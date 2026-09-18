@@ -1,0 +1,437 @@
+name: Tachyon Release Workflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  get-version:
+    name: Calculate App Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Extract Version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1 | xargs)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+  build-android:
+    name: Build Android APKs
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+
+      - name: Download FFmpeg (Android)
+        run: |
+          for ABI in "arm64-v8a" "x86_64" "armeabi-v7a"; do
+            wget -qO ffmpeg_${ABI}.zip https://github.com/chomusuke-mk/vidra-ffmpeg/releases/latest/download/ffmpeg-android-${ABI}.zip
+            unzip -q ffmpeg_${ABI}.zip -d ffmpeg_${ABI}
+            
+            OUT_DIR="android/app/src/main/jniLibs/$ABI"
+            mkdir -p "$OUT_DIR"
+            cp ffmpeg_${ABI}/ffmpeg "$OUT_DIR/libffmpeg.so"
+            cp ffmpeg_${ABI}/ffprobe "$OUT_DIR/libffprobe.so"
+          done
+
+      - name: Configure Android signing
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_B64" | base64 -d > android/upload-keystore.pkcs12
+          echo "storePassword=$ANDROID_KEYSTORE_PASSWORD" > android/key.properties
+          echo "keyPassword=$ANDROID_KEY_PASSWORD" >> android/key.properties
+          echo "keyAlias=$ANDROID_KEY_ALIAS" >> android/key.properties
+          echo "storeFile=upload-keystore.pkcs12" >> android/key.properties
+
+      - name: Build Flutter APKs
+        run: |
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk tachyon-android.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk tachyon-android-arm64-v8a.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk tachyon-android-x86_64.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk tachyon-android-armeabi-v7a.apk
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-apks
+          path: |
+            tachyon-android.apk
+            tachyon-android-arm64-v8a.apk
+            tachyon-android-x86_64.apk
+            tachyon-android-armeabi-v7a.apk
+          retention-days: 1
+
+  build-linux:
+    name: Build Linux Packages
+    needs: get-version
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev rpm rpm-common fuse libfuse2 locate dpkg zsync dpkg-sig
+          wget -O appimagetool-real "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool-real
+          sudo mv appimagetool-real /usr/local/bin/
+          echo '#!/bin/bash' > appimagetool
+          echo 'UPDATE_INFO="gh-releases-zsync|chomusuke-mk|tachyon|latest|tachyon-x86_64.AppImage.zsync"' >> appimagetool
+          echo '/usr/local/bin/appimagetool-real --sign -u "$UPDATE_INFO" "$@"' >> appimagetool
+          chmod +x appimagetool
+          sudo mv appimagetool /usr/local/bin/
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+
+      - name: Download FFmpeg (Linux)
+        run: |
+          wget -qO ffmpeg.zip https://github.com/chomusuke-mk/vidra-ffmpeg/releases/latest/download/ffmpeg-linux-x86_64.zip
+          unzip -q ffmpeg.zip -d ffmpeg_ext
+          mkdir -p linux
+          cp ffmpeg_ext/ffmpeg linux/ffmpeg
+          cp ffmpeg_ext/ffprobe linux/ffprobe
+          chmod +x linux/ffmpeg linux/ffprobe
+
+      - name: Build Flutter Linux
+        run: flutter build linux --release
+
+      - name: Create AppImage and DEB
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          # Import GPG key
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+          # Create a wrapper for gpg and gpg2 to auto-supply the passphrase during AppImage and DEB signing
+          # We must override the system binaries because GPGME (used by appimagetool) hardcodes absolute paths.
+          sudo mv /usr/bin/gpg /usr/bin/gpg-real
+          sudo mv /usr/bin/gpg2 /usr/bin/gpg2-real || true
+
+          echo '#!/bin/bash' | sudo tee /usr/bin/gpg
+          echo '/usr/bin/gpg-real --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$@"' | sudo tee -a /usr/bin/gpg
+          sudo chmod +x /usr/bin/gpg
+
+          echo '#!/bin/bash' | sudo tee /usr/bin/gpg2
+          echo '/usr/bin/gpg-real --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$@"' | sudo tee -a /usr/bin/gpg2
+          sudo chmod +x /usr/bin/gpg2
+
+          dart pub global activate fastforge
+          export PATH="$PATH":"$HOME/.pub-cache/bin"
+          fastforge release --name linux-release --skip-clean
+
+          cp dist/tachyon-x86_64.AppImage tachyon-x86_64.AppImage
+          cp dist/tachyon-x86_64.AppImage.zsync tachyon-x86_64.AppImage.zsync
+          cp dist/tachyon-linux.deb tachyon-linux.deb
+
+          # Sign the DEB package using the explicitly extracted GPG key ID
+          KEY_ID=$(gpg --list-secret-keys --with-colons | grep "^sec" | cut -d':' -f5 | head -n 1)
+          dpkg-sig -k "$KEY_ID" -s builder tachyon-linux.deb
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-packages
+          path: |
+            tachyon-x86_64.AppImage
+            tachyon-x86_64.AppImage.zsync
+            tachyon-linux.deb
+          retention-days: 1
+
+  build-windows:
+    name: Build Windows Exe
+    needs: get-version
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+
+      - name: Download FFmpeg (Windows)
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/chomusuke-mk/vidra-ffmpeg/releases/latest/download/ffmpeg-windows-x86_64.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_ext" -Force
+          New-Item -ItemType Directory -Force -Path "windows"
+          Copy-Item "ffmpeg_ext\ffmpeg.exe" -Destination "windows\ffmpeg.exe"
+          Copy-Item "ffmpeg_ext\ffprobe.exe" -Destination "windows\ffprobe.exe"
+
+      - name: Build Flutter Windows
+        run: flutter build windows --release
+
+      - name: Package with Inno Setup
+        run: |
+          iscc /DAppVer="${{ needs.get-version.outputs.version }}" installer.iss
+          Copy-Item "dist\tachyon-windows.exe" -Destination "tachyon-windows.exe"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: tachyon-windows.exe
+          retention-days: 1
+
+  build-snap:
+    name: Build Snap Package
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+
+      - name: Download FFmpeg (Linux)
+        run: |
+          wget -qO ffmpeg.zip https://github.com/chomusuke-mk/vidra-ffmpeg/releases/latest/download/ffmpeg-linux-x86_64.zip
+          unzip -q ffmpeg.zip -d ffmpeg_ext
+          mkdir -p linux
+          cp ffmpeg_ext/ffmpeg linux/ffmpeg
+          cp ffmpeg_ext/ffprobe linux/ffprobe
+          chmod +x linux/ffmpeg linux/ffprobe
+
+      - name: Build Snap
+        uses: snapcore/action-build@v1
+        id: build
+
+      - name: Rename Snap
+        run: mv *.snap tachyon-linux.snap
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: snap-package
+          path: tachyon-linux.snap
+          retention-days: 1
+
+  publish-release:
+    name: Publish Release
+    needs: [get-version, build-android, build-linux, build-windows, build-snap]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate Checksums
+        working-directory: artifacts
+        run: |
+          sha256sum tachyon-* > SHA2-256SUMS
+          sha512sum tachyon-* > SHA2-512SUMS
+
+      - name: Generate GPG Signatures
+        working-directory: artifacts
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --detach-sign --output SHA2-256SUMS.sig SHA2-256SUMS
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --detach-sign --output SHA2-512SUMS.sig SHA2-512SUMS
+
+      - name: Generate Release Notes
+        working-directory: artifacts
+        env:
+          VERSION: ${{ needs.get-version.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FFMPEG_TAG=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/chomusuke-mk/vidra-ffmpeg/releases/latest | jq -r .tag_name)
+
+
+          cat <<EOF > RELEASE_NOTES.md
+
+          Tachyon is an advanced music player.
+
+          ## 📥 Published Executables
+          The following binaries are provided for this release. Download the appropriate file for your platform from the assets below.
+
+          | Platform | Installer                                                                                                           |
+          | -------- | ------------------------------------------------------------------------------------------------------------------- |
+          | Windows  | tachyon-windows.exe                                                                                                   |
+          | Linux    | tachyon-x86_64.AppImage <br> tachyon-linux.deb <br> tachyon-linux.snap                                                    |
+          | Android  | tachyon-android.apk <br> tachyon-android-arm64-v8a.apk <br> tachyon-android-x86_64.apk <br> tachyon-android-armeabi-v7a.apk |
+
+          ## 📌 Backend and Native Dependencies
+          This release was dynamically built using the following versions of external dependencies:
+
+          | Component           | Version            | Release Link                                                                              |
+          | ------------------- | ------------------ | ----------------------------------------------------------------------------------------- |
+          | **Vidra FFmpeg**    | \`${FFMPEG_TAG}\`  | [View Release](https://github.com/chomusuke-mk/vidra-ffmpeg/releases/tag/${FFMPEG_TAG})   |
+
+          ## 🎯 Changelog
+          You can view the full history of changes for this release in the [CHANGELOG.md](https://github.com/chomusuke-mk/tachyon/blob/${VERSION}/CHANGELOG.md) file of this repository.
+
+          ## 🔒 SHA2-256 Checksums
+          To verify the integrity of your download, you can use the following SHA2-256 checksums:
+
+          \`\`\`text
+          $(cat SHA2-256SUMS)
+          \`\`\`
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.get-version.outputs.version }}
+          name: "Tachyon v${{ needs.get-version.outputs.version }}"
+          body_path: artifacts/RELEASE_NOTES.md
+          files: |
+            artifacts/tachyon-windows.exe
+            artifacts/tachyon-x86_64.AppImage
+            artifacts/tachyon-x86_64.AppImage.zsync
+            artifacts/tachyon-linux.deb
+            artifacts/tachyon-linux.snap
+            artifacts/tachyon-android.apk
+            artifacts/tachyon-android-arm64-v8a.apk
+            artifacts/tachyon-android-x86_64.apk
+            artifacts/tachyon-android-armeabi-v7a.apk
+            artifacts/SHA2-256SUMS
+            artifacts/SHA2-512SUMS
+            artifacts/SHA2-256SUMS.sig
+            artifacts/SHA2-512SUMS.sig
+
+  trigger-apt-update:
+    name: Trigger APT Repository Update
+    needs: publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger APT Repository GitHub Action
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${{ secrets.APT_REPO_TOKEN }}" \
+            https://api.github.com/repos/chomusuke-mk/apt-repository/dispatches \
+            -d '{"event_type": "update-apt"}'
+
+  trigger-fdroid-update:
+    name: Trigger F-Droid Repository Update
+    needs: publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger F-Droid Repository GitHub Action
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${{ secrets.FDROID_REPO_TOKEN }}" \
+            https://api.github.com/repos/chomusuke-mk/fdroid-repository/dispatches \
+            -d '{"event_type": "update-fdroid"}'
+
+  publish-snap:
+    name: Publish to Snap Store
+    needs: publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Snap Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: snap-package
+          path: snap-artifact
+
+      - name: Publish Snap
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: snap-artifact/vidra-linux.snap
+          release: stable
+
+  publish-choco:
+    name: Publish to Chocolatey
+    needs: [get-version, publish-release]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Prepare Chocolatey Package
+        env:
+          VERSION: ${{ needs.get-version.outputs.version }}
+        run: |
+          # 1. Download the exe to calculate the hash
+          $url = "https://github.com/chomusuke-mk/tachyon/releases/download/$env:VERSION/tachyon-windows.exe"
+          Invoke-WebRequest -Uri $url -OutFile "tachyon-windows.exe"
+          $hash = (Get-FileHash "tachyon-windows.exe" -Algorithm SHA256).Hash
+
+          # 2. Replace placeholders in nuspec
+          $nuspecPath = "choco\tachyon\tachyon.nuspec"
+          (Get-Content $nuspecPath) -replace '__APP_VERSION__', $env:VERSION | Set-Content $nuspecPath
+
+          # 3. Replace placeholders in install script
+          $installPath = "choco\tachyon\tools\chocolateyinstall.ps1"
+          $scriptContent = Get-Content $installPath
+          $scriptContent = $scriptContent -replace '__APP_VERSION__', $env:VERSION
+          $scriptContent = $scriptContent -replace '__SHA256_HASH__', $hash
+          $scriptContent | Set-Content $installPath
+
+      - name: Pack and Push to Chocolatey
+        working-directory: choco/tachyon
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          choco pack
+          choco push --key $env:CHOCOLATEY_API_KEY --source https://push.chocolatey.org/
+
+  publish-winget:
+    name: Publish to WinGet
+    needs: [get-version, publish-release]
+    runs-on: windows-latest
+    steps:
+      - name: Download wingetcreate
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile "wingetcreate.exe"
+
+      - name: Sync Fork with Upstream
+        shell: pwsh
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          gh repo sync "${{ github.repository_owner }}/winget-pkgs" -b master
+
+      - name: Update and Submit Manifest to WinGet
+        shell: pwsh
+        env:
+          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          .\wingetcreate.exe update Chomusuke.Tachyon `
+            --urls "https://github.com/${{ github.repository }}/releases/download/${{ needs.get-version.outputs.version }}/tachyon-windows.exe|x64|machine" `
+            --version "${{ needs.get-version.outputs.version }}" `
+            --token "${{ secrets.WINGET_TOKEN }}" `
+            --no-open `
+            --submit

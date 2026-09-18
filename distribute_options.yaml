@@ -1,0 +1,23 @@
+output: dist/temp/
+releases:
+  - name: linux-release
+    jobs:
+      - name: linux-appimage
+        package:
+          platform: linux
+          target: appimage
+          hooks:
+            post:
+              - mkdir -p dist/
+              - mv $(find $OUTPUT_DIRECTORY -name "*.AppImage") dist/tachyon-x86_64.AppImage
+              - rm -f *.AppImage.zsync
+              - zsyncmake -o dist/tachyon-x86_64.AppImage.zsync -u tachyon-x86_64.AppImage dist/tachyon-x86_64.AppImage
+
+      - name: linux-deb
+        package:
+          platform: linux
+          target: deb
+          hooks:
+            post:
+              - mkdir -p dist/
+              - mv $(find $OUTPUT_DIRECTORY -name "*.deb") dist/tachyon-linux.deb

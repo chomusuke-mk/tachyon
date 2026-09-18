@@ -1,0 +1,48 @@
+{
+  "$schema": "vscode://schemas/tasks",
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Flutter: Clean Android (gradlew clean)",
+      "type": "shell",
+      "command": "./gradlew",
+      "args": [
+        "clean"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/android",
+        "env": {
+          "SERIOUS_PYTHON_SITE_PACKAGES": "${workspaceFolder}/.serious_python/site-packages",
+          "SERIOUS_PYTHON_APP": "${workspaceFolder}/.serious_python/app",
+        }
+      },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Android APK (Flutter)",
+      "type": "process",
+      "command": "flutter",
+      "args": [
+        "build",
+        "apk",
+        "--release"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "SERIOUS_PYTHON_SITE_PACKAGES": "${workspaceFolder}/.serious_python/site-packages",
+          "SERIOUS_PYTHON_APP": "${workspaceFolder}/.serious_python/app",
+        }
+      },
+      "dependsOn": [
+        "Prepare: Create site-packages directory"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
