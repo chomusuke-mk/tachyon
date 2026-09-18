@@ -27,6 +27,8 @@ words:
   - asíncronamente
   - asincrónicamente
   - assetcatalog
+  - audiotrack
+  - audiounit
   - autocompletado
   - Autolayout
   - autoplay
@@ -42,6 +44,7 @@ words:
   - bugtracker
   - Buildables
   - buildlog
+  - cancion
   - cfbundle
   - cffi
   - CFLAGS
@@ -53,11 +56,14 @@ words:
   - COINIT
   - Compris
   - configúralo
+  - Conversores
+  - coreaudio
   - craftctl
   - crashea
   - crashee
   - crasheos
   - createallsubdirs
+  - crossfade
   - cupertino
   - dailymotion
   - DAPPLICATION
@@ -97,6 +103,7 @@ words:
   - Endonyms
   - Enrutador
   - ENRUTADOR
+  - equalización
   - extractaudio
   - facebook
   - fastforge
@@ -116,6 +123,7 @@ words:
   - flutterlocalnotifications
   - FONTCHANGE
   - FOSS
+  - FSML
   - gboolean
   - gchar
   - GLASSMORPHISM
@@ -166,7 +174,10 @@ words:
   - klass
   - kotlin
   - LASTEXITCODE
+  - lastfm
   - launchable
+  - lavfi
+  - lerp
   - libapp
   - libbz
   - libc
@@ -177,6 +188,7 @@ words:
   - libfuse
   - libglib
   - libgomp
+  - libmpv
   - libnotify
   - libnuma
   - libpython
@@ -216,10 +228,13 @@ words:
   - Menü
   - metainfo
   - Metaspace
+  - Milisegundos
   - mingit
   - miniaturizable
   - molestoso
   - Motorstatus
+  - mpris
+  - MPRIS
   - MSGSEND
   - MSVC
   - MULTICONFIG
@@ -252,12 +267,14 @@ words:
   - opendesktop
   - opengl
   - openpgp
+  - opensles
   - ORGANIZATIONNAME
   - orquestador
   - OVERLAPPEDWINDOW
   - parallelizable
   - Parseamos
   - parseando
+  - Parsear
   - parseo
   - patreon
   - pbxuser
@@ -267,6 +284,7 @@ words:
   - pinentry
   - pkcs
   - pkgs
+  - playables
   - podspec
   - posix
   - postuninstall
@@ -293,30 +311,43 @@ words:
   - rediseñada
   - refactorización
   - regístralo
+  - reimplementar
   - reintentando
   - Reintentando
   - remux
   - renderiza
+  - renderizado
   - renderizamos
   - renderizar
   - renderizará
   - renderizarse
+  - replaygain
   - reprepro
+  - reproduccion
+  - resetea
+  - reseteado
   - Reseteamos
   - Resolutor
   - Roboto
   - RUNPATH
   - rxdart
+  - samplerate
   - Sandboxed
   - SANDBOXING
+  - scaletempo
   - Schnelleinstellungen
   - sconsign
+  - scrobbling
+  - Scrobbling
   - sdcard
   - SDKROOT
   - Segoe
   - selfpromo
   - SERIALIZACIÓN
+  - síncrono
   - skipifsilent
+  - smtc
+  - SMTC
   - snapcore
   - Snapcraft
   - SNAPCRAFT
@@ -335,6 +366,7 @@ words:
   - Submenús
   - subosito
   - subproyecto
+  - Subproyectos
   - Subtags
   - subviews
   - Suche
@@ -343,7 +375,9 @@ words:
   - swipeable
   - Symbolication
   - SYMED
+  - syncfusion
   - SYSROOT
+  - taglib
   - TARG
   - telemetría
   - temurin
@@ -359,11 +393,13 @@ words:
   - tmpfilename
   - tombstoned
   - twofactor
+  - typedef
   - ultrarrápido
   - uncompromised
   - unhide
   - uninst
   - uninstallexe
+  - Unmute
   - unregistration
   - Unscrollable
   - userappdata
@@ -382,6 +418,8 @@ words:
   - vivaldi
   - volcándola
   - VSACL
+  - wasapi
+  - WASAPI
   - wayland
   - WCAG
   - Wconditional

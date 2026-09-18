@@ -60,3 +60,4 @@ app.*.map.json
 /dist/
 /.agents/
 /app/src_old/
+/docs-from-otro-player
