@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
-import '../../locales/presentation/locale_controller.dart';
-import '../domain/playback_state.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/domain/playback_state.dart';
+
 import 'playback_controller.dart';
 
 /// Modal bottom sheet presenting advanced audio controls and effects:
@@ -18,6 +20,7 @@ class AudioEffectsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final playback = context.watch<PlaybackController>();
     final strings = context.watch<LocaleController>().localeStrings;
+    final settings = context.watch<SettingsController>();
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -48,74 +51,125 @@ class AudioEffectsSheet extends StatelessWidget {
             // Title
             Text(
               strings.npAudioControls,
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 20),
 
             // 1. Playback Speed (0.5x - 1.5x)
+            Text(strings.npSpeed, style: theme.textTheme.titleSmall),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(strings.npSpeed, style: theme.textTheme.titleSmall),
-                Text('${playback.rate.toStringAsFixed(2)}x', style: theme.textTheme.labelLarge),
+                IconButton(
+                  icon: Icon(Icons.speed_rounded),
+                  onPressed: () => playback.setRate(1.0),
+                  iconSize: 25,
+                  color: colorScheme.onSurfaceVariant,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  style: IconButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                  ),
+                ),
+                Expanded(
+                  child: Slider.adaptive(
+                    value: playback.rate.clamp(0.5, 1.5),
+                    min: 0.5,
+                    max: 1.5,
+                    divisions: 20,
+                    onChanged: playback.setRate,
+                  ),
+                ),
+                Text(
+                  playback.rate.toStringAsFixed(2),
+                  style: theme.textTheme.labelLarge,
+                ),
               ],
             ),
-            Slider(
-              value: playback.rate.clamp(0.5, 1.5),
-              min: 0.5,
-              max: 1.5,
-              divisions: 20,
-              onChanged: playback.setRate,
-            ),
-            Wrap(
-              spacing: 8,
-              children: [0.5, 0.75, 1.0, 1.25, 1.5].map((preset) {
-                return ChoiceChip(
-                  label: Text('${preset}x'),
-                  selected: (playback.rate - preset).abs() < 0.01,
-                  onSelected: (_) => playback.setRate(preset),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
-
             // 2. Pitch Shifting (0.5 - 1.5)
+            Text(strings.npPitch, style: theme.textTheme.titleSmall),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(strings.npPitch, style: theme.textTheme.titleSmall),
-                Text(playback.pitch.toStringAsFixed(2), style: theme.textTheme.labelLarge),
+                IconButton(
+                  icon: Icon(
+                    Icons.keyboard_voice_rounded,
+                    size: 25,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  onPressed: () => playback.setPitch(1.0),
+                  iconSize: 25,
+                  color: colorScheme.onSurfaceVariant,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  style: IconButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                  ),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: playback.pitch.clamp(0.5, 1.5),
+                    min: 0.5,
+                    max: 1.5,
+                    divisions: 20,
+                    onChanged: playback.setPitch,
+                  ),
+                ),
+                Text(
+                  playback.pitch.toStringAsFixed(2),
+                  style: theme.textTheme.labelLarge,
+                ),
               ],
             ),
-            Slider(
-              value: playback.pitch.clamp(0.5, 1.5),
-              min: 0.5,
-              max: 1.5,
-              divisions: 20,
-              onChanged: playback.setPitch,
-            ),
-            TextButton.icon(
-              onPressed: () => playback.setPitch(1.0),
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Reset Pitch (1.0)'),
-            ),
-            const SizedBox(height: 16),
 
             // 3. Volume Boost (up to 200%)
+            Text(strings.npVolumeBoost, style: theme.textTheme.titleSmall),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [],
+            ),
+            Row(
               children: [
-                Text(strings.npVolumeBoost, style: theme.textTheme.titleSmall),
-                Text('${(playback.volume * 100).round()}%', style: theme.textTheme.labelLarge),
+                IconButton(
+                  icon: Icon(
+                    Icons.headphones_rounded,
+                    size: 25,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  onPressed: () => playback.setVolume(100.0),
+                  iconSize: 25,
+                  color: colorScheme.onSurfaceVariant,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  style: IconButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                  ),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: playback.volume.clamp(100.0, 200.0),
+                    min: 100.0,
+                    max: 200.0,
+                    divisions: 100,
+                    onChanged: playback.setVolume,
+                  ),
+                ),
+                Text(
+                  playback.volume.toStringAsFixed(0),
+                  style: theme.textTheme.labelLarge,
+                ),
               ],
             ),
-            Slider(
-              value: playback.volume.clamp(0.0, 2.0),
-              min: 0.0,
-              max: 2.0,
-              divisions: 40,
-              onChanged: playback.setVolume,
-            ),
+
             const SizedBox(height: 16),
 
             // 4. ReplayGain Normalization Mode
@@ -158,6 +212,57 @@ class AudioEffectsSheet extends StatelessWidget {
               max: 15.0,
               divisions: 30,
               onChanged: playback.setReplayGainPreamp,
+            ),
+            SwitchListTile(
+              value: settings.crossfadeEnabled,
+              onChanged: (val) => settings.setCrossfadeEnabled(val),
+              title: Text(
+                strings.sCrossfadeEnable,
+                style: theme.textTheme.titleSmall,
+              ),
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              contentPadding: EdgeInsets.zero,
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.swap_horiz_rounded,
+                    size: 25,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  onPressed: () => settings.setCrossfadeDuration(2),
+                  iconSize: 25,
+                  color: colorScheme.onSurfaceVariant,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  style: IconButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                  ),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: settings.crossfadeDuration.toDouble().clamp(
+                      2.0,
+                      30.0,
+                    ),
+                    min: 2.0,
+                    max: 30.0,
+                    divisions: 28,
+                    onChanged: (val) =>
+                        settings.setCrossfadeDuration(val.round()),
+                  ),
+                ),
+                Text(
+                  '${settings.crossfadeDuration}s',
+                  style: theme.textTheme.labelLarge,
+                ),
+              ],
             ),
           ],
         ),

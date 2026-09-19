@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
-
-import '../../library/domain/track.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 
 enum Loop {
   off('off'),
@@ -66,7 +65,10 @@ class QueueItem {
         'trackNumber': track.trackNumber,
         'discNumber': track.discNumber,
         'bitrate': track.bitrate,
+        'sampleRate': track.sampleRate,
+        'channels': track.channels,
         'lyrics': track.lyrics,
+        'codec': track.codec,
       },
     );
   }

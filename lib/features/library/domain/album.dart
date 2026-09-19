@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import 'track.dart';
 
 @immutable
@@ -52,7 +53,10 @@ class Album {
     };
   }
 
-  factory Album.fromDbMap(Map<String, dynamic> map, {List<Track> tracks = const []}) {
+  factory Album.fromDbMap(
+    Map<String, dynamic> map, {
+    List<Track> tracks = const [],
+  }) {
     return Album(
       id: map['id'] as int?,
       name: map['name'] as String? ?? '',
@@ -83,8 +87,10 @@ class Album {
       artistId: (json['artistId'] ?? json['artist_id']) as int?,
       artistName: (json['artistName'] ?? json['artist_name']) as String?,
       year: json['year'] as int?,
-      trackCount: ((json['trackCount'] ?? json['track_count']) as num?)?.toInt() ?? 0,
-      tracks: (json['tracks'] as List<dynamic>?)
+      trackCount:
+          ((json['trackCount'] ?? json['track_count']) as num?)?.toInt() ?? 0,
+      tracks:
+          (json['tracks'] as List<dynamic>?)
               ?.map((e) => Track.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
@@ -106,12 +112,12 @@ class Album {
 
   @override
   int get hashCode => Object.hash(
-        id,
-        name,
-        artistId,
-        artistName,
-        year,
-        trackCount,
-        Object.hashAll(tracks),
-      );
+    id,
+    name,
+    artistId,
+    artistName,
+    year,
+    trackCount,
+    Object.hashAll(tracks),
+  );
 }

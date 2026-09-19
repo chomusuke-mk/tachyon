@@ -11,40 +11,6 @@ import 'package:tachyon/features/library/domain/genre.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
-abstract class AppDatabase {
-  Future<void> init();
-  Future<void> insertOrUpdateTrack(Track track);
-  Future<void> batchInsertTracks(List<Track> tracks);
-  Future<List<Track>> getAllTracks({String? sortBy, bool ascending = true});
-  Future<List<Album>> getAllAlbums();
-  Future<List<Artist>> getAllArtists();
-  Future<List<Genre>> getAllGenres();
-  Future<List<Playlist>> getAllPlaylists();
-  Future<List<Track>> getTracksForPlaylist(int playlistId);
-  Future<int> createPlaylist(String name);
-  Future<void> addTrackToPlaylist(int playlistId, int trackId);
-  Future<void> removeTrackFromPlaylist(int playlistId, int trackId);
-  Future<void> reorderPlaylistEntries(
-    int playlistId,
-    int fromIndex,
-    int toIndex,
-  );
-  Future<List<Track>> searchTracks(String query);
-  Future<void> close();
-
-  // Supplementary methods for complete feature operation
-  Database get database;
-  Future<void> deletePlaylist(int playlistId);
-  Future<void> saveLyrics(String keyHash, String rawLrc, String source);
-  Future<String?> getLyrics(String keyHash);
-  Future<bool> isTrackLiked(int trackId);
-  Future<void> toggleLikeTrack(int trackId, String uri);
-  Future<void> clearHistory();
-
-  static const int likedSongsPlaylistId = 1;
-  static const int historyPlaylistId = 2;
-}
-
 abstract final class AppDatabaseSchema {
   static const String createArtistsTable = '''
     CREATE TABLE IF NOT EXISTS artists (
@@ -150,16 +116,17 @@ abstract final class AppDatabaseSchema {
   ];
 }
 
-class AppDatabaseImpl implements AppDatabase {
+class AppDatabase {
   Database? _db;
   final String? customPath;
   final bool inMemory;
+  static const int likedSongsPlaylistId = 1;
+  static const int historyPlaylistId = 2;
 
-  AppDatabaseImpl({this.customPath, this.inMemory = false});
+  AppDatabase({this.customPath, this.inMemory = false});
 
-  factory AppDatabaseImpl.inMemory() => AppDatabaseImpl(inMemory: true);
+  factory AppDatabase.inMemory() => AppDatabase(inMemory: true);
 
-  @override
   Database get database {
     if (_db == null) {
       throw StateError('AppDatabase is not initialized. Call init() first.');
@@ -167,7 +134,6 @@ class AppDatabaseImpl implements AppDatabase {
     return _db!;
   }
 
-  @override
   Future<void> init() async {
     if (_db != null) return;
 
@@ -237,7 +203,6 @@ class AppDatabaseImpl implements AppDatabase {
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  @override
   Future<void> insertOrUpdateTrack(Track track) async {
     await database.transaction((txn) async {
       int? artistId = track.artistId;
@@ -322,7 +287,6 @@ class AppDatabaseImpl implements AppDatabase {
           'file_size': track.fileSize,
           'modified_at': track.modifiedAt,
           'lyrics': track.lyrics,
-          'has_cover': track.hasCover ? 1 : 0,
         };
         await txn.update(
           'tracks',
@@ -349,7 +313,6 @@ class AppDatabaseImpl implements AppDatabase {
           'file_size': track.fileSize,
           'modified_at': track.modifiedAt,
           'lyrics': track.lyrics,
-          'has_cover': track.hasCover ? 1 : 0,
         };
         trackId = await txn.insert('tracks', trackMap);
       }
@@ -402,7 +365,6 @@ class AppDatabaseImpl implements AppDatabase {
     });
   }
 
-  @override
   Future<void> batchInsertTracks(List<Track> tracks) async {
     if (tracks.isEmpty) return;
 
@@ -555,7 +517,6 @@ class AppDatabaseImpl implements AppDatabase {
             'file_size': t.fileSize,
             'modified_at': t.modifiedAt,
             'lyrics': t.lyrics,
-            'has_cover': t.hasCover ? 1 : 0,
           };
 
           if (existingId != null) {
@@ -618,7 +579,6 @@ class AppDatabaseImpl implements AppDatabase {
     ''');
   }
 
-  @override
   Future<List<Track>> getAllTracks({
     String? sortBy,
     bool ascending = true,
@@ -667,7 +627,6 @@ class AppDatabaseImpl implements AppDatabase {
     return rows.map((r) => Track.fromJson(r)).toList();
   }
 
-  @override
   Future<List<Album>> getAllAlbums() async {
     final rows = await database.rawQuery('''
       SELECT 
@@ -681,7 +640,6 @@ class AppDatabaseImpl implements AppDatabase {
     return rows.map((r) => Album.fromJson(r)).toList();
   }
 
-  @override
   Future<List<Artist>> getAllArtists() async {
     final rows = await database.rawQuery('''
       SELECT 
@@ -697,7 +655,6 @@ class AppDatabaseImpl implements AppDatabase {
     return rows.map((r) => Artist.fromJson(r)).toList();
   }
 
-  @override
   Future<List<Genre>> getAllGenres() async {
     final rows = await database.rawQuery('''
       SELECT 
@@ -711,7 +668,6 @@ class AppDatabaseImpl implements AppDatabase {
     return rows.map((r) => Genre.fromJson(r)).toList();
   }
 
-  @override
   Future<List<Playlist>> getAllPlaylists() async {
     final rows = await database.rawQuery('''
       SELECT 
@@ -725,7 +681,6 @@ class AppDatabaseImpl implements AppDatabase {
     return rows.map((r) => Playlist.fromJson(r)).toList();
   }
 
-  @override
   Future<List<Track>> getTracksForPlaylist(int playlistId) async {
     final rows = await database.rawQuery(
       '''
@@ -749,7 +704,6 @@ class AppDatabaseImpl implements AppDatabase {
     return rows.map((r) => Track.fromJson(r)).toList();
   }
 
-  @override
   Future<int> createPlaylist(String name) async {
     return await database.insert('playlists', {
       'name': name.trim(),
@@ -758,7 +712,6 @@ class AppDatabaseImpl implements AppDatabase {
     });
   }
 
-  @override
   Future<void> addTrackToPlaylist(int playlistId, int trackId) async {
     await database.transaction((txn) async {
       final trackRow = await txn.query(
@@ -790,7 +743,6 @@ class AppDatabaseImpl implements AppDatabase {
     });
   }
 
-  @override
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) async {
     await database.transaction((txn) async {
       await txn.delete(
@@ -820,7 +772,6 @@ class AppDatabaseImpl implements AppDatabase {
     });
   }
 
-  @override
   Future<void> reorderPlaylistEntries(
     int playlistId,
     int fromIndex,
@@ -855,7 +806,6 @@ class AppDatabaseImpl implements AppDatabase {
     });
   }
 
-  @override
   Future<List<Track>> searchTracks(String query) async {
     final clean = query.trim();
     if (clean.isEmpty) return [];
@@ -892,7 +842,6 @@ class AppDatabaseImpl implements AppDatabase {
     return rows.map((r) => Track.fromJson(r)).toList();
   }
 
-  @override
   Future<void> deletePlaylist(int playlistId) async {
     // Only user-created playlists (is_special = 0) can be deleted
     await database.delete(
@@ -902,7 +851,6 @@ class AppDatabaseImpl implements AppDatabase {
     );
   }
 
-  @override
   Future<void> saveLyrics(String keyHash, String rawLrc, String source) async {
     await database.insert('lyrics_cache', {
       'key_hash': keyHash,
@@ -912,7 +860,6 @@ class AppDatabaseImpl implements AppDatabase {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  @override
   Future<String?> getLyrics(String keyHash) async {
     final rows = await database.query(
       'lyrics_cache',
@@ -925,7 +872,6 @@ class AppDatabaseImpl implements AppDatabase {
     return rows.first['raw_lrc'] as String?;
   }
 
-  @override
   Future<bool> isTrackLiked(int trackId) async {
     final res = await database.query(
       'playlist_entries',
@@ -937,7 +883,6 @@ class AppDatabaseImpl implements AppDatabase {
     return res.isNotEmpty;
   }
 
-  @override
   Future<void> toggleLikeTrack(int trackId, String uri) async {
     final liked = await isTrackLiked(trackId);
     if (liked) {
@@ -947,7 +892,6 @@ class AppDatabaseImpl implements AppDatabase {
     }
   }
 
-  @override
   Future<void> clearHistory() async {
     await database.delete(
       'playlist_entries',
@@ -956,7 +900,6 @@ class AppDatabaseImpl implements AppDatabase {
     );
   }
 
-  @override
   Future<void> close() async {
     if (_db != null) {
       await _db!.close();

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../locales/presentation/locale_controller.dart';
-import '../../library/domain/playlist.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
+
 import 'playlist_detail_screen.dart';
 import 'playlists_controller.dart';
 
@@ -20,9 +21,7 @@ class PlaylistsScreen extends StatelessWidget {
           content: TextField(
             controller: controller,
             autofocus: true,
-            decoration: InputDecoration(
-              hintText: strings.plNewNameHint,
-            ),
+            decoration: InputDecoration(hintText: strings.plNewNameHint),
           ),
           actions: [
             TextButton(
@@ -56,9 +55,7 @@ class PlaylistsScreen extends StatelessWidget {
           content: TextField(
             controller: controller,
             autofocus: true,
-            decoration: const InputDecoration(
-              hintText: 'Enter playlist name',
-            ),
+            decoration: const InputDecoration(hintText: 'Enter playlist name'),
           ),
           actions: [
             TextButton(
@@ -69,7 +66,10 @@ class PlaylistsScreen extends StatelessWidget {
               onPressed: () {
                 final name = controller.text.trim();
                 if (name.isNotEmpty && playlist.id != null) {
-                  context.read<PlaylistsController>().renamePlaylist(playlist.id!, name);
+                  context.read<PlaylistsController>().renamePlaylist(
+                    playlist.id!,
+                    name,
+                  );
                 }
                 Navigator.of(context).pop();
               },
@@ -99,7 +99,9 @@ class PlaylistsScreen extends StatelessWidget {
               style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
               onPressed: () {
                 if (playlist.id != null) {
-                  context.read<PlaylistsController>().deletePlaylist(playlist.id!);
+                  context.read<PlaylistsController>().deletePlaylist(
+                    playlist.id!,
+                  );
                 }
                 Navigator.of(context).pop();
               },
@@ -146,18 +148,24 @@ class PlaylistsScreen extends StatelessWidget {
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: colorScheme.primary,
-                  child: const Icon(Icons.favorite_rounded, color: Colors.white),
+                  child: const Icon(
+                    Icons.favorite_rounded,
+                    color: Colors.white,
+                  ),
                 ),
                 title: Text(
                   strings.plLikedSongs,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text(strings.plTracksCountFormatted(likedPlaylist.trackCount)),
+                subtitle: Text(
+                  strings.plTracksCountFormatted(likedPlaylist.trackCount),
+                ),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => PlaylistDetailScreen(playlist: likedPlaylist),
+                      builder: (_) =>
+                          PlaylistDetailScreen(playlist: likedPlaylist),
                     ),
                   );
                 },
@@ -169,13 +177,18 @@ class PlaylistsScreen extends StatelessWidget {
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: colorScheme.surfaceContainerHighest,
-                  child: Icon(Icons.history_rounded, color: colorScheme.onSurfaceVariant),
+                  child: Icon(
+                    Icons.history_rounded,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 title: Text(
                   strings.plHistory,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text(strings.plTracksCountFormatted(historyPlaylist.trackCount)),
+                subtitle: Text(
+                  strings.plTracksCountFormatted(historyPlaylist.trackCount),
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -190,7 +203,8 @@ class PlaylistsScreen extends StatelessWidget {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => PlaylistDetailScreen(playlist: historyPlaylist),
+                      builder: (_) =>
+                          PlaylistDetailScreen(playlist: historyPlaylist),
                     ),
                   );
                 },
@@ -206,9 +220,9 @@ class PlaylistsScreen extends StatelessWidget {
             child: Text(
               'Your Playlists (${userPlaylists.length})',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.bold,
-                  ),
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           if (userPlaylists.isEmpty)
@@ -227,13 +241,18 @@ class PlaylistsScreen extends StatelessWidget {
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor: colorScheme.secondaryContainer,
-                    child: Icon(Icons.playlist_play_rounded, color: colorScheme.onSecondaryContainer),
+                    child: Icon(
+                      Icons.playlist_play_rounded,
+                      color: colorScheme.onSecondaryContainer,
+                    ),
                   ),
                   title: Text(
                     playlist.name,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: Text(strings.plTracksCountFormatted(playlist.trackCount)),
+                  subtitle: Text(
+                    strings.plTracksCountFormatted(playlist.trackCount),
+                  ),
                   trailing: PopupMenuButton<String>(
                     onSelected: (value) {
                       if (value == 'rename') {
@@ -257,9 +276,16 @@ class PlaylistsScreen extends StatelessWidget {
                         value: 'delete',
                         child: Row(
                           children: [
-                            const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent),
+                            const Icon(
+                              Icons.delete_outline_rounded,
+                              size: 20,
+                              color: Colors.redAccent,
+                            ),
                             const SizedBox(width: 12),
-                            Text(strings.plDelete, style: const TextStyle(color: Colors.redAccent)),
+                            Text(
+                              strings.plDelete,
+                              style: const TextStyle(color: Colors.redAccent),
+                            ),
                           ],
                         ),
                       ),
@@ -268,7 +294,8 @@ class PlaylistsScreen extends StatelessWidget {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => PlaylistDetailScreen(playlist: playlist),
+                        builder: (_) =>
+                            PlaylistDetailScreen(playlist: playlist),
                       ),
                     );
                   },

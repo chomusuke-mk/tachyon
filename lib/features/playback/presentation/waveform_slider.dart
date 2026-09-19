@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Interactive seek slider with optimistic local drag state, simulated aesthetic
@@ -43,10 +44,14 @@ class _WaveformSliderState extends State<WaveformSlider> {
 
     final currentMs = _isDragging
         ? _dragValue
-        : widget.position.inMilliseconds.toDouble().clamp(0.0, effectiveTotalMs);
+        : widget.position.inMilliseconds.toDouble().clamp(
+            0.0,
+            effectiveTotalMs,
+          );
 
     final progressFraction = (currentMs / effectiveTotalMs).clamp(0.0, 1.0);
-    final remainingDuration = widget.duration - Duration(milliseconds: currentMs.round());
+    final remainingDuration =
+        widget.duration - Duration(milliseconds: currentMs.round());
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -61,13 +66,21 @@ class _WaveformSliderState extends State<WaveformSlider> {
                 onHorizontalDragStart: (details) {
                   setState(() {
                     _isDragging = true;
-                    final fraction = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+                    final fraction =
+                        (details.localPosition.dx / constraints.maxWidth).clamp(
+                          0.0,
+                          1.0,
+                        );
                     _dragValue = fraction * effectiveTotalMs;
                   });
                 },
                 onHorizontalDragUpdate: (details) {
                   setState(() {
-                    final fraction = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+                    final fraction =
+                        (details.localPosition.dx / constraints.maxWidth).clamp(
+                          0.0,
+                          1.0,
+                        );
                     _dragValue = fraction * effectiveTotalMs;
                   });
                 },
@@ -79,15 +92,23 @@ class _WaveformSliderState extends State<WaveformSlider> {
                   });
                 },
                 onTapDown: (details) {
-                  final fraction = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
-                  final target = Duration(milliseconds: (fraction * effectiveTotalMs).round());
+                  final fraction =
+                      (details.localPosition.dx / constraints.maxWidth).clamp(
+                        0.0,
+                        1.0,
+                      );
+                  final target = Duration(
+                    milliseconds: (fraction * effectiveTotalMs).round(),
+                  );
                   widget.onSeek(target);
                 },
                 child: CustomPaint(
                   size: Size(constraints.maxWidth, 38),
                   painter: _WaveformSliderPainter(
                     progress: progressFraction,
-                    bufferedFraction: widget.isBuffering ? (progressFraction + 0.15).clamp(0.0, 1.0) : 1.0,
+                    bufferedFraction: widget.isBuffering
+                        ? (progressFraction + 0.15).clamp(0.0, 1.0)
+                        : 1.0,
                     activeColor: colorScheme.primary,
                     inactiveColor: colorScheme.surfaceContainerHighest,
                     bufferedColor: colorScheme.primary.withValues(alpha: 0.35),
@@ -171,7 +192,8 @@ class _WaveformSliderPainter extends CustomPainter {
 
       // Aesthetic simulated waveform amplitude curve
       final angle = (i / _barCount) * math.pi * 3;
-      final amplitude = (math.sin(angle).abs() * 0.6 + 0.3) * (size.height * 0.75);
+      final amplitude =
+          (math.sin(angle).abs() * 0.6 + 0.3) * (size.height * 0.75);
       final halfHeight = math.max(3.0, amplitude / 2);
 
       final rect = RRect.fromRectAndRadius(

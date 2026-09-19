@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../features/library/domain/track.dart';
+import 'package:tachyon/features/library/domain/track.dart';
+
 import 'album_art_image.dart';
 
 enum TrackAction {
@@ -56,10 +57,7 @@ class TrackTile extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     final leadingWidget = isSelectionMode
-        ? Checkbox(
-            value: isSelected,
-            onChanged: onSelectChanged,
-          )
+        ? Checkbox(value: isSelected, onChanged: onSelectChanged)
         : Stack(
             alignment: Alignment.center,
             children: [
@@ -68,10 +66,7 @@ class TrackTile extends StatelessWidget {
                 child: SizedBox(
                   width: 48,
                   height: 48,
-                  child: AlbumArtImage(
-                    uri: track.uri,
-                    fit: BoxFit.cover,
-                  ),
+                  child: AlbumArtImage(uri: track.uri, fit: BoxFit.cover),
                 ),
               ),
               if (isPlaying)
@@ -125,8 +120,12 @@ class TrackTile extends StatelessWidget {
             if (onToggleLike != null)
               IconButton(
                 icon: Icon(
-                  isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  color: isLiked ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                  isLiked
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  color: isLiked
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant,
                   size: 20,
                 ),
                 onPressed: onToggleLike,
@@ -214,9 +213,16 @@ class TrackTile extends StatelessWidget {
                     value: TrackAction.delete,
                     child: Row(
                       children: [
-                        Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent),
+                        Icon(
+                          Icons.delete_outline_rounded,
+                          size: 20,
+                          color: Colors.redAccent,
+                        ),
                         SizedBox(width: 12),
-                        Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                        Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
                       ],
                     ),
                   ),

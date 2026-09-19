@@ -1,14 +1,16 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/database/app_database.dart';
-import '../../../core/services/wakelock_service.dart';
-import '../../../shared/theme/app_theme.dart';
-import '../../../shared/widgets/album_art_image.dart';
-import '../../locales/domain/locale.dart';
-import '../../locales/presentation/locale_controller.dart';
-import '../domain/queue_item.dart';
+import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/services/wakelock_service.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/features/locales/domain/locale.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/domain/queue_item.dart';
+
 import 'audio_effects_sheet.dart';
 import 'lyrics_view.dart';
 import 'playback_controller.dart';
@@ -34,7 +36,8 @@ class NowPlayingScreen extends StatefulWidget {
   State<NowPlayingScreen> createState() => _NowPlayingScreenState();
 }
 
-class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBindingObserver {
+class _NowPlayingScreenState extends State<NowPlayingScreen>
+    with WidgetsBindingObserver {
   bool _showLyrics = false;
   int _desktopRightPanelTab = 0; // 0: Lyrics, 1: Queue
   bool _isCurrentTrackLiked = false;
@@ -121,7 +124,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
       _lastUnmutedVolume = playback.volume;
       playback.setVolume(0.0);
     } else {
-      playback.setVolume(_lastUnmutedVolume > 0 ? _lastUnmutedVolume : 1.0);
+      playback.setVolume(_lastUnmutedVolume > 0 ? _lastUnmutedVolume : 100.0);
     }
   }
 
@@ -179,8 +182,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
           // 2. Main Responsive Content Layer
           SafeArea(
             child: isDesktop
-                ? _buildDesktopLayout(context, playback, currentTrack, strings, colorScheme)
-                : _buildMobileLayout(context, playback, currentTrack, strings, colorScheme),
+                ? _buildDesktopLayout(
+                    context,
+                    playback,
+                    currentTrack,
+                    strings,
+                    colorScheme,
+                  )
+                : _buildMobileLayout(
+                    context,
+                    playback,
+                    currentTrack,
+                    strings,
+                    colorScheme,
+                  ),
           ),
         ],
       ),
@@ -191,11 +206,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (uri.isNotEmpty)
-          AlbumArtImage(
-            uri: uri,
-            fit: BoxFit.cover,
-          ),
+        if (uri.isNotEmpty) AlbumArtImage(uri: uri, fit: BoxFit.cover),
         BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 32.0, sigmaY: 32.0),
           child: Container(
@@ -242,19 +253,18 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                     Text(
                       strings.npTitle.toUpperCase(),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            letterSpacing: 1.5,
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.primary,
-                          ),
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.primary,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       track.album.isNotEmpty ? track.album : strings.alTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -262,7 +272,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
               IconButton(
                 icon: Icon(
                   _showLyrics ? Icons.music_note_rounded : Icons.lyrics_rounded,
-                  color: _showLyrics ? colorScheme.primary : colorScheme.onSurface,
+                  color: _showLyrics
+                      ? colorScheme.primary
+                      : colorScheme.onSurface,
                 ),
                 tooltip: strings.npLyrics,
                 onPressed: () => setState(() => _showLyrics = !_showLyrics),
@@ -307,18 +319,16 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                           track.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           track.artist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -329,9 +339,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                           ? Icons.favorite_rounded
                           : Icons.favorite_border_rounded,
                       size: 28,
-                      color: _isCurrentTrackLiked ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                      color: _isCurrentTrackLiked
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
                     ),
-                    tooltip: _isCurrentTrackLiked ? strings.npLiked : strings.npUnliked,
+                    tooltip: _isCurrentTrackLiked
+                        ? strings.npLiked
+                        : strings.npUnliked,
                     onPressed: _toggleLike,
                   ),
                 ],
@@ -353,8 +367,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                 children: [
                   IconButton(
                     icon: const Icon(Icons.shuffle_rounded, size: 24),
-                    color: playback.isShuffled ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                    tooltip: playback.isShuffled ? strings.npShuffleOn : strings.npShuffleOff,
+                    color: playback.isShuffled
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                    tooltip: playback.isShuffled
+                        ? strings.npShuffleOn
+                        : strings.npShuffleOff,
                     onPressed: playback.toggleShuffle,
                   ),
                   IconButton(
@@ -369,10 +387,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                       padding: const EdgeInsets.all(16),
                     ),
                     icon: Icon(
-                      playback.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      playback.isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
                       size: 38,
                     ),
-                    tooltip: playback.isPlaying ? strings.npPause : strings.npPlay,
+                    tooltip: playback.isPlaying
+                        ? strings.npPause
+                        : strings.npPlay,
                     onPressed: () {
                       playback.playOrPause();
                       _syncWakelock();
@@ -387,8 +409,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                     icon: Icon(
                       playback.loopMode != Loop.off
                           ? (playback.loopMode == Loop.one
-                              ? Icons.repeat_one_rounded
-                              : Icons.repeat_rounded)
+                                ? Icons.repeat_one_rounded
+                                : Icons.repeat_rounded)
                           : Icons.repeat_rounded,
                       size: 24,
                     ),
@@ -398,8 +420,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                     tooltip: playback.loopMode == Loop.one
                         ? strings.npRepeatOne
                         : (playback.loopMode == Loop.all
-                            ? strings.npRepeatAll
-                            : strings.npRepeatOff),
+                              ? strings.npRepeatAll
+                              : strings.npRepeatOff),
                     onPressed: playback.toggleLoopMode,
                   ),
                 ],
@@ -414,8 +436,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                       playback.volume == 0.0
                           ? Icons.volume_off_rounded
                           : (playback.volume > 0.5
-                              ? Icons.volume_up_rounded
-                              : Icons.volume_down_rounded),
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_down_rounded),
                       size: 20,
                     ),
                     tooltip: strings.npVolume,
@@ -423,9 +445,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                   ),
                   Expanded(
                     child: Slider(
-                      value: playback.volume.clamp(0.0, 1.0),
+                      value: playback.volume.clamp(0.0, 100.0),
                       min: 0.0,
-                      max: 1.0,
+                      max: 100.0,
                       onChanged: playback.setVolume,
                     ),
                   ),
@@ -470,9 +492,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                     const SizedBox(width: 8),
                     Text(
                       strings.npTitle,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const Spacer(),
                     IconButton(
@@ -480,9 +501,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                         _isCurrentTrackLiked
                             ? Icons.favorite_rounded
                             : Icons.favorite_border_rounded,
-                        color: _isCurrentTrackLiked ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                        color: _isCurrentTrackLiked
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant,
                       ),
-                      tooltip: _isCurrentTrackLiked ? strings.npLiked : strings.npUnliked,
+                      tooltip: _isCurrentTrackLiked
+                          ? strings.npLiked
+                          : strings.npUnliked,
                       onPressed: _toggleLike,
                     ),
                     IconButton(
@@ -497,7 +522,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                 // Hero Cover Art
                 Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 360, maxHeight: 360),
+                    constraints: const BoxConstraints(
+                      maxWidth: 360,
+                      maxHeight: 360,
+                    ),
                     child: _buildHeroCoverArt(track.uri, context),
                   ),
                 ),
@@ -508,18 +536,16 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                   track.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  track.artist,
+                  '${track.artist} • ${track.album}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 16),
 
@@ -538,8 +564,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                   children: [
                     IconButton(
                       icon: const Icon(Icons.shuffle_rounded),
-                      color: playback.isShuffled ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                      tooltip: playback.isShuffled ? strings.npShuffleOn : strings.npShuffleOff,
+                      color: playback.isShuffled
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                      tooltip: playback.isShuffled
+                          ? strings.npShuffleOn
+                          : strings.npShuffleOff,
                       onPressed: playback.toggleShuffle,
                     ),
                     const SizedBox(width: 12),
@@ -556,10 +586,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                         padding: const EdgeInsets.all(16),
                       ),
                       icon: Icon(
-                        playback.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        playback.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
                         size: 36,
                       ),
-                      tooltip: playback.isPlaying ? strings.npPause : strings.npPlay,
+                      tooltip: playback.isPlaying
+                          ? strings.npPause
+                          : strings.npPlay,
                       onPressed: () {
                         playback.playOrPause();
                         _syncWakelock();
@@ -576,8 +610,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                       icon: Icon(
                         playback.loopMode != Loop.off
                             ? (playback.loopMode == Loop.one
-                                ? Icons.repeat_one_rounded
-                                : Icons.repeat_rounded)
+                                  ? Icons.repeat_one_rounded
+                                  : Icons.repeat_rounded)
                             : Icons.repeat_rounded,
                       ),
                       color: playback.loopMode != Loop.off
@@ -586,8 +620,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                       tooltip: playback.loopMode == Loop.one
                           ? strings.npRepeatOne
                           : (playback.loopMode == Loop.all
-                              ? strings.npRepeatAll
-                              : strings.npRepeatOff),
+                                ? strings.npRepeatAll
+                                : strings.npRepeatOff),
                       onPressed: playback.toggleLoopMode,
                     ),
                   ],
@@ -603,8 +637,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                         playback.volume == 0.0
                             ? Icons.volume_off_rounded
                             : (playback.volume > 0.5
-                                ? Icons.volume_up_rounded
-                                : Icons.volume_down_rounded),
+                                  ? Icons.volume_up_rounded
+                                  : Icons.volume_down_rounded),
                         size: 20,
                       ),
                       tooltip: strings.npVolume,
@@ -613,9 +647,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                     SizedBox(
                       width: 220,
                       child: Slider(
-                        value: playback.volume.clamp(0.0, 1.0),
+                        value: playback.volume.clamp(0.0, 100.0),
                         min: 0.0,
-                        max: 1.0,
+                        max: 100.0,
                         onChanged: playback.setVolume,
                       ),
                     ),
@@ -649,20 +683,22 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
                     ),
                   ],
                   selected: {_desktopRightPanelTab},
-                  onSelectionChanged: (set) => setState(() => _desktopRightPanelTab = set.first),
+                  onSelectionChanged: (set) =>
+                      setState(() => _desktopRightPanelTab = set.first),
                 ),
                 const SizedBox(height: 16),
 
                 // Right Panel Content
                 Expanded(
                   child: Card(
-                    color: colorScheme.surfaceContainerLow.withValues(alpha: 0.6),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    color: colorScheme.surfaceContainerLow.withValues(
+                      alpha: 0.6,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: _desktopRightPanelTab == 0
-                        ? LyricsView(
-                            uri: track.uri,
-                            onSeek: playback.seek,
-                          )
+                        ? LyricsView(uri: track.uri, onSeek: playback.seek)
                         : const QueueView(),
                   ),
                 ),
@@ -699,10 +735,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(24.0),
-                child: AlbumArtImage(
-                  uri: uri,
-                  fit: BoxFit.cover,
-                ),
+                child: AlbumArtImage(uri: uri, fit: BoxFit.cover),
               ),
             ),
           ),
@@ -722,6 +755,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> with WidgetsBinding
 
   void _openAudioControls(BuildContext context) {
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:tachyon/core/services/audio_engine_service.dart';
+
 // ============================================================================
 // AUDIO SESSION & AUDIO FOCUS MANAGEMENT
 // ============================================================================
@@ -17,14 +19,6 @@ class AudioInterruptionEvent {
   });
 }
 
-/// Abstract handler for audio session actions (pause, play, duck).
-abstract interface class AudioSessionPlayerDelegate {
-  bool get isPlaying;
-  Future<void> play();
-  Future<void> pause();
-  Future<void> setVolume(double volume);
-}
-
 /// Manages operating system audio session focus and peripheral disconnect events.
 ///
 /// Features:
@@ -33,13 +27,13 @@ abstract interface class AudioSessionPlayerDelegate {
 /// - "Becoming Noisy" protection: auto-pause when headphones are unplugged or Bluetooth disconnects.
 /// - Audio session activation when starting playback and deactivation when stopped.
 class AudioSessionManager {
-  final AudioSessionPlayerDelegate delegate;
+  final AudioEngineService audioEngineService;
   bool _wasPlayingBeforeInterruption = false;
   bool _isSessionActive = false;
   StreamSubscription<dynamic>? _interruptionSub;
   StreamSubscription<dynamic>? _becomingNoisySub;
 
-  AudioSessionManager({required this.delegate});
+  AudioSessionManager({required this.audioEngineService});
 
   bool get wasPlayingBeforeInterruption => _wasPlayingBeforeInterruption;
   bool get isSessionActive => _isSessionActive;
@@ -58,21 +52,23 @@ class AudioSessionManager {
 
     // 2. Listen for becoming noisy (unplugged headphones / disconnected BT)
     if (mockBecomingNoisyStream != null) {
-      _becomingNoisySub = mockBecomingNoisyStream.listen((_) => handleBecomingNoisy());
+      _becomingNoisySub = mockBecomingNoisyStream.listen(
+        (_) => handleBecomingNoisy(),
+      );
     }
   }
 
   /// Handles audio interruptions from phone calls, alarms, or assistants.
   void handleInterruption(AudioInterruptionEvent event) {
     if (event.begin) {
-      if (delegate.isPlaying) {
+      if (audioEngineService.isPlaying) {
         _wasPlayingBeforeInterruption = true;
-        delegate.pause();
+        audioEngineService.pause();
       }
     } else {
       if (_wasPlayingBeforeInterruption) {
         if (event.type == AudioInterruptionType.pause) {
-          delegate.play();
+          audioEngineService.play();
         }
         _wasPlayingBeforeInterruption = false;
       }
@@ -83,8 +79,8 @@ class AudioSessionManager {
   ///
   /// Standard Android/iOS behavior mandates immediate pause to avoid public blasting.
   void handleBecomingNoisy() {
-    if (delegate.isPlaying) {
-      delegate.pause();
+    if (audioEngineService.isPlaying) {
+      audioEngineService.pause();
     }
   }
 

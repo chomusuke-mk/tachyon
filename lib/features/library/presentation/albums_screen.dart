@@ -1,17 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/widgets/album_art_image.dart';
-import '../../locales/presentation/locale_controller.dart';
-import '../domain/album.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/library/domain/album.dart';
+
 import 'album_detail_screen.dart';
 import 'library_controller.dart';
 
-enum AlbumSortOption {
-  title,
-  artist,
-  year,
-  trackCount,
-}
+enum AlbumSortOption { title, artist, year, trackCount }
 
 class AlbumsScreen extends StatefulWidget {
   const AlbumsScreen({super.key});
@@ -37,7 +33,9 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
           cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
           break;
         case AlbumSortOption.artist:
-          cmp = (a.artistName ?? '').toLowerCase().compareTo((b.artistName ?? '').toLowerCase());
+          cmp = (a.artistName ?? '').toLowerCase().compareTo(
+            (b.artistName ?? '').toLowerCase(),
+          );
           break;
         case AlbumSortOption.year:
           cmp = (a.year ?? 0).compareTo(b.year ?? 0);
@@ -95,7 +93,8 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                   Icon(
                     Icons.album_outlined,
                     size: 64,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant
+                        .withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -106,8 +105,8 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                   Text(
                     strings.alNoAlbumsDesc,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -123,10 +122,17 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
               itemCount: albums.length,
               itemBuilder: (context, index) {
                 final album = albums[index];
-                // Find a track from this album to get a cover URI
-                final albumTrack = library.allTracks
-                    .where((t) => (album.id != null && t.albumId == album.id) || t.album == album.name)
-                    .firstOrNull;
+                // Find a track from this album that has a cached cover image.
+                // Prefer tracks with hasCover=true, fall back to any track.
+                final albumTracks = library.allTracks.where(
+                  (t) =>
+                      (album.id != null && t.albumId == album.id) ||
+                      t.album == album.name,
+                );
+                //TODO FIX HEERE
+                final albumTrack =
+                    albumTracks.where((t) => false).firstOrNull ??
+                    albumTracks.firstOrNull;
                 final coverUri = albumTrack?.uri ?? '';
 
                 return InkWell(
@@ -158,7 +164,10 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                         album.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(

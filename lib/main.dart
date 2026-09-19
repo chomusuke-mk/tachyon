@@ -25,9 +25,9 @@ import 'features/settings/presentation/settings_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MediaKitPlayerAdapter.ensureInitialized();
+  await AudioPlayerAdapter.ensureInitialized();
   final sharedPreferences = await SharedPreferences.getInstance();
-  final database = AppDatabaseImpl();
+  final database = AppDatabase();
   await database.init();
   final cacheDirectory = await getApplicationCacheDirectory();
   runApp(
@@ -41,17 +41,18 @@ Future<void> main() async {
         Provider<QueueManager>(create: (_) => QueueManager()),
         Provider<LocaleRepository>(create: (_) => LocaleRepository()),
 
-        // Servicios base que dependen de la infraestructura
-        ProxyProvider<AppDatabase, MetadataExtractor>(
-          update: (_, db, prev) => prev ?? MetadataExtractorImpl(database: db),
-        ),
+        // CoverCacheService debe estar antes de MetadataExtractor (dependencia)
         ProxyProvider<AppDatabase, CoverCacheService>(
           update: (_, db, prev) =>
-              prev ?? CoverCacheServiceImpl(cacheDirectory: cacheDirectory),
+              prev ?? CoverCacheService(cacheDirectory: cacheDirectory),
+        ),
+        ProxyProvider2<AppDatabase, CoverCacheService, MetadataExtractor>(
+          update: (_, db, cover, prev) =>
+              prev ?? MetadataExtractor(database: db, coverCacheService: cover),
         ),
         ProxyProvider<QueueManager, AudioEngineService>(
           update: (_, queueMgr, prev) =>
-              prev ?? AudioEngineServiceImpl(queueManager: queueMgr),
+              prev ?? AudioEngineService(queueManager: queueMgr),
         ),
         ProxyProvider<SharedPreferences, SettingsRepository>(
           update: (_, prefs, prev) => prev ?? SettingsRepository(prefs),
@@ -61,7 +62,7 @@ Future<void> main() async {
         // CAPA 2: SERVICIOS Y REPOSITORIOS DEPENDIENTES
         // =====================================================================
         ProxyProvider<AppDatabase, LyricsService>(
-          update: (_, db, prev) => prev ?? LyricsServiceImpl(database: db),
+          update: (_, db, prev) => prev ?? LyricsService(database: db),
         ),
 
         // =====================================================================

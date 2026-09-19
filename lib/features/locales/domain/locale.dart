@@ -44,17 +44,24 @@ class AppStringKey {
   String get npVolumeBoost => _cadenasLocalizadas['np_volume_boost'] ?? '';
   String get npReplayGain => _cadenasLocalizadas['np_replay_gain'] ?? '';
   String get npReplayGainOff => _cadenasLocalizadas['np_replay_gain_off'] ?? '';
-  String get npReplayGainTrack => _cadenasLocalizadas['np_replay_gain_track'] ?? '';
-  String get npReplayGainAlbum => _cadenasLocalizadas['np_replay_gain_album'] ?? '';
+  String get npReplayGainTrack =>
+      _cadenasLocalizadas['np_replay_gain_track'] ?? '';
+  String get npReplayGainAlbum =>
+      _cadenasLocalizadas['np_replay_gain_album'] ?? '';
   String get npPreamp => _cadenasLocalizadas['np_preamp'] ?? '';
   String get npCrossfade => _cadenasLocalizadas['np_crossfade'] ?? '';
-  String get npCrossfadeDuration => _cadenasLocalizadas['np_crossfade_duration'] ?? '';
-  String get npExclusiveAudio => _cadenasLocalizadas['np_exclusive_audio'] ?? '';
+  String get npCrossfadeDuration =>
+      _cadenasLocalizadas['np_crossfade_duration'] ?? '';
+  String get npExclusiveAudio =>
+      _cadenasLocalizadas['np_exclusive_audio'] ?? '';
   String get npFullscreen => _cadenasLocalizadas['np_fullscreen'] ?? '';
-  String get npExitFullscreen => _cadenasLocalizadas['np_exit_fullscreen'] ?? '';
+  String get npExitFullscreen =>
+      _cadenasLocalizadas['np_exit_fullscreen'] ?? '';
   String get npVisualizer => _cadenasLocalizadas['np_visualizer'] ?? '';
-  String get npBackgroundArtwork => _cadenasLocalizadas['np_background_artwork'] ?? '';
-  String get npBackgroundGradient => _cadenasLocalizadas['np_background_gradient'] ?? '';
+  String get npBackgroundArtwork =>
+      _cadenasLocalizadas['np_background_artwork'] ?? '';
+  String get npBackgroundGradient =>
+      _cadenasLocalizadas['np_background_gradient'] ?? '';
   String get npAddToPlaylist => _cadenasLocalizadas['np_add_to_playlist'] ?? '';
   String get npLiked => _cadenasLocalizadas['np_liked'] ?? '';
   String get npUnliked => _cadenasLocalizadas['np_unliked'] ?? '';
@@ -80,7 +87,8 @@ class AppStringKey {
   String get trShare => _cadenasLocalizadas['tr_share'] ?? '';
   String get trDelete => _cadenasLocalizadas['tr_delete'] ?? '';
   String get trDeleteConfirm => _cadenasLocalizadas['tr_delete_confirm'] ?? '';
-  String get trDeletedSuccess => _cadenasLocalizadas['tr_deleted_success'] ?? '';
+  String get trDeletedSuccess =>
+      _cadenasLocalizadas['tr_deleted_success'] ?? '';
   String get trNoTracks => _cadenasLocalizadas['tr_no_tracks'] ?? '';
   String get trNoTracksDesc => _cadenasLocalizadas['tr_no_tracks_desc'] ?? '';
   String get trCount => _cadenasLocalizadas['tr_count'] ?? '';
@@ -91,7 +99,8 @@ class AppStringKey {
   String get trSortDateAdded => _cadenasLocalizadas['tr_sort_date_added'] ?? '';
   String get trSortDuration => _cadenasLocalizadas['tr_sort_duration'] ?? '';
   String get trSortAscending => _cadenasLocalizadas['tr_sort_ascending'] ?? '';
-  String get trSortDescending => _cadenasLocalizadas['tr_sort_descending'] ?? '';
+  String get trSortDescending =>
+      _cadenasLocalizadas['tr_sort_descending'] ?? '';
 
   // ---------------------------------------------------------------------------
   // al_: Albums Screen & Detail
@@ -111,7 +120,8 @@ class AppStringKey {
   String get alSortTitle => _cadenasLocalizadas['al_sort_title'] ?? '';
   String get alSortArtist => _cadenasLocalizadas['al_sort_artist'] ?? '';
   String get alSortYear => _cadenasLocalizadas['al_sort_year'] ?? '';
-  String get alSortTrackCount => _cadenasLocalizadas['al_sort_track_count'] ?? '';
+  String get alSortTrackCount =>
+      _cadenasLocalizadas['al_sort_track_count'] ?? '';
   String get alTotalDuration => _cadenasLocalizadas['al_total_duration'] ?? '';
 
   // ---------------------------------------------------------------------------
@@ -182,7 +192,8 @@ class AppStringKey {
   String get fAddToLibrary => _cadenasLocalizadas['f_add_to_library'] ?? '';
   String get fItemsCount => _cadenasLocalizadas['f_items_count'] ?? '';
   String get fInaccessible => _cadenasLocalizadas['f_inaccessible'] ?? '';
-  String get fInaccessibleDesc => _cadenasLocalizadas['f_inaccessible_desc'] ?? '';
+  String get fInaccessibleDesc =>
+      _cadenasLocalizadas['f_inaccessible_desc'] ?? '';
   String get fBreadcrumbRoot => _cadenasLocalizadas['f_breadcrumb_root'] ?? '';
 
   // ---------------------------------------------------------------------------
@@ -197,9 +208,11 @@ class AppStringKey {
   String get srAlbumsFound => _cadenasLocalizadas['sr_albums_found'] ?? '';
   String get srArtistsFound => _cadenasLocalizadas['sr_artists_found'] ?? '';
   String get srGenresFound => _cadenasLocalizadas['sr_genres_found'] ?? '';
-  String get srPlaylistsFound => _cadenasLocalizadas['sr_playlists_found'] ?? '';
+  String get srPlaylistsFound =>
+      _cadenasLocalizadas['sr_playlists_found'] ?? '';
   String get srViewMore => _cadenasLocalizadas['sr_view_more'] ?? '';
-  String get srRecentSearches => _cadenasLocalizadas['sr_recent_searches'] ?? '';
+  String get srRecentSearches =>
+      _cadenasLocalizadas['sr_recent_searches'] ?? '';
   String get srClearHistory => _cadenasLocalizadas['sr_clear_history'] ?? '';
 
   // ---------------------------------------------------------------------------
@@ -207,34 +220,54 @@ class AppStringKey {
   // ---------------------------------------------------------------------------
   String get sTitle => _cadenasLocalizadas['s_title'] ?? '';
   String get sMusicFolders => _cadenasLocalizadas['s_music_folders'] ?? '';
-  String get sMusicFoldersDesc => _cadenasLocalizadas['s_music_folders_desc'] ?? '';
+  String get sMusicFoldersDesc =>
+      _cadenasLocalizadas['s_music_folders_desc'] ?? '';
   String get sAddFolder => _cadenasLocalizadas['s_add_folder'] ?? '';
   String get sRemoveFolder => _cadenasLocalizadas['s_remove_folder'] ?? '';
   String get sRescanLibrary => _cadenasLocalizadas['s_rescan_library'] ?? '';
-  String get sRescanLibraryDesc => _cadenasLocalizadas['s_rescan_library_desc'] ?? '';
-  String get sScanningProgress => _cadenasLocalizadas['s_scanning_progress'] ?? '';
-  String get sCleanMissingTracks => _cadenasLocalizadas['s_clean_missing_tracks'] ?? '';
-  String get sCleanMissingTracksDesc => _cadenasLocalizadas['s_clean_missing_tracks_desc'] ?? '';
+  String get sRescanLibraryDesc =>
+      _cadenasLocalizadas['s_rescan_library_desc'] ?? '';
+  String get sScanningProgress =>
+      _cadenasLocalizadas['s_scanning_progress'] ?? '';
+  String get sCleanMissingTracks =>
+      _cadenasLocalizadas['s_clean_missing_tracks'] ?? '';
+  String get sCleanMissingTracksDesc =>
+      _cadenasLocalizadas['s_clean_missing_tracks_desc'] ?? '';
   String get sAudioSection => _cadenasLocalizadas['s_audio_section'] ?? '';
-  String get sCrossfadeEnable => _cadenasLocalizadas['s_crossfade_enable'] ?? '';
-  String get sCrossfadeEnableDesc => _cadenasLocalizadas['s_crossfade_enable_desc'] ?? '';
-  String get sCrossfadeDuration => _cadenasLocalizadas['s_crossfade_duration'] ?? '';
-  String get sCrossfadeDurationDesc => _cadenasLocalizadas['s_crossfade_duration_desc'] ?? '';
+  String get sCrossfadeEnable =>
+      _cadenasLocalizadas['s_crossfade_enable'] ?? '';
+  String get sCrossfadeEnableDesc =>
+      _cadenasLocalizadas['s_crossfade_enable_desc'] ?? '';
+  String get sCrossfadeDuration =>
+      _cadenasLocalizadas['s_crossfade_duration'] ?? '';
+  String get sCrossfadeDurationDesc =>
+      _cadenasLocalizadas['s_crossfade_duration_desc'] ?? '';
   String get sCrossfadeCurve => _cadenasLocalizadas['s_crossfade_curve'] ?? '';
-  String get sCrossfadeCurveDesc => _cadenasLocalizadas['s_crossfade_curve_desc'] ?? '';
-  String get sCrossfadeCurveEqualPower => _cadenasLocalizadas['s_crossfade_curve_equal_power'] ?? '';
-  String get sCrossfadeCurveLinear => _cadenasLocalizadas['s_crossfade_curve_linear'] ?? '';
+  String get sCrossfadeCurveDesc =>
+      _cadenasLocalizadas['s_crossfade_curve_desc'] ?? '';
+  String get sCrossfadeCurveEqualPower =>
+      _cadenasLocalizadas['s_crossfade_curve_equal_power'] ?? '';
+  String get sCrossfadeCurveLinear =>
+      _cadenasLocalizadas['s_crossfade_curve_linear'] ?? '';
   String get sAudioOutput => _cadenasLocalizadas['s_audio_output'] ?? '';
-  String get sAudioOutputDesc => _cadenasLocalizadas['s_audio_output_desc'] ?? '';
+  String get sAudioOutputDesc =>
+      _cadenasLocalizadas['s_audio_output_desc'] ?? '';
   String get sExclusiveAudio => _cadenasLocalizadas['s_exclusive_audio'] ?? '';
-  String get sExclusiveAudioDesc => _cadenasLocalizadas['s_exclusive_audio_desc'] ?? '';
+  String get sExclusiveAudioDesc =>
+      _cadenasLocalizadas['s_exclusive_audio_desc'] ?? '';
   String get sReplayGainMode => _cadenasLocalizadas['s_replay_gain_mode'] ?? '';
-  String get sReplayGainModeDesc => _cadenasLocalizadas['s_replay_gain_mode_desc'] ?? '';
-  String get sReplayGainPreamp => _cadenasLocalizadas['s_replay_gain_preamp'] ?? '';
-  String get sReplayGainPreampDesc => _cadenasLocalizadas['s_replay_gain_preamp_desc'] ?? '';
-  String get sGaplessPlayback => _cadenasLocalizadas['s_gapless_playback'] ?? '';
-  String get sGaplessPlaybackDesc => _cadenasLocalizadas['s_gapless_playback_desc'] ?? '';
-  String get sAppearanceSection => _cadenasLocalizadas['s_appearance_section'] ?? '';
+  String get sReplayGainModeDesc =>
+      _cadenasLocalizadas['s_replay_gain_mode_desc'] ?? '';
+  String get sReplayGainPreamp =>
+      _cadenasLocalizadas['s_replay_gain_preamp'] ?? '';
+  String get sReplayGainPreampDesc =>
+      _cadenasLocalizadas['s_replay_gain_preamp_desc'] ?? '';
+  String get sGaplessPlayback =>
+      _cadenasLocalizadas['s_gapless_playback'] ?? '';
+  String get sGaplessPlaybackDesc =>
+      _cadenasLocalizadas['s_gapless_playback_desc'] ?? '';
+  String get sAppearanceSection =>
+      _cadenasLocalizadas['s_appearance_section'] ?? '';
   String get sThemeMode => _cadenasLocalizadas['s_theme_mode'] ?? '';
   String get sThemeModeDesc => _cadenasLocalizadas['s_theme_mode_desc'] ?? '';
   String get sThemeSystem => _cadenasLocalizadas['s_theme_system'] ?? '';
@@ -242,21 +275,28 @@ class AppStringKey {
   String get sThemeDark => _cadenasLocalizadas['s_theme_dark'] ?? '';
   String get sThemeOled => _cadenasLocalizadas['s_theme_oled'] ?? '';
   String get sAccentColor => _cadenasLocalizadas['s_accent_color'] ?? '';
-  String get sAccentColorDesc => _cadenasLocalizadas['s_accent_color_desc'] ?? '';
+  String get sAccentColorDesc =>
+      _cadenasLocalizadas['s_accent_color_desc'] ?? '';
   String get sDynamicColor => _cadenasLocalizadas['s_dynamic_color'] ?? '';
-  String get sDynamicColorDesc => _cadenasLocalizadas['s_dynamic_color_desc'] ?? '';
-  String get sLanguageSection => _cadenasLocalizadas['s_language_section'] ?? '';
+  String get sDynamicColorDesc =>
+      _cadenasLocalizadas['s_dynamic_color_desc'] ?? '';
+  String get sLanguageSection =>
+      _cadenasLocalizadas['s_language_section'] ?? '';
   String get sLanguage => _cadenasLocalizadas['s_language'] ?? '';
   String get sLanguageDesc => _cadenasLocalizadas['s_language_desc'] ?? '';
-  String get sIntegrationsSection => _cadenasLocalizadas['s_integrations_section'] ?? '';
+  String get sIntegrationsSection =>
+      _cadenasLocalizadas['s_integrations_section'] ?? '';
   String get sDiscordRpc => _cadenasLocalizadas['s_discord_rpc'] ?? '';
   String get sDiscordRpcDesc => _cadenasLocalizadas['s_discord_rpc_desc'] ?? '';
-  String get sMediaNotifications => _cadenasLocalizadas['s_media_notifications'] ?? '';
-  String get sMediaNotificationsDesc => _cadenasLocalizadas['s_media_notifications_desc'] ?? '';
+  String get sMediaNotifications =>
+      _cadenasLocalizadas['s_media_notifications'] ?? '';
+  String get sMediaNotificationsDesc =>
+      _cadenasLocalizadas['s_media_notifications_desc'] ?? '';
   String get sAboutSection => _cadenasLocalizadas['s_about_section'] ?? '';
   String get sAppVersion => _cadenasLocalizadas['s_app_version'] ?? '';
   String get sCheckUpdates => _cadenasLocalizadas['s_check_updates'] ?? '';
-  String get sCheckUpdatesDesc => _cadenasLocalizadas['s_check_updates_desc'] ?? '';
+  String get sCheckUpdatesDesc =>
+      _cadenasLocalizadas['s_check_updates_desc'] ?? '';
   String get sViewChangelog => _cadenasLocalizadas['s_view_changelog'] ?? '';
   String get sGithubRepo => _cadenasLocalizadas['s_github_repo'] ?? '';
   String get sLicense => _cadenasLocalizadas['s_license'] ?? '';
@@ -273,9 +313,11 @@ class AppStringKey {
   String get upUpToDate => _cadenasLocalizadas['up_up_to_date'] ?? '';
   String get upChecking => _cadenasLocalizadas['up_checking'] ?? '';
   String get upCheckNow => _cadenasLocalizadas['up_check_now'] ?? '';
-  String get upCurrentVersion => _cadenasLocalizadas['up_current_version'] ?? '';
+  String get upCurrentVersion =>
+      _cadenasLocalizadas['up_current_version'] ?? '';
   String get upLatestVersion => _cadenasLocalizadas['up_latest_version'] ?? '';
-  String get upDownloadButton => _cadenasLocalizadas['up_download_button'] ?? '';
+  String get upDownloadButton =>
+      _cadenasLocalizadas['up_download_button'] ?? '';
   String get upDownloading => _cadenasLocalizadas['up_downloading'] ?? '';
   String get upInstallButton => _cadenasLocalizadas['up_install_button'] ?? '';
   String get upDismiss => _cadenasLocalizadas['up_dismiss'] ?? '';
@@ -296,7 +338,8 @@ class AppStringKey {
   // ---------------------------------------------------------------------------
   // sel_: Multi-selection Toolbar
   // ---------------------------------------------------------------------------
-  String get selSelectedCount => _cadenasLocalizadas['sel_selected_count'] ?? '';
+  String get selSelectedCount =>
+      _cadenasLocalizadas['sel_selected_count'] ?? '';
   String get selCancel => _cadenasLocalizadas['sel_cancel'] ?? '';
   String get selSelectAll => _cadenasLocalizadas['sel_select_all'] ?? '';
   String get selDeselectAll => _cadenasLocalizadas['sel_deselect_all'] ?? '';
@@ -304,22 +347,38 @@ class AppStringKey {
   // ---------------------------------------------------------------------------
   // Parametric Formatters
   // ---------------------------------------------------------------------------
-  String trCountFormatted(int count) => trCount.replaceAll('{count}', count.toString());
-  String selSelectedCountFormatted(int count) => selSelectedCount.replaceAll('{count}', count.toString());
-  String alTracksCountFormatted(int count) => alTracksCount.replaceAll('{count}', count.toString());
-  String arAlbumsCountFormatted(int count) => arAlbumsCount.replaceAll('{count}', count.toString());
-  String arTracksCountFormatted(int count) => arTracksCount.replaceAll('{count}', count.toString());
-  String plTracksCountFormatted(int count) => plTracksCount.replaceAll('{count}', count.toString());
-  String plDeleteConfirmFormatted(String name) => plDeleteConfirm.replaceAll('{name}', name);
-  String gTracksCountFormatted(int count) => gTracksCount.replaceAll('{count}', count.toString());
-  String gAlbumsCountFormatted(int count) => gAlbumsCount.replaceAll('{count}', count.toString());
-  String fItemsCountFormatted(int count) => fItemsCount.replaceAll('{count}', count.toString());
-  String srViewMoreFormatted(int count) => srViewMore.replaceAll('{count}', count.toString());
-  String sScanningProgressFormatted(int progress) => sScanningProgress.replaceAll('{progress}', progress.toString());
-  String upCurrentVersionFormatted(String version) => upCurrentVersion.replaceAll('{version}', version);
-  String upLatestVersionFormatted(String version) => upLatestVersion.replaceAll('{version}', version);
-  String upDownloadingFormatted(int progress) => upDownloading.replaceAll('{progress}', progress.toString());
-  String clVersionFormatted(String version) => clVersion.replaceAll('{version}', version);
+  String trCountFormatted(int count) =>
+      trCount.replaceAll('{count}', count.toString());
+  String selSelectedCountFormatted(int count) =>
+      selSelectedCount.replaceAll('{count}', count.toString());
+  String alTracksCountFormatted(int count) =>
+      alTracksCount.replaceAll('{count}', count.toString());
+  String arAlbumsCountFormatted(int count) =>
+      arAlbumsCount.replaceAll('{count}', count.toString());
+  String arTracksCountFormatted(int count) =>
+      arTracksCount.replaceAll('{count}', count.toString());
+  String plTracksCountFormatted(int count) =>
+      plTracksCount.replaceAll('{count}', count.toString());
+  String plDeleteConfirmFormatted(String name) =>
+      plDeleteConfirm.replaceAll('{name}', name);
+  String gTracksCountFormatted(int count) =>
+      gTracksCount.replaceAll('{count}', count.toString());
+  String gAlbumsCountFormatted(int count) =>
+      gAlbumsCount.replaceAll('{count}', count.toString());
+  String fItemsCountFormatted(int count) =>
+      fItemsCount.replaceAll('{count}', count.toString());
+  String srViewMoreFormatted(int count) =>
+      srViewMore.replaceAll('{count}', count.toString());
+  String sScanningProgressFormatted(int progress) =>
+      sScanningProgress.replaceAll('{progress}', progress.toString());
+  String upCurrentVersionFormatted(String version) =>
+      upCurrentVersion.replaceAll('{version}', version);
+  String upLatestVersionFormatted(String version) =>
+      upLatestVersion.replaceAll('{version}', version);
+  String upDownloadingFormatted(int progress) =>
+      upDownloading.replaceAll('{progress}', progress.toString());
+  String clVersionFormatted(String version) =>
+      clVersion.replaceAll('{version}', version);
 
   // ---------------------------------------------------------------------------
   // Registry Catalog
@@ -334,10 +393,20 @@ class AppStringKey {
     'np_lyrics', 'np_lyrics_empty', 'np_lyrics_sync', 'np_lyrics_unsync',
     'np_audio_controls', 'np_speed', 'np_pitch', 'np_volume_boost',
     'np_replay_gain', 'np_replay_gain_off', 'np_replay_gain_track',
-    'np_replay_gain_album', 'np_preamp', 'np_crossfade', 'np_crossfade_duration',
-    'np_exclusive_audio', 'np_fullscreen', 'np_exit_fullscreen', 'np_visualizer',
+    'np_replay_gain_album',
+    'np_preamp',
+    'np_crossfade',
+    'np_crossfade_duration',
+    'np_exclusive_audio',
+    'np_fullscreen',
+    'np_exit_fullscreen',
+    'np_visualizer',
     'np_background_artwork', 'np_background_gradient', 'np_add_to_playlist',
-    'np_liked', 'np_unliked', 'np_technical_info', 'np_bitrate', 'np_sample_rate',
+    'np_liked',
+    'np_unliked',
+    'np_technical_info',
+    'np_bitrate',
+    'np_sample_rate',
     'np_channels', 'np_format',
     // tr_
     'tr_title', 'tr_search_hint', 'tr_play', 'tr_play_next', 'tr_add_queue',
@@ -363,7 +432,10 @@ class AppStringKey {
     'pl_cancel_button', 'pl_delete', 'pl_delete_confirm', 'pl_rename',
     'pl_edit', 'pl_empty', 'pl_empty_desc', 'pl_add_tracks', 'pl_remove_track',
     'pl_play_all', 'pl_shuffle_all', 'pl_liked_songs', 'pl_history',
-    'pl_recently_added', 'pl_tracks_count', 'pl_reorder_hint', 'pl_no_playlists',
+    'pl_recently_added',
+    'pl_tracks_count',
+    'pl_reorder_hint',
+    'pl_no_playlists',
     // g_
     'g_title', 'g_search_hint', 'g_unknown', 'g_tracks_count', 'g_albums_count',
     'g_play_all', 'g_shuffle_all', 'g_no_genres', 'g_no_genres_desc',
@@ -372,24 +444,43 @@ class AppStringKey {
     'f_scan_folder', 'f_add_to_library', 'f_items_count', 'f_inaccessible',
     'f_inaccessible_desc', 'f_breadcrumb_root',
     // sr_
-    'sr_title', 'sr_hint', 'sr_filter_all', 'sr_no_results', 'sr_no_results_desc',
+    'sr_title',
+    'sr_hint',
+    'sr_filter_all',
+    'sr_no_results',
+    'sr_no_results_desc',
     'sr_tracks_found', 'sr_albums_found', 'sr_artists_found', 'sr_genres_found',
-    'sr_playlists_found', 'sr_view_more', 'sr_recent_searches', 'sr_clear_history',
+    'sr_playlists_found',
+    'sr_view_more',
+    'sr_recent_searches',
+    'sr_clear_history',
     // s_
     's_title', 's_music_folders', 's_music_folders_desc', 's_add_folder',
     's_remove_folder', 's_rescan_library', 's_rescan_library_desc',
-    's_scanning_progress', 's_clean_missing_tracks', 's_clean_missing_tracks_desc',
+    's_scanning_progress',
+    's_clean_missing_tracks',
+    's_clean_missing_tracks_desc',
     's_audio_section', 's_crossfade_enable', 's_crossfade_enable_desc',
     's_crossfade_duration', 's_crossfade_duration_desc', 's_crossfade_curve',
-    's_crossfade_curve_desc', 's_crossfade_curve_equal_power', 's_crossfade_curve_linear',
+    's_crossfade_curve_desc',
+    's_crossfade_curve_equal_power',
+    's_crossfade_curve_linear',
     's_audio_output',
     's_audio_output_desc', 's_exclusive_audio', 's_exclusive_audio_desc',
     's_replay_gain_mode', 's_replay_gain_mode_desc', 's_replay_gain_preamp',
-    's_replay_gain_preamp_desc', 's_gapless_playback', 's_gapless_playback_desc',
-    's_appearance_section', 's_theme_mode', 's_theme_mode_desc', 's_theme_system',
+    's_replay_gain_preamp_desc',
+    's_gapless_playback',
+    's_gapless_playback_desc',
+    's_appearance_section',
+    's_theme_mode',
+    's_theme_mode_desc',
+    's_theme_system',
     's_theme_light', 's_theme_dark', 's_theme_oled', 's_accent_color',
     's_accent_color_desc', 's_dynamic_color', 's_dynamic_color_desc',
-    's_language_section', 's_language', 's_language_desc', 's_integrations_section',
+    's_language_section',
+    's_language',
+    's_language_desc',
+    's_integrations_section',
     's_discord_rpc', 's_discord_rpc_desc', 's_media_notifications',
     's_media_notifications_desc', 's_about_section', 's_app_version',
     's_check_updates', 's_check_updates_desc', 's_view_changelog',
@@ -409,7 +500,8 @@ class AppStringKey {
 
   List<String> get allKeys => List.unmodifiable(_allAppStrings);
 
-  Map<String, String> toJson() => Map<String, String>.unmodifiable(_cadenasLocalizadas);
+  Map<String, String> toJson() =>
+      Map<String, String>.unmodifiable(_cadenasLocalizadas);
 
   Future<void> updateFromJson(
     Map<String, String> jsonData, {
@@ -421,7 +513,9 @@ class AppStringKey {
           .toList();
       debugPrint('Missing localization keys: ${missingKeys.join(', ')}');
       if (assertAllKeysPresent) {
-        throw FormatException('Missing localization keys: ${missingKeys.join(', ')}');
+        throw FormatException(
+          'Missing localization keys: ${missingKeys.join(', ')}',
+        );
       }
     }
     _cadenasLocalizadas.addAll(jsonData);

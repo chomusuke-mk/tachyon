@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../shared/theme/app_theme.dart';
-import '../library/presentation/albums_screen.dart';
-import '../library/presentation/artists_screen.dart';
-import '../library/presentation/folders_screen.dart';
-import '../library/presentation/genres_screen.dart';
-import '../library/presentation/tracks_screen.dart';
-import '../locales/presentation/locale_controller.dart';
-import '../playlists/presentation/playlists_screen.dart';
-import '../search/presentation/search_screen.dart';
-import '../settings/presentation/settings_screen.dart';
-import '../playback/presentation/now_playing_screen.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/features/library/presentation/albums_screen.dart';
+import 'package:tachyon/features/library/presentation/artists_screen.dart';
+import 'package:tachyon/features/library/presentation/folders_screen.dart';
+import 'package:tachyon/features/library/presentation/genres_screen.dart';
+import 'package:tachyon/features/library/presentation/tracks_screen.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playlists/presentation/playlists_screen.dart';
+import 'package:tachyon/features/search/presentation/search_screen.dart';
+import 'package:tachyon/features/settings/presentation/settings_screen.dart';
+import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
+
 import 'mini_player_bar.dart';
 
 enum ShellDestination {

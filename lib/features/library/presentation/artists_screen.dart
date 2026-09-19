@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/widgets/album_art_image.dart';
-import '../../locales/presentation/locale_controller.dart';
-import '../domain/artist.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/library/domain/artist.dart';
+
 import 'artist_detail_screen.dart';
 import 'library_controller.dart';
 
-enum ArtistSortOption {
-  name,
-  albums,
-  tracks,
-}
+enum ArtistSortOption { name, albums, tracks }
 
 class ArtistsScreen extends StatefulWidget {
   const ArtistsScreen({super.key});
@@ -87,7 +84,8 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                   Icon(
                     Icons.person_outline_rounded,
                     size: 64,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant
+                        .withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -98,8 +96,8 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                   Text(
                     strings.arNoArtistsDesc,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -116,7 +114,11 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
               itemBuilder: (context, index) {
                 final artist = artists[index];
                 final artistTrack = library.allTracks
-                    .where((t) => (artist.id != null && t.artistId == artist.id) || t.artist == artist.name)
+                    .where(
+                      (t) =>
+                          (artist.id != null && t.artistId == artist.id) ||
+                          t.artist == artist.name,
+                    )
                     .firstOrNull;
                 final coverUri = artistTrack?.uri ?? '';
 
@@ -134,7 +136,9 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                     children: [
                       CircleAvatar(
                         radius: 54,
-                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         child: coverUri.isNotEmpty
                             ? ClipOval(
                                 child: SizedBox(
@@ -149,7 +153,9 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                             : Icon(
                                 Icons.person_rounded,
                                 size: 48,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                       ),
                       const SizedBox(height: 8),
@@ -158,7 +164,10 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(

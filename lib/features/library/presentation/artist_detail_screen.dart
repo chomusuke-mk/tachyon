@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/widgets/album_art_image.dart';
-import '../../../shared/widgets/track_tile.dart';
-import '../../locales/presentation/locale_controller.dart';
-import '../../playback/presentation/playback_controller.dart';
-import '../domain/artist.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/track_tile.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/library/domain/artist.dart';
+
 import 'album_detail_screen.dart';
 import 'library_controller.dart';
 
@@ -20,19 +21,25 @@ class ArtistDetailScreen extends StatelessWidget {
     final playback = context.watch<PlaybackController>();
 
     final artistTracks = library.allTracks
-        .where((t) => (artist.id != null && t.artistId == artist.id) || t.artist == artist.name)
+        .where(
+          (t) =>
+              (artist.id != null && t.artistId == artist.id) ||
+              t.artist == artist.name,
+        )
         .toList();
 
     final artistAlbums = library.albums
-        .where((a) => (artist.id != null && a.artistId == artist.id) || a.artistName == artist.name)
+        .where(
+          (a) =>
+              (artist.id != null && a.artistId == artist.id) ||
+              a.artistName == artist.name,
+        )
         .toList();
 
     final firstUri = artistTracks.isNotEmpty ? artistTracks.first.uri : '';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(artist.name),
-      ),
+      appBar: AppBar(title: Text(artist.name)),
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
@@ -42,7 +49,9 @@ class ArtistDetailScreen extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 64,
-                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer,
                     child: firstUri.isNotEmpty
                         ? ClipOval(
                             child: SizedBox(
@@ -57,23 +66,24 @@ class ArtistDetailScreen extends StatelessWidget {
                         : Icon(
                             Icons.person_rounded,
                             size: 64,
-                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
                           ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     artist.name,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${strings.arAlbumsCountFormatted(artistAlbums.length)} • ${strings.arTracksCountFormatted(artistTracks.length)}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -83,7 +93,8 @@ class ArtistDetailScreen extends StatelessWidget {
                         icon: const Icon(Icons.play_arrow_rounded),
                         label: Text(strings.arPlayAll),
                         onPressed: artistTracks.isNotEmpty
-                            ? () => playback.playAll(artistTracks, startIndex: 0)
+                            ? () =>
+                                  playback.playAll(artistTracks, startIndex: 0)
                             : null,
                       ),
                       const SizedBox(width: 12),
@@ -91,7 +102,8 @@ class ArtistDetailScreen extends StatelessWidget {
                         icon: const Icon(Icons.shuffle_rounded),
                         label: Text(strings.arShuffleAll),
                         onPressed: artistTracks.isNotEmpty
-                            ? () => playback.playAll(artistTracks, shuffle: true)
+                            ? () =>
+                                  playback.playAll(artistTracks, shuffle: true)
                             : null,
                       ),
                     ],
@@ -102,9 +114,8 @@ class ArtistDetailScreen extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         strings.arDiscography,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -113,11 +124,17 @@ class ArtistDetailScreen extends StatelessWidget {
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: artistAlbums.length,
-                        separatorBuilder: (context, index) => const SizedBox(width: 12),
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final album = artistAlbums[index];
                           final albumTrack = library.allTracks
-                              .where((t) => (album.id != null && t.albumId == album.id) || t.album == album.name)
+                              .where(
+                                (t) =>
+                                    (album.id != null &&
+                                        t.albumId == album.id) ||
+                                    t.album == album.name,
+                              )
                               .firstOrNull;
                           final coverUri = albumTrack?.uri ?? '';
 
@@ -126,7 +143,8 @@ class ArtistDetailScreen extends StatelessWidget {
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
-                                  builder: (_) => AlbumDetailScreen(album: album),
+                                  builder: (_) =>
+                                      AlbumDetailScreen(album: album),
                                 ),
                               );
                             },
@@ -151,14 +169,19 @@ class ArtistDetailScreen extends StatelessWidget {
                                     album.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                   if (album.year != null)
                                     Text(
                                       album.year.toString(),
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: Theme.of(context).colorScheme.outline,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .outline,
                                       ),
                                     ),
                                 ],
@@ -174,9 +197,8 @@ class ArtistDetailScreen extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       strings.arAllTracks,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -184,20 +206,18 @@ class ArtistDetailScreen extends StatelessWidget {
             ),
           ),
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final track = artistTracks[index];
-                final isPlaying = playback.currentTrack?.uri == track.uri;
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final track = artistTracks[index];
+              final isPlaying = playback.currentTrack?.uri == track.uri;
 
-                return TrackTile(
-                  key: ValueKey(track.uri),
-                  track: track,
-                  isPlaying: isPlaying,
-                  onTap: () => playback.playTrack(track, contextTracks: artistTracks),
-                );
-              },
-              childCount: artistTracks.length,
-            ),
+              return TrackTile(
+                key: ValueKey(track.uri),
+                track: track,
+                isPlaying: isPlaying,
+                onTap: () =>
+                    playback.playTrack(track, contextTracks: artistTracks),
+              );
+            }, childCount: artistTracks.length),
           ),
         ],
       ),

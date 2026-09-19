@@ -162,7 +162,12 @@ class SettingsScreen extends StatelessWidget {
                             size: 20,
                           ),
                           tooltip: strings.sRemoveFolder,
-                          onPressed: () => settings.removeMusicDirectory(dir),
+                          onPressed: () {
+                            context
+                                .read<LibraryController>()
+                                .deleteTracksInFolder(dir);
+                            settings.removeMusicDirectory(dir);
+                          },
                         ),
                       );
                     }),
@@ -237,9 +242,9 @@ class SettingsScreen extends StatelessWidget {
                     type: ControllerType.slider,
                     child: Slider(
                       value: settings.crossfadeDuration.toDouble(),
-                      min: 1.0,
-                      max: 12.0,
-                      divisions: 11,
+                      min: 2.0,
+                      max: 30.0,
+                      divisions: 28,
                       label: '${settings.crossfadeDuration}s',
                       onChanged: settings.crossfadeEnabled
                           ? (val) => settings.setCrossfadeDuration(val.round())

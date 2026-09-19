@@ -4,15 +4,12 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:tachyon/core/utils/platform_utils.dart';
+import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/core/services/cover_cache_service.dart';
-
-import 'ffprobe_metadata_parser.dart';
-import 'process_executor.dart';
 
 /// Concurrency limiter implementing a bounded worker pool.
 class ConcurrencyLimiter {
@@ -95,45 +92,25 @@ class ThrottledProgressEmitter {
   }
 }
 
-/// High-level contract for library file scanning, metadata extraction,
-/// and embedded cover art extraction.
-abstract class MetadataExtractor {
-  Future<Track?> extractMetadata(String filePath);
-
-  Stream<ScanProgress> scanDirectories(
-    List<String> directories, {
-    CancellationToken? cancellationToken,
-  });
-
-  Future<String?> extractCoverArt(String filePath, String cacheDir);
-}
-
 /// Production implementation of [MetadataExtractor] with bounded isolate worker pool,
 /// incremental change detection, 20 Hz UI progress throttle, and chunked DB commits.
-class MetadataExtractorImpl implements MetadataExtractor {
+class MetadataExtractor {
   final AppDatabase database;
-  final ProcessExecutor executor;
-  final PlatformContext platform;
-  final FfprobeMetadataParser parser;
-  final CoverCacheService? coverCacheService;
+  final CoverCacheService coverCacheService;
   final int? customWorkerCount;
 
-  MetadataExtractorImpl({
+  MetadataExtractor({
     required this.database,
-    this.executor = const NativeProcessExecutor(),
-    this.platform = const NativePlatformContext(),
-    this.parser = const FfprobeMetadataParser(),
-    this.coverCacheService,
+    required this.coverCacheService,
     this.customWorkerCount,
   });
 
   int get workerCount =>
-      customWorkerCount ?? (platform.numberOfProcessors ~/ 2).clamp(1, 8);
+      customWorkerCount ?? (Platform.numberOfProcessors ~/ 2).clamp(1, 8);
 
-  @override
   Future<Track?> extractMetadata(String filePath) async {
     final file = File(filePath);
-    if (!platform.fileExists(filePath) && !await file.exists()) {
+    if (!file.existsSync() && !await file.exists()) {
       return null;
     }
 
@@ -144,15 +121,39 @@ class MetadataExtractorImpl implements MetadataExtractor {
       size = stat.size;
       modifiedAt = stat.modified.millisecondsSinceEpoch;
     } catch (_) {}
+    try {
+      final metadata = readMetadata(file, getImage: false);
 
-    final ffprobePath = await PlatformUtils.resolveExecutable('ffprobe');
-    return _extractSingleFile(
-      ffprobePath,
-      DiscoveredAudioFile(path: filePath, size: size, modifiedAt: modifiedAt),
-    );
+      if (!coverCacheService.hasCachedCover(file.path)) {
+        try {
+          unawaited(coverCacheService.saveCacheCover(file.path));
+        } catch (_) {}
+      }
+      return Track(
+        uri: filePath,
+        title: metadata.title ?? p.basenameWithoutExtension(filePath),
+        album: metadata.album,
+        artist: metadata.artist,
+        artists: metadata.performers,
+        albumArtist: metadata.albumArtist,
+        trackNumber: metadata.trackNumber,
+        discNumber: metadata.discNumber,
+        year: metadata.year?.year,
+        durationMs: metadata.duration?.inMilliseconds ?? 0,
+        bitrate: metadata.bitrate,
+        sampleRate: metadata.sampleRate,
+        channels: null,
+        codec: null,
+        fileSize: size,
+        modifiedAt: modifiedAt,
+        lyrics: metadata.lyrics,
+        genres: metadata.genres,
+      );
+    } catch (e) {
+      return null;
+    }
   }
 
-  @override
   Stream<ScanProgress> scanDirectories(
     List<String> directories, {
     CancellationToken? cancellationToken,
@@ -170,8 +171,6 @@ class MetadataExtractorImpl implements MetadataExtractor {
     final emitter = ThrottledProgressEmitter(controller);
 
     try {
-      final ffprobePath = await PlatformUtils.resolveExecutable('ffprobe');
-
       emitter.emit(
         const ScanProgress(phase: ScanPhase.discovering),
         force: true,
@@ -257,7 +256,7 @@ class MetadataExtractorImpl implements MetadataExtractor {
           limiter.run(() async {
             if (cancellationToken?.isCancelled ?? false) return;
 
-            final track = await _extractSingleFile(ffprobePath, file);
+            final track = await extractMetadata(file.path);
             scannedCount++;
 
             if (track != null) {
@@ -346,16 +345,9 @@ class MetadataExtractorImpl implements MetadataExtractor {
     List<String> directories, {
     CancellationToken? cancellationToken,
   }) async* {
-    final supportedSet = [
-      'mp3',
-      'flac',
-      'wav',
-      'aac',
-      'ogg',
-      'm4a',
-      'mka',
-      'opus',
-    ].map((e) => e.toLowerCase().replaceAll('.', '')).toSet();
+    final supportedSet = supportedFileExtensions
+        .map((e) => e.toLowerCase().replaceAll('.', ''))
+        .toSet();
 
     for (final dirPath in directories) {
       if (cancellationToken?.isCancelled ?? false) break;
@@ -401,43 +393,6 @@ class MetadataExtractorImpl implements MetadataExtractor {
     }
   }
 
-  Future<Track?> _extractSingleFile(
-    String ffprobePath,
-    DiscoveredAudioFile file,
-  ) async {
-    try {
-      final result = await executor
-          .run(ffprobePath, [
-            '-v',
-            'quiet',
-            '-print_format',
-            'json',
-            '-show_format',
-            '-show_streams',
-            file.path,
-          ])
-          .timeout(const Duration(seconds: 15));
-
-      if (result.exitCode != 0) {
-        debugPrint(
-          'ffprobe exited with code ${result.exitCode} for ${file.path}',
-        );
-        return null;
-      }
-
-      final jsonStr = result.stdout.toString();
-      return parser.parse(
-        jsonString: jsonStr,
-        filePath: file.path,
-        fileSize: file.size,
-        modifiedAt: file.modifiedAt,
-      );
-    } catch (e) {
-      debugPrint('Metadata extraction failed for ${file.path}: $e');
-      return null;
-    }
-  }
-
   Future<void> _persistBatch(
     List<Track> batch,
     ThrottledProgressEmitter emitter,
@@ -473,21 +428,5 @@ class MetadataExtractorImpl implements MetadataExtractor {
       debugPrint('Warning: Could not pre-query existing track metadata: $e');
       return {};
     }
-  }
-
-  @override
-  Future<String?> extractCoverArt(String filePath, String cacheDir) async {
-    final service =
-        coverCacheService ??
-        CoverCacheServiceImpl(
-          cacheDirectory: Directory(cacheDir),
-          executor: executor,
-        );
-
-    final file = await service.extractAndCacheCover(
-      filePath,
-      hasAttachedPic: true,
-    );
-    return file?.path;
   }
 }

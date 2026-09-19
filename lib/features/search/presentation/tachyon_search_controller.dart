@@ -1,16 +1,12 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
-import '../../../core/database/app_database.dart';
-import '../../library/domain/album.dart';
-import '../../library/domain/artist.dart';
-import '../../library/domain/track.dart';
 
-enum SearchFilterCategory {
-  all,
-  tracks,
-  albums,
-  artists;
-}
+import 'package:flutter/foundation.dart';
+import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/features/library/domain/album.dart';
+import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/library/domain/track.dart';
+
+enum SearchFilterCategory { all, tracks, albums, artists }
 
 class TachyonSearchController extends ChangeNotifier {
   final AppDatabase _database;
@@ -43,7 +39,9 @@ class TachyonSearchController extends ChangeNotifier {
   bool get isSearching => _isSearching;
   bool get isEmptyQuery => _query.trim().isEmpty;
   bool get hasResults =>
-      _matchedTracks.isNotEmpty || _matchedAlbums.isNotEmpty || _matchedArtists.isNotEmpty;
+      _matchedTracks.isNotEmpty ||
+      _matchedAlbums.isNotEmpty ||
+      _matchedArtists.isNotEmpty;
 
   // ---------------------------------------------------------------------------
   // Operations
@@ -77,7 +75,8 @@ class TachyonSearchController extends ChangeNotifier {
       // Concurrent execution of multi-domain searches in SQLite
       final trackFuture = _database.searchTracks(cleanQuery);
 
-      final albumFuture = _database.database.rawQuery('''
+      final albumFuture = _database.database.rawQuery(
+        '''
         SELECT al.id, al.name, al.artist_id, al.artist_name, al.year, COUNT(t.id) AS track_count
         FROM albums al
         LEFT JOIN tracks t ON t.album_id = al.id
@@ -85,9 +84,12 @@ class TachyonSearchController extends ChangeNotifier {
         GROUP BY al.id
         ORDER BY al.name COLLATE NOCASE ASC
         LIMIT 25
-      ''', [wildcard, wildcard]);
+      ''',
+        [wildcard, wildcard],
+      );
 
-      final artistFuture = _database.database.rawQuery('''
+      final artistFuture = _database.database.rawQuery(
+        '''
         SELECT ar.id, ar.name, COUNT(DISTINCT t.id) AS track_count, COUNT(DISTINCT al.id) AS album_count
         FROM artists ar
         LEFT JOIN tracks t ON t.artist_id = ar.id
@@ -96,13 +98,23 @@ class TachyonSearchController extends ChangeNotifier {
         GROUP BY ar.id
         ORDER BY ar.name COLLATE NOCASE ASC
         LIMIT 25
-      ''', [wildcard]);
+      ''',
+        [wildcard],
+      );
 
-      final results = await Future.wait([trackFuture, albumFuture, artistFuture]);
+      final results = await Future.wait([
+        trackFuture,
+        albumFuture,
+        artistFuture,
+      ]);
 
       _matchedTracks = results[0] as List<Track>;
-      _matchedAlbums = (results[1] as List<Map<String, dynamic>>).map((r) => Album.fromDbMap(r)).toList();
-      _matchedArtists = (results[2] as List<Map<String, dynamic>>).map((r) => Artist.fromDbMap(r)).toList();
+      _matchedAlbums = (results[1] as List<Map<String, dynamic>>)
+          .map((r) => Album.fromDbMap(r))
+          .toList();
+      _matchedArtists = (results[2] as List<Map<String, dynamic>>)
+          .map((r) => Artist.fromDbMap(r))
+          .toList();
     } catch (e) {
       debugPrint('Search query failed: $e');
     } finally {

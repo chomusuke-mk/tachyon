@@ -22,7 +22,6 @@ class Track {
   final int fileSize;
   final int modifiedAt;
   final String? lyrics;
-  final bool hasCover;
   final List<String> genres;
 
   const Track({
@@ -46,12 +45,12 @@ class Track {
     required this.fileSize,
     required this.modifiedAt,
     this.lyrics,
-    this.hasCover = false,
     this.genres = const [],
   });
 
   Duration get duration => Duration(milliseconds: durationMs);
-  DateTime get modifiedDateTime => DateTime.fromMillisecondsSinceEpoch(modifiedAt);
+  DateTime get modifiedDateTime =>
+      DateTime.fromMillisecondsSinceEpoch(modifiedAt);
 
   // Convenience aliases for flexible consumption
   String? get artistName => artist;
@@ -78,7 +77,6 @@ class Track {
     int? fileSize,
     int? modifiedAt,
     String? lyrics,
-    bool? hasCover,
     List<String>? genres,
   }) {
     return Track(
@@ -102,7 +100,6 @@ class Track {
       fileSize: fileSize ?? this.fileSize,
       modifiedAt: modifiedAt ?? this.modifiedAt,
       lyrics: lyrics ?? this.lyrics,
-      hasCover: hasCover ?? this.hasCover,
       genres: genres ?? this.genres,
     );
   }
@@ -126,7 +123,6 @@ class Track {
       'file_size': fileSize,
       'modified_at': modifiedAt,
       'lyrics': lyrics,
-      'has_cover': hasCover ? 1 : 0,
     };
   }
 
@@ -142,14 +138,20 @@ class Track {
       uri: map['uri'] as String? ?? '',
       title: map['title'] as String? ?? '',
       albumId: map['album_id'] as int?,
-      album: albumName ?? (map['album_name'] as String?) ?? (map['album'] as String?),
+      album:
+          albumName ??
+          (map['album_name'] as String?) ??
+          (map['album'] as String?),
       artistId: map['artist_id'] as int?,
-      artist: artistName ?? (map['artist_name'] as String?) ?? (map['artist'] as String?),
+      artist:
+          artistName ??
+          (map['artist_name'] as String?) ??
+          (map['artist'] as String?),
       artists: artists.isNotEmpty
           ? artists
           : ((map['artist_name'] ?? map['artist']) != null
-              ? [(map['artist_name'] ?? map['artist']) as String]
-              : const []),
+                ? [(map['artist_name'] ?? map['artist']) as String]
+                : const []),
       albumArtist: map['album_artist'] as String?,
       trackNumber: map['track_number'] as int?,
       discNumber: map['disc_number'] as int? ?? 1,
@@ -162,7 +164,6 @@ class Track {
       fileSize: map['file_size'] as int? ?? 0,
       modifiedAt: map['modified_at'] as int? ?? 0,
       lyrics: map['lyrics'] as String?,
-      hasCover: (map['has_cover'] as int? ?? 0) == 1,
       genres: genres,
     );
   }
@@ -189,7 +190,6 @@ class Track {
       'fileSize': fileSize,
       'modifiedAt': modifiedAt,
       'lyrics': lyrics,
-      'hasCover': hasCover,
       'genres': genres,
     };
   }
@@ -203,25 +203,22 @@ class Track {
     final album = (json['album'] ?? json['album_name']) as String?;
     final artistId = (json['artistId'] ?? json['artist_id']) as int?;
     final artist = (json['artist'] ?? json['artist_name']) as String?;
-    final albumArtist = (json['albumArtist'] ?? json['album_artist']) as String?;
+    final albumArtist =
+        (json['albumArtist'] ?? json['album_artist']) as String?;
     final trackNumber = (json['trackNumber'] ?? json['track_number']) as int?;
     final discNumber = (json['discNumber'] ?? json['disc_number']) as int? ?? 1;
     final year = json['year'] as int?;
-    final durationMs = ((json['durationMs'] ?? json['duration_ms']) as num?)?.toInt() ?? 0;
+    final durationMs =
+        ((json['durationMs'] ?? json['duration_ms']) as num?)?.toInt() ?? 0;
     final bitrate = json['bitrate'] as int?;
     final sampleRate = (json['sampleRate'] ?? json['sample_rate']) as int?;
     final channels = json['channels'] as int?;
     final codec = json['codec'] as String?;
-    final fileSize = ((json['fileSize'] ?? json['file_size']) as num?)?.toInt() ?? 0;
-    final modifiedAt = ((json['modifiedAt'] ?? json['modified_at']) as num?)?.toInt() ?? 0;
+    final fileSize =
+        ((json['fileSize'] ?? json['file_size']) as num?)?.toInt() ?? 0;
+    final modifiedAt =
+        ((json['modifiedAt'] ?? json['modified_at']) as num?)?.toInt() ?? 0;
     final lyrics = json['lyrics'] as String?;
-
-    bool hasCover = false;
-    if (json['hasCover'] is bool) {
-      hasCover = json['hasCover'] as bool;
-    } else if (json['has_cover'] is int) {
-      hasCover = (json['has_cover'] as int) == 1;
-    }
 
     List<String> artists = const [];
     if (json['artists'] is List) {
@@ -256,7 +253,6 @@ class Track {
       fileSize: fileSize,
       modifiedAt: modifiedAt,
       lyrics: lyrics,
-      hasCover: hasCover,
       genres: genres,
     );
   }
@@ -286,32 +282,30 @@ class Track {
           fileSize == other.fileSize &&
           modifiedAt == other.modifiedAt &&
           lyrics == other.lyrics &&
-          hasCover == other.hasCover &&
           listEquals(genres, other.genres);
 
   @override
   int get hashCode => Object.hashAll([
-        id,
-        uri,
-        title,
-        albumId,
-        album,
-        artistId,
-        artist,
-        Object.hashAll(artists),
-        albumArtist,
-        trackNumber,
-        discNumber,
-        year,
-        durationMs,
-        bitrate,
-        sampleRate,
-        channels,
-        codec,
-        fileSize,
-        modifiedAt,
-        lyrics,
-        hasCover,
-        Object.hashAll(genres),
-      ]);
+    id,
+    uri,
+    title,
+    albumId,
+    album,
+    artistId,
+    artist,
+    Object.hashAll(artists),
+    albumArtist,
+    trackNumber,
+    discNumber,
+    year,
+    durationMs,
+    bitrate,
+    sampleRate,
+    channels,
+    codec,
+    fileSize,
+    modifiedAt,
+    lyrics,
+    Object.hashAll(genres),
+  ]);
 }

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/widgets/track_tile.dart';
-import '../../locales/presentation/locale_controller.dart';
-import '../../playback/presentation/playback_controller.dart';
-import '../domain/genre.dart';
+import 'package:tachyon/shared/widgets/track_tile.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/library/domain/genre.dart';
+
 import 'library_controller.dart';
 
 class GenresScreen extends StatefulWidget {
@@ -63,7 +64,8 @@ class _GenresScreenState extends State<GenresScreen> {
               key: ValueKey(track.uri),
               track: track,
               isPlaying: isPlaying,
-              onTap: () => playback.playTrack(track, contextTracks: genreTracks),
+              onTap: () =>
+                  playback.playTrack(track, contextTracks: genreTracks),
             );
           },
         ),
@@ -73,9 +75,7 @@ class _GenresScreenState extends State<GenresScreen> {
     final genres = library.genres;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(strings.gTitle),
-      ),
+      appBar: AppBar(title: Text(strings.gTitle)),
       body: genres.isEmpty
           ? Center(
               child: Column(
@@ -84,7 +84,8 @@ class _GenresScreenState extends State<GenresScreen> {
                   Icon(
                     Icons.category_outlined,
                     size: 64,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant
+                        .withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -95,8 +96,8 @@ class _GenresScreenState extends State<GenresScreen> {
                   Text(
                     strings.gNoGenresDesc,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -125,13 +126,19 @@ class _GenresScreenState extends State<GenresScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.music_note_rounded, color: colorScheme.primary),
+                          Icon(
+                            Icons.music_note_rounded,
+                            color: colorScheme.primary,
+                          ),
                           const Spacer(),
                           Text(
                             genre.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(

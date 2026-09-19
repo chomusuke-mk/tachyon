@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+
+import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -86,9 +88,11 @@ class LibraryController extends ChangeNotifier {
   // Getters
   // ---------------------------------------------------------------------------
   List<Track> get tracks =>
-      (_selectedGenre != null || _selectedArtist != null || _selectedAlbum != null)
-          ? _filteredTracks
-          : _tracks;
+      (_selectedGenre != null ||
+          _selectedArtist != null ||
+          _selectedAlbum != null)
+      ? _filteredTracks
+      : _tracks;
 
   List<Track> get allTracks => List.unmodifiable(_tracks);
   List<Album> get albums => List.unmodifiable(_albums);
@@ -106,8 +110,10 @@ class LibraryController extends ChangeNotifier {
   Album? get selectedAlbum => _selectedAlbum;
 
   String? get currentFolderPath => _currentFolderPath;
-  List<String> get currentFolderSubdirectories => List.unmodifiable(_currentFolderSubdirectories);
-  List<Track> get currentFolderTracks => List.unmodifiable(_currentFolderTracks);
+  List<String> get currentFolderSubdirectories =>
+      List.unmodifiable(_currentFolderSubdirectories);
+  List<Track> get currentFolderTracks =>
+      List.unmodifiable(_currentFolderTracks);
   List<String> get folderBreadcrumbs => List.unmodifiable(_folderBreadcrumbs);
 
   ScanProgress get scanProgress => _scanProgress;
@@ -236,16 +242,30 @@ class LibraryController extends ChangeNotifier {
     var result = List<Track>.from(_tracks);
 
     if (_selectedAlbum != null) {
-      result = result.where((t) => t.albumId == _selectedAlbum!.id || t.album == _selectedAlbum!.name).toList();
+      result = result
+          .where(
+            (t) =>
+                t.albumId == _selectedAlbum!.id ||
+                t.album == _selectedAlbum!.name,
+          )
+          .toList();
     }
 
     if (_selectedArtist != null) {
-      result = result.where((t) => t.artistId == _selectedArtist!.id || t.artist == _selectedArtist!.name).toList();
+      result = result
+          .where(
+            (t) =>
+                t.artistId == _selectedArtist!.id ||
+                t.artist == _selectedArtist!.name,
+          )
+          .toList();
     }
 
     if (_selectedGenre != null) {
       final targetGenre = _selectedGenre!.name.toLowerCase();
-      result = result.where((t) => t.genres.any((g) => g.toLowerCase() == targetGenre)).toList();
+      result = result
+          .where((t) => t.genres.any((g) => g.toLowerCase() == targetGenre))
+          .toList();
     }
 
     _filteredTracks = result;
@@ -273,18 +293,28 @@ class LibraryController extends ChangeNotifier {
             subDirs.add(entity.path);
           }
         } else if (entity is File) {
-          final ext = p.extension(entity.path).toLowerCase().replaceAll('.', '');
-          if (['mp3', 'flac', 'wav', 'aac', 'ogg', 'm4a', 'mka', 'opus'].contains(ext)) {
+          final ext = p
+              .extension(entity.path)
+              .toLowerCase()
+              .replaceAll('.', '');
+          if (supportedFileExtensions
+              .map((e) => e.toLowerCase().replaceAll('.', ''))
+              .contains(ext)) {
             currentDirUris.add(entity.path);
           }
         }
       }
 
-      subDirs.sort((a, b) => p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()));
+      subDirs.sort(
+        (a, b) =>
+            p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()),
+      );
       _currentFolderSubdirectories = subDirs;
 
       // Cross-reference with indexed tracks
-      _currentFolderTracks = _tracks.where((t) => currentDirUris.contains(t.uri)).toList();
+      _currentFolderTracks = _tracks
+          .where((t) => currentDirUris.contains(t.uri))
+          .toList();
     } catch (e) {
       debugPrint('Error navigating folder $folderPath: $e');
     }
@@ -315,25 +345,25 @@ class LibraryController extends ChangeNotifier {
     _scanSubscription = _metadataExtractor
         .scanDirectories(directories, cancellationToken: token)
         .listen(
-      (progress) {
-        _scanProgress = progress;
-        notifyListeners();
+          (progress) {
+            _scanProgress = progress;
+            notifyListeners();
 
-        if (progress.phase == ScanPhase.completed) {
-          loadLibrary();
-        }
-      },
-      onError: (err) {
-        _scanProgress = _scanProgress.copyWith(
-          phase: ScanPhase.failed,
-          errorMessage: err.toString(),
+            if (progress.phase == ScanPhase.completed) {
+              loadLibrary();
+            }
+          },
+          onError: (err) {
+            _scanProgress = _scanProgress.copyWith(
+              phase: ScanPhase.failed,
+              errorMessage: err.toString(),
+            );
+            notifyListeners();
+          },
+          onDone: () {
+            _scanSubscription = null;
+          },
         );
-        notifyListeners();
-      },
-      onDone: () {
-        _scanSubscription = null;
-      },
-    );
   }
 
   void cancelScan() {
@@ -358,6 +388,24 @@ class LibraryController extends ChangeNotifier {
       await loadLibrary();
     } catch (e) {
       _errorMessage = 'Failed to delete track: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Removes from the database all tracks whose file path starts with [folderPath].
+  Future<void> deleteTracksInFolder(String folderPath) async {
+    try {
+      // Normalise: ensure path ends with separator so we don't accidentally
+      // match "/music/rock" when looking for "/music/ro".
+      final prefix = folderPath.endsWith('/') ? folderPath : '$folderPath/';
+      await _database.database.delete(
+        'tracks',
+        where: "uri LIKE ?",
+        whereArgs: ['${prefix.replaceAll('%', r'\%').replaceAll('_', r'\_')}%'],
+      );
+      await loadLibrary();
+    } catch (e) {
+      _errorMessage = 'Failed to delete tracks in folder: $e';
       notifyListeners();
     }
   }

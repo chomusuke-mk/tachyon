@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/services/cover_cache_service.dart';
+import 'package:tachyon/core/services/cover_cache_service.dart';
 
 class AlbumArtImage extends StatelessWidget {
   final String uri;

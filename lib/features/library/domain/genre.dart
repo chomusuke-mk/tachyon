@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import 'track.dart';
 
 @immutable
@@ -30,13 +31,13 @@ class Genre {
   }
 
   Map<String, dynamic> toDbMap() {
-    return {
-      if (id != null) 'id': id,
-      'name': name,
-    };
+    return {if (id != null) 'id': id, 'name': name};
   }
 
-  factory Genre.fromDbMap(Map<String, dynamic> map, {List<Track> tracks = const []}) {
+  factory Genre.fromDbMap(
+    Map<String, dynamic> map, {
+    List<Track> tracks = const [],
+  }) {
     return Genre(
       id: map['id'] as int?,
       name: map['name'] as String? ?? '',
@@ -58,8 +59,10 @@ class Genre {
     return Genre(
       id: json['id'] as int?,
       name: json['name'] as String? ?? '',
-      trackCount: ((json['trackCount'] ?? json['track_count']) as num?)?.toInt() ?? 0,
-      tracks: (json['tracks'] as List<dynamic>?)
+      trackCount:
+          ((json['trackCount'] ?? json['track_count']) as num?)?.toInt() ?? 0,
+      tracks:
+          (json['tracks'] as List<dynamic>?)
               ?.map((e) => Track.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
@@ -77,10 +80,5 @@ class Genre {
           listEquals(tracks, other.tracks);
 
   @override
-  int get hashCode => Object.hash(
-        id,
-        name,
-        trackCount,
-        Object.hashAll(tracks),
-      );
+  int get hashCode => Object.hash(id, name, trackCount, Object.hashAll(tracks));
 }

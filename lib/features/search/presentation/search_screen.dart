@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/widgets/album_art_image.dart';
-import '../../../shared/widgets/track_tile.dart';
-import '../../library/presentation/album_detail_screen.dart';
-import '../../library/presentation/artist_detail_screen.dart';
-import '../../locales/presentation/locale_controller.dart';
-import '../../playback/presentation/playback_controller.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/track_tile.dart';
+import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
+import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+
 import 'tachyon_search_controller.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -64,31 +65,38 @@ class _SearchScreenState extends State<SearchScreen> {
           // Filter Chips Row
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
             child: Row(
               children: [
                 FilterChip(
                   label: Text(strings.srFilterAll),
                   selected: searchCtrl.category == SearchFilterCategory.all,
-                  onSelected: (_) => searchCtrl.setCategory(SearchFilterCategory.all),
+                  onSelected: (_) =>
+                      searchCtrl.setCategory(SearchFilterCategory.all),
                 ),
                 const SizedBox(width: 8),
                 FilterChip(
                   label: Text(strings.srTracksFound),
                   selected: searchCtrl.category == SearchFilterCategory.tracks,
-                  onSelected: (_) => searchCtrl.setCategory(SearchFilterCategory.tracks),
+                  onSelected: (_) =>
+                      searchCtrl.setCategory(SearchFilterCategory.tracks),
                 ),
                 const SizedBox(width: 8),
                 FilterChip(
                   label: Text(strings.srAlbumsFound),
                   selected: searchCtrl.category == SearchFilterCategory.albums,
-                  onSelected: (_) => searchCtrl.setCategory(SearchFilterCategory.albums),
+                  onSelected: (_) =>
+                      searchCtrl.setCategory(SearchFilterCategory.albums),
                 ),
                 const SizedBox(width: 8),
                 FilterChip(
                   label: Text(strings.srArtistsFound),
                   selected: searchCtrl.category == SearchFilterCategory.artists,
-                  onSelected: (_) => searchCtrl.setCategory(SearchFilterCategory.artists),
+                  onSelected: (_) =>
+                      searchCtrl.setCategory(SearchFilterCategory.artists),
                 ),
               ],
             ),
@@ -107,7 +115,9 @@ class _SearchScreenState extends State<SearchScreen> {
                         Icon(
                           Icons.search_rounded,
                           size: 64,
-                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.4,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -130,196 +140,256 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                   )
                 : (!searchCtrl.hasResults && !searchCtrl.isSearching
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.search_off_rounded,
-                              size: 64,
-                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              strings.srNoResults,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                              child: Text(
-                                strings.srNoResultsDesc,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: colorScheme.onSurfaceVariant,
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off_rounded,
+                                size: 64,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.4,
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView(
-                        children: [
-                          // Tracks category or section in All
-                          if ((searchCtrl.category == SearchFilterCategory.all ||
-                                  searchCtrl.category == SearchFilterCategory.tracks) &&
-                              matchedTracks.isNotEmpty) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                              child: Text(
-                                strings.srTracksFound,
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.primary,
-                                    ),
+                              const SizedBox(height: 16),
+                              Text(
+                                strings.srNoResults,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            ...matchedTracks.map((track) {
-                              final isPlaying = playback.currentTrack?.uri == track.uri;
-                              return TrackTile(
-                                key: ValueKey('search_${track.uri}'),
-                                track: track,
-                                isPlaying: isPlaying,
-                                onTap: () => playback.playTrack(track, contextTracks: matchedTracks),
-                              );
-                            }),
-                          ],
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32.0,
+                                ),
+                                child: Text(
+                                  strings.srNoResultsDesc,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView(
+                          children: [
+                            // Tracks category or section in All
+                            if ((searchCtrl.category ==
+                                        SearchFilterCategory.all ||
+                                    searchCtrl.category ==
+                                        SearchFilterCategory.tracks) &&
+                                matchedTracks.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  16,
+                                  16,
+                                  8,
+                                ),
+                                child: Text(
+                                  strings.srTracksFound,
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                ),
+                              ),
+                              ...matchedTracks.map((track) {
+                                final isPlaying =
+                                    playback.currentTrack?.uri == track.uri;
+                                return TrackTile(
+                                  key: ValueKey('search_${track.uri}'),
+                                  track: track,
+                                  isPlaying: isPlaying,
+                                  onTap: () => playback.playTrack(
+                                    track,
+                                    contextTracks: matchedTracks,
+                                  ),
+                                );
+                              }),
+                            ],
 
-                          // Albums category or section in All
-                          if ((searchCtrl.category == SearchFilterCategory.all ||
-                                  searchCtrl.category == SearchFilterCategory.albums) &&
-                              matchedAlbums.isNotEmpty) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                              child: Text(
-                                strings.srAlbumsFound,
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.primary,
-                                    ),
+                            // Albums category or section in All
+                            if ((searchCtrl.category ==
+                                        SearchFilterCategory.all ||
+                                    searchCtrl.category ==
+                                        SearchFilterCategory.albums) &&
+                                matchedAlbums.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  16,
+                                  16,
+                                  8,
+                                ),
+                                child: Text(
+                                  strings.srAlbumsFound,
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                ),
                               ),
-                            ),
-                            SizedBox(
-                              height: 170,
-                              child: ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                itemCount: matchedAlbums.length,
-                                separatorBuilder: (context, index) => const SizedBox(width: 12),
-                                itemBuilder: (context, index) {
-                                  final album = matchedAlbums[index];
-                                  return InkWell(
-                                    borderRadius: BorderRadius.circular(10.0),
-                                    onTap: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                          builder: (_) => AlbumDetailScreen(album: album),
-                                        ),
-                                      );
-                                    },
-                                    child: SizedBox(
-                                      width: 120,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(10.0),
-                                            child: const SizedBox(
-                                              width: 120,
-                                              height: 120,
-                                              child: AlbumArtImage(
-                                                uri: '',
-                                                fit: BoxFit.cover,
+                              SizedBox(
+                                height: 170,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16.0,
+                                  ),
+                                  itemCount: matchedAlbums.length,
+                                  separatorBuilder: (context, index) =>
+                                      const SizedBox(width: 12),
+                                  itemBuilder: (context, index) {
+                                    final album = matchedAlbums[index];
+                                    return InkWell(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                AlbumDetailScreen(album: album),
+                                          ),
+                                        );
+                                      },
+                                      child: SizedBox(
+                                        width: 120,
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(10.0),
+                                              child: const SizedBox(
+                                                width: 120,
+                                                height: 120,
+                                                child: AlbumArtImage(
+                                                  uri: '',
+                                                  fit: BoxFit.cover,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            album.name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                          ),
-                                          Text(
-                                            album.artistName ?? '',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: colorScheme.onSurfaceVariant,
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              album.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            Text(
+                                              album.artistName ?? '',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+
+                            // Artists category or section in All
+                            if ((searchCtrl.category ==
+                                        SearchFilterCategory.all ||
+                                    searchCtrl.category ==
+                                        SearchFilterCategory.artists) &&
+                                matchedArtists.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  16,
+                                  16,
+                                  8,
+                                ),
+                                child: Text(
+                                  strings.srArtistsFound,
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                ),
+                              ),
+                              SizedBox(
+                                height: 130,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16.0,
+                                  ),
+                                  itemCount: matchedArtists.length,
+                                  separatorBuilder: (context, index) =>
+                                      const SizedBox(width: 16),
+                                  itemBuilder: (context, index) {
+                                    final artist = matchedArtists[index];
+                                    return InkWell(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) => ArtistDetailScreen(
+                                              artist: artist,
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-
-                          // Artists category or section in All
-                          if ((searchCtrl.category == SearchFilterCategory.all ||
-                                  searchCtrl.category == SearchFilterCategory.artists) &&
-                              matchedArtists.isNotEmpty) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                              child: Text(
-                                strings.srArtistsFound,
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.primary,
-                                    ),
-                              ),
-                            ),
-                            SizedBox(
-                              height: 130,
-                              child: ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                itemCount: matchedArtists.length,
-                                separatorBuilder: (context, index) => const SizedBox(width: 16),
-                                itemBuilder: (context, index) {
-                                  final artist = matchedArtists[index];
-                                  return InkWell(
-                                    borderRadius: BorderRadius.circular(10.0),
-                                    onTap: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                          builder: (_) => ArtistDetailScreen(artist: artist),
+                                        );
+                                      },
+                                      child: SizedBox(
+                                        width: 90,
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 36,
+                                              backgroundColor: colorScheme
+                                                  .surfaceContainerHighest,
+                                              child: Icon(
+                                                Icons.person_rounded,
+                                                size: 36,
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              artist.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      );
-                                    },
-                                    child: SizedBox(
-                                      width: 90,
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          CircleAvatar(
-                                            radius: 36,
-                                            backgroundColor: colorScheme.surfaceContainerHighest,
-                                            child: Icon(Icons.person_rounded, size: 36, color: colorScheme.onSurfaceVariant),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            artist.name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                          ),
-                                        ],
                                       ),
-                                    ),
-                                  );
-                                },
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
+                            ],
+                            const SizedBox(height: 24),
                           ],
-                          const SizedBox(height: 24),
-                        ],
-                      )),
+                        )),
           ),
         ],
       ),

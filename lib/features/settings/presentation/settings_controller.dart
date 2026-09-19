@@ -2,12 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../../../core/services/audio_engine_service.dart';
-import '../../playback/domain/crossfade_config.dart';
-import '../../playback/domain/playback_state.dart';
-import '../../playback/domain/queue_item.dart';
-import '../data/settings_repository.dart';
-import '../domain/app_settings.dart';
+import 'package:tachyon/core/services/audio_engine_service.dart';
+import 'package:tachyon/features/playback/domain/crossfade_config.dart';
+import 'package:tachyon/features/playback/domain/playback_state.dart';
+import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart';
 
 class SettingsController extends ChangeNotifier {
   final SettingsRepository _repository;

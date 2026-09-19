@@ -9,50 +9,11 @@ import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 
 import 'audio_player_adapter.dart';
-import 'audio_session_manager.dart';
 import 'queue_manager.dart';
 
 // ============================================================================
 // AUDIO ENGINE SERVICE INTERFACE
 // ============================================================================
-
-/// Public contract for the Tachyon Audio Engine Service.
-abstract class AudioEngineService {
-  Stream<MediaPlayerState> get stateStream;
-  MediaPlayerState get currentState;
-
-  Future<void> open(
-    List<QueueItem> playables, {
-    int index = 0,
-    bool play = true,
-    bool shuffle = false,
-  });
-
-  Future<void> play();
-  Future<void> pause();
-  Future<void> stop();
-  Future<void> next();
-  Future<void> previous();
-  Future<void> seek(Duration position);
-  Future<void> setVolume(double volume);
-  Future<void> setRate(double rate);
-  Future<void> setPitch(double pitch);
-  Future<void> setCrossfadeConfig(CrossfadeConfig config);
-  Future<void> setLoopMode(Loop loop);
-  Future<void> toggleShuffle();
-  Future<void> insertNext(QueueItem playable);
-  Future<void> append(List<QueueItem> playables);
-  Future<void> remove(int index);
-  Future<void> reorder(int from, int to);
-  Future<void> dispose();
-
-  // Audio Effects & Platform Extensions
-  Future<void> setReplayGain(ReplayGainMode mode);
-  Future<void> setReplayGainPreamp(double preamp);
-  Future<void> setExclusiveAudio(bool exclusive);
-  Future<void> setMpvProperty(String property, String value);
-  Future<void> setMpvProperties(Map<String, String> properties);
-}
 
 // ============================================================================
 // EXCLUSIVE AUDIO / CROSSFADE CONFLICT EXCEPTION
@@ -83,8 +44,7 @@ class ExclusiveAudioCrossfadeException implements Exception {
 /// - Gapless mode: when crossfade duration == 0s, transitions instantly.
 /// - Integrates with [QueueManager] for queue, shuffle, loop, and infinite mix.
 /// - Implements [AudioSessionPlayerDelegate] for audio focus and session handling.
-class AudioEngineServiceImpl
-    implements AudioEngineService, AudioSessionPlayerDelegate {
+class AudioEngineService {
   final AudioPlayerAdapter _playerA;
   final AudioPlayerAdapter _playerB;
   late AudioPlayerAdapter _activePlayer;
@@ -113,14 +73,14 @@ class AudioEngineServiceImpl
   double _replayGainPreamp = 0.0;
   final Map<String, String> _customMpvProperties = {};
 
-  AudioEngineServiceImpl({
+  AudioEngineService({
     AudioPlayerAdapter? playerA,
     AudioPlayerAdapter? playerB,
     QueueManager? queueManager,
     this.tickerInterval = const Duration(milliseconds: 25),
     math.Random? random,
-  }) : _playerA = playerA ?? MediaKitPlayerAdapter(),
-       _playerB = playerB ?? MediaKitPlayerAdapter(),
+  }) : _playerA = playerA ?? AudioPlayerAdapter(),
+       _playerB = playerB ?? AudioPlayerAdapter(),
        _queueManager = queueManager ?? QueueManager(random: random),
        _stateSubject = BehaviorSubject<MediaPlayerState>(
          const MediaPlayerState.initial(),
@@ -136,13 +96,10 @@ class AudioEngineServiceImpl
   bool get isCrossfading => _isCrossfading;
   CrossfadeConfig get crossfadeConfig => _crossfadeConfig;
 
-  @override
   bool get isPlaying => _activePlayer.isPlaying;
 
-  @override
   Stream<MediaPlayerState> get stateStream => _stateSubject;
 
-  @override
   MediaPlayerState get currentState => _stateSubject.value;
 
   // --------------------------------------------------------------------------
@@ -225,7 +182,6 @@ class AudioEngineServiceImpl
   // Core Playback Operations
   // --------------------------------------------------------------------------
 
-  @override
   Future<void> open(
     List<QueueItem> playables, {
     int index = 0,
@@ -258,7 +214,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> play() async {
     if (_queueManager.activeQueue.isEmpty) return;
     if (_isCrossfading) {
@@ -277,7 +232,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> pause() async {
     if (_isCrossfading) {
       if (_fadeTickStartTime != null) {
@@ -296,7 +250,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> stop() async {
     _abortActiveCrossfade();
     await _activePlayer.stop();
@@ -304,7 +257,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> seek(Duration position) async {
     if (_queueManager.activeQueue.isEmpty) return;
 
@@ -317,7 +269,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> next() async {
     if (_queueManager.activeQueue.isEmpty) return;
 
@@ -345,7 +296,6 @@ class AudioEngineServiceImpl
     }
   }
 
-  @override
   Future<void> previous() async {
     if (_queueManager.activeQueue.isEmpty) return;
 
@@ -374,7 +324,6 @@ class AudioEngineServiceImpl
   // Crossfade Orchestration Engine
   // --------------------------------------------------------------------------
 
-  @override
   Future<void> setCrossfadeConfig(CrossfadeConfig config) async {
     if (config.enabled && _exclusiveAudio && config.duration > Duration.zero) {
       throw const ExclusiveAudioCrossfadeException(
@@ -574,7 +523,6 @@ class AudioEngineServiceImpl
   // Audio Effects & MPV Controls
   // --------------------------------------------------------------------------
 
-  @override
   Future<void> setVolume(double volume) async {
     // Clamped up to 200.0% for volume boost
     _masterVolume = volume.clamp(0.0, 200.0);
@@ -584,7 +532,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> setRate(double rate) async {
     _playbackRate = rate.clamp(0.5, 1.5);
     await _activePlayer.setRate(_playbackRate);
@@ -592,7 +539,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> setPitch(double pitch) async {
     _playbackPitch = pitch.clamp(0.5, 1.5);
     await _activePlayer.setPitch(_playbackPitch);
@@ -600,7 +546,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> setReplayGain(ReplayGainMode mode) async {
     _replayGain = mode;
     final propertyValue = switch (mode) {
@@ -613,7 +558,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> setReplayGainPreamp(double preamp) async {
     _replayGainPreamp = preamp.clamp(-15.0, 15.0);
     final preampStr = _replayGainPreamp.toStringAsFixed(1);
@@ -622,7 +566,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> setExclusiveAudio(bool exclusive) async {
     if (exclusive &&
         _crossfadeConfig.enabled &&
@@ -650,14 +593,12 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> setMpvProperty(String property, String value) async {
     _customMpvProperties[property] = value;
     await _activePlayer.setProperty(property, value);
     await _standbyPlayer.setProperty(property, value);
   }
 
-  @override
   Future<void> setMpvProperties(Map<String, String> properties) async {
     _customMpvProperties.addAll(properties);
     for (final entry in properties.entries) {
@@ -670,19 +611,16 @@ class AudioEngineServiceImpl
   // Queue Management Delegation
   // --------------------------------------------------------------------------
 
-  @override
   Future<void> setLoopMode(Loop loop) async {
     _queueManager.setLoopMode(loop);
     _emitState();
   }
 
-  @override
   Future<void> toggleShuffle() async {
     _queueManager.toggleShuffle();
     _emitState();
   }
 
-  @override
   Future<void> insertNext(QueueItem playable) async {
     if (_isCrossfading) {
       _abortActiveCrossfade();
@@ -695,7 +633,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> append(List<QueueItem> playables) async {
     if (_queueManager.activeQueue.isEmpty) {
       await open(playables);
@@ -705,7 +642,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> remove(int index) async {
     if (index < 0 || index >= _queueManager.activeQueue.length) return;
 
@@ -724,7 +660,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> reorder(int from, int to) async {
     if (_isCrossfading) {
       _abortActiveCrossfade();
@@ -733,7 +668,6 @@ class AudioEngineServiceImpl
     _emitState();
   }
 
-  @override
   Future<void> dispose() async {
     _abortActiveCrossfade();
     for (final sub in _activeSubscriptions) {

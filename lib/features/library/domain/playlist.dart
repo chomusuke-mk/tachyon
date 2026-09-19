@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import 'track.dart';
 
 enum PlaylistType {
@@ -102,13 +103,16 @@ class PlaylistEntry {
   factory PlaylistEntry.fromJson(Map<String, dynamic> json) {
     return PlaylistEntry(
       id: json['id'] as int?,
-      playlistId: ((json['playlistId'] ?? json['playlist_id']) as num?)?.toInt() ?? 0,
+      playlistId:
+          ((json['playlistId'] ?? json['playlist_id']) as num?)?.toInt() ?? 0,
       trackId: (json['trackId'] ?? json['track_id']) as int?,
       uri: (json['uri'] as String?) ?? '',
       customTitle: (json['customTitle'] ?? json['custom_title']) as String?,
       position: ((json['position']) as num?)?.toInt() ?? 0,
       addedAt: ((json['addedAt'] ?? json['added_at']) as num?)?.toInt() ?? 0,
-      track: json['track'] != null ? Track.fromJson(json['track'] as Map<String, dynamic>) : null,
+      track: json['track'] != null
+          ? Track.fromJson(json['track'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -128,15 +132,15 @@ class PlaylistEntry {
 
   @override
   int get hashCode => Object.hash(
-        id,
-        playlistId,
-        trackId,
-        uri,
-        customTitle,
-        position,
-        addedAt,
-        track,
-      );
+    id,
+    playlistId,
+    trackId,
+    uri,
+    customTitle,
+    position,
+    addedAt,
+    track,
+  );
 }
 
 @immutable
@@ -157,7 +161,8 @@ class Playlist {
     this.entries = const [],
   });
 
-  int get trackCount => entries.isNotEmpty ? entries.length : (explicitTrackCount ?? 0);
+  int get trackCount =>
+      entries.isNotEmpty ? entries.length : (explicitTrackCount ?? 0);
   int get isSpecial => type.value;
   bool get isSpecialPlaylist => type != PlaylistType.user;
 
@@ -215,14 +220,18 @@ class Playlist {
   }
 
   factory Playlist.fromJson(Map<String, dynamic> json) {
-    final typeVal = (json['type'] ?? json['is_special'] ?? json['isSpecial']) as int? ?? 0;
+    final typeVal =
+        (json['type'] ?? json['is_special'] ?? json['isSpecial']) as int? ?? 0;
     return Playlist(
       id: json['id'] as int?,
       name: json['name'] as String? ?? '',
-      createdAt: ((json['createdAt'] ?? json['created_at']) as num?)?.toInt() ?? 0,
+      createdAt:
+          ((json['createdAt'] ?? json['created_at']) as num?)?.toInt() ?? 0,
       type: PlaylistType.fromValue(typeVal),
-      explicitTrackCount: ((json['trackCount'] ?? json['track_count']) as num?)?.toInt() ?? 0,
-      entries: (json['entries'] as List<dynamic>?)
+      explicitTrackCount:
+          ((json['trackCount'] ?? json['track_count']) as num?)?.toInt() ?? 0,
+      entries:
+          (json['entries'] as List<dynamic>?)
               ?.map((e) => PlaylistEntry.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
@@ -241,11 +250,6 @@ class Playlist {
           listEquals(entries, other.entries);
 
   @override
-  int get hashCode => Object.hash(
-        id,
-        name,
-        createdAt,
-        type,
-        Object.hashAll(entries),
-      );
+  int get hashCode =>
+      Object.hash(id, name, createdAt, type, Object.hashAll(entries));
 }

@@ -51,7 +51,7 @@ dependencies:
   sqflite_common_ffi: ^2.3.4+4
   sqlite3_flutter_libs: ^0.5.24
   wakelock_plus: ^1.2.8
-
+  audio_metadata_reader: ^1.8.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

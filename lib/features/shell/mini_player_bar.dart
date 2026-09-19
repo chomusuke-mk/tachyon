@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../shared/widgets/album_art_image.dart';
-import '../locales/presentation/locale_controller.dart';
-import '../playback/domain/queue_item.dart';
-import '../playback/presentation/playback_controller.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 
 class MiniPlayerBar extends StatelessWidget {
   final bool isDesktop;
   final VoidCallback? onTap;
 
-  const MiniPlayerBar({
-    super.key,
-    required this.isDesktop,
-    this.onTap,
-  });
+  const MiniPlayerBar({super.key, required this.isDesktop, this.onTap});
 
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -109,35 +105,53 @@ class MiniPlayerBar extends StatelessWidget {
                         ),
                         const SizedBox(width: 16),
                         IconButton(
-                          icon: Icon(playback.loopMode != Loop.off
-                              ? (playback.loopMode == Loop.one ? Icons.repeat_one_rounded : Icons.repeat_rounded)
-                              : Icons.repeat_rounded),
-                          color: playback.loopMode != Loop.off ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                          icon: Icon(
+                            playback.loopMode != Loop.off
+                                ? (playback.loopMode == Loop.one
+                                      ? Icons.repeat_one_rounded
+                                      : Icons.repeat_rounded)
+                                : Icons.repeat_rounded,
+                          ),
+                          color: playback.loopMode != Loop.off
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
                           tooltip: playback.loopMode == Loop.one
                               ? strings.npRepeatOne
-                              : (playback.loopMode == Loop.all ? strings.npRepeatAll : strings.npRepeatOff),
+                              : (playback.loopMode == Loop.all
+                                    ? strings.npRepeatAll
+                                    : strings.npRepeatOff),
                           onPressed: playback.toggleLoopMode,
                         ),
                         IconButton(
                           icon: const Icon(Icons.shuffle_rounded),
-                          color: playback.isShuffled ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                          tooltip: playback.isShuffled ? strings.npShuffleOn : strings.npShuffleOff,
+                          color: playback.isShuffled
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                          tooltip: playback.isShuffled
+                              ? strings.npShuffleOn
+                              : strings.npShuffleOff,
                           onPressed: playback.toggleShuffle,
                         ),
                         IconButton(
                           icon: const Icon(Icons.skip_previous_rounded),
                           tooltip: strings.npPrevious,
-                          onPressed: playback.hasPrevious ? playback.previous : null,
+                          onPressed: playback.hasPrevious
+                              ? playback.previous
+                              : null,
                         ),
                       ],
 
                       // Play / Pause Button
                       IconButton.filledTonal(
                         icon: Icon(
-                          playback.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                          playback.isPlaying
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
                           size: 26,
                         ),
-                        tooltip: playback.isPlaying ? strings.npPause : strings.npPlay,
+                        tooltip: playback.isPlaying
+                            ? strings.npPause
+                            : strings.npPlay,
                         onPressed: playback.playOrPause,
                       ),
 

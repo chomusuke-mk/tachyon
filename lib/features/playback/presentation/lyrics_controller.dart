@@ -1,10 +1,13 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import 'playback_controller.dart';
-import '../../../core/services/lrc_parser.dart';
-import '../../../core/services/lyrics_service.dart';
-import '../domain/lyric_line.dart';
-import '../domain/queue_item.dart';
+
+import 'package:tachyon/core/services/lrc_parser.dart';
+import 'package:tachyon/core/services/lyrics_service.dart';
+import 'package:tachyon/features/playback/domain/lyric_line.dart';
+import 'package:tachyon/features/playback/domain/queue_item.dart';
 
 /// State Controller managing lyrics fetching, O(log n) synchronization,
 /// auto-scrolling, manual scroll lock with 5-second auto-resume timer, and tap-to-seek.
@@ -76,7 +79,8 @@ class LyricsController extends ChangeNotifier {
 
     // 2. Resolve active lyric line based on current playback position
     if (_lyrics != null && _lyrics!.isSynced && lines.isNotEmpty) {
-      final effectivePos = playbackController.position + Duration(milliseconds: _userOffsetMs);
+      final effectivePos =
+          playbackController.position + Duration(milliseconds: _userOffsetMs);
       final newIndex = _lyrics!.activeIndexAt(effectivePos);
 
       if (newIndex != _currentIndex && newIndex >= 0) {
@@ -168,7 +172,10 @@ class LyricsController extends ChangeNotifier {
     // Standard list item height in logical pixels
     const double estimatedLineHeight = 56.0;
     final viewportHeight = scrollController.position.viewportDimension;
-    final targetOffset = (index * estimatedLineHeight) - (viewportHeight / 2) + (estimatedLineHeight / 2);
+    final targetOffset =
+        (index * estimatedLineHeight) -
+        (viewportHeight / 2) +
+        (estimatedLineHeight / 2);
 
     final clampedOffset = targetOffset.clamp(
       0.0,

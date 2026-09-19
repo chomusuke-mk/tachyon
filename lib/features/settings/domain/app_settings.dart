@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
-import '../../playback/domain/playback_state.dart';
-import '../../playback/domain/queue_item.dart';
+import 'package:tachyon/features/playback/domain/playback_state.dart';
+import 'package:tachyon/features/playback/domain/queue_item.dart';
 
 typedef LoopMode = Loop;
 

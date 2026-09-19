@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+
 import 'lyrics_controller.dart';
 
 /// Synchronized lyrics list view widget.
@@ -13,11 +14,7 @@ class LyricsView extends StatelessWidget {
   final String? uri;
   final ValueChanged<Duration>? onSeek;
 
-  const LyricsView({
-    super.key,
-    this.uri,
-    this.onSeek,
-  });
+  const LyricsView({super.key, this.uri, this.onSeek});
 
   @override
   Widget build(BuildContext context) {
@@ -26,9 +23,7 @@ class LyricsView extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     if (lyricsController.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator.adaptive(),
-      );
+      return const Center(child: CircularProgressIndicator.adaptive());
     }
 
     if (!lyricsController.hasLyrics) {
@@ -44,9 +39,8 @@ class LyricsView extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               strings.npLyricsEmpty,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
           ],
@@ -69,7 +63,10 @@ class LyricsView extends StatelessWidget {
           ListView.builder(
             controller: lyricsController.scrollController,
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 120.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 120.0,
+            ),
             itemCount: lines.length,
             itemBuilder: (context, index) {
               final line = lines[index];
@@ -84,7 +81,10 @@ class LyricsView extends StatelessWidget {
                   }
                 },
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10.0,
+                    horizontal: 8.0,
+                  ),
                   child: Text(
                     line.text,
                     textAlign: TextAlign.center,

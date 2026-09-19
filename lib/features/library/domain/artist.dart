@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import 'album.dart';
 import 'track.dart';
 
@@ -77,13 +78,17 @@ class Artist {
     return Artist(
       id: json['id'] as int?,
       name: json['name'] as String? ?? '',
-      trackCount: ((json['trackCount'] ?? json['track_count']) as num?)?.toInt() ?? 0,
-      albumCount: ((json['albumCount'] ?? json['album_count']) as num?)?.toInt() ?? 0,
-      albums: (json['albums'] as List<dynamic>?)
+      trackCount:
+          ((json['trackCount'] ?? json['track_count']) as num?)?.toInt() ?? 0,
+      albumCount:
+          ((json['albumCount'] ?? json['album_count']) as num?)?.toInt() ?? 0,
+      albums:
+          (json['albums'] as List<dynamic>?)
               ?.map((e) => Album.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
-      tracks: (json['tracks'] as List<dynamic>?)
+      tracks:
+          (json['tracks'] as List<dynamic>?)
               ?.map((e) => Track.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
@@ -104,11 +109,11 @@ class Artist {
 
   @override
   int get hashCode => Object.hash(
-        id,
-        name,
-        trackCount,
-        albumCount,
-        Object.hashAll(albums),
-        Object.hashAll(tracks),
-      );
+    id,
+    name,
+    trackCount,
+    albumCount,
+    Object.hashAll(albums),
+    Object.hashAll(tracks),
+  );
 }

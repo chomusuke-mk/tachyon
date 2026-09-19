@@ -81,7 +81,9 @@ class SettingRow extends StatelessWidget {
         }
 
         final alignedChild = Align(
-          alignment: stackVertically ? Alignment.centerLeft : Alignment.centerRight,
+          alignment: stackVertically
+              ? Alignment.centerLeft
+              : Alignment.centerRight,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: constraints.maxWidth),
             child: controllerWidget,

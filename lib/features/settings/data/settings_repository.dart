@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../playback/domain/playback_state.dart';
-import '../../playback/domain/queue_item.dart';
-import '../domain/app_settings.dart';
+import 'package:tachyon/features/playback/domain/playback_state.dart';
+import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart';
 
 enum CrossfadeCurve {
   equalPower('equal_power'),

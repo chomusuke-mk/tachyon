@@ -1,4 +1,5 @@
 import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
 
 @immutable
@@ -50,7 +51,8 @@ class LyricLine {
 
   factory LyricLine.fromJson(Map<String, dynamic> json) {
     return LyricLine(
-      timestampMs: ((json['timestampMs'] ?? json['timestamp_ms']) as num?)?.toInt() ?? 0,
+      timestampMs:
+          ((json['timestampMs'] ?? json['timestamp_ms']) as num?)?.toInt() ?? 0,
       text: json['text'] as String? ?? '',
       isSynced: (json['isSynced'] ?? json['is_synced']) as bool? ?? false,
       translation: json['translation'] as String?,
@@ -79,7 +81,10 @@ class LyricLine {
     final List<LyricLine> parsed = [];
 
     // Header regex e.g. [offset:500] or [offset:-200]
-    final offsetRegex = RegExp(r'\[offset:\s*([+-]?\d+)\s*\]', caseSensitive: false);
+    final offsetRegex = RegExp(
+      r'\[offset:\s*([+-]?\d+)\s*\]',
+      caseSensitive: false,
+    );
     // Timestamp tag regex e.g. [01:23.45] or [1:23.45] or [105:23.456]
     final timestampRegex = RegExp(r'\[(\d{1,}):(\d{2})\.(\d{2,3})\]');
 
@@ -97,11 +102,7 @@ class LyricLine {
       if (matches.isEmpty) {
         // Line without timestamp: metadata tag [ar:...] or plain unsynced lyric line
         if (!line.startsWith('[') || !line.endsWith(']')) {
-          parsed.add(LyricLine(
-            timestampMs: 0,
-            text: line,
-            isSynced: false,
-          ));
+          parsed.add(LyricLine(timestampMs: 0, text: line, isSynced: false));
         }
         continue;
       }
@@ -118,12 +119,19 @@ class LyricLine {
             ? int.parse(fracStr) * 10
             : int.parse(fracStr);
 
-        final totalMs = (mm * 60 * 1000) + (ss * 1000) + fracMs + headerOffset + userOffsetMs;
-        parsed.add(LyricLine(
-          timestampMs: totalMs < 0 ? 0 : totalMs,
-          text: text,
-          isSynced: true,
-        ));
+        final totalMs =
+            (mm * 60 * 1000) +
+            (ss * 1000) +
+            fracMs +
+            headerOffset +
+            userOffsetMs;
+        parsed.add(
+          LyricLine(
+            timestampMs: totalMs < 0 ? 0 : totalMs,
+            text: text,
+            isSynced: true,
+          ),
+        );
       }
     }
 

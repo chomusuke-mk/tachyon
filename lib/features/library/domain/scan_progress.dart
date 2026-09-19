@@ -97,18 +97,18 @@ class ScanProgress {
 
   @override
   int get hashCode => Object.hash(
-        phase,
-        currentFile,
-        scannedFiles,
-        totalFiles,
-        newTracks,
-        updatedTracks,
-        skippedTracks,
-        failedTracks,
-        progress,
-        errorMessage,
-        elapsedTime,
-      );
+    phase,
+    currentFile,
+    scannedFiles,
+    totalFiles,
+    newTracks,
+    updatedTracks,
+    skippedTracks,
+    failedTracks,
+    progress,
+    errorMessage,
+    elapsedTime,
+  );
 
   @override
   String toString() =>

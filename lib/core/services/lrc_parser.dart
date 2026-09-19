@@ -1,6 +1,7 @@
 import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
-import '../../features/playback/domain/lyric_line.dart';
+import 'package:tachyon/features/playback/domain/lyric_line.dart';
 
 /// Immutable container holding the parsed LRC document, metadata, and fast lookup trees.
 @immutable
@@ -34,13 +35,13 @@ class ParsedLrc {
 
   /// Factory for an empty lyric document
   factory ParsedLrc.empty() => ParsedLrc(
-        metadata: const {},
-        offsetMs: 0,
-        lines: const [],
-        timeline: SplayTreeMap<Duration, LyricLine>(),
-        indexMap: SplayTreeMap<int, int>(),
-        isSynced: false,
-      );
+    metadata: const {},
+    offsetMs: 0,
+    lines: const [],
+    timeline: SplayTreeMap<Duration, LyricLine>(),
+    indexMap: SplayTreeMap<int, int>(),
+    isSynced: false,
+  );
 
   // Metadata accessors
   String? get title => metadata['ti'];
@@ -74,7 +75,9 @@ class ParsedLrc {
     if (lines.isEmpty) return null;
     if (!isSynced || timeline.isEmpty) return lines.first;
 
-    final key = timeline.lastKeyBefore(position + const Duration(microseconds: 1));
+    final key = timeline.lastKeyBefore(
+      position + const Duration(microseconds: 1),
+    );
     if (key == null) return lines.first;
     return timeline[key];
   }
@@ -84,10 +87,15 @@ class ParsedLrc {
 abstract final class LrcParser {
   // Matches standard and extended LRC timestamps:
   // [mm:ss.xx] (centis), [mm:ss.xxx] (millis), [m:ss.xx], [120:00.00]
-  static final RegExp _timestampRegex = RegExp(r'\[(\d+):(\d{2})(?:\.(\d{1,3}))?\]');
+  static final RegExp _timestampRegex = RegExp(
+    r'\[(\d+):(\d{2})(?:\.(\d{1,3}))?\]',
+  );
 
   // Matches [offset:+/-ms]
-  static final RegExp _offsetRegex = RegExp(r'\[offset:\s*([+-]?\d+)\s*\]', caseSensitive: false);
+  static final RegExp _offsetRegex = RegExp(
+    r'\[offset:\s*([+-]?\d+)\s*\]',
+    caseSensitive: false,
+  );
 
   // Matches metadata tags e.g. [ti:Song Title] or [ar:Artist Name]
   static final RegExp _metadataRegex = RegExp(r'^\[([a-zA-Z]+)\s*:\s*(.*)\]$');
@@ -139,11 +147,9 @@ abstract final class LrcParser {
       if (timestampMatches.isEmpty) {
         // Plain text lyric line (without brackets)
         if (!line.startsWith('[') || !line.endsWith(']')) {
-          parsedLines.add(LyricLine(
-            timestampMs: 0,
-            text: line,
-            isSynced: false,
-          ));
+          parsedLines.add(
+            LyricLine(timestampMs: 0, text: line, isSynced: false),
+          );
         }
         continue;
       }
@@ -171,14 +177,17 @@ abstract final class LrcParser {
           }
         }
 
-        final totalMs = (mm * 60 * 1000) + (ss * 1000) + fracMs + headerOffset + userOffsetMs;
+        final totalMs =
+            (mm * 60 * 1000) +
+            (ss * 1000) +
+            fracMs +
+            headerOffset +
+            userOffsetMs;
         final clampedMs = totalMs < 0 ? 0 : totalMs;
 
-        parsedLines.add(LyricLine(
-          timestampMs: clampedMs,
-          text: text,
-          isSynced: true,
-        ));
+        parsedLines.add(
+          LyricLine(timestampMs: clampedMs, text: text, isSynced: true),
+        );
       }
     }
 

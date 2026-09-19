@@ -242,8 +242,14 @@ abstract final class TachyonTheme {
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: colorScheme.surfaceContainerLow,
         indicatorColor: colorScheme.primaryContainer,
-        selectedIconTheme: IconThemeData(color: colorScheme.onPrimaryContainer, size: 24),
-        unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 24),
+        selectedIconTheme: IconThemeData(
+          color: colorScheme.onPrimaryContainer,
+          size: 24,
+        ),
+        unselectedIconTheme: IconThemeData(
+          color: colorScheme.onSurfaceVariant,
+          size: 24,
+        ),
         labelType: NavigationRailLabelType.all,
       ),
       navigationBarTheme: NavigationBarThemeData(
@@ -261,7 +267,10 @@ abstract final class TachyonTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: rimBorder, width: 1),

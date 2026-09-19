@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../core/database/app_database.dart';
-import '../../library/domain/playlist.dart';
-import '../../library/domain/track.dart';
+import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 
 class PlaylistsController extends ChangeNotifier {
   final AppDatabase _database;

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../shared/widgets/album_art_image.dart';
-import '../../locales/domain/locale.dart';
-import '../../locales/presentation/locale_controller.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/features/locales/domain/locale.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+
 import 'playback_controller.dart';
 
 /// Modal bottom sheet representation of the playback queue on Mobile.
@@ -41,9 +42,7 @@ class QueueDrawerSheet extends StatelessWidget {
               ),
 
               // Queue View Body
-              Expanded(
-                child: QueueView(scrollController: scrollController),
-              ),
+              Expanded(child: QueueView(scrollController: scrollController)),
             ],
           ),
         );
@@ -80,9 +79,8 @@ class QueueView extends StatelessWidget {
             children: [
               Text(
                 strings.npQueue,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(width: 8),
               Badge.count(
@@ -127,14 +125,15 @@ class QueueView extends StatelessWidget {
                       Icon(
                         Icons.queue_music_rounded,
                         size: 56,
-                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                        color: colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Text(
                         strings.npQueueEmpty,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
+                        style: Theme.of(context).textTheme.bodyMedium
+                            ?.copyWith(color: colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -165,7 +164,9 @@ class QueueView extends StatelessWidget {
                       onDismissed: (_) => playback.removeFromQueue(index),
                       child: Material(
                         color: isCurrent
-                            ? colorScheme.primaryContainer.withValues(alpha: 0.28)
+                            ? colorScheme.primaryContainer.withValues(
+                                alpha: 0.28,
+                              )
                             : Colors.transparent,
                         child: ListTile(
                           leading: Stack(
@@ -205,8 +206,12 @@ class QueueView extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
-                              color: isCurrent ? colorScheme.primary : colorScheme.onSurface,
+                              fontWeight: isCurrent
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isCurrent
+                                  ? colorScheme.primary
+                                  : colorScheme.onSurface,
                             ),
                           ),
                           subtitle: Text(
@@ -230,7 +235,8 @@ class QueueView extends StatelessWidget {
                                 index: index,
                                 child: Icon(
                                   Icons.drag_handle_rounded,
-                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                                  color: colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.6),
                                 ),
                               ),
                             ],
@@ -257,7 +263,9 @@ class QueueView extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(strings.npQueueClear),
-        content: const Text('Are you sure you want to clear the entire playback queue?'),
+        content: const Text(
+          'Are you sure you want to clear the entire playback queue?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),

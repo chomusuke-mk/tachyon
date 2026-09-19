@@ -48,6 +48,7 @@ words:
   - Buildables
   - buildlog
   - cancion
+  - centis
   - cfbundle
   - cffi
   - CFLAGS
@@ -177,6 +178,7 @@ words:
   - jetbrains
   - jvmargs
   - kasem
+  - kbps
   - keyrings
   - klass
   - kotlin
@@ -262,6 +264,7 @@ words:
   - NONNULL
   - noplaylist
   - NORESTART
+  - Normalise
   - notif
   - nowait
   - NOZORDER
@@ -332,6 +335,7 @@ words:
   - replaygain
   - reprepro
   - reproduccion
+  - rescan
   - Rescan
   - resetea
   - reseteado
@@ -408,13 +412,19 @@ words:
   - unhide
   - uninst
   - uninstallexe
+  - unliked
+  - Unliked
   - Unmute
+  - Unmuted
   - unregistration
   - Unscrollable
+  - unsync
+  - Unsync
   - userappdata
   - userdesktop
   - userosscache
   - USERPROFILE
+  - USLT
   - uuid
   - uvicorn
   - vedantmgoyal

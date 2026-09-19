@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
@@ -26,7 +27,7 @@ class PlaybackController extends ChangeNotifier {
     required AudioEngineService audioEngineService,
     required this._database,
     required this._settingsRepository,
-  })  : _audioEngine = audioEngineService {
+  }) : _audioEngine = audioEngineService {
     _state = _audioEngine.currentState;
     _engineSubscription = _audioEngine.stateStream.listen((newState) {
       _state = newState;
@@ -141,18 +142,13 @@ class PlaybackController extends ChangeNotifier {
 
   bool get isInfiniteMixEnabled {
     final engine = _audioEngine;
-    if (engine is AudioEngineServiceImpl) {
-      return engine.queueManager.infiniteMixEnabled;
-    }
-    return false;
+    return engine.queueManager.infiniteMixEnabled;
   }
 
   void setInfiniteMix(bool enabled) {
     final engine = _audioEngine;
-    if (engine is AudioEngineServiceImpl) {
-      engine.queueManager.setInfiniteMix(enabled);
-      notifyListeners();
-    }
+    engine.queueManager.setInfiniteMix(enabled);
+    notifyListeners();
   }
 
   void toggleInfiniteMix() {
@@ -195,9 +191,12 @@ class PlaybackController extends ChangeNotifier {
   Future<void> setCrossfadeConfig(CrossfadeConfig config) =>
       _audioEngine.setCrossfadeConfig(config);
 
-  Future<void> setReplayGain(ReplayGainMode mode) => _audioEngine.setReplayGain(mode);
-  Future<void> setReplayGainPreamp(double preamp) => _audioEngine.setReplayGainPreamp(preamp);
-  Future<void> setExclusiveAudio(bool exclusive) => _audioEngine.setExclusiveAudio(exclusive);
+  Future<void> setReplayGain(ReplayGainMode mode) =>
+      _audioEngine.setReplayGain(mode);
+  Future<void> setReplayGainPreamp(double preamp) =>
+      _audioEngine.setReplayGainPreamp(preamp);
+  Future<void> setExclusiveAudio(bool exclusive) =>
+      _audioEngine.setExclusiveAudio(exclusive);
 
   // ---------------------------------------------------------------------------
   // History Logging & State Persistence Helpers
@@ -211,7 +210,8 @@ class PlaybackController extends ChangeNotifier {
 
     // Log to History if track has played > 15s or reached 50%
     if (!_historyLoggedForCurrentTrack && newState.currentTrack != null) {
-      final hasPlayedThreshold = newState.position.inSeconds > 15 ||
+      final hasPlayedThreshold =
+          newState.position.inSeconds > 15 ||
           (newState.duration.inMilliseconds > 0 && newState.progress >= 0.5);
 
       if (hasPlayedThreshold) {

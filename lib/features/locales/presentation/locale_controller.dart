@@ -1,7 +1,8 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../data/locale_repository.dart';
-import '../domain/locale.dart';
+import 'package:tachyon/features/locales/data/locale_repository.dart';
+import 'package:tachyon/features/locales/domain/locale.dart';
 
 /// State management controller providing reactive localized strings to UI widgets.
 ///
@@ -31,21 +32,21 @@ class LocaleController extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-      // 1. Load English fallback into memory once during startup
-      _fallbackCache = await _repository.getLocaleStrings(_fallbackCode);
+    // 1. Load English fallback into memory once during startup
+    _fallbackCache = await _repository.getLocaleStrings(_fallbackCode);
 
-      // 2. If initial locale is English, directly populate strings
-      if (_currentLocaleCode == _fallbackCode) {
-        await _localeStrings.updateFromJson(
-          _fallbackCache,
-          assertAllKeysPresent: false,
-        );
-        notifyListeners();
-        if (!_initCompleter.isCompleted) _initCompleter.complete();
-        return;
-      }
-      await _loadAndMerge(_currentLocaleCode);
+    // 2. If initial locale is English, directly populate strings
+    if (_currentLocaleCode == _fallbackCode) {
+      await _localeStrings.updateFromJson(
+        _fallbackCache,
+        assertAllKeysPresent: false,
+      );
+      notifyListeners();
       if (!_initCompleter.isCompleted) _initCompleter.complete();
+      return;
+    }
+    await _loadAndMerge(_currentLocaleCode);
+    if (!_initCompleter.isCompleted) _initCompleter.complete();
   }
 
   Future<void> _loadAndMerge(String targetLocale) async {

@@ -1,50 +1,32 @@
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../database/app_database.dart';
-import '../../features/library/domain/track.dart';
-import '../../features/playback/domain/queue_item.dart';
+import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/playback/domain/queue_item.dart';
+
 import 'lrc_parser.dart';
 
-/// Contract for resolving lyrics across embedded tags, external .lrc files, and local SQLite cache.
-abstract class LyricsService {
-  Future<ParsedLrc?> getLyricsForTrack(Track track, {bool forceRefresh = false});
-  Future<ParsedLrc?> getLyricsForQueueItem(QueueItem item, {bool forceRefresh = false});
-  Future<ParsedLrc?> getLyricsByUri({
-    required String uri,
-    String? title,
-    String? artist,
-    int? durationMs,
-    String? embeddedLyrics,
-    bool forceRefresh = false,
-  });
-  Future<void> saveLyrics({
-    required String keyHash,
-    required String rawLrc,
-    required String source,
-  });
-  void clearMemoryCache();
-}
-
 /// Production implementation of [LyricsService] with 3-tier fallback and in-memory LRU cache.
-class LyricsServiceImpl implements LyricsService {
+class LyricsService {
   final AppDatabase database;
   final int maxMemoryEntries;
 
   // In-memory LRU cache: keyHash -> ParsedLrc
-  final LinkedHashMap<String, ParsedLrc> _memoryCache = LinkedHashMap<String, ParsedLrc>();
+  final LinkedHashMap<String, ParsedLrc> _memoryCache =
+      LinkedHashMap<String, ParsedLrc>();
 
-  LyricsServiceImpl({
-    required this.database,
-    this.maxMemoryEntries = 50,
-  });
+  LyricsService({required this.database, this.maxMemoryEntries = 50});
 
-  @override
-  Future<ParsedLrc?> getLyricsForTrack(Track track, {bool forceRefresh = false}) {
+  Future<ParsedLrc?> getLyricsForTrack(
+    Track track, {
+    bool forceRefresh = false,
+  }) {
     return getLyricsByUri(
       uri: track.uri,
       title: track.title,
@@ -55,8 +37,10 @@ class LyricsServiceImpl implements LyricsService {
     );
   }
 
-  @override
-  Future<ParsedLrc?> getLyricsForQueueItem(QueueItem item, {bool forceRefresh = false}) {
+  Future<ParsedLrc?> getLyricsForQueueItem(
+    QueueItem item, {
+    bool forceRefresh = false,
+  }) {
     final embedded = item.extras['lyrics'] as String?;
     return getLyricsByUri(
       uri: item.uri,
@@ -68,7 +52,6 @@ class LyricsServiceImpl implements LyricsService {
     );
   }
 
-  @override
   Future<ParsedLrc?> getLyricsByUri({
     required String uri,
     String? title,
@@ -177,7 +160,11 @@ class LyricsServiceImpl implements LyricsService {
     return null;
   }
 
-  Future<void> _cacheLyrics(String keyHash, String rawLrc, String source) async {
+  Future<void> _cacheLyrics(
+    String keyHash,
+    String rawLrc,
+    String source,
+  ) async {
     try {
       await database.saveLyrics(keyHash, rawLrc, source);
     } catch (e) {
@@ -192,7 +179,6 @@ class LyricsServiceImpl implements LyricsService {
     _memoryCache[key] = parsed;
   }
 
-  @override
   Future<void> saveLyrics({
     required String keyHash,
     required String rawLrc,
@@ -203,7 +189,6 @@ class LyricsServiceImpl implements LyricsService {
     _putInMemory(keyHash, parsed);
   }
 
-  @override
   void clearMemoryCache() {
     _memoryCache.clear();
   }
@@ -215,8 +200,12 @@ class LyricsServiceImpl implements LyricsService {
     String? artist,
     int? durationMs,
   }) {
-    if (title != null && title.trim().isNotEmpty && artist != null && artist.trim().isNotEmpty) {
-      final canonical = '${title.trim().toLowerCase()}|${artist.trim().toLowerCase()}|${durationMs ?? 0}';
+    if (title != null &&
+        title.trim().isNotEmpty &&
+        artist != null &&
+        artist.trim().isNotEmpty) {
+      final canonical =
+          '${title.trim().toLowerCase()}|${artist.trim().toLowerCase()}|${durationMs ?? 0}';
       return sha256.convert(utf8.encode(canonical)).toString();
     }
     return sha256.convert(utf8.encode(uri)).toString();

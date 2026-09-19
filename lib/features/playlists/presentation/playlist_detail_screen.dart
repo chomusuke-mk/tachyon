@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../locales/presentation/locale_controller.dart';
-import '../../playback/presentation/playback_controller.dart';
-import '../../library/domain/playlist.dart';
-import '../../library/domain/track.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/features/library/domain/track.dart';
+
 import 'playlists_controller.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
@@ -52,9 +53,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     final tracks = playlists.selectedPlaylistTracks;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(currentPlaylist.name),
-      ),
+      appBar: AppBar(title: Text(currentPlaylist.name)),
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
@@ -73,8 +72,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       currentPlaylist.type == PlaylistType.liked
                           ? Icons.favorite_rounded
                           : (currentPlaylist.type == PlaylistType.history
-                              ? Icons.history_rounded
-                              : Icons.playlist_play_rounded),
+                                ? Icons.history_rounded
+                                : Icons.playlist_play_rounded),
                       size: 64,
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
                     ),
@@ -82,17 +81,16 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                   const SizedBox(height: 16),
                   Text(
                     currentPlaylist.name,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${strings.plTracksCountFormatted(tracks.length)} • ${_formatTotalDuration(tracks)}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -137,7 +135,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               child: Center(
                 child: Text(
                   strings.plEmpty,
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             )
@@ -149,7 +149,11 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                 itemCount: tracks.length,
                 onReorderItem: (oldIndex, newIndex) {
                   if (currentPlaylist.id != null) {
-                    playlists.reorderPlaylistEntries(currentPlaylist.id!, oldIndex, newIndex);
+                    playlists.reorderPlaylistEntries(
+                      currentPlaylist.id!,
+                      oldIndex,
+                      newIndex,
+                    );
                   }
                 },
                 itemBuilder: (context, index) {
@@ -159,8 +163,12 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                   return ListTile(
                     key: ValueKey('${track.id}_$index'),
                     leading: Icon(
-                      isPlaying ? Icons.volume_up_rounded : Icons.music_note_rounded,
-                      color: isPlaying ? Theme.of(context).colorScheme.primary : null,
+                      isPlaying
+                          ? Icons.volume_up_rounded
+                          : Icons.music_note_rounded,
+                      color: isPlaying
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
                     ),
                     title: Text(
                       track.title,
@@ -168,7 +176,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: isPlaying ? Theme.of(context).colorScheme.primary : null,
+                        color: isPlaying
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
                       ),
                     ),
                     subtitle: Text(
@@ -183,21 +193,32 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                           _formatTrackDuration(track.durationMs),
                           style: TextStyle(
                             fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
-                        if (currentPlaylist.type == PlaylistType.user && track.id != null && currentPlaylist.id != null)
+                        if (currentPlaylist.type == PlaylistType.user &&
+                            track.id != null &&
+                            currentPlaylist.id != null)
                           IconButton(
-                            icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+                            icon: const Icon(
+                              Icons.remove_circle_outline_rounded,
+                              size: 20,
+                            ),
                             tooltip: strings.plRemoveTrack,
                             onPressed: () {
-                              playlists.removeTrackFromPlaylist(currentPlaylist.id!, track.id!);
+                              playlists.removeTrackFromPlaylist(
+                                currentPlaylist.id!,
+                                track.id!,
+                              );
                             },
                           ),
                         const Icon(Icons.drag_handle_rounded),
                       ],
                     ),
-                    onTap: () => playback.playTrack(track, contextTracks: tracks),
+                    onTap: () =>
+                        playback.playTrack(track, contextTracks: tracks),
                   );
                 },
               ),
