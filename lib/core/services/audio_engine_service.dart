@@ -1,0 +1,746 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:tachyon/features/playback/domain/behavior_subject.dart';
+import 'package:tachyon/features/playback/domain/crossfade_config.dart';
+import 'package:tachyon/features/playback/domain/playback_state.dart';
+import 'package:tachyon/features/playback/domain/queue_item.dart';
+
+import 'audio_player_adapter.dart';
+import 'audio_session_manager.dart';
+import 'queue_manager.dart';
+
+// ============================================================================
+// AUDIO ENGINE SERVICE INTERFACE
+// ============================================================================
+
+/// Public contract for the Tachyon Audio Engine Service.
+abstract class AudioEngineService {
+  Stream<MediaPlayerState> get stateStream;
+  MediaPlayerState get currentState;
+
+  Future<void> open(
+    List<QueueItem> playables, {
+    int index = 0,
+    bool play = true,
+    bool shuffle = false,
+  });
+
+  Future<void> play();
+  Future<void> pause();
+  Future<void> stop();
+  Future<void> next();
+  Future<void> previous();
+  Future<void> seek(Duration position);
+  Future<void> setVolume(double volume);
+  Future<void> setRate(double rate);
+  Future<void> setPitch(double pitch);
+  Future<void> setCrossfadeConfig(CrossfadeConfig config);
+  Future<void> setLoopMode(Loop loop);
+  Future<void> toggleShuffle();
+  Future<void> insertNext(QueueItem playable);
+  Future<void> append(List<QueueItem> playables);
+  Future<void> remove(int index);
+  Future<void> reorder(int from, int to);
+  Future<void> dispose();
+
+  // Audio Effects & Platform Extensions
+  Future<void> setReplayGain(ReplayGainMode mode);
+  Future<void> setReplayGainPreamp(double preamp);
+  Future<void> setExclusiveAudio(bool exclusive);
+  Future<void> setMpvProperty(String property, String value);
+  Future<void> setMpvProperties(Map<String, String> properties);
+}
+
+// ============================================================================
+// EXCLUSIVE AUDIO / CROSSFADE CONFLICT EXCEPTION
+// ============================================================================
+
+class ExclusiveAudioCrossfadeException implements Exception {
+  final String message;
+  const ExclusiveAudioCrossfadeException(this.message);
+
+  @override
+  String toString() => 'ExclusiveAudioCrossfadeException: $message';
+}
+
+// ============================================================================
+// AUDIO ENGINE SERVICE IMPLEMENTATION
+// ============================================================================
+
+/// Production and testable implementation of [AudioEngineService].
+///
+/// Coordinates two [AudioPlayerAdapter] instances (Player A and Player B):
+/// - Role Swapping: Player A and Player B alternate roles between active and standby.
+/// - Active Player plays current song and drives UI progress streams.
+/// - When remaining track duration <= effective crossfade duration, standby player
+///   preloads and starts the next track at volume 0.0.
+/// - 25ms periodic ticker automates the volume curve (Equal-Power or Linear).
+/// - On completion, outgoing player stops, roles swap, and the incoming player
+///   continues uninterrupted.
+/// - Gapless mode: when crossfade duration == 0s, transitions instantly.
+/// - Integrates with [QueueManager] for queue, shuffle, loop, and infinite mix.
+/// - Implements [AudioSessionPlayerDelegate] for audio focus and session handling.
+class AudioEngineServiceImpl
+    implements AudioEngineService, AudioSessionPlayerDelegate {
+  final AudioPlayerAdapter _playerA;
+  final AudioPlayerAdapter _playerB;
+  late AudioPlayerAdapter _activePlayer;
+  late AudioPlayerAdapter _standbyPlayer;
+
+  final QueueManager _queueManager;
+  final Duration tickerInterval;
+
+  final BehaviorSubject<MediaPlayerState> _stateSubject;
+  final List<StreamSubscription> _activeSubscriptions = [];
+
+  // Crossfade state
+  CrossfadeConfig _crossfadeConfig = const CrossfadeConfig();
+  bool _isCrossfading = false;
+  Timer? _fadeTimer;
+  DateTime? _fadeTickStartTime;
+  Duration _accumulatedFadeDuration = Duration.zero;
+  Duration _effectiveCrossfadeDuration = Duration.zero;
+
+  // Effects and audio properties
+  double _masterVolume = 100.0;
+  double _playbackRate = 1.0;
+  double _playbackPitch = 1.0;
+  bool _exclusiveAudio = false;
+  ReplayGainMode _replayGain = ReplayGainMode.off;
+  double _replayGainPreamp = 0.0;
+  final Map<String, String> _customMpvProperties = {};
+
+  AudioEngineServiceImpl({
+    AudioPlayerAdapter? playerA,
+    AudioPlayerAdapter? playerB,
+    QueueManager? queueManager,
+    this.tickerInterval = const Duration(milliseconds: 25),
+    math.Random? random,
+  }) : _playerA = playerA ?? MediaKitPlayerAdapter(),
+       _playerB = playerB ?? MediaKitPlayerAdapter(),
+       _queueManager = queueManager ?? QueueManager(random: random),
+       _stateSubject = BehaviorSubject<MediaPlayerState>(
+         const MediaPlayerState.initial(),
+       ) {
+    _activePlayer = _playerA;
+    _standbyPlayer = _playerB;
+    _bindActivePlayerStreams();
+  }
+
+  AudioPlayerAdapter get activePlayer => _activePlayer;
+  AudioPlayerAdapter get standbyPlayer => _standbyPlayer;
+  QueueManager get queueManager => _queueManager;
+  bool get isCrossfading => _isCrossfading;
+  CrossfadeConfig get crossfadeConfig => _crossfadeConfig;
+
+  @override
+  bool get isPlaying => _activePlayer.isPlaying;
+
+  @override
+  Stream<MediaPlayerState> get stateStream => _stateSubject;
+
+  @override
+  MediaPlayerState get currentState => _stateSubject.value;
+
+  // --------------------------------------------------------------------------
+  // Stream Management
+  // --------------------------------------------------------------------------
+
+  void _emitState() {
+    final newState = currentState.copyWith(
+      index: _queueManager.currentIndex >= 0 ? _queueManager.currentIndex : 0,
+      playables: _queueManager.activeQueue,
+      mixOffset: _queueManager.mixOffset,
+      playing: _activePlayer.isPlaying,
+      buffering: _activePlayer.isBuffering,
+      completed: _activePlayer.isCompleted,
+      position: _activePlayer.position,
+      duration: _activePlayer.duration,
+      volume: _masterVolume,
+      rate: _playbackRate,
+      pitch: _playbackPitch,
+      shuffle: _queueManager.isShuffled,
+      loop: _queueManager.loopMode,
+      crossfadeConfig: _crossfadeConfig,
+      crossfadeDuration: _crossfadeConfig.duration,
+      exclusiveAudio: _exclusiveAudio,
+      replayGain: _replayGain,
+      replayGainPreamp: _replayGainPreamp,
+    );
+    _stateSubject.add(newState);
+  }
+
+  void _bindActivePlayerStreams() {
+    for (final sub in _activeSubscriptions) {
+      sub.cancel();
+    }
+    _activeSubscriptions.clear();
+
+    _activeSubscriptions.add(
+      _activePlayer.positionStream.listen((pos) {
+        _stateSubject.add(currentState.copyWith(position: pos));
+        _checkCrossfadeTrigger(pos, _activePlayer.duration);
+      }),
+    );
+
+    _activeSubscriptions.add(
+      _activePlayer.durationStream.listen((dur) {
+        _stateSubject.add(currentState.copyWith(duration: dur));
+      }),
+    );
+
+    _activeSubscriptions.add(
+      _activePlayer.playingStream.listen((playing) {
+        _stateSubject.add(currentState.copyWith(playing: playing));
+      }),
+    );
+
+    _activeSubscriptions.add(
+      _activePlayer.bufferingStream.listen((buffering) {
+        _stateSubject.add(currentState.copyWith(buffering: buffering));
+      }),
+    );
+
+    _activeSubscriptions.add(
+      _activePlayer.completedStream.listen((completed) {
+        if (completed && !_isCrossfading) {
+          _handleTrackCompleted();
+        }
+      }),
+    );
+
+    _activeSubscriptions.add(
+      _activePlayer.bitrateStream.listen((bitrate) {
+        if (bitrate != null) {
+          _stateSubject.add(currentState.copyWith(audioBitrate: bitrate));
+        }
+      }),
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // Core Playback Operations
+  // --------------------------------------------------------------------------
+
+  @override
+  Future<void> open(
+    List<QueueItem> playables, {
+    int index = 0,
+    bool play = true,
+    bool shuffle = false,
+  }) async {
+    _abortActiveCrossfade();
+
+    if (playables.isEmpty) {
+      _queueManager.clear();
+      await _activePlayer.stop();
+      await _standbyPlayer.stop();
+      _emitState();
+      return;
+    }
+
+    _queueManager.setQueue(playables, startIndex: index, shuffle: shuffle);
+
+    final targetTrack = _queueManager.currentTrack;
+    if (targetTrack == null) {
+      _emitState();
+      return;
+    }
+
+    await _activePlayer.setVolume(_masterVolume);
+    await _activePlayer.setRate(_playbackRate);
+    await _activePlayer.setPitch(_playbackPitch);
+    await _activePlayer.open(targetTrack.uri, play: play);
+
+    _emitState();
+  }
+
+  @override
+  Future<void> play() async {
+    if (_queueManager.activeQueue.isEmpty) return;
+    if (_isCrossfading) {
+      await _activePlayer.play();
+      await _standbyPlayer.play();
+      if (_fadeTimer == null || !_fadeTimer!.isActive) {
+        _fadeTickStartTime = DateTime.now();
+        _fadeTimer?.cancel();
+        _fadeTimer = Timer.periodic(tickerInterval, (_) {
+          _onCrossfadeTick();
+        });
+      }
+    } else {
+      await _activePlayer.play();
+    }
+    _emitState();
+  }
+
+  @override
+  Future<void> pause() async {
+    if (_isCrossfading) {
+      if (_fadeTickStartTime != null) {
+        _accumulatedFadeDuration += DateTime.now().difference(
+          _fadeTickStartTime!,
+        );
+        _fadeTickStartTime = null;
+      }
+      _fadeTimer?.cancel();
+      _fadeTimer = null;
+      await _activePlayer.pause();
+      await _standbyPlayer.pause();
+    } else {
+      await _activePlayer.pause();
+    }
+    _emitState();
+  }
+
+  @override
+  Future<void> stop() async {
+    _abortActiveCrossfade();
+    await _activePlayer.stop();
+    await _standbyPlayer.stop();
+    _emitState();
+  }
+
+  @override
+  Future<void> seek(Duration position) async {
+    if (_queueManager.activeQueue.isEmpty) return;
+
+    // Seeking during active crossfade aborts preloaded instance
+    if (_isCrossfading) {
+      _abortActiveCrossfade();
+    }
+
+    await _activePlayer.seek(position);
+    _emitState();
+  }
+
+  @override
+  Future<void> next() async {
+    if (_queueManager.activeQueue.isEmpty) return;
+
+    // Next during active crossfade fast-forwards immediately
+    if (_isCrossfading) {
+      await _fastForwardCrossfade();
+      return;
+    }
+
+    if (_queueManager.loopMode == Loop.one) {
+      await _activePlayer.seek(Duration.zero);
+      await _activePlayer.play();
+      _emitState();
+      return;
+    }
+
+    final nextItem = await _queueManager.next(isManual: true);
+    if (nextItem != null) {
+      await _activePlayer.open(nextItem.uri, play: true);
+      _emitState();
+    } else {
+      // Loop.off at end of queue
+      await _activePlayer.stop();
+      _stateSubject.add(currentState.copyWith(completed: true, playing: false));
+    }
+  }
+
+  @override
+  Future<void> previous() async {
+    if (_queueManager.activeQueue.isEmpty) return;
+
+    if (_isCrossfading) {
+      _abortActiveCrossfade();
+    }
+
+    // Standard behavior: if current track played > 3 seconds, restart it
+    if (_activePlayer.position > const Duration(seconds: 3)) {
+      await _activePlayer.seek(Duration.zero);
+      _emitState();
+      return;
+    }
+
+    final prevItem = _queueManager.previous(position: _activePlayer.position);
+    if (prevItem != null) {
+      await _activePlayer.open(prevItem.uri, play: true);
+      _emitState();
+    } else {
+      await _activePlayer.seek(Duration.zero);
+      _emitState();
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Crossfade Orchestration Engine
+  // --------------------------------------------------------------------------
+
+  @override
+  Future<void> setCrossfadeConfig(CrossfadeConfig config) async {
+    if (config.enabled && _exclusiveAudio && config.duration > Duration.zero) {
+      throw const ExclusiveAudioCrossfadeException(
+        'Cannot enable crossfade when Windows Exclusive Audio is active.',
+      );
+    }
+    _crossfadeConfig = config;
+    _emitState();
+  }
+
+  void _checkCrossfadeTrigger(
+    Duration currentPosition,
+    Duration totalDuration,
+  ) {
+    if (_isCrossfading) return;
+    if (!_crossfadeConfig.enabled ||
+        _crossfadeConfig.duration == Duration.zero) {
+      return;
+    }
+    if (totalDuration <= Duration.zero) return;
+
+    final nextTrack = _getNextTrackForCrossfade();
+    if (nextTrack == null) return;
+
+    // Symmetric clamping: clamped by outgoing track duration / 2 AND incoming track duration / 2
+    var effectiveCrossfade = _crossfadeConfig.effectiveDuration(totalDuration);
+    if (nextTrack.duration > Duration.zero) {
+      final nextEffective = _crossfadeConfig.effectiveDuration(
+        nextTrack.duration,
+      );
+      if (nextEffective < effectiveCrossfade) {
+        effectiveCrossfade = nextEffective;
+      }
+    }
+    if (effectiveCrossfade <= Duration.zero) return;
+
+    final remaining = totalDuration - currentPosition;
+    if (remaining <= effectiveCrossfade) {
+      _startCrossfade(effectiveCrossfade, nextTrack);
+    }
+  }
+
+  QueueItem? _getNextTrackForCrossfade() {
+    if (_queueManager.activeQueue.isEmpty) return null;
+
+    if (_queueManager.loopMode == Loop.one) {
+      return null;
+    }
+    if (_queueManager.currentIndex < _queueManager.activeQueue.length - 1) {
+      return _queueManager.activeQueue[_queueManager.currentIndex + 1];
+    }
+    if (_queueManager.loopMode == Loop.all) {
+      return _queueManager.activeQueue[0];
+    }
+    return null; // End of queue with Loop.off -> do not crossfade
+  }
+
+  Future<void> _startCrossfade(
+    Duration effectiveDuration,
+    QueueItem nextTrack,
+  ) async {
+    _isCrossfading = true;
+    _accumulatedFadeDuration = Duration.zero;
+    _fadeTickStartTime = DateTime.now();
+    _effectiveCrossfadeDuration = effectiveDuration;
+
+    // Prime standby player
+    await _standbyPlayer.setVolume(0.0);
+    await _standbyPlayer.setRate(_playbackRate);
+    await _standbyPlayer.setPitch(_playbackPitch);
+    await _standbyPlayer.open(nextTrack.uri, play: true);
+
+    _fadeTimer?.cancel();
+    _fadeTimer = Timer.periodic(tickerInterval, (_) {
+      _onCrossfadeTick();
+    });
+  }
+
+  void _onCrossfadeTick() {
+    if (!_isCrossfading || _fadeTickStartTime == null) return;
+
+    final now = DateTime.now();
+    final tickElapsed = now.difference(_fadeTickStartTime!);
+    _fadeTickStartTime = now;
+    _accumulatedFadeDuration += tickElapsed;
+
+    final totalMs = _effectiveCrossfadeDuration.inMilliseconds;
+    final progress = totalMs > 0
+        ? (_accumulatedFadeDuration.inMilliseconds / totalMs).clamp(0.0, 1.0)
+        : 1.0;
+
+    final vOut = _crossfadeConfig.calculateFadeOutVolume(
+      progress,
+      _masterVolume,
+    );
+    final vIn = _crossfadeConfig.calculateFadeInVolume(progress, _masterVolume);
+
+    _activePlayer.setVolume(vOut);
+    _standbyPlayer.setVolume(vIn);
+
+    if (progress >= 1.0) {
+      _completeCrossfade();
+    }
+  }
+
+  Future<void> _completeCrossfade() async {
+    _fadeTimer?.cancel();
+    _fadeTimer = null;
+    _fadeTickStartTime = null;
+    _accumulatedFadeDuration = Duration.zero;
+
+    // Terminate outgoing player
+    await _activePlayer.stop();
+
+    // Ensure incoming player receives exact master volume
+    await _standbyPlayer.setVolume(_masterVolume);
+
+    // Advance queue index
+    _advanceQueueIndex();
+
+    // Role Swap: Standby becomes Active, Active becomes Standby
+    final temp = _activePlayer;
+    _activePlayer = _standbyPlayer;
+    _standbyPlayer = temp;
+
+    _isCrossfading = false;
+    _bindActivePlayerStreams();
+    _emitState();
+  }
+
+  Future<void> _fastForwardCrossfade() async {
+    _fadeTimer?.cancel();
+    _fadeTimer = null;
+    _fadeTickStartTime = null;
+    _accumulatedFadeDuration = Duration.zero;
+
+    await _activePlayer.stop();
+    await _standbyPlayer.setVolume(_masterVolume);
+
+    _advanceQueueIndex();
+
+    final temp = _activePlayer;
+    _activePlayer = _standbyPlayer;
+    _standbyPlayer = temp;
+
+    _isCrossfading = false;
+    _bindActivePlayerStreams();
+    _emitState();
+  }
+
+  void _abortActiveCrossfade() {
+    if (!_isCrossfading) return;
+
+    _fadeTimer?.cancel();
+    _fadeTimer = null;
+    _fadeTickStartTime = null;
+    _accumulatedFadeDuration = Duration.zero;
+    _isCrossfading = false;
+
+    // Reset outgoing player back to full master volume
+    _activePlayer.setVolume(_masterVolume);
+    // Stop preloaded standby player
+    _standbyPlayer.stop();
+  }
+
+  void _advanceQueueIndex() {
+    if (_queueManager.loopMode == Loop.one) {
+      // Index remains unchanged
+    } else if (_queueManager.currentIndex <
+        _queueManager.activeQueue.length - 1) {
+      _queueManager.jumpTo(_queueManager.currentIndex + 1);
+    } else if (_queueManager.loopMode == Loop.all) {
+      _queueManager.jumpTo(0);
+    }
+  }
+
+  Future<void> _handleTrackCompleted() async {
+    if (_queueManager.loopMode == Loop.one) {
+      await _activePlayer.seek(Duration.zero);
+      await _activePlayer.play();
+      _emitState();
+    } else {
+      final nextItem = await _queueManager.next(isManual: false);
+      if (nextItem != null) {
+        await _activePlayer.open(nextItem.uri, play: true);
+        _emitState();
+      } else {
+        await _activePlayer.stop();
+        _stateSubject.add(
+          currentState.copyWith(completed: true, playing: false),
+        );
+      }
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Audio Effects & MPV Controls
+  // --------------------------------------------------------------------------
+
+  @override
+  Future<void> setVolume(double volume) async {
+    // Clamped up to 200.0% for volume boost
+    _masterVolume = volume.clamp(0.0, 200.0);
+    if (!_isCrossfading) {
+      await _activePlayer.setVolume(_masterVolume);
+    }
+    _emitState();
+  }
+
+  @override
+  Future<void> setRate(double rate) async {
+    _playbackRate = rate.clamp(0.5, 1.5);
+    await _activePlayer.setRate(_playbackRate);
+    await _standbyPlayer.setRate(_playbackRate);
+    _emitState();
+  }
+
+  @override
+  Future<void> setPitch(double pitch) async {
+    _playbackPitch = pitch.clamp(0.5, 1.5);
+    await _activePlayer.setPitch(_playbackPitch);
+    await _standbyPlayer.setPitch(_playbackPitch);
+    _emitState();
+  }
+
+  @override
+  Future<void> setReplayGain(ReplayGainMode mode) async {
+    _replayGain = mode;
+    final propertyValue = switch (mode) {
+      ReplayGainMode.off => 'no',
+      ReplayGainMode.track => 'track',
+      ReplayGainMode.album => 'album',
+    };
+    await _activePlayer.setProperty('replaygain', propertyValue);
+    await _standbyPlayer.setProperty('replaygain', propertyValue);
+    _emitState();
+  }
+
+  @override
+  Future<void> setReplayGainPreamp(double preamp) async {
+    _replayGainPreamp = preamp.clamp(-15.0, 15.0);
+    final preampStr = _replayGainPreamp.toStringAsFixed(1);
+    await _activePlayer.setProperty('replaygain-preamp', preampStr);
+    await _standbyPlayer.setProperty('replaygain-preamp', preampStr);
+    _emitState();
+  }
+
+  @override
+  Future<void> setExclusiveAudio(bool exclusive) async {
+    if (exclusive &&
+        _crossfadeConfig.enabled &&
+        _crossfadeConfig.duration > Duration.zero) {
+      throw const ExclusiveAudioCrossfadeException(
+        'Windows Exclusive Audio cannot be enabled while crossfade is active.',
+      );
+    }
+
+    _exclusiveAudio = exclusive;
+    final exclusiveStr = exclusive ? 'yes' : 'no';
+
+    if (!kIsWeb && Platform.isWindows) {
+      if (exclusive) {
+        await _activePlayer.setProperty('ao', 'wasapi');
+        await _standbyPlayer.setProperty('ao', 'wasapi');
+      } else {
+        await _activePlayer.setProperty('ao', '');
+        await _standbyPlayer.setProperty('ao', '');
+      }
+    }
+
+    await _activePlayer.setProperty('audio-exclusive', exclusiveStr);
+    await _standbyPlayer.setProperty('audio-exclusive', exclusiveStr);
+    _emitState();
+  }
+
+  @override
+  Future<void> setMpvProperty(String property, String value) async {
+    _customMpvProperties[property] = value;
+    await _activePlayer.setProperty(property, value);
+    await _standbyPlayer.setProperty(property, value);
+  }
+
+  @override
+  Future<void> setMpvProperties(Map<String, String> properties) async {
+    _customMpvProperties.addAll(properties);
+    for (final entry in properties.entries) {
+      await _activePlayer.setProperty(entry.key, entry.value);
+      await _standbyPlayer.setProperty(entry.key, entry.value);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Queue Management Delegation
+  // --------------------------------------------------------------------------
+
+  @override
+  Future<void> setLoopMode(Loop loop) async {
+    _queueManager.setLoopMode(loop);
+    _emitState();
+  }
+
+  @override
+  Future<void> toggleShuffle() async {
+    _queueManager.toggleShuffle();
+    _emitState();
+  }
+
+  @override
+  Future<void> insertNext(QueueItem playable) async {
+    if (_isCrossfading) {
+      _abortActiveCrossfade();
+    }
+    if (_queueManager.activeQueue.isEmpty) {
+      await open([playable]);
+      return;
+    }
+    _queueManager.insertNext(playable);
+    _emitState();
+  }
+
+  @override
+  Future<void> append(List<QueueItem> playables) async {
+    if (_queueManager.activeQueue.isEmpty) {
+      await open(playables);
+      return;
+    }
+    _queueManager.append(playables);
+    _emitState();
+  }
+
+  @override
+  Future<void> remove(int index) async {
+    if (index < 0 || index >= _queueManager.activeQueue.length) return;
+
+    if (_isCrossfading) {
+      _abortActiveCrossfade();
+    }
+
+    final wasCurrent = index == _queueManager.currentIndex;
+    _queueManager.remove(index);
+
+    if (_queueManager.activeQueue.isEmpty) {
+      await stop();
+    } else if (wasCurrent && _queueManager.currentTrack != null) {
+      await _activePlayer.open(_queueManager.currentTrack!.uri, play: true);
+    }
+    _emitState();
+  }
+
+  @override
+  Future<void> reorder(int from, int to) async {
+    if (_isCrossfading) {
+      _abortActiveCrossfade();
+    }
+    _queueManager.reorder(from, to);
+    _emitState();
+  }
+
+  @override
+  Future<void> dispose() async {
+    _abortActiveCrossfade();
+    for (final sub in _activeSubscriptions) {
+      await sub.cancel();
+    }
+    await _activePlayer.dispose();
+    await _standbyPlayer.dispose();
+    await _stateSubject.close();
+  }
+}

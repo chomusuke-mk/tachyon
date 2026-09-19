@@ -1,122 +1,183 @@
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tachyon/app.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+import 'dart:ui' as ui;
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+import 'core/database/app_database.dart';
+import 'core/services/audio_engine_service.dart';
+import 'core/services/audio_player_adapter.dart';
+import 'core/services/cover_cache_service.dart';
+import 'core/services/metadata_extractor.dart';
+import 'core/services/queue_manager.dart';
+import 'core/services/lyrics_service.dart';
+import 'features/library/presentation/library_controller.dart';
+import 'features/locales/data/locale_repository.dart';
+import 'features/locales/presentation/locale_controller.dart';
+import 'features/playback/presentation/lyrics_controller.dart';
+import 'features/playback/presentation/playback_controller.dart';
+import 'features/playlists/presentation/playlists_controller.dart';
+import 'features/search/presentation/tachyon_search_controller.dart';
+import 'features/settings/data/settings_repository.dart';
+import 'features/settings/presentation/settings_controller.dart';
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
-}
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await MediaKitPlayerAdapter.ensureInitialized();
+  final sharedPreferences = await SharedPreferences.getInstance();
+  final database = AppDatabaseImpl();
+  await database.init();
+  final cacheDirectory = await getApplicationCacheDirectory();
+  runApp(
+    MultiProvider(
+      providers: [
+        // =====================================================================
+        // CAPA 1: INFRAESTRUCTURA BASE Y SINGLETONS
+        // =====================================================================
+        Provider<SharedPreferences>.value(value: sharedPreferences),
+        Provider<AppDatabase>.value(value: database),
+        Provider<QueueManager>(create: (_) => QueueManager()),
+        Provider<LocaleRepository>(create: (_) => LocaleRepository()),
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+        // Servicios base que dependen de la infraestructura
+        ProxyProvider<AppDatabase, MetadataExtractor>(
+          update: (_, db, prev) => prev ?? MetadataExtractorImpl(database: db),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+        ProxyProvider<AppDatabase, CoverCacheService>(
+          update: (_, db, prev) =>
+              prev ?? CoverCacheServiceImpl(cacheDirectory: cacheDirectory),
+        ),
+        ProxyProvider<QueueManager, AudioEngineService>(
+          update: (_, queueMgr, prev) =>
+              prev ?? AudioEngineServiceImpl(queueManager: queueMgr),
+        ),
+        ProxyProvider<SharedPreferences, SettingsRepository>(
+          update: (_, prefs, prev) => prev ?? SettingsRepository(prefs),
+        ),
+
+        // =====================================================================
+        // CAPA 2: SERVICIOS Y REPOSITORIOS DEPENDIENTES
+        // =====================================================================
+        ProxyProvider<AppDatabase, LyricsService>(
+          update: (_, db, prev) => prev ?? LyricsServiceImpl(database: db),
+        ),
+
+        // =====================================================================
+        // CAPA 3: CONTROLADORES DE ESTADO (UI Y REACTIVIDAD)
+        // =====================================================================
+        ChangeNotifierProxyProvider2<
+          SettingsRepository,
+          AudioEngineService,
+          SettingsController
+        >(
+          create: (context) => SettingsController(
+            settingsRepository: context.read<SettingsRepository>(),
+            audioEngineService: context.read<AudioEngineService>(),
+          ),
+          update: (_, repo, audioEngine, prev) =>
+              prev ??
+              SettingsController(
+                settingsRepository: repo,
+                audioEngineService: audioEngine,
+              ),
+        ),
+
+        ChangeNotifierProxyProvider2<
+          LocaleRepository,
+          SettingsController,
+          LocaleController
+        >(
+          create: (context) {
+            final repo = context.read<LocaleRepository>();
+            final settings = context.read<SettingsController>();
+            return LocaleController(repo, settings.appLanguage);
+          },
+          update: (context, repo, settings, prev) {
+            String currentLang = settings.appLanguage;
+            if (currentLang == "defaultOption") {
+              currentLang = ui.PlatformDispatcher.instance.locale.languageCode;
+            }
+            if (prev != null && prev.currentLocaleCode != currentLang) {
+              prev.setLocale(currentLang);
+            }
+            return prev ?? LocaleController(repo, currentLang);
+          },
+        ),
+
+        ChangeNotifierProxyProvider3<
+          AppDatabase,
+          MetadataExtractor,
+          CoverCacheService,
+          LibraryController
+        >(
+          create: (context) => LibraryController(
+            database: context.read<AppDatabase>(),
+            metadataExtractor: context.read<MetadataExtractor>(),
+            coverCacheService: context.read<CoverCacheService>(),
+          )..loadLibrary(),
+          update: (_, db, meta, cover, prev) =>
+              prev ??
+              LibraryController(
+                database: db,
+                metadataExtractor: meta,
+                coverCacheService: cover,
+              ),
+        ),
+
+        ChangeNotifierProxyProvider<AppDatabase, PlaylistsController>(
+          create: (context) =>
+              PlaylistsController(database: context.read<AppDatabase>())
+                ..loadPlaylists(),
+          update: (_, db, prev) => prev ?? PlaylistsController(database: db),
+        ),
+
+        ChangeNotifierProxyProvider<AppDatabase, TachyonSearchController>(
+          create: (context) =>
+              TachyonSearchController(database: context.read<AppDatabase>()),
+          update: (_, db, prev) =>
+              prev ?? TachyonSearchController(database: db),
+        ),
+
+        ChangeNotifierProxyProvider3<
+          AudioEngineService,
+          AppDatabase,
+          SettingsRepository,
+          PlaybackController
+        >(
+          create: (context) => PlaybackController(
+            audioEngineService: context.read<AudioEngineService>(),
+            database: context.read<AppDatabase>(),
+            settingsRepository: context.read<SettingsRepository>(),
+          ),
+          update: (_, audio, db, repo, prev) =>
+              prev ??
+              PlaybackController(
+                audioEngineService: audio,
+                database: db,
+                settingsRepository: repo,
+              ),
+        ),
+
+        ChangeNotifierProxyProvider2<
+          LyricsService,
+          PlaybackController,
+          LyricsController
+        >(
+          create: (context) => LyricsController(
+            lyricsService: context.read<LyricsService>(),
+            playbackController: context.read<PlaybackController>(),
+          ),
+          update: (_, lyrics, playback, prev) =>
+              prev ??
+              LyricsController(
+                lyricsService: lyrics,
+                playbackController: playback,
+              ),
+        ),
+      ],
+      child: const App(),
+    ),
+  );
 }

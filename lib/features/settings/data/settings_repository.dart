@@ -1,0 +1,185 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../playback/domain/playback_state.dart';
+import '../../playback/domain/queue_item.dart';
+import '../domain/app_settings.dart';
+
+enum CrossfadeCurve {
+  equalPower('equal_power'),
+  linear('linear');
+
+  const CrossfadeCurve(this.jsonValue);
+  final String jsonValue;
+
+  static CrossfadeCurve fromString(String? val) {
+    return CrossfadeCurve.values.firstWhere(
+      (e) => e.jsonValue == val,
+      orElse: () => CrossfadeCurve.equalPower,
+    );
+  }
+}
+
+class SettingsRepository {
+  final SharedPreferences _prefs;
+
+  SettingsRepository(this._prefs);
+
+  static const _keyMusicDirectories = 's_music_directories';
+  static const _keyCrossfadeEnabled = 's_crossfade_enabled';
+  static const _keyCrossfadeDuration = 's_crossfade_duration';
+  static const _keyCrossfadeCurve = 's_crossfade_curve';
+  static const _keyVolume = 's_volume';
+  static const _keyPlaybackRate = 's_playback_rate';
+  static const _keyPlaybackPitch = 's_playback_pitch';
+  static const _keyLoopMode = 's_loop_mode';
+  static const _keyShuffle = 's_shuffle';
+  static const _keyReplayGain = 's_replay_gain';
+  static const _keyReplayGainPreamp = 's_replay_gain_preamp';
+  static const _keyVolumeBoost = 's_volume_boost';
+  static const _keyExclusiveAudio = 's_exclusive_audio';
+  static const _keyTheme = 's_theme';
+  static const _keyLanguage = 's_language';
+  static const _keyLastPlayedUri = 's_last_played_uri';
+  static const _keyLastPlayedPosition = 's_last_played_position';
+  static const _keyEqualizerEnabled = 's_equalizer_enabled';
+  static const _keyEqualizerGains = 's_equalizer_gains';
+
+  ThemeMode _getAppTheme() {
+    final themeIndex = _prefs.getInt(_keyTheme);
+    if (themeIndex == null) return ThemeMode.system;
+    return ThemeMode.values[themeIndex];
+  }
+
+  List<double> getEqualizerGains() {
+    final gainsStrings = _prefs.getStringList(_keyEqualizerGains);
+    if (gainsStrings == null) {
+      return const [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    }
+    return gainsStrings.map((s) => double.tryParse(s) ?? 0.0).toList();
+  }
+
+  AppSettings getSettings() {
+    return AppSettings(
+      musicDirectories: _prefs.getStringList(_keyMusicDirectories) ?? [],
+      crossfadeEnabled: _prefs.getBool(_keyCrossfadeEnabled) ?? true,
+      crossfadeDuration: _prefs.getInt(_keyCrossfadeDuration) ?? 2,
+      crossfadeCurve: CrossfadeCurve.fromString(
+        _prefs.getString(_keyCrossfadeCurve),
+      ),
+      volume: _prefs.getDouble(_keyVolume) ?? 100.0,
+      playbackRate: _prefs.getDouble(_keyPlaybackRate) ?? 1.0,
+      playbackPitch: _prefs.getDouble(_keyPlaybackPitch) ?? 1.0,
+      loopMode: Loop.fromString(_prefs.getString(_keyLoopMode)),
+      shuffle: _prefs.getBool(_keyShuffle) ?? false,
+      replayGain: ReplayGainMode.fromString(_keyReplayGain),
+      replayGainPreamp: _prefs.getDouble(_keyReplayGainPreamp) ?? 0.0,
+      volumeBoost: _prefs.getDouble(_keyVolumeBoost) ?? 100.0,
+      exclusiveAudio: _prefs.getBool(_keyExclusiveAudio) ?? false,
+      themeMode: _getAppTheme(),
+      appLanguage: _prefs.getString(_keyLanguage) ?? 'defaultOption',
+      lastPlayedUri: _prefs.getString(_keyLastPlayedUri),
+      lastPlayedPositionMs: _prefs.getInt(_keyLastPlayedPosition) ?? 0,
+      equalizerEnabled: _prefs.getBool(_keyEqualizerEnabled) ?? false,
+      equalizerGains: getEqualizerGains(),
+    );
+  }
+
+  Future<void> saveSettings(AppSettings settings) async {
+    final futures = <Future<bool>>[
+      _prefs.setStringList(_keyMusicDirectories, settings.musicDirectories),
+      _prefs.setBool(_keyCrossfadeEnabled, settings.crossfadeEnabled),
+      _prefs.setInt(_keyCrossfadeDuration, settings.crossfadeDuration),
+      _prefs.setString(_keyCrossfadeCurve, settings.crossfadeCurve.jsonValue),
+      _prefs.setDouble(_keyVolume, settings.volume),
+      _prefs.setDouble(_keyPlaybackRate, settings.playbackRate),
+      _prefs.setDouble(_keyPlaybackPitch, settings.playbackPitch),
+      _prefs.setInt(_keyLoopMode, settings.loopMode.index),
+      _prefs.setBool(_keyShuffle, settings.shuffle),
+      _prefs.setString(_keyReplayGain, settings.replayGain.name),
+      _prefs.setDouble(_keyReplayGainPreamp, settings.replayGainPreamp),
+      _prefs.setDouble(_keyVolumeBoost, settings.volumeBoost),
+      _prefs.setBool(_keyExclusiveAudio, settings.exclusiveAudio),
+      _prefs.setInt(_keyTheme, settings.themeMode.index),
+      _prefs.setString(_keyLanguage, settings.appLanguage),
+      _prefs.setInt(_keyLastPlayedPosition, settings.lastPlayedPositionMs),
+      _prefs.setBool(_keyEqualizerEnabled, settings.equalizerEnabled),
+      _prefs.setStringList(
+        _keyEqualizerGains,
+        settings.equalizerGains.map((g) => g.toString()).toList(),
+      ),
+    ];
+
+    if (settings.lastPlayedUri != null) {
+      futures.add(_prefs.setString(_keyLastPlayedUri, settings.lastPlayedUri!));
+    } else {
+      futures.add(_prefs.remove(_keyLastPlayedUri));
+    }
+
+    await Future.wait(futures);
+  }
+
+  Future<void> setMusicDirectories(List<String> dirs) =>
+      _prefs.setStringList(_keyMusicDirectories, dirs);
+
+  Future<void> setCrossfadeDuration(int durationSeconds) =>
+      _prefs.setInt(_keyCrossfadeDuration, durationSeconds.clamp(2, 30));
+
+  Future<void> setCrossfadeEnabled(bool enabled) =>
+      _prefs.setBool(_keyCrossfadeEnabled, enabled);
+
+  Future<void> setCrossfadeCurve(CrossfadeCurve curve) =>
+      _prefs.setString(_keyCrossfadeCurve, curve.jsonValue);
+
+  Future<void> setVolume(double volume) =>
+      _prefs.setDouble(_keyVolume, volume.clamp(0, 100));
+
+  Future<void> setPlaybackRate(double rate) =>
+      _prefs.setDouble(_keyPlaybackRate, rate.clamp(0.5, 1.5));
+
+  Future<void> setPlaybackPitch(double pitch) =>
+      _prefs.setDouble(_keyPlaybackPitch, pitch.clamp(0.5, 1.5));
+
+  Future<void> setLoopMode(Loop mode) =>
+      _prefs.setString(_keyLoopMode, mode.repr);
+
+  Future<void> setShuffle(bool shuffle) => _prefs.setBool(_keyShuffle, shuffle);
+
+  Future<void> setReplayGain(ReplayGainMode mode) =>
+      _prefs.setString(_keyReplayGain, mode.name);
+
+  Future<void> setReplayGainPreamp(double preamp) =>
+      _prefs.setDouble(_keyReplayGainPreamp, preamp.clamp(-15, 15));
+
+  Future<void> setVolumeBoost(double boost) =>
+      _prefs.setDouble(_keyVolumeBoost, boost.clamp(100, 200));
+
+  Future<void> setExclusiveAudio(bool exclusive) =>
+      _prefs.setBool(_keyExclusiveAudio, exclusive);
+
+  Future<void> setThemeMode(ThemeMode theme) =>
+      _prefs.setInt(_keyTheme, theme.index);
+
+  Future<void> setAppLanguage(String language) =>
+      _prefs.setString(_keyLanguage, language);
+
+  Future<void> setLastPlayed({
+    required String uri,
+    required int positionMs,
+  }) async {
+    await _prefs.setString(_keyLastPlayedUri, uri);
+    await _prefs.setInt(_keyLastPlayedPosition, positionMs);
+  }
+
+  Future<void> setEqualizerEnabled(bool enabled) =>
+      _prefs.setBool(_keyEqualizerEnabled, enabled);
+
+  Future<void> setEqualizerGains(List<double> gains) => _prefs.setStringList(
+    _keyEqualizerGains,
+    gains.map((g) => g.toString()).toList(),
+  );
+
+  Future<void> resetToDefaults() async {
+    await _prefs.clear();
+  }
+}
