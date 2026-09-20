@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
 
 // ============================================================================
 // AUDIO PLAYER ADAPTER
@@ -29,8 +29,8 @@ class AudioPlayerAdapter {
   AudioPlayerAdapter({
     AudioLoadConfiguration configuration = const AudioLoadConfiguration(
       androidLivePlaybackSpeedControl: AndroidLivePlaybackSpeedControl(
-        fallbackMaxPlaybackSpeed: 4.0,
-        fallbackMinPlaybackSpeed: 0.1,
+        fallbackMaxPlaybackSpeed: AppDefaults.playbackRateMax,
+        fallbackMinPlaybackSpeed: AppDefaults.playbackRateMin,
         maxLiveOffsetErrorForUnitSpeed: Duration(milliseconds: 500),
         minPossibleLiveOffsetSmoothingFactor: 0.1,
         minUpdateInterval: Duration(milliseconds: 100),
@@ -50,13 +50,17 @@ class AudioPlayerAdapter {
 
   /// Ensures native media_kit platform bindings are initialized once.
   static Future<void> ensureInitialized() async {
-    JustAudioMediaKit.ensureInitialized();
-  }
-
-  /// Configures platform-specific libmpv properties for optimal low-latency,
-  /// pop-free audio streaming.
-  Future<void> configurePlatformAudioDrivers() async {
-    debugPrint('Configuring platform audio drivers NOT SUPPORTED...');
+    JustAudioMediaKit.ensureInitialized(
+      windows: true,
+      linux: true,
+      android: false,
+      iOS: false,
+      macOS: false,
+    );
+    JustAudioMediaKit.bufferSize = 8 * 1024 * 1024;
+    JustAudioMediaKit.title = 'Tachyon Audio Player';
+    JustAudioMediaKit.pitch = true;
+    JustAudioMediaKit.prefetchPlaylist = false;
   }
 
   Future<void> open(
@@ -82,9 +86,8 @@ class AudioPlayerAdapter {
 
   Future<void> setPitch(double pitch) => _player.setPitch(pitch);
 
-  Future<void> setProperty(String name, String value) async {
-    debugPrint('Not supported');
-  }
+  Future<void> setSkipSilence(bool enabled) =>
+      _player.setSkipSilenceEnabled(enabled);
 
   Future<void> dispose() async {
     _isDisposed = true;
@@ -111,13 +114,11 @@ class AudioPlayerAdapter {
 
   Stream<double> get volumeStream => _player.volumeStream;
 
-  Stream<double> get rateStream =>
-      Stream.value(1.0); // JustAudio does not support rate changes
+  Stream<double> get rateStream => _player.speedStream;
 
   Stream<double> get pitchStream => _player.pitchStream;
 
-  Stream<double?> get bitrateStream =>
-      Stream.value(_player.preferredPeakBitRate);
+  Stream<bool> get skipSilenceStream => _player.skipSilenceEnabledStream;
 
   Duration get position => _player.position;
 
@@ -131,9 +132,11 @@ class AudioPlayerAdapter {
 
   double get volume => _player.volume;
 
-  double get rate => 1.0; // JustAudio does not support rate changes
+  double get rate => _player.speed;
 
   double get pitch => _player.pitch;
+
+  bool get skipSilence => _player.skipSilenceEnabled;
 
   bool get isDisposed => _isDisposed;
 }

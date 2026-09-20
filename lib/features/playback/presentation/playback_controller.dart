@@ -65,10 +65,7 @@ class PlaybackController extends ChangeNotifier {
   bool get hasPrevious => _state.hasPrevious;
 
   CrossfadeConfig get crossfadeConfig => _state.crossfadeConfig;
-  bool get exclusiveAudio => _state.exclusiveAudio;
-  ReplayGainMode get replayGain => _state.replayGain;
-  double get replayGainPreamp => _state.replayGainPreamp;
-
+  bool get skipSilence => _state.skipSilence;
   // ---------------------------------------------------------------------------
   // High-Level Track Selection & Queue Actions
   // ---------------------------------------------------------------------------
@@ -191,12 +188,8 @@ class PlaybackController extends ChangeNotifier {
   Future<void> setCrossfadeConfig(CrossfadeConfig config) =>
       _audioEngine.setCrossfadeConfig(config);
 
-  Future<void> setReplayGain(ReplayGainMode mode) =>
-      _audioEngine.setReplayGain(mode);
-  Future<void> setReplayGainPreamp(double preamp) =>
-      _audioEngine.setReplayGainPreamp(preamp);
-  Future<void> setExclusiveAudio(bool exclusive) =>
-      _audioEngine.setExclusiveAudio(exclusive);
+  Future<void> setSkipSilence(bool enabled) =>
+      _audioEngine.setSkipSilence(enabled);
 
   // ---------------------------------------------------------------------------
   // History Logging & State Persistence Helpers

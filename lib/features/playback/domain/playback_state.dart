@@ -1,24 +1,8 @@
 import 'package:flutter/foundation.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
 
 import 'crossfade_config.dart';
 import 'queue_item.dart';
-
-enum ReplayGainMode {
-  off,
-  track,
-  album;
-
-  static ReplayGainMode fromString(String? value) {
-    switch (value?.toLowerCase()) {
-      case 'track':
-        return ReplayGainMode.track;
-      case 'album':
-        return ReplayGainMode.album;
-      default:
-        return ReplayGainMode.off;
-    }
-  }
-}
 
 enum PlaybackStatus { idle, loading, playing, paused, completed }
 
@@ -38,9 +22,7 @@ class PlaybackState {
   final bool shuffle;
   final Loop loop;
   final Duration crossfadeDuration;
-  final bool exclusiveAudio;
-  final ReplayGainMode replayGain;
-  final double replayGainPreamp;
+  final bool skipSilence;
   final double? audioBitrate;
   final int? audioSampleRate;
   final int? audioChannels;
@@ -60,9 +42,7 @@ class PlaybackState {
     this.shuffle = false,
     this.loop = Loop.off,
     this.crossfadeDuration = const Duration(seconds: 5),
-    this.exclusiveAudio = false,
-    this.replayGain = ReplayGainMode.off,
-    this.replayGainPreamp = 0.0,
+    this.skipSilence = false,
     this.audioBitrate,
     this.audioSampleRate,
     this.audioChannels,
@@ -120,9 +100,7 @@ class PlaybackState {
     Loop? loop,
     Duration? crossfadeDuration,
     CrossfadeConfig? crossfadeConfig,
-    bool? exclusiveAudio,
-    ReplayGainMode? replayGain,
-    double? replayGainPreamp,
+    bool? skipSilence,
     double? audioBitrate,
     int? audioSampleRate,
     int? audioChannels,
@@ -145,9 +123,7 @@ class PlaybackState {
           crossfadeConfig?.duration ??
           crossfadeDuration ??
           this.crossfadeDuration,
-      exclusiveAudio: exclusiveAudio ?? this.exclusiveAudio,
-      replayGain: replayGain ?? this.replayGain,
-      replayGainPreamp: replayGainPreamp ?? this.replayGainPreamp,
+      skipSilence: skipSilence ?? this.skipSilence,
       audioBitrate: audioBitrate ?? this.audioBitrate,
       audioSampleRate: audioSampleRate ?? this.audioSampleRate,
       audioChannels: audioChannels ?? this.audioChannels,
@@ -170,9 +146,7 @@ class PlaybackState {
       'shuffle': shuffle,
       'loop': loop.index,
       'crossfadeDurationMs': crossfadeDuration.inMilliseconds,
-      'exclusiveAudio': exclusiveAudio,
-      'replayGain': replayGain.name,
-      'replayGainPreamp': replayGainPreamp,
+      'skipSilence': skipSilence,
       'audioBitrate': audioBitrate,
       'audioSampleRate': audioSampleRate,
       'audioChannels': audioChannels,
@@ -197,17 +171,22 @@ class PlaybackState {
       duration: Duration(
         milliseconds: (json['durationMs'] as num?)?.toInt() ?? 0,
       ),
-      rate: (json['rate'] as num?)?.toDouble() ?? 1.0,
-      pitch: (json['pitch'] as num?)?.toDouble() ?? 1.0,
-      volume: (json['volume'] as num?)?.toDouble() ?? 100.0,
+      rate:
+          (json['rate'] as num?)?.toDouble() ?? AppDefaults.playbackRateDefault,
+      pitch:
+          (json['pitch'] as num?)?.toDouble() ??
+          AppDefaults.playbackPitchDefault,
+      volume: (json['volume'] as num?)?.toDouble() ?? AppDefaults.volumeDefault,
       shuffle: json['shuffle'] as bool? ?? false,
       loop: Loop.fromString(json['loop'] as String?),
       crossfadeDuration: Duration(
-        milliseconds: (json['crossfadeDurationMs'] as num?)?.toInt() ?? 5000,
+        milliseconds:
+            ((json['crossfadeDurationMs'] ??
+                        AppDefaults.crossfadeDefaultDuration * 1000)
+                    as num)
+                .toInt(),
       ),
-      exclusiveAudio: json['exclusiveAudio'] as bool? ?? false,
-      replayGain: ReplayGainMode.fromString(json['replayGain'] as String?),
-      replayGainPreamp: (json['replayGainPreamp'] as num?)?.toDouble() ?? 0.0,
+      skipSilence: json['skipSilence'] as bool? ?? false,
       audioBitrate: (json['audioBitrate'] as num?)?.toDouble(),
       audioSampleRate: json['audioSampleRate'] as int?,
       audioChannels: json['audioChannels'] as int?,
@@ -233,9 +212,7 @@ class PlaybackState {
           shuffle == other.shuffle &&
           loop == other.loop &&
           crossfadeDuration == other.crossfadeDuration &&
-          exclusiveAudio == other.exclusiveAudio &&
-          replayGain == other.replayGain &&
-          replayGainPreamp == other.replayGainPreamp &&
+          skipSilence == other.skipSilence &&
           audioBitrate == other.audioBitrate &&
           audioSampleRate == other.audioSampleRate &&
           audioChannels == other.audioChannels;
@@ -256,14 +233,9 @@ class PlaybackState {
     shuffle,
     loop,
     crossfadeDuration,
-    exclusiveAudio,
-    replayGain,
-    replayGainPreamp,
+    skipSilence,
     audioBitrate,
     audioSampleRate,
     audioChannels,
   ]);
 }
-
-/// Alias for MediaPlayerState specified in PROJECT.md
-typedef MediaPlayerState = PlaybackState;

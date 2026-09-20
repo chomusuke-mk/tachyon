@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'dart:math' as math;
 
+import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/playback/domain/behavior_subject.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
@@ -52,7 +52,7 @@ class AudioEngineService {
   final QueueManager _queueManager;
   final Duration tickerInterval;
 
-  final BehaviorSubject<MediaPlayerState> _stateSubject;
+  final BehaviorSubject<PlaybackState> _stateSubject;
   final List<StreamSubscription> _activeSubscriptions = [];
 
   // Crossfade state
@@ -64,13 +64,10 @@ class AudioEngineService {
   Duration _effectiveCrossfadeDuration = Duration.zero;
 
   // Effects and audio properties
-  double _masterVolume = 100.0;
-  double _playbackRate = 1.0;
-  double _playbackPitch = 1.0;
-  bool _exclusiveAudio = false;
-  ReplayGainMode _replayGain = ReplayGainMode.off;
-  double _replayGainPreamp = 0.0;
-  final Map<String, String> _customMpvProperties = {};
+  double _masterVolume = AppDefaults.volumeDefault;
+  double _playbackRate = AppDefaults.playbackRateDefault;
+  double _playbackPitch = AppDefaults.playbackPitchDefault;
+  bool _skipSilence = false;
 
   AudioEngineService({
     AudioPlayerAdapter? playerA,
@@ -81,8 +78,8 @@ class AudioEngineService {
   }) : _playerA = playerA ?? AudioPlayerAdapter(),
        _playerB = playerB ?? AudioPlayerAdapter(),
        _queueManager = queueManager ?? QueueManager(random: random),
-       _stateSubject = BehaviorSubject<MediaPlayerState>(
-         const MediaPlayerState.initial(),
+       _stateSubject = BehaviorSubject<PlaybackState>(
+         const PlaybackState.initial(),
        ) {
     _activePlayer = _playerA;
     _standbyPlayer = _playerB;
@@ -97,9 +94,9 @@ class AudioEngineService {
 
   bool get isPlaying => _activePlayer.isPlaying;
 
-  Stream<MediaPlayerState> get stateStream => _stateSubject;
+  Stream<PlaybackState> get stateStream => _stateSubject;
 
-  MediaPlayerState get currentState => _stateSubject.value;
+  PlaybackState get currentState => _stateSubject.value;
 
   // --------------------------------------------------------------------------
   // Stream Management
@@ -122,9 +119,7 @@ class AudioEngineService {
       loop: _queueManager.loopMode,
       crossfadeConfig: _crossfadeConfig,
       crossfadeDuration: _crossfadeConfig.duration,
-      exclusiveAudio: _exclusiveAudio,
-      replayGain: _replayGain,
-      replayGainPreamp: _replayGainPreamp,
+      skipSilence: _skipSilence,
     );
     _stateSubject.add(newState);
   }
@@ -164,14 +159,6 @@ class AudioEngineService {
       _activePlayer.completedStream.listen((completed) {
         if (completed && !_isCrossfading) {
           _handleTrackCompleted();
-        }
-      }),
-    );
-
-    _activeSubscriptions.add(
-      _activePlayer.bitrateStream.listen((bitrate) {
-        if (bitrate != null) {
-          _stateSubject.add(currentState.copyWith(audioBitrate: bitrate));
         }
       }),
     );
@@ -324,11 +311,6 @@ class AudioEngineService {
   // --------------------------------------------------------------------------
 
   Future<void> setCrossfadeConfig(CrossfadeConfig config) async {
-    if (config.enabled && _exclusiveAudio && config.duration > Duration.zero) {
-      throw const ExclusiveAudioCrossfadeException(
-        'Cannot enable crossfade when Windows Exclusive Audio is active.',
-      );
-    }
     _crossfadeConfig = config;
     _emitState();
   }
@@ -523,8 +505,10 @@ class AudioEngineService {
   // --------------------------------------------------------------------------
 
   Future<void> setVolume(double volume) async {
-    // Clamped up to 200.0% for volume boost
-    _masterVolume = volume.clamp(0.0, 200.0);
+    _masterVolume = volume.clamp(
+      AppDefaults.volumeMin,
+      AppDefaults.volumeBoostMax,
+    );
     if (!_isCrossfading) {
       await _activePlayer.setVolume(_masterVolume);
     }
@@ -532,78 +516,30 @@ class AudioEngineService {
   }
 
   Future<void> setRate(double rate) async {
-    _playbackRate = rate.clamp(0.5, 1.5);
+    _playbackRate = rate.clamp(
+      AppDefaults.playbackRateMin,
+      AppDefaults.playbackRateMax,
+    );
     await _activePlayer.setRate(_playbackRate);
     await _standbyPlayer.setRate(_playbackRate);
     _emitState();
   }
 
   Future<void> setPitch(double pitch) async {
-    _playbackPitch = pitch.clamp(0.5, 1.5);
+    _playbackPitch = pitch.clamp(
+      AppDefaults.playbackPitchMin,
+      AppDefaults.playbackPitchMax,
+    );
     await _activePlayer.setPitch(_playbackPitch);
     await _standbyPlayer.setPitch(_playbackPitch);
     _emitState();
   }
 
-  Future<void> setReplayGain(ReplayGainMode mode) async {
-    _replayGain = mode;
-    final propertyValue = switch (mode) {
-      ReplayGainMode.off => 'no',
-      ReplayGainMode.track => 'track',
-      ReplayGainMode.album => 'album',
-    };
-    await _activePlayer.setProperty('replaygain', propertyValue);
-    await _standbyPlayer.setProperty('replaygain', propertyValue);
+  Future<void> setSkipSilence(bool enabled) async {
+    _skipSilence = enabled;
+    await _activePlayer.setSkipSilence(enabled);
+    await _standbyPlayer.setSkipSilence(enabled);
     _emitState();
-  }
-
-  Future<void> setReplayGainPreamp(double preamp) async {
-    _replayGainPreamp = preamp.clamp(-15.0, 15.0);
-    final preampStr = _replayGainPreamp.toStringAsFixed(1);
-    await _activePlayer.setProperty('replaygain-preamp', preampStr);
-    await _standbyPlayer.setProperty('replaygain-preamp', preampStr);
-    _emitState();
-  }
-
-  Future<void> setExclusiveAudio(bool exclusive) async {
-    if (exclusive &&
-        _crossfadeConfig.enabled &&
-        _crossfadeConfig.duration > Duration.zero) {
-      throw const ExclusiveAudioCrossfadeException(
-        'Windows Exclusive Audio cannot be enabled while crossfade is active.',
-      );
-    }
-
-    _exclusiveAudio = exclusive;
-    final exclusiveStr = exclusive ? 'yes' : 'no';
-
-    if (Platform.isWindows) {
-      if (exclusive) {
-        await _activePlayer.setProperty('ao', 'wasapi');
-        await _standbyPlayer.setProperty('ao', 'wasapi');
-      } else {
-        await _activePlayer.setProperty('ao', '');
-        await _standbyPlayer.setProperty('ao', '');
-      }
-    }
-
-    await _activePlayer.setProperty('audio-exclusive', exclusiveStr);
-    await _standbyPlayer.setProperty('audio-exclusive', exclusiveStr);
-    _emitState();
-  }
-
-  Future<void> setMpvProperty(String property, String value) async {
-    _customMpvProperties[property] = value;
-    await _activePlayer.setProperty(property, value);
-    await _standbyPlayer.setProperty(property, value);
-  }
-
-  Future<void> setMpvProperties(Map<String, String> properties) async {
-    _customMpvProperties.addAll(properties);
-    for (final entry in properties.entries) {
-      await _activePlayer.setProperty(entry.key, entry.value);
-      await _standbyPlayer.setProperty(entry.key, entry.value);
-    }
   }
 
   // --------------------------------------------------------------------------

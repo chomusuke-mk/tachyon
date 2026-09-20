@@ -6,7 +6,6 @@ import 'package:tachyon/core/services/cover_cache_service.dart';
 import 'package:tachyon/shared/widgets/setting_row.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/domain/playback_state.dart';
 
 import 'settings_controller.dart';
 
@@ -288,60 +287,6 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const Divider(),
-                  SettingRow(
-                    title: strings.sReplayGainMode,
-                    description: strings.sReplayGainModeDesc,
-                    type: ControllerType.dropdown,
-                    child: DropdownButton<ReplayGainMode>(
-                      isExpanded: true,
-                      value: settings.replayGain,
-                      items: const [
-                        DropdownMenuItem(
-                          value: ReplayGainMode.off,
-                          child: Text('Off'),
-                        ),
-                        DropdownMenuItem(
-                          value: ReplayGainMode.track,
-                          child: Text('Track'),
-                        ),
-                        DropdownMenuItem(
-                          value: ReplayGainMode.album,
-                          child: Text('Album'),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) settings.setReplayGain(val);
-                      },
-                    ),
-                  ),
-                  const Divider(),
-                  SettingRow(
-                    title: strings.sReplayGainPreamp,
-                    description:
-                        '${settings.replayGainPreamp.toStringAsFixed(1)} dB',
-                    type: ControllerType.slider,
-                    child: Slider(
-                      value: settings.replayGainPreamp,
-                      min: -15.0,
-                      max: 15.0,
-                      divisions: 60,
-                      label:
-                          '${settings.replayGainPreamp.toStringAsFixed(1)} dB',
-                      onChanged: settings.replayGain != ReplayGainMode.off
-                          ? (val) => settings.setReplayGainPreamp(val)
-                          : null,
-                    ),
-                  ),
-                  const Divider(),
-                  SettingRow(
-                    title: strings.sExclusiveAudio,
-                    description: strings.sExclusiveAudioDesc,
-                    type: ControllerType.switchCtrl,
-                    child: Switch(
-                      value: settings.exclusiveAudio,
-                      onChanged: (val) => settings.setExclusiveAudio(val),
-                    ),
-                  ),
                 ],
               ),
             ),

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/domain/playback_state.dart';
 
 import 'playback_controller.dart';
 
@@ -59,7 +59,8 @@ class AudioEffectsSheet extends StatelessWidget {
               children: [
                 IconButton(
                   icon: Icon(Icons.speed_rounded),
-                  onPressed: () => playback.setRate(1.0),
+                  onPressed: () =>
+                      playback.setRate(AppDefaults.playbackRateDefault),
                   iconSize: 25,
                   color: colorScheme.onSurfaceVariant,
                   constraints: const BoxConstraints(
@@ -73,10 +74,17 @@ class AudioEffectsSheet extends StatelessWidget {
                 ),
                 Expanded(
                   child: Slider.adaptive(
-                    value: playback.rate.clamp(0.5, 1.5),
-                    min: 0.5,
-                    max: 1.5,
-                    divisions: 20,
+                    value: playback.rate.clamp(
+                      AppDefaults.playbackRateMin,
+                      AppDefaults.playbackRateMax,
+                    ),
+                    min: AppDefaults.playbackRateMin,
+                    max: AppDefaults.playbackRateMax,
+                    divisions:
+                        ((AppDefaults.playbackRateMax -
+                                    AppDefaults.playbackRateMin) /
+                                0.1)
+                            .round(),
                     onChanged: playback.setRate,
                   ),
                 ),
@@ -96,7 +104,8 @@ class AudioEffectsSheet extends StatelessWidget {
                     size: 25,
                     color: colorScheme.onSurfaceVariant,
                   ),
-                  onPressed: () => playback.setPitch(1.0),
+                  onPressed: () =>
+                      playback.setPitch(AppDefaults.playbackPitchDefault),
                   iconSize: 25,
                   color: colorScheme.onSurfaceVariant,
                   constraints: const BoxConstraints(
@@ -110,10 +119,17 @@ class AudioEffectsSheet extends StatelessWidget {
                 ),
                 Expanded(
                   child: Slider(
-                    value: playback.pitch.clamp(0.5, 1.5),
-                    min: 0.5,
-                    max: 1.5,
-                    divisions: 20,
+                    value: playback.pitch.clamp(
+                      AppDefaults.playbackPitchMin,
+                      AppDefaults.playbackPitchMax,
+                    ),
+                    min: AppDefaults.playbackPitchMin,
+                    max: AppDefaults.playbackPitchMax,
+                    divisions:
+                        ((AppDefaults.playbackPitchMax -
+                                    AppDefaults.playbackPitchMin) /
+                                0.1)
+                            .round(),
                     onChanged: playback.setPitch,
                   ),
                 ),
@@ -138,7 +154,8 @@ class AudioEffectsSheet extends StatelessWidget {
                     size: 25,
                     color: colorScheme.onSurfaceVariant,
                   ),
-                  onPressed: () => playback.setVolume(100.0),
+                  onPressed: () =>
+                      playback.setVolume(AppDefaults.volumeBoostDefault),
                   iconSize: 25,
                   color: colorScheme.onSurfaceVariant,
                   constraints: const BoxConstraints(
@@ -152,10 +169,16 @@ class AudioEffectsSheet extends StatelessWidget {
                 ),
                 Expanded(
                   child: Slider(
-                    value: playback.volume.clamp(100.0, 200.0),
-                    min: 100.0,
-                    max: 200.0,
-                    divisions: 100,
+                    value: playback.volume.clamp(
+                      AppDefaults.volumeBoostMin,
+                      AppDefaults.volumeBoostMax,
+                    ),
+                    min: AppDefaults.volumeBoostMin,
+                    max: AppDefaults.volumeBoostMax,
+                    divisions:
+                        ((AppDefaults.volumeBoostMax -
+                                AppDefaults.volumeBoostMin))
+                            .round(),
                     onChanged: playback.setVolume,
                   ),
                 ),
@@ -165,50 +188,7 @@ class AudioEffectsSheet extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            // 4. ReplayGain Normalization Mode
-            Text(strings.npReplayGain, style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
-            SegmentedButton<ReplayGainMode>(
-              segments: [
-                ButtonSegment(
-                  value: ReplayGainMode.off,
-                  label: Text(strings.npReplayGainOff),
-                ),
-                ButtonSegment(
-                  value: ReplayGainMode.track,
-                  label: Text(strings.npReplayGainTrack),
-                ),
-                ButtonSegment(
-                  value: ReplayGainMode.album,
-                  label: Text(strings.npReplayGainAlbum),
-                ),
-              ],
-              selected: {playback.replayGain},
-              onSelectionChanged: (set) => playback.setReplayGain(set.first),
-            ),
-            const SizedBox(height: 16),
-
-            // 5. ReplayGain Preamp Gain
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(strings.npPreamp, style: theme.textTheme.titleSmall),
-                Text(
-                  '${playback.replayGainPreamp >= 0 ? '+' : ''}${playback.replayGainPreamp.toStringAsFixed(1)} dB',
-                  style: theme.textTheme.labelLarge,
-                ),
-              ],
-            ),
-            Slider(
-              value: playback.replayGainPreamp.clamp(-15.0, 15.0),
-              min: -15.0,
-              max: 15.0,
-              divisions: 30,
-              onChanged: playback.setReplayGainPreamp,
-            ),
             SwitchListTile(
               value: settings.crossfadeEnabled,
               onChanged: (val) => settings.setCrossfadeEnabled(val),
@@ -241,19 +221,24 @@ class AudioEffectsSheet extends StatelessWidget {
                 Expanded(
                   child: Slider(
                     value: settings.crossfadeDuration.toDouble().clamp(
-                      2.0,
-                      30.0,
+                      AppDefaults.crossfadeMinDuration.toDouble(),
+                      AppDefaults.crossfadeMaxDuration.toDouble(),
                     ),
-                    min: 2.0,
-                    max: 30.0,
-                    divisions: 28,
+                    min: AppDefaults.crossfadeMinDuration.toDouble(),
+                    max: AppDefaults.crossfadeMaxDuration.toDouble(),
+                    divisions:
+                        AppDefaults.crossfadeMaxDuration -
+                        AppDefaults.crossfadeMinDuration,
                     onChanged: (val) =>
                         settings.setCrossfadeDuration(val.round()),
                   ),
                 ),
-                Text(
-                  '${settings.crossfadeDuration}s',
-                  style: theme.textTheme.labelLarge,
+                Container(
+                  constraints: const BoxConstraints(minWidth: 25),
+                  child: Text(
+                    '${settings.crossfadeDuration}s',
+                    style: theme.textTheme.labelLarge,
+                  ),
                 ),
               ],
             ),

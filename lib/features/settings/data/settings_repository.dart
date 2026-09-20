@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 
@@ -34,10 +33,8 @@ class SettingsRepository {
   static const _keyPlaybackPitch = 's_playback_pitch';
   static const _keyLoopMode = 's_loop_mode';
   static const _keyShuffle = 's_shuffle';
-  static const _keyReplayGain = 's_replay_gain';
-  static const _keyReplayGainPreamp = 's_replay_gain_preamp';
+  static const _keySkipSilence = 's_skip_silence';
   static const _keyVolumeBoost = 's_volume_boost';
-  static const _keyExclusiveAudio = 's_exclusive_audio';
   static const _keyTheme = 's_theme';
   static const _keyLanguage = 's_language';
   static const _keyLastPlayedUri = 's_last_played_uri';
@@ -72,10 +69,8 @@ class SettingsRepository {
       playbackPitch: _prefs.getDouble(_keyPlaybackPitch) ?? 1.0,
       loopMode: Loop.fromString(_prefs.getString(_keyLoopMode)),
       shuffle: _prefs.getBool(_keyShuffle) ?? false,
-      replayGain: ReplayGainMode.fromString(_keyReplayGain),
-      replayGainPreamp: _prefs.getDouble(_keyReplayGainPreamp) ?? 0.0,
+      skipSilence: _prefs.getBool(_keySkipSilence) ?? false,
       volumeBoost: _prefs.getDouble(_keyVolumeBoost) ?? 100.0,
-      exclusiveAudio: _prefs.getBool(_keyExclusiveAudio) ?? false,
       themeMode: _getAppTheme(),
       appLanguage: _prefs.getString(_keyLanguage) ?? 'defaultOption',
       lastPlayedUri: _prefs.getString(_keyLastPlayedUri),
@@ -96,10 +91,8 @@ class SettingsRepository {
       _prefs.setDouble(_keyPlaybackPitch, settings.playbackPitch),
       _prefs.setInt(_keyLoopMode, settings.loopMode.index),
       _prefs.setBool(_keyShuffle, settings.shuffle),
-      _prefs.setString(_keyReplayGain, settings.replayGain.name),
-      _prefs.setDouble(_keyReplayGainPreamp, settings.replayGainPreamp),
+      _prefs.setBool(_keySkipSilence, settings.skipSilence),
       _prefs.setDouble(_keyVolumeBoost, settings.volumeBoost),
-      _prefs.setBool(_keyExclusiveAudio, settings.exclusiveAudio),
       _prefs.setInt(_keyTheme, settings.themeMode.index),
       _prefs.setString(_keyLanguage, settings.appLanguage),
       _prefs.setInt(_keyLastPlayedPosition, settings.lastPlayedPositionMs),
@@ -145,17 +138,11 @@ class SettingsRepository {
 
   Future<void> setShuffle(bool shuffle) => _prefs.setBool(_keyShuffle, shuffle);
 
-  Future<void> setReplayGain(ReplayGainMode mode) =>
-      _prefs.setString(_keyReplayGain, mode.name);
-
-  Future<void> setReplayGainPreamp(double preamp) =>
-      _prefs.setDouble(_keyReplayGainPreamp, preamp.clamp(-15, 15));
+  Future<void> setSkipSilence(bool skip) =>
+      _prefs.setBool(_keySkipSilence, skip);
 
   Future<void> setVolumeBoost(double boost) =>
       _prefs.setDouble(_keyVolumeBoost, boost.clamp(100, 200));
-
-  Future<void> setExclusiveAudio(bool exclusive) =>
-      _prefs.setBool(_keyExclusiveAudio, exclusive);
 
   Future<void> setThemeMode(ThemeMode theme) =>
       _prefs.setInt(_keyTheme, theme.index);

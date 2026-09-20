@@ -2,12 +2,19 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
 
 @immutable
 class CrossfadeConfig {
-  static const Duration minDuration = Duration(seconds: 2);
-  static const Duration maxDuration = Duration(seconds: 30);
-  static const Duration defaultDuration = Duration(seconds: 5);
+  static const Duration minDuration = Duration(
+    seconds: AppDefaults.crossfadeMinDuration,
+  );
+  static const Duration maxDuration = Duration(
+    seconds: AppDefaults.crossfadeMaxDuration,
+  );
+  static const Duration defaultDuration = Duration(
+    seconds: AppDefaults.crossfadeDefaultDuration,
+  );
 
   final bool enabled;
   final Duration duration;
@@ -86,7 +93,8 @@ class CrossfadeConfig {
       enabled: json['enabled'] as bool? ?? true,
       duration: Duration(
         milliseconds:
-            ((json['durationMs'] ?? json['duration']) as num?)?.toInt() ?? 5000,
+            ((json['durationMs'] ?? json['duration']) as num?)?.toInt() ??
+            defaultDuration.inMilliseconds,
       ),
       curve: CrossfadeCurve.fromString(json['curve'] as String?),
     );

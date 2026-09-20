@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
 
 import 'package:tachyon/core/services/audio_engine_service.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
-import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
@@ -37,8 +37,7 @@ class SettingsController extends ChangeNotifier {
   double get playbackPitch => _settings.playbackPitch;
   Loop get loopMode => _settings.loopMode;
   bool get shuffle => _settings.shuffle;
-  ReplayGainMode get replayGain => _settings.replayGain;
-  double get replayGainPreamp => _settings.replayGainPreamp;
+  bool get skipSilence => _settings.skipSilence;
   double get volumeBoost => _settings.volumeBoost;
   bool get exclusiveAudio => _settings.exclusiveAudio;
   ThemeMode get themeMode => _settings.themeMode;
@@ -63,8 +62,7 @@ class SettingsController extends ChangeNotifier {
     await _audioEngine.setVolume(_settings.volume);
     await _audioEngine.setRate(_settings.playbackRate);
     await _audioEngine.setPitch(_settings.playbackPitch);
-    await _audioEngine.setReplayGain(_settings.replayGain);
-    await _audioEngine.setReplayGainPreamp(_settings.replayGainPreamp);
+    await _audioEngine.setSkipSilence(_settings.skipSilence);
     await _audioEngine.setLoopMode(_settings.loopMode);
 
     notifyListeners();
@@ -102,7 +100,10 @@ class SettingsController extends ChangeNotifier {
   // Audio Engine Preferences
   // ---------------------------------------------------------------------------
   Future<void> setCrossfadeDuration(int seconds) async {
-    final clamped = seconds.clamp(2, 30);
+    final clamped = seconds.clamp(
+      AppDefaults.crossfadeMinDuration,
+      AppDefaults.crossfadeMaxDuration,
+    );
     _settings = _settings.copyWith(crossfadeDuration: clamped);
     await _repository.setCrossfadeDuration(clamped);
     await _audioEngine.setCrossfadeConfig(
@@ -116,11 +117,6 @@ class SettingsController extends ChangeNotifier {
   }
 
   Future<void> setCrossfadeEnabled(bool enabled) async {
-    if (enabled && _settings.exclusiveAudio) {
-      _settings = _settings.copyWith(exclusiveAudio: false);
-      await _repository.setExclusiveAudio(false);
-      await _audioEngine.setExclusiveAudio(false);
-    }
     _settings = _settings.copyWith(crossfadeEnabled: enabled);
     await _repository.setCrossfadeEnabled(enabled);
     await _audioEngine.setCrossfadeConfig(
@@ -146,43 +142,20 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setSkipSilence(bool enabled) async {
+    _settings = _settings.copyWith(skipSilence: enabled);
+    await _repository.setSkipSilence(enabled);
+    await _audioEngine.setSkipSilence(enabled);
+    notifyListeners();
+  }
+
   Future<void> setVolumeBoost(double boost) async {
-    final clamped = boost.clamp(100.0, 200.0);
+    final clamped = boost.clamp(
+      AppDefaults.volumeBoostMin,
+      AppDefaults.volumeBoostMax,
+    );
     _settings = _settings.copyWith(volumeBoost: clamped);
     await _repository.setVolumeBoost(clamped);
-    notifyListeners();
-  }
-
-  Future<void> setReplayGain(ReplayGainMode mode) async {
-    _settings = _settings.copyWith(replayGain: mode);
-    await _repository.setReplayGain(mode);
-    await _audioEngine.setReplayGain(mode);
-    notifyListeners();
-  }
-
-  Future<void> setReplayGainPreamp(double preamp) async {
-    final clamped = preamp.clamp(0.5, 1.5);
-    _settings = _settings.copyWith(replayGainPreamp: clamped);
-    await _repository.setReplayGainPreamp(clamped);
-    await _audioEngine.setReplayGainPreamp(clamped);
-    notifyListeners();
-  }
-
-  Future<void> setExclusiveAudio(bool exclusive) async {
-    if (exclusive && _settings.crossfadeEnabled) {
-      _settings = _settings.copyWith(crossfadeEnabled: false);
-      await _repository.setCrossfadeEnabled(false);
-      await _audioEngine.setCrossfadeConfig(
-        CrossfadeConfig(
-          enabled: false,
-          duration: Duration(seconds: _settings.crossfadeDuration),
-          curve: _settings.crossfadeCurve,
-        ),
-      );
-    }
-    _settings = _settings.copyWith(exclusiveAudio: exclusive);
-    await _repository.setExclusiveAudio(exclusive);
-    await _audioEngine.setExclusiveAudio(exclusive);
     notifyListeners();
   }
 

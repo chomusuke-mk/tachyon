@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
-import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 
 typedef LoopMode = Loop;
@@ -21,8 +20,7 @@ class AppSettings {
   final double playbackPitch; // 0.5 to 1.5 (default 1.0)
   final Loop loopMode; // Loop.off (default)
   final bool shuffle; // default false
-  final ReplayGainMode replayGain; // ReplayGainMode.off
-  final double replayGainPreamp; // -15.0 to +15.0 dB (default 0.0)
+  final bool skipSilence; // default false
   final double volumeBoost; // 100.0% to 200.0% (default 100.0)
   final bool exclusiveAudio; // Windows WASAPI exclusive (default false)
 
@@ -48,8 +46,7 @@ class AppSettings {
     this.playbackPitch = 1.0,
     this.loopMode = Loop.off,
     this.shuffle = false,
-    this.replayGain = ReplayGainMode.off,
-    this.replayGainPreamp = 0.0,
+    this.skipSilence = false,
     this.volumeBoost = 100.0,
     this.exclusiveAudio = false,
     this.themeMode = ThemeMode.dark,
@@ -85,8 +82,7 @@ class AppSettings {
           playbackPitch == other.playbackPitch &&
           loopMode == other.loopMode &&
           shuffle == other.shuffle &&
-          replayGain == other.replayGain &&
-          replayGainPreamp == other.replayGainPreamp &&
+          skipSilence == other.skipSilence &&
           volumeBoost == other.volumeBoost &&
           exclusiveAudio == other.exclusiveAudio &&
           themeMode == other.themeMode &&
@@ -106,8 +102,7 @@ class AppSettings {
     double? playbackPitch,
     Loop? loopMode,
     bool? shuffle,
-    ReplayGainMode? replayGain,
-    double? replayGainPreamp,
+    bool? skipSilence,
     double? volumeBoost,
     bool? exclusiveAudio,
     ThemeMode? themeMode,
@@ -127,8 +122,7 @@ class AppSettings {
       playbackPitch: playbackPitch ?? this.playbackPitch,
       loopMode: loopMode ?? this.loopMode,
       shuffle: shuffle ?? this.shuffle,
-      replayGain: replayGain ?? this.replayGain,
-      replayGainPreamp: replayGainPreamp ?? this.replayGainPreamp,
+      skipSilence: skipSilence ?? this.skipSilence,
       volumeBoost: volumeBoost ?? this.volumeBoost,
       exclusiveAudio: exclusiveAudio ?? this.exclusiveAudio,
       themeMode: themeMode ?? this.themeMode,
@@ -151,8 +145,7 @@ class AppSettings {
     playbackPitch,
     loopMode,
     shuffle,
-    replayGain,
-    replayGainPreamp,
+    skipSilence,
     volumeBoost,
     exclusiveAudio,
     themeMode,
