@@ -14,7 +14,7 @@ class AppSettings {
 
   // Audio Playback
   final bool crossfadeEnabled;
-  final int crossfadeDuration; // 1 to 12 seconds (default 5)
+  final int crossfadeDuration; // 2 to 30 seconds (default 5)
   final CrossfadeCurve crossfadeCurve; // 'equal_power' or 'linear'
   final double volume; // 0.0 to 100.0 (default 100.0)
   final double playbackRate; // 0.5 to 1.5 (default 1.0)

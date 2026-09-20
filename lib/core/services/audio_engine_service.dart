@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:tachyon/features/playback/domain/behavior_subject.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
@@ -578,7 +577,7 @@ class AudioEngineService {
     _exclusiveAudio = exclusive;
     final exclusiveStr = exclusive ? 'yes' : 'no';
 
-    if (!kIsWeb && Platform.isWindows) {
+    if (Platform.isWindows) {
       if (exclusive) {
         await _activePlayer.setProperty('ao', 'wasapi');
         await _standbyPlayer.setProperty('ao', 'wasapi');

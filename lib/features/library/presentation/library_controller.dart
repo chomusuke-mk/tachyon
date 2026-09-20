@@ -82,7 +82,6 @@ class LibraryController extends ChangeNotifier {
   // Scanning State
   ScanProgress _scanProgress = const ScanProgress();
   StreamSubscription<ScanProgress>? _scanSubscription;
-  CancellationToken? _scanCancellationToken;
 
   // ---------------------------------------------------------------------------
   // Getters
@@ -336,14 +335,12 @@ class LibraryController extends ChangeNotifier {
     if (directories.isEmpty) return;
 
     cancelScan();
-    final token = CancellationToken();
-    _scanCancellationToken = token;
 
     _scanProgress = const ScanProgress(phase: ScanPhase.discovering);
     notifyListeners();
 
     _scanSubscription = _metadataExtractor
-        .scanDirectories(directories, cancellationToken: token)
+        .scanDirectories(directories)
         .listen(
           (progress) {
             _scanProgress = progress;
@@ -353,7 +350,7 @@ class LibraryController extends ChangeNotifier {
               loadLibrary();
             }
           },
-          onError: (err) {
+          onError: (Object err) {
             _scanProgress = _scanProgress.copyWith(
               phase: ScanPhase.failed,
               errorMessage: err.toString(),
@@ -367,8 +364,9 @@ class LibraryController extends ChangeNotifier {
   }
 
   void cancelScan() {
-    _scanCancellationToken?.cancel();
-    _scanCancellationToken = null;
+    // Cancel the isolate-level pipeline via the extractor
+    _metadataExtractor.cancelScan();
+    // Cancel the stream subscription on the controller side
     _scanSubscription?.cancel();
     _scanSubscription = null;
     if (_scanProgress.isRunning) {

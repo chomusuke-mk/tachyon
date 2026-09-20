@@ -25,10 +25,6 @@ class AudioEffectsSheet extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHigh,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
       child: SingleChildScrollView(
         child: Column(
@@ -220,9 +216,6 @@ class AudioEffectsSheet extends StatelessWidget {
                 strings.sCrossfadeEnable,
                 style: theme.textTheme.titleSmall,
               ),
-              dense: true,
-              visualDensity: VisualDensity.compact,
-              contentPadding: EdgeInsets.zero,
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

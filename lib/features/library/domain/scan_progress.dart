@@ -53,6 +53,7 @@ class ScanProgress {
   ScanProgress copyWith({
     ScanPhase? phase,
     String? currentFile,
+    bool clearCurrentFile = false,
     int? scannedFiles,
     int? totalFiles,
     int? newTracks,
@@ -65,7 +66,7 @@ class ScanProgress {
   }) {
     return ScanProgress(
       phase: phase ?? this.phase,
-      currentFile: currentFile ?? this.currentFile,
+      currentFile: clearCurrentFile ? null : (currentFile ?? this.currentFile),
       scannedFiles: scannedFiles ?? this.scannedFiles,
       totalFiles: totalFiles ?? this.totalFiles,
       newTracks: newTracks ?? this.newTracks,
@@ -75,6 +76,45 @@ class ScanProgress {
       progress: progress ?? this.progress,
       errorMessage: errorMessage ?? this.errorMessage,
       elapsedTime: elapsedTime ?? this.elapsedTime,
+    );
+  }
+
+  /// Serializes this instance to a plain [Map] that can cross Isolate boundaries.
+  Map<String, dynamic> toJson() => {
+    'phase': phase.name,
+    'currentFile': currentFile,
+    'scannedFiles': scannedFiles,
+    'totalFiles': totalFiles,
+    'newTracks': newTracks,
+    'updatedTracks': updatedTracks,
+    'skippedTracks': skippedTracks,
+    'failedTracks': failedTracks,
+    'progress': progress,
+    'errorMessage': errorMessage,
+    'elapsedMs': elapsedTime.inMilliseconds,
+  };
+
+  /// Deserializes a [Map] received from a secondary Isolate back into a [ScanProgress].
+  factory ScanProgress.fromJson(Map<String, dynamic> json) {
+    final phaseName = json['phase'] as String? ?? 'idle';
+    final phase = ScanPhase.values.firstWhere(
+      (e) => e.name == phaseName,
+      orElse: () => ScanPhase.idle,
+    );
+    return ScanProgress(
+      phase: phase,
+      currentFile: json['currentFile'] as String?,
+      scannedFiles: (json['scannedFiles'] as num?)?.toInt() ?? 0,
+      totalFiles: (json['totalFiles'] as num?)?.toInt() ?? 0,
+      newTracks: (json['newTracks'] as num?)?.toInt() ?? 0,
+      updatedTracks: (json['updatedTracks'] as num?)?.toInt() ?? 0,
+      skippedTracks: (json['skippedTracks'] as num?)?.toInt() ?? 0,
+      failedTracks: (json['failedTracks'] as num?)?.toInt() ?? 0,
+      progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
+      errorMessage: json['errorMessage'] as String?,
+      elapsedTime: Duration(
+        milliseconds: (json['elapsedMs'] as num?)?.toInt() ?? 0,
+      ),
     );
   }
 

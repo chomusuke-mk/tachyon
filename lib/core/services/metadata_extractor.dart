@@ -1,99 +1,37 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
+import 'dart:isolate';
 
+import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/services/cover_cache_service.dart';
+import 'package:tachyon/core/services/scan_isolate.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
 
-/// Concurrency limiter implementing a bounded worker pool.
-class ConcurrencyLimiter {
-  final int maxConcurrent;
-  int _activeCount = 0;
-  final Queue<Completer<void>> _waiters = Queue<Completer<void>>();
+export 'package:tachyon/core/services/scan_isolate.dart'
+    show DiscoveredAudioFile;
 
-  ConcurrencyLimiter(this.maxConcurrent) {
-    assert(maxConcurrent >= 1, 'maxConcurrent must be at least 1');
-  }
-
-  int get activeCount => _activeCount;
-
-  Future<R> run<R>(Future<R> Function() operation) async {
-    while (_activeCount >= maxConcurrent) {
-      final completer = Completer<void>();
-      _waiters.add(completer);
-      await completer.future;
-    }
-
-    _activeCount++;
-    try {
-      return await operation();
-    } finally {
-      _activeCount--;
-      if (_waiters.isNotEmpty) {
-        _waiters.removeFirst().complete();
-      }
-    }
-  }
-}
-
-/// Discovered audio file entity awaiting metadata extraction.
-class DiscoveredAudioFile {
-  final String path;
-  final int size;
-  final int modifiedAt;
-
-  const DiscoveredAudioFile({
-    required this.path,
-    required this.size,
-    required this.modifiedAt,
-  });
-
-  @override
-  String toString() => 'DiscoveredAudioFile($path, $size bytes)';
-}
-
-/// Internal progress tracker with 20 Hz throttled stream dispatching.
-class ThrottledProgressEmitter {
-  final StreamController<ScanProgress> controller;
-  final Stopwatch stopwatch = Stopwatch();
-  ScanProgress _current = const ScanProgress();
-  int _lastEmitTimestampMs = -minEmitIntervalMs;
-  static const int minEmitIntervalMs =
-      50; // 20 Hz throttle threshold (zero UI jank)
-
-  ThrottledProgressEmitter(this.controller) {
-    stopwatch.start();
-  }
-
-  ScanProgress get current => _current;
-
-  void emit(ScanProgress progress, {bool force = false}) {
-    _current = progress.copyWith(elapsedTime: stopwatch.elapsed);
-    final now = stopwatch.elapsedMilliseconds;
-    if (force || (now - _lastEmitTimestampMs) >= minEmitIntervalMs) {
-      _lastEmitTimestampMs = now;
-      if (!controller.isClosed) {
-        controller.add(_current);
-      }
-    }
-  }
-
-  void close() {
-    stopwatch.stop();
-    if (!controller.isClosed) {
-      controller.close();
-    }
-  }
-}
-
-/// Production implementation of [MetadataExtractor] with bounded isolate worker pool,
-/// incremental change detection, 20 Hz UI progress throttle, and chunked DB commits.
+/// Manages spawning the scan Isolate and bridging its progress events and
+/// track batches back to the main isolate.
+///
+/// ### Architecture
+/// The scan isolate performs CPU-heavy work (file discovery, `readMetadata`,
+/// cover caching) and communicates results to the main isolate via a typed
+/// message protocol over a single [ReceivePort]:
+///
+/// ```
+///  {'_type': 'progress', ...ScanProgress fields}  → emit to progress stream
+///  {'_type': 'batch',    'tracks': [Track.toJson(), ...]}  → DB insert (main)
+///  {'_type': 'done',     'progress': ScanProgress.toJson()}  → final stats
+/// ```
+///
+/// All SQLite writes stay in the main isolate so there is never more than one
+/// writer, avoiding the "database is locked" error that arises when a second
+/// isolate opens its own connection concurrently.
 class MetadataExtractor {
   final AppDatabase database;
   final CoverCacheService coverCacheService;
@@ -108,11 +46,17 @@ class MetadataExtractor {
   int get workerCount =>
       customWorkerCount ?? (Platform.numberOfProcessors ~/ 2).clamp(1, 8);
 
+  Isolate? _activeIsolate;
+  SendPort? _cancelPort;
+
+  // ---------------------------------------------------------------------------
+  // Public: extractMetadata – single-file convenience (runs on caller isolate)
+  // ---------------------------------------------------------------------------
+
+  /// Extracts metadata for a single [filePath]. Useful for one-off queries.
   Future<Track?> extractMetadata(String filePath) async {
     final file = File(filePath);
-    if (!file.existsSync() && !await file.exists()) {
-      return null;
-    }
+    if (!file.existsSync() && !await file.exists()) return null;
 
     int size = 0;
     int modifiedAt = 0;
@@ -121,6 +65,7 @@ class MetadataExtractor {
       size = stat.size;
       modifiedAt = stat.modified.millisecondsSinceEpoch;
     } catch (_) {}
+
     try {
       final metadata = readMetadata(file, getImage: false);
 
@@ -129,6 +74,7 @@ class MetadataExtractor {
           unawaited(coverCacheService.saveCacheCover(file.path));
         } catch (_) {}
       }
+
       return Track(
         uri: filePath,
         title: metadata.title ?? p.basenameWithoutExtension(filePath),
@@ -149,284 +95,226 @@ class MetadataExtractor {
         lyrics: metadata.lyrics,
         genres: metadata.genres,
       );
-    } catch (e) {
+    } catch (_) {
       return null;
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Public: discoverFiles – convenience wrapper (runs on caller isolate)
+  // ---------------------------------------------------------------------------
+
+  Stream<DiscoveredAudioFile> discoverFiles(
+    List<String> directories, {
+    CancellationToken? cancellationToken,
+  }) {
+    return _discoverFilesLocal(directories, cancellationToken: cancellationToken);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public: scanDirectories – spawns the Isolate
+  // ---------------------------------------------------------------------------
+
+  /// Starts the full scan pipeline in a dedicated [Isolate] and returns a
+  /// [Stream<ScanProgress>].
   Stream<ScanProgress> scanDirectories(
     List<String> directories, {
     CancellationToken? cancellationToken,
   }) {
     final controller = StreamController<ScanProgress>();
-    _runPipeline(directories, controller, cancellationToken);
+    _spawnScanIsolate(directories, controller, cancellationToken);
     return controller.stream;
   }
 
-  Future<void> _runPipeline(
+  /// Cancels any active scan.
+  void cancelScan() {
+    _cancelPort?.send('cancel');
+    _cancelPort = null;
+    _activeIsolate?.kill(priority: Isolate.beforeNextEvent);
+    _activeIsolate = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private: isolate orchestration
+  // ---------------------------------------------------------------------------
+
+  Future<void> _spawnScanIsolate(
     List<String> directories,
     StreamController<ScanProgress> controller,
     CancellationToken? cancellationToken,
   ) async {
-    final emitter = ThrottledProgressEmitter(controller);
+    cancelScan();
 
+    final coverCachePath = coverCacheService.cacheDirectory.path;
+
+    final progressPort = ReceivePort();
+    final handshakePort = ReceivePort();
+
+    final args = ScanIsolateArgs(
+      progressPort: progressPort.sendPort,
+      handshakePort: handshakePort.sendPort,
+      directories: directories,
+      coverCachePath: coverCachePath,
+      workerCount: workerCount,
+    );
+
+    late Isolate isolate;
     try {
-      emitter.emit(
-        const ScanProgress(phase: ScanPhase.discovering),
-        force: true,
-      );
-
-      // 1. Snapshot existing tracks from SQLite for instant incremental lookup
-      final existingMetaMap = await _loadExistingTrackMetas();
-
-      // 2. Traversal & Discovery
-      final discoveredFiles = <DiscoveredAudioFile>[];
-      await for (final file in discoverFiles(
-        directories,
-        cancellationToken: cancellationToken,
-      )) {
-        if (cancellationToken?.isCancelled ?? false) break;
-        discoveredFiles.add(file);
-        emitter.emit(
-          emitter.current.copyWith(
-            phase: ScanPhase.discovering,
-            totalFiles: discoveredFiles.length,
-            currentFile: file.path,
-          ),
-        );
-      }
-
-      if (cancellationToken?.isCancelled ?? false) {
-        emitter.emit(
-          emitter.current.copyWith(phase: ScanPhase.cancelled),
-          force: true,
-        );
-        emitter.close();
-        return;
-      }
-
-      final totalFiles = discoveredFiles.length;
-      int scannedCount = 0;
-      int skippedCount = 0;
-      int newCount = 0;
-      int updatedCount = 0;
-      int failedCount = 0;
-
-      emitter.emit(
-        emitter.current.copyWith(
-          phase: ScanPhase.extracting,
-          scannedFiles: 0,
-          totalFiles: totalFiles,
-          progress: 0.0,
-        ),
-        force: true,
-      );
-
-      // 3. Concurrency-bounded Worker Pool for Extraction
-      final limiter = ConcurrencyLimiter(workerCount);
-      final pendingInserts = <Track>[];
-      final tasks = <Future<void>>[];
-
-      for (final file in discoveredFiles) {
-        if (cancellationToken?.isCancelled ?? false) break;
-
-        final existing = existingMetaMap[file.path];
-
-        // Incremental cache check: identical size and modification timestamp
-        if (existing != null &&
-            existing.fileSize == file.size &&
-            existing.modifiedAt == file.modifiedAt) {
-          scannedCount++;
-          skippedCount++;
-          emitter.emit(
-            emitter.current.copyWith(
-              phase: ScanPhase.extracting,
-              scannedFiles: scannedCount,
-              skippedTracks: skippedCount,
-              progress: totalFiles > 0 ? scannedCount / totalFiles : 1.0,
-              currentFile: file.path,
-            ),
-          );
-          continue;
-        }
-
-        final isUpdate = existing != null;
-
-        tasks.add(
-          limiter.run(() async {
-            if (cancellationToken?.isCancelled ?? false) return;
-
-            final track = await extractMetadata(file.path);
-            scannedCount++;
-
-            if (track != null) {
-              pendingInserts.add(track);
-              if (isUpdate) {
-                updatedCount++;
-              } else {
-                newCount++;
-              }
-            } else {
-              failedCount++;
-            }
-
-            emitter.emit(
-              emitter.current.copyWith(
-                phase: ScanPhase.extracting,
-                scannedFiles: scannedCount,
-                newTracks: newCount,
-                updatedTracks: updatedCount,
-                failedTracks: failedCount,
-                skippedTracks: skippedCount,
-                progress: totalFiles > 0 ? scannedCount / totalFiles : 1.0,
-                currentFile: file.path,
-              ),
-            );
-
-            // Flush batch if threshold reached
-            if (pendingInserts.length >= 30) {
-              final batch = List<Track>.from(pendingInserts);
-              pendingInserts.clear();
-              await _persistBatch(batch, emitter);
-            }
-          }),
-        );
-      }
-
-      await Future.wait(tasks);
-
-      if (cancellationToken?.isCancelled ?? false) {
-        emitter.emit(
-          emitter.current.copyWith(phase: ScanPhase.cancelled),
-          force: true,
-        );
-        emitter.close();
-        return;
-      }
-
-      // Flush any remaining tracks
-      if (pendingInserts.isNotEmpty) {
-        final remainingBatch = List<Track>.from(pendingInserts);
-        pendingInserts.clear();
-        await _persistBatch(remainingBatch, emitter);
-      }
-
-      // 4. Mark completion
-      emitter.emit(
-        emitter.current.copyWith(
-          phase: ScanPhase.completed,
-          scannedFiles: totalFiles,
-          totalFiles: totalFiles,
-          newTracks: newCount,
-          updatedTracks: updatedCount,
-          skippedTracks: skippedCount,
-          failedTracks: failedCount,
-          progress: 1.0,
-          currentFile: null,
-        ),
-        force: true,
-      );
-    } catch (e, st) {
-      debugPrint('Scan pipeline failed: $e\n$st');
-      emitter.emit(
-        emitter.current.copyWith(
-          phase: ScanPhase.failed,
-          errorMessage: e.toString(),
-        ),
-        force: true,
-      );
-    } finally {
-      emitter.close();
+      isolate = await Isolate.spawn(scanIsolateEntry, args);
+    } catch (e) {
+      progressPort.close();
+      handshakePort.close();
+      controller.addError(e);
+      controller.close();
+      return;
     }
+
+    _activeIsolate = isolate;
+
+    // Handshake: receive the cancel SendPort from the new isolate
+    final cancelSendPort = await handshakePort.first as SendPort;
+    handshakePort.close();
+    _cancelPort = cancelSendPort;
+
+    // Forward external cancellation token
+    if (cancellationToken?.isCancelled ?? false) {
+      cancelSendPort.send('cancel');
+    }
+    cancellationToken?.onCancel(() => cancelSendPort.send('cancel'));
+
+    // Pending DB insert futures so we can await them before emitting 'completed'
+    final pendingInserts = <Future<void>>[];
+
+    progressPort.listen(
+      (message) async {
+        if (message is! Map<String, dynamic>) return;
+
+        final type = message['_type'] as String?;
+
+        switch (type) {
+          case 'progress':
+            // Strip the internal '_type' key before deserialising
+            final progressMap = Map<String, dynamic>.from(message)
+              ..remove('_type');
+            try {
+              final progress = ScanProgress.fromJson(progressMap);
+              if (!controller.isClosed) controller.add(progress);
+            } catch (e) {
+              debugPrint('[MetadataExtractor] Failed to parse progress: $e');
+            }
+
+          case 'batch':
+            // Deserialise tracks and insert via the main-isolate DB connection
+            try {
+              final rawList = message['tracks'] as List<dynamic>;
+              final tracks = rawList
+                  .map((e) => Track.fromJson(e as Map<String, dynamic>))
+                  .toList();
+              if (tracks.isNotEmpty) {
+                pendingInserts.add(
+                  database.batchInsertTracks(tracks).catchError((Object err) {
+                    debugPrint('[MetadataExtractor] batchInsert error: $err');
+                  }),
+                );
+              }
+            } catch (e) {
+              debugPrint('[MetadataExtractor] Failed to process batch: $e');
+            }
+
+          case 'done':
+            // Wait for all pending DB inserts, then emit the final progress
+            try {
+              await Future.wait(pendingInserts);
+            } catch (e) {
+              debugPrint('[MetadataExtractor] Insert error during done: $e');
+            }
+            try {
+              final progressMap = Map<String, dynamic>.from(
+                message['progress'] as Map<String, dynamic>,
+              );
+              final finalProgress = ScanProgress.fromJson(progressMap);
+              if (!controller.isClosed) controller.add(finalProgress);
+            } catch (e) {
+              debugPrint('[MetadataExtractor] Failed to parse done progress: $e');
+            }
+            progressPort.close();
+            if (!controller.isClosed) controller.close();
+            _activeIsolate = null;
+            _cancelPort = null;
+
+          default:
+            debugPrint('[MetadataExtractor] Unknown message type: $type');
+        }
+      },
+      onError: (Object err) {
+        if (!controller.isClosed) controller.addError(err);
+        progressPort.close();
+        controller.close();
+        _activeIsolate = null;
+        _cancelPort = null;
+      },
+      onDone: () {
+        if (!controller.isClosed) controller.close();
+        _activeIsolate = null;
+        _cancelPort = null;
+      },
+      cancelOnError: false,
+    );
+
+    controller.onCancel = () => cancelSendPort.send('cancel');
   }
+}
 
-  /// Traverses directories searching for supported audio files.
-  Stream<DiscoveredAudioFile> discoverFiles(
-    List<String> directories, {
-    CancellationToken? cancellationToken,
-  }) async* {
-    final supportedSet = supportedFileExtensions
-        .map((e) => e.toLowerCase().replaceAll('.', ''))
-        .toSet();
+// ---------------------------------------------------------------------------
+// Local file discovery (runs on caller isolate; used by discoverFiles helper)
+// ---------------------------------------------------------------------------
 
-    for (final dirPath in directories) {
+Stream<DiscoveredAudioFile> _discoverFilesLocal(
+  List<String> directories, {
+  CancellationToken? cancellationToken,
+}) async* {
+  final supportedSet = supportedFileExtensions
+      .map((e) => e.toLowerCase().replaceAll('.', ''))
+      .toSet();
+
+  for (final dirPath in directories) {
+    if (cancellationToken?.isCancelled ?? false) break;
+
+    final dir = Directory(dirPath);
+    if (!await dir.exists()) continue;
+
+    Stream<FileSystemEntity> entityStream;
+    try {
+      entityStream = dir.list(recursive: true, followLinks: false);
+    } catch (e) {
+      debugPrint('[MetadataExtractor] Unable to list directory $dirPath: $e');
+      continue;
+    }
+
+    await for (final entity in entityStream.handleError((Object e) {
+      debugPrint('[MetadataExtractor] Error accessing filesystem entity: $e');
+    })) {
       if (cancellationToken?.isCancelled ?? false) break;
+      if (entity is! File) continue;
 
-      final dir = Directory(dirPath);
-      if (!await dir.exists()) continue;
+      final filename = p.basename(entity.path);
+      if (filename.startsWith('.')) continue;
 
-      Stream<FileSystemEntity> entityStream;
+      final ext = p.extension(entity.path).toLowerCase().replaceAll('.', '');
+      if (!supportedSet.contains(ext)) continue;
+
       try {
-        entityStream = dir.list(recursive: true, followLinks: false);
-      } catch (e) {
-        debugPrint('Warning: Unable to list directory $dirPath: $e');
+        final stat = await entity.stat();
+        if (stat.size <= 0) continue;
+        yield DiscoveredAudioFile(
+          path: entity.path,
+          size: stat.size,
+          modifiedAt: stat.modified.millisecondsSinceEpoch,
+        );
+      } catch (_) {
         continue;
       }
-
-      await for (final entity in entityStream.handleError((e) {
-        debugPrint('Error accessing filesystem entity: $e');
-      })) {
-        if (cancellationToken?.isCancelled ?? false) break;
-
-        if (entity is! File) continue;
-
-        // Ignore hidden files / directories (e.g. .git, .thumbnails)
-        final filename = p.basename(entity.path);
-        if (filename.startsWith('.')) continue;
-
-        final ext = p.extension(entity.path).toLowerCase().replaceAll('.', '');
-        if (!supportedSet.contains(ext)) continue;
-
-        try {
-          final stat = await entity.stat();
-          if (stat.size <= 0) continue;
-
-          yield DiscoveredAudioFile(
-            path: entity.path,
-            size: stat.size,
-            modifiedAt: stat.modified.millisecondsSinceEpoch,
-          );
-        } catch (_) {
-          continue;
-        }
-      }
-    }
-  }
-
-  Future<void> _persistBatch(
-    List<Track> batch,
-    ThrottledProgressEmitter emitter,
-  ) async {
-    emitter.emit(
-      emitter.current.copyWith(phase: ScanPhase.persisting),
-      force: true,
-    );
-    await database.batchInsertTracks(batch);
-    // Yield to event loop between transactions to prevent UI starving
-    await Future.delayed(Duration.zero);
-    emitter.emit(
-      emitter.current.copyWith(phase: ScanPhase.extracting),
-      force: true,
-    );
-  }
-
-  Future<Map<String, ({int fileSize, int modifiedAt})>>
-  _loadExistingTrackMetas() async {
-    try {
-      final rows = await database.database.rawQuery(
-        'SELECT uri, file_size, modified_at FROM tracks;',
-      );
-      final map = <String, ({int fileSize, int modifiedAt})>{};
-      for (final r in rows) {
-        final uri = r['uri'] as String;
-        final size = r['file_size'] as int;
-        final modified = r['modified_at'] as int;
-        map[uri] = (fileSize: size, modifiedAt: modified);
-      }
-      return map;
-    } catch (e) {
-      debugPrint('Warning: Could not pre-query existing track metadata: $e');
-      return {};
     }
   }
 }
+

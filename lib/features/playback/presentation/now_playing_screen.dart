@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/wakelock_service.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
@@ -48,34 +47,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _syncWakelock();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncWakelock();
     _checkLikedStatus();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _syncWakelock();
-    } else {
-      WakelockService.disable();
-    }
-  }
-
-  void _syncWakelock() {
-    if (!mounted) return;
-    final playback = context.read<PlaybackController>();
-    if (playback.isPlaying) {
-      WakelockService.enable();
-    } else {
-      WakelockService.disable();
-    }
-  }
 
   Future<void> _checkLikedStatus() async {
     final playback = context.read<PlaybackController>();
@@ -131,7 +110,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    WakelockService.disable();
     super.dispose();
   }
 
@@ -143,13 +121,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final isDesktop = TachyonBreakpoints.isDesktop(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
-    // Keep wakelock state in sync with playback playing changes
-    if (playback.isPlaying) {
-      WakelockService.enable();
-    } else {
-      WakelockService.disable();
-    }
 
     if (currentTrack == null) {
       return Scaffold(
@@ -397,7 +368,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                         : strings.npPlay,
                     onPressed: () {
                       playback.playOrPause();
-                      _syncWakelock();
                     },
                   ),
                   IconButton(
@@ -596,7 +566,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                           : strings.npPlay,
                       onPressed: () {
                         playback.playOrPause();
-                        _syncWakelock();
                       },
                     ),
                     const SizedBox(width: 12),
@@ -754,11 +723,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   }
 
   void _openAudioControls(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     showModalBottomSheet(
       useSafeArea: true,
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: colorScheme.surfaceContainerHigh,
       builder: (context) => const AudioEffectsSheet(),
     );
   }
