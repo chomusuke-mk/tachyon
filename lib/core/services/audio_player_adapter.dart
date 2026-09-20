@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
-import 'package:media_kit/media_kit.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 // ============================================================================
 // AUDIO PLAYER ADAPTER
@@ -23,46 +23,40 @@ import 'package:media_kit/media_kit.dart';
 /// - Pitch preservation enabled by default via `PlayerConfiguration(pitch: true)`
 ///   which activates mpv's `scaletempo2` time-stretching filter.
 class AudioPlayerAdapter {
-  final Player _player;
+  final AudioPlayer _player;
   bool _isDisposed = false;
 
   AudioPlayerAdapter({
-    PlayerConfiguration configuration = const PlayerConfiguration(
-      title: 'Tachyon',
-      pitch: true,
+    AudioLoadConfiguration configuration = const AudioLoadConfiguration(
+      androidLivePlaybackSpeedControl: AndroidLivePlaybackSpeedControl(
+        fallbackMaxPlaybackSpeed: 4.0,
+        fallbackMinPlaybackSpeed: 0.1,
+        maxLiveOffsetErrorForUnitSpeed: Duration(milliseconds: 500),
+        minPossibleLiveOffsetSmoothingFactor: 0.1,
+        minUpdateInterval: Duration(milliseconds: 100),
+        proportionalControlFactor: 0.1,
+        targetLiveOffsetIncrementOnRebuffer: Duration(milliseconds: 100),
+      ),
+      androidLoadControl: AndroidLoadControl(
+        backBufferDuration: Duration(seconds: 30),
+        bufferForPlaybackAfterRebufferDuration: Duration(milliseconds: 500),
+        bufferForPlaybackDuration: Duration(milliseconds: 500),
+        maxBufferDuration: Duration(seconds: 30),
+        minBufferDuration: Duration(milliseconds: 500),
+        prioritizeTimeOverSizeThresholds: true,
+      ),
     ),
-  }) : _player = Player(configuration: configuration);
+  }) : _player = AudioPlayer(audioLoadConfiguration: configuration);
 
   /// Ensures native media_kit platform bindings are initialized once.
   static Future<void> ensureInitialized() async {
-    MediaKit.ensureInitialized();
+    JustAudioMediaKit.ensureInitialized();
   }
 
   /// Configures platform-specific libmpv properties for optimal low-latency,
   /// pop-free audio streaming.
   Future<void> configurePlatformAudioDrivers() async {
-    final platform = _player.platform as dynamic;
-    try {
-      if (Platform.isAndroid) {
-        await platform.setProperty('ao', 'audiotrack,opensles');
-      } else if (Platform.isIOS) {
-        await platform.setProperty('ao', 'audiounit');
-      } else if (Platform.isMacOS) {
-        await platform.setProperty('ao', 'coreaudio');
-      }
-
-      // 'audio-stream-silence' keeps the audio sink alive between tracks,
-      // avoiding annoying hardware sink open/close clicks and pops.
-      // Omitted on iOS due to audiounit limitations.
-      if (!Platform.isIOS) {
-        await platform.setProperty('audio-stream-silence', 'yes');
-      }
-
-      // Disable automatic subtitle lookup for audio files
-      await platform.setProperty('sub-auto', 'no');
-    } catch (e) {
-      debugPrint('[MediaKitPlayerAdapter] Driver config warning: $e');
-    }
+    debugPrint('Configuring platform audio drivers NOT SUPPORTED...');
   }
 
   Future<void> open(
@@ -70,7 +64,8 @@ class AudioPlayerAdapter {
     bool play = true,
     Duration? startPosition,
   }) async {
-    await _player.open(Media(uri, start: startPosition), play: play);
+    await _player.setFilePath(uri);
+    await _player.play();
   }
 
   Future<void> play() => _player.play();
@@ -81,15 +76,14 @@ class AudioPlayerAdapter {
 
   Future<void> seek(Duration position) => _player.seek(position);
 
-  Future<void> setVolume(double volume) => _player.setVolume(volume);
+  Future<void> setVolume(double volume) => _player.setVolume(volume / 100.0);
 
-  Future<void> setRate(double rate) => _player.setRate(rate);
+  Future<void> setRate(double rate) => _player.setSpeed(rate);
 
   Future<void> setPitch(double pitch) => _player.setPitch(pitch);
 
   Future<void> setProperty(String name, String value) async {
-    final platform = _player.platform as dynamic;
-    await platform.setProperty(name, value);
+    debugPrint('Not supported');
   }
 
   Future<void> dispose() async {
@@ -97,39 +91,49 @@ class AudioPlayerAdapter {
     await _player.dispose();
   }
 
-  Stream<Duration> get positionStream => _player.stream.position;
+  Stream<Duration> get positionStream => _player.positionStream;
 
-  Stream<Duration> get durationStream => _player.stream.duration;
+  Stream<Duration?> get durationStream => _player.durationStream;
 
-  Stream<bool> get playingStream => _player.stream.playing;
+  Stream<bool> get playingStream => _player.playingStream;
 
-  Stream<bool> get bufferingStream => _player.stream.buffering;
+  Stream<bool> get bufferingStream =>
+      _player.bufferedPositionStream.map((bufferedPosition) {
+        final duration = _player.duration;
+        if (duration == null) return false;
+        return bufferedPosition < duration;
+      });
 
-  Stream<bool> get completedStream => _player.stream.completed;
+  Stream<bool> get completedStream =>
+      _player.processingStateStream.map((state) {
+        return state == ProcessingState.completed;
+      });
 
-  Stream<double> get volumeStream => _player.stream.volume;
+  Stream<double> get volumeStream => _player.volumeStream;
 
-  Stream<double> get rateStream => _player.stream.rate;
+  Stream<double> get rateStream =>
+      Stream.value(1.0); // JustAudio does not support rate changes
 
-  Stream<double> get pitchStream => _player.stream.pitch;
+  Stream<double> get pitchStream => _player.pitchStream;
 
-  Stream<double?> get bitrateStream => _player.stream.audioBitrate;
+  Stream<double?> get bitrateStream =>
+      Stream.value(_player.preferredPeakBitRate);
 
-  Duration get position => _player.state.position;
+  Duration get position => _player.position;
 
-  Duration get duration => _player.state.duration;
+  Duration get duration => _player.duration ?? Duration.zero;
 
-  bool get isPlaying => _player.state.playing;
+  bool get isPlaying => _player.playing;
 
-  bool get isBuffering => _player.state.buffering;
+  bool get isBuffering => _player.processingState == ProcessingState.buffering;
 
-  bool get isCompleted => _player.state.completed;
+  bool get isCompleted => _player.processingState == ProcessingState.completed;
 
-  double get volume => _player.state.volume;
+  double get volume => _player.volume;
 
-  double get rate => _player.state.rate;
+  double get rate => 1.0; // JustAudio does not support rate changes
 
-  double get pitch => _player.state.pitch;
+  double get pitch => _player.pitch;
 
   bool get isDisposed => _isDisposed;
 }

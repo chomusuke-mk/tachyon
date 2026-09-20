@@ -238,6 +238,7 @@ words:
   - metainfo
   - Metaspace
   - Milisegundos
+  - MIMALLOC
   - mingit
   - miniaturizable
   - molestoso
@@ -314,6 +315,7 @@ words:
   - PYTHONUNBUFFERED
   - quickjs
   - Reactividad
+  - Rebuffer
   - reconectamos
   - Reconectando
   - recursesubdirs
@@ -370,6 +372,7 @@ words:
   - sourcecode
   - sponsorblock
   - sqflite
+  - sqlite
   - SRCROOT
   - starlette
   - strdupv

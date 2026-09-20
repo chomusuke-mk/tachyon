@@ -1,8 +1,8 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
@@ -115,90 +115,223 @@ abstract final class AppDatabaseSchema {
   ];
 }
 
+enum ConflictAlgorithm { ignore, replace }
+
+class SqliteDatabase {
+  SqliteDatabase(this._database);
+
+  final Database _database;
+
+  Future<void> execute(
+    String sql, [
+    List<Object?> parameters = const [],
+  ]) async {
+    _database.execute(sql, parameters);
+  }
+
+  Future<List<Map<String, dynamic>>> rawQuery(
+    String sql, [
+    List<Object?> parameters = const [],
+  ]) async {
+    return _database
+        .select(sql, parameters)
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> query(
+    String table, {
+    List<String>? columns,
+    String? where,
+    List<Object?>? whereArgs,
+    int? limit,
+    String? orderBy,
+  }) async {
+    final selectedColumns = columns?.join(', ') ?? '*';
+    final sql = StringBuffer('SELECT $selectedColumns FROM $table');
+    if (where != null && where.isNotEmpty) sql.write(' WHERE $where');
+    if (orderBy != null && orderBy.isNotEmpty) sql.write(' ORDER BY $orderBy');
+    if (limit != null) sql.write(' LIMIT $limit');
+    return rawQuery(sql.toString(), whereArgs ?? const []);
+  }
+
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
+    final columns = values.keys.toList();
+    final conflict = switch (conflictAlgorithm) {
+      ConflictAlgorithm.ignore => ' OR IGNORE',
+      ConflictAlgorithm.replace => ' OR REPLACE',
+      null => '',
+    };
+    final placeholders = List.filled(columns.length, '?').join(', ');
+    _database.execute(
+      'INSERT$conflict INTO $table (${columns.join(', ')}) VALUES ($placeholders)',
+      values.values.toList(),
+    );
+    return _database.lastInsertRowId;
+  }
+
+  Future<int> update(
+    String table,
+    Map<String, Object?> values, {
+    String? where,
+    List<Object?>? whereArgs,
+  }) async {
+    final assignments = values.keys.map((column) => '$column = ?').join(', ');
+    final sql = StringBuffer('UPDATE $table SET $assignments');
+    if (where != null && where.isNotEmpty) sql.write(' WHERE $where');
+    _database.execute(sql.toString(), [...values.values, ...?whereArgs]);
+    return _database.updatedRows;
+  }
+
+  Future<int> delete(
+    String table, {
+    String? where,
+    List<Object?>? whereArgs,
+  }) async {
+    final sql = StringBuffer('DELETE FROM $table');
+    if (where != null && where.isNotEmpty) sql.write(' WHERE $where');
+    _database.execute(sql.toString(), whereArgs ?? const []);
+    return _database.updatedRows;
+  }
+
+  Future<int> rawUpdate(
+    String sql, [
+    List<Object?> parameters = const [],
+  ]) async {
+    _database.execute(sql, parameters);
+    return _database.updatedRows;
+  }
+
+  Future<T> transaction<T>(
+    Future<T> Function(SqliteDatabase txn) action,
+  ) async {
+    _database.execute('BEGIN');
+    try {
+      final result = await action(this);
+      _database.execute('COMMIT');
+      return result;
+    } catch (_) {
+      _database.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  SqliteBatch batch() => SqliteBatch(this);
+}
+
+class SqliteBatch {
+  SqliteBatch(this._database);
+
+  final SqliteDatabase _database;
+  final List<FutureOr<Object?> Function()> _operations = [];
+
+  void insert(
+    String table,
+    Map<String, Object?> values, {
+    ConflictAlgorithm? conflictAlgorithm,
+  }) {
+    _operations.add(
+      () =>
+          _database.insert(table, values, conflictAlgorithm: conflictAlgorithm),
+    );
+  }
+
+  void update(
+    String table,
+    Map<String, Object?> values, {
+    String? where,
+    List<Object?>? whereArgs,
+  }) {
+    _operations.add(
+      () => _database.update(table, values, where: where, whereArgs: whereArgs),
+    );
+  }
+
+  void delete(String table, {String? where, List<Object?>? whereArgs}) {
+    _operations.add(
+      () => _database.delete(table, where: where, whereArgs: whereArgs),
+    );
+  }
+
+  Future<List<Object?>> commit({bool noResult = false}) async {
+    final results = <Object?>[];
+    for (final operation in _operations) {
+      final result = await operation();
+      if (!noResult) results.add(result);
+    }
+    return results;
+  }
+}
+
 class AppDatabase {
   Database? _db;
-  final String? customPath;
-  final bool inMemory;
   static const int likedSongsPlaylistId = 1;
   static const int historyPlaylistId = 2;
 
-  AppDatabase({this.customPath, this.inMemory = false});
+  AppDatabase();
 
-  factory AppDatabase.inMemory() => AppDatabase(inMemory: true);
-
-  Database get database {
+  SqliteDatabase get database {
     if (_db == null) {
       throw StateError('AppDatabase is not initialized. Call init() first.');
     }
-    return _db!;
+    return SqliteDatabase(_db!);
   }
 
   Future<void> init() async {
     if (_db != null) return;
 
-    // Configure cross-platform FFI for desktop & headless test environments
-    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    }
+    final appSupportDir = await getApplicationSupportDirectory();
+    final dbPath = p.join(appSupportDir.path, 'music.db');
 
-    final String dbPath;
-    final custom = customPath;
-    if (inMemory) {
-      dbPath = inMemoryDatabasePath;
-    } else if (custom != null) {
-      dbPath = custom;
-    } else {
-      final appSupportDir = await getApplicationSupportDirectory();
-      dbPath = p.join(appSupportDir.path, 'music.db');
-    }
+    _db = sqlite3.open(dbPath, mode: OpenMode.readWriteCreate);
 
-    _db = await openDatabase(
-      dbPath,
-      version: 1,
-      onConfigure: (db) async {
-        await db.execute('PRAGMA foreign_keys = ON;');
-        await db.execute('PRAGMA journal_mode = WAL;');
-        await db.execute('PRAGMA synchronous = NORMAL;');
-        await db.execute(
-          'PRAGMA cache_size = -64000;',
-        ); // 64MB memory page cache
-      },
-      onCreate: (db, version) async {
-        await _executeSchema(db);
-      },
-    );
+    _db!.execute('PRAGMA foreign_keys = ON;');
+    _db!.execute('PRAGMA journal_mode = WAL;');
+    _db!.execute('PRAGMA synchronous = NORMAL;');
+    _db!.execute('PRAGMA cache_size = -64000;'); // 64MB memory page cache
+
+    _executeSchema(_db!);
   }
 
-  Future<void> _executeSchema(DatabaseExecutor db) async {
-    await db.execute(AppDatabaseSchema.createArtistsTable);
-    await db.execute(AppDatabaseSchema.createAlbumsTable);
-    await db.execute(AppDatabaseSchema.createTracksTable);
-    await db.execute(AppDatabaseSchema.createGenresTable);
-    await db.execute(AppDatabaseSchema.createTrackGenresTable);
-    await db.execute(AppDatabaseSchema.createPlaylistsTable);
-    await db.execute(AppDatabaseSchema.createPlaylistEntriesTable);
-    await db.execute(AppDatabaseSchema.createLyricsCacheTable);
+  Future<void> _executeSchema(Database db) async {
+    db.execute(AppDatabaseSchema.createArtistsTable);
+    db.execute(AppDatabaseSchema.createAlbumsTable);
+    db.execute(AppDatabaseSchema.createTracksTable);
+    db.execute(AppDatabaseSchema.createGenresTable);
+    db.execute(AppDatabaseSchema.createTrackGenresTable);
+    db.execute(AppDatabaseSchema.createPlaylistsTable);
+    db.execute(AppDatabaseSchema.createPlaylistEntriesTable);
+    db.execute(AppDatabaseSchema.createLyricsCacheTable);
 
     for (final sql in AppDatabaseSchema.indexes) {
-      await db.execute(sql);
+      db.execute(sql);
     }
 
     // Seed special system playlists
     final now = DateTime.now().millisecondsSinceEpoch;
-    await db.insert('playlists', {
-      'id': AppDatabase.likedSongsPlaylistId,
-      'name': 'Liked Songs',
-      'created_at': now,
-      'is_special': PlaylistType.liked.value,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    db.execute(
+      'INSERT OR IGNORE INTO playlists (id, name, created_at, is_special) VALUES (?, ?, ?, ?)',
+      [
+        AppDatabase.likedSongsPlaylistId,
+        'Liked Songs',
+        now,
+        PlaylistType.liked.value,
+      ],
+    );
 
-    await db.insert('playlists', {
-      'id': AppDatabase.historyPlaylistId,
-      'name': 'History',
-      'created_at': now,
-      'is_special': PlaylistType.history.value,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    db.execute(
+      'INSERT OR IGNORE INTO playlists (id, name, created_at, is_special) VALUES (?, ?, ?, ?)',
+      [
+        AppDatabase.historyPlaylistId,
+        'History',
+        now,
+        PlaylistType.history.value,
+      ],
+    );
   }
 
   Future<void> insertOrUpdateTrack(Track track) async {
@@ -566,12 +699,12 @@ class AppDatabase {
     }
 
     // Refresh aggregated counts
-    await database.execute('''
+    database.execute('''
       UPDATE artists SET 
         track_count = (SELECT COUNT(*) FROM tracks WHERE tracks.artist_id = artists.id),
         album_count = (SELECT COUNT(*) FROM albums WHERE albums.artist_id = artists.id);
     ''');
-    await database.execute('''
+    database.execute('''
       UPDATE albums SET 
         track_count = (SELECT COUNT(*) FROM tracks WHERE tracks.album_id = albums.id);
     ''');
@@ -900,7 +1033,7 @@ class AppDatabase {
 
   Future<void> close() async {
     if (_db != null) {
-      await _db!.close();
+      _db!.close();
       _db = null;
     }
   }
