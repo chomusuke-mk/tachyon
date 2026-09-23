@@ -9,6 +9,10 @@ class WaveformSlider extends StatefulWidget {
   final Duration duration;
   final bool isBuffering;
   final ValueChanged<Duration> onSeek;
+  final int? currentIndex;
+  final int? totalCount;
+  final Duration Function()? playlistDuration;
+  final Duration Function()? playlistPosition;
 
   const WaveformSlider({
     super.key,
@@ -16,6 +20,10 @@ class WaveformSlider extends StatefulWidget {
     required this.duration,
     required this.onSeek,
     this.isBuffering = false,
+    this.currentIndex,
+    this.totalCount,
+    this.playlistDuration,
+    this.playlistPosition,
   });
 
   @override
@@ -26,12 +34,18 @@ class _WaveformSliderState extends State<WaveformSlider> {
   bool _isDragging = false;
   double _dragValue = 0.0;
   bool _showRemaining = true;
+  bool _showPlaylistProgressTime = false;
 
-  String _formatDuration(Duration duration, {bool isNegative = false}) {
+  String _formatDuration(Duration duration, {String? prefix}) {
     final totalSeconds = duration.inSeconds.abs();
-    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final hours = (totalSeconds ~/ 3600); //.padLeft(2, '0');
+    final minutes = ((totalSeconds % 3600) ~/ 60)
+        .toString(); //.padLeft(2, '0');
     final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '${isNegative ? "-" : ""}$minutes:$seconds';
+    if (hours > 0) {
+      return '${prefix ?? ""}$hours:${minutes.padLeft(2, '0')}:$seconds';
+    }
+    return '${prefix ?? ""}$minutes:$seconds';
   }
 
   @override
@@ -134,13 +148,31 @@ class _WaveformSliderState extends State<WaveformSlider> {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
+            if (widget.currentIndex != null && widget.totalCount != null)
+              GestureDetector(
+                onTap: () => setState(
+                  () => _showPlaylistProgressTime = !_showPlaylistProgressTime,
+                ),
+                child: Text(
+                  _showPlaylistProgressTime &&
+                          widget.playlistPosition != null &&
+                          widget.playlistDuration != null
+                      ? '${_formatDuration(widget.playlistPosition!())} / ${_formatDuration(widget.playlistDuration!())}'
+                      : '${widget.currentIndex ?? 0} / ${widget.totalCount ?? 0}',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
 
             // Toggle Total / Remaining Time on tap
             GestureDetector(
               onTap: () => setState(() => _showRemaining = !_showRemaining),
               child: Text(
                 _showRemaining
-                    ? _formatDuration(remainingDuration, isNegative: true)
+                    ? _formatDuration(remainingDuration, prefix: "-")
                     : _formatDuration(widget.duration),
                 style: textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,

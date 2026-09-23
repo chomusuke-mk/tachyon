@@ -39,7 +39,6 @@ class SettingsController extends ChangeNotifier {
   bool get shuffle => _settings.shuffle;
   bool get skipSilence => _settings.skipSilence;
   double get volumeBoost => _settings.volumeBoost;
-  bool get exclusiveAudio => _settings.exclusiveAudio;
   ThemeMode get themeMode => _settings.themeMode;
   String get appLanguage => _settings.appLanguage;
   bool get equalizerEnabled => _settings.equalizerEnabled;

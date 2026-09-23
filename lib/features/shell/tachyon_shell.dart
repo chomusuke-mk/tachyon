@@ -171,7 +171,6 @@ class _TachyonShellState extends State<TachyonShell> {
               ),
             ),
             const VerticalDivider(width: 1, thickness: 1),
-
             // Main Content Area & Docked Desktop Mini Player
             Expanded(
               child: Column(

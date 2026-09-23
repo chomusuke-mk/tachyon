@@ -61,3 +61,6 @@ app.*.map.json
 /.agents/
 /app/src_old/
 /docs-from-otro-player
+# Widget Preview related
+.widget_preview/
+/JSON/
