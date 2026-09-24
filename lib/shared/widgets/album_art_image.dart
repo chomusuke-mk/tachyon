@@ -22,9 +22,13 @@ class AlbumArtImage extends StatelessWidget {
   Widget build(BuildContext context) {
     CoverCacheService? cacheService;
     try {
-      cacheService = Provider.of<CoverCacheService?>(context, listen: false);
+      cacheService = Provider.of<CoverCacheService>(context, listen: false);
     } catch (_) {
-      cacheService = null;
+      try {
+        cacheService = Provider.of<CoverCacheService?>(context, listen: false);
+      } catch (_) {
+        cacheService = null;
+      }
     }
 
     final colorScheme = Theme.of(context).colorScheme;

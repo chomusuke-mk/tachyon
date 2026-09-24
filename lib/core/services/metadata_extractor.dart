@@ -13,7 +13,7 @@ import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
 export 'package:tachyon/core/services/scan_isolate.dart'
-    show DiscoveredAudioFile;
+    show DiscoveredAudioFile, TrackFileMeta;
 
 /// Manages spawning the scan Isolate and bridging its progress events and
 /// track batches back to the main isolate.
@@ -150,12 +150,29 @@ class MetadataExtractor {
     final progressPort = ReceivePort();
     final handshakePort = ReceivePort();
 
+    // Query existing track metadata for incremental scanning
+    Map<String, TrackFileMeta> existingMetas = const {};
+    try {
+      existingMetas = await database.getExistingTrackMetas();
+    } catch (e) {
+      debugPrint('[MetadataExtractor] Failed to load existing track metas: $e');
+    }
+
+    if (cancellationToken?.isCancelled ?? false) {
+      progressPort.close();
+      handshakePort.close();
+      controller.add(const ScanProgress(phase: ScanPhase.cancelled));
+      controller.close();
+      return;
+    }
+
     final args = ScanIsolateArgs(
       progressPort: progressPort.sendPort,
       handshakePort: handshakePort.sendPort,
       directories: directories,
       coverCachePath: coverCachePath,
       workerCount: workerCount,
+      existingMetas: existingMetas,
     );
 
     late Isolate isolate;

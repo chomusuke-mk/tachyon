@@ -803,6 +803,25 @@ class AppDatabase {
     return rows.map((r) => Track.fromJson(r)).toList();
   }
 
+  /// Returns a map of `uri` -> `(modifiedAt, fileSize)` for all tracks currently in the database.
+  /// Used by `MetadataExtractor` to perform incremental scans without re-reading unchanged files.
+  Future<Map<String, ({int modifiedAt, int fileSize})>> getExistingTrackMetas() async {
+    final rows = await database.query(
+      'tracks',
+      columns: ['uri', 'modified_at', 'file_size'],
+    );
+    final result = <String, ({int modifiedAt, int fileSize})>{};
+    for (final row in rows) {
+      final uri = row['uri'] as String?;
+      final modifiedAt = row['modified_at'] as int?;
+      final fileSize = row['file_size'] as int?;
+      if (uri != null && modifiedAt != null && fileSize != null) {
+        result[uri] = (modifiedAt: modifiedAt, fileSize: fileSize);
+      }
+    }
+    return result;
+  }
+
   Future<List<Album>> getAllAlbums() async {
     final rows = await database.rawQuery('''
       SELECT 

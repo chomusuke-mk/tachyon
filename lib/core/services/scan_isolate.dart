@@ -29,6 +29,9 @@ import 'package:tachyon/features/library/domain/track.dart';
 // Args bundle: main isolate → scan isolate
 // ---------------------------------------------------------------------------
 
+/// Track metadata snapshot used to detect unchanged files during incremental scanning.
+typedef TrackFileMeta = ({int modifiedAt, int fileSize});
+
 /// All data needed to boot the scan isolate.
 /// Only primitive / sendable types so it crosses the isolate boundary safely.
 class ScanIsolateArgs {
@@ -41,6 +44,7 @@ class ScanIsolateArgs {
   final List<String> directories;
   final String coverCachePath;
   final int workerCount;
+  final Map<String, TrackFileMeta> existingMetas;
 
   const ScanIsolateArgs({
     required this.progressPort,
@@ -48,6 +52,7 @@ class ScanIsolateArgs {
     required this.directories,
     required this.coverCachePath,
     required this.workerCount,
+    this.existingMetas = const {},
   });
 }
 
@@ -80,6 +85,7 @@ Future<void> scanIsolateEntry(ScanIsolateArgs args) async {
     directories: args.directories,
     coverService: coverService,
     workerCount: args.workerCount,
+    existingMetas: args.existingMetas,
     cancellationToken: token,
     send: args.progressPort.send,
   );
@@ -95,6 +101,7 @@ Future<void> _runPipeline({
   required List<String> directories,
   required CoverCacheService coverService,
   required int workerCount,
+  required Map<String, TrackFileMeta> existingMetas,
   required CancellationToken cancellationToken,
   required void Function(Object?) send,
 }) async {
@@ -163,13 +170,7 @@ Future<void> _runPipeline({
     int updatedCount = 0;
     int failedCount = 0;
 
-    // 2. Load existing track metas from a snapshot sent by the main isolate.
-    //    We request them via a special message and await the reply.
-    //    For simplicity, we pass them in ScanIsolateArgs as a pre-built map.
-    //    (See: the main isolate will pass existingMetas via args in the future.)
-    //    For now we treat everything as new/update – incremental check is skipped.
-    //    TODO: pass existingMetas in ScanIsolateArgs for full incremental scan.
-
+    // 2. Incremental scan preparation
     sendProgress(
       ScanProgress(phase: ScanPhase.extracting, totalFiles: totalFiles),
       force: true,
@@ -194,6 +195,31 @@ Future<void> _runPipeline({
     for (final file in discoveredFiles) {
       if (cancellationToken.isCancelled) break;
 
+      final existing = existingMetas[file.path];
+      if (existing != null &&
+          existing.modifiedAt == file.modifiedAt &&
+          existing.fileSize == file.size) {
+        if (!coverService.hasCachedCover(file.path)) {
+          try {
+            unawaited(coverService.saveCacheCover(file.path));
+          } catch (_) {}
+        }
+        skippedCount++;
+        scannedCount++;
+        sendProgress(ScanProgress(
+          phase: ScanPhase.extracting,
+          scannedFiles: scannedCount,
+          totalFiles: totalFiles,
+          newTracks: newCount,
+          updatedTracks: updatedCount,
+          skippedTracks: skippedCount,
+          failedTracks: failedCount,
+          progress: totalFiles > 0 ? scannedCount / totalFiles : 1.0,
+          currentFile: file.path,
+        ));
+        continue;
+      }
+
       tasks.add(limiter.run(() async {
         if (cancellationToken.isCancelled) return;
 
@@ -202,7 +228,11 @@ Future<void> _runPipeline({
 
         if (track != null) {
           pendingTracks.add(track);
-          newCount++; // treated as new (no incremental lookup yet)
+          if (existing != null) {
+            updatedCount++;
+          } else {
+            newCount++;
+          }
         } else {
           failedCount++;
         }
