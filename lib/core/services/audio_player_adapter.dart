@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/core/services/tachyon_audio_platform.dart';
 
 // ============================================================================
 // AUDIO PLAYER ADAPTER
@@ -50,17 +50,7 @@ class AudioPlayerAdapter {
 
   /// Ensures native media_kit platform bindings are initialized once.
   static Future<void> ensureInitialized() async {
-    JustAudioMediaKit.ensureInitialized(
-      windows: true,
-      linux: true,
-      android: false,
-      iOS: false,
-      macOS: false,
-    );
-    JustAudioMediaKit.bufferSize = 8 * 1024 * 1024;
-    JustAudioMediaKit.title = 'Tachyon Audio Player';
-    JustAudioMediaKit.pitch = true;
-    JustAudioMediaKit.prefetchPlaylist = false;
+    TachyonAudioPlatform.ensureInitialized();
   }
 
   Future<void> open(
