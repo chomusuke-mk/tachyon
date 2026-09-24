@@ -12,6 +12,7 @@ import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'audio_effects_sheet.dart';
 import 'lyrics_view.dart';
 import 'playback_controller.dart';
+import 'lyrics_controller.dart';
 import 'queue_drawer.dart';
 import 'waveform_slider.dart';
 
@@ -26,6 +27,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     with WidgetsBindingObserver {
   bool _showLyrics = false;
   bool _showQueue = false;
+  LyricsController? _lyricsController;
 
   bool _isCurrentTrackLiked = false;
   String? _lastLikedCheckUri;
@@ -40,6 +42,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _lyricsController = context.read<LyricsController>();
     _checkLikedStatus();
   }
 
@@ -96,8 +99,44 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     }
   }
 
+  void _toggleLyrics() {
+    final isNarrow = MediaQuery.sizeOf(context).width < 588;
+    setState(() {
+      _showLyrics = !_showLyrics;
+      if (_showLyrics && isNarrow && _showQueue) {
+        _showQueue = false;
+      }
+    });
+    _lyricsController?.setLyricsViewVisible(_showLyrics);
+  }
+
+  void _toggleQueue() {
+    final isNarrow = MediaQuery.sizeOf(context).width < 588;
+    setState(() {
+      _showQueue = !_showQueue;
+      if (_showQueue && isNarrow && _showLyrics) {
+        _showLyrics = false;
+        _lyricsController?.setLyricsViewVisible(false);
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_showLyrics) {
+      if (state == AppLifecycleState.paused ||
+          state == AppLifecycleState.hidden ||
+          state == AppLifecycleState.detached) {
+        _lyricsController?.setLyricsViewVisible(false);
+      } else if (state == AppLifecycleState.resumed) {
+        _lyricsController?.setLyricsViewVisible(true);
+      }
+    }
+  }
+
   @override
   void dispose() {
+    _lyricsController?.setLyricsViewVisible(false);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -153,7 +192,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               color: _showLyrics ? colorScheme.primary : colorScheme.onSurface,
             ),
             tooltip: strings.npLyrics,
-            onPressed: () => setState(() => _showLyrics = !_showLyrics),
+            onPressed: _toggleLyrics,
           ),
           IconButton(
             icon: Icon(
@@ -161,7 +200,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               color: _showQueue ? colorScheme.primary : colorScheme.onSurface,
             ),
             tooltip: strings.npQueue,
-            onPressed: () => setState(() => _showQueue = !_showQueue),
+            onPressed: _toggleQueue,
           ),
           IconButton(
             icon: const Icon(Icons.equalizer_rounded),
@@ -314,9 +353,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               ),
 
               IconButton(
-                onPressed: () => setState(() => _showQueue = !_showQueue),
+                onPressed: _toggleQueue,
                 icon: const Icon(Icons.add_rounded, size: 28),
-                tooltip: "ADD",
+                tooltip: strings.npQueue,
               ),
             ],
           ),

@@ -9,6 +9,7 @@ import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/playback/domain/lyric_source.dart';
 
 abstract final class AppDatabaseSchema {
   static const String createArtistsTable = '''
@@ -100,6 +101,18 @@ abstract final class AppDatabaseSchema {
     );
   ''';
 
+  static const String createLyricsSourceCacheTable = '''
+    CREATE TABLE IF NOT EXISTS lyrics_source_cache (
+      key_hash TEXT NOT NULL,
+      source TEXT NOT NULL,
+      state TEXT NOT NULL,
+      raw_lrc TEXT,
+      is_synced INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (key_hash, source)
+    );
+  ''';
+
   static const List<String> indexes = [
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_uri ON tracks(uri);',
     'CREATE INDEX IF NOT EXISTS idx_tracks_album_id ON tracks(album_id);',
@@ -112,6 +125,7 @@ abstract final class AppDatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_track_genres_genre_id ON track_genres(genre_id);',
     'CREATE INDEX IF NOT EXISTS idx_playlist_entries_playlist_pos ON playlist_entries(playlist_id, position);',
     'CREATE INDEX IF NOT EXISTS idx_playlist_entries_track_id ON playlist_entries(track_id);',
+    'CREATE INDEX IF NOT EXISTS idx_lyrics_source_cache_key ON lyrics_source_cache(key_hash);',
   ];
 }
 
@@ -274,6 +288,36 @@ class AppDatabase {
 
   AppDatabase();
 
+  /// Creates an in-memory database instance for isolated testing.
+  factory AppDatabase.inMemory() {
+    final appDb = AppDatabase();
+    final db = sqlite3.openInMemory();
+    db.execute('PRAGMA foreign_keys = ON;');
+    appDb._executeSchemaSync(db);
+    appDb._db = db;
+    return appDb;
+  }
+
+  /// Wraps an existing sqlite3 [Database] instance.
+  factory AppDatabase.forTesting(Database db) {
+    final appDb = AppDatabase();
+    appDb._db = db;
+    db.execute('PRAGMA foreign_keys = ON;');
+    appDb._executeSchemaSync(db);
+    return appDb;
+  }
+
+  void _initInMemory() {
+    _db = sqlite3.openInMemory();
+    _db!.execute('PRAGMA foreign_keys = ON;');
+    _executeSchemaSync(_db!);
+  }
+
+  Future<void> initInMemory() async {
+    if (_db != null) return;
+    _initInMemory();
+  }
+
   SqliteDatabase get database {
     if (_db == null) {
       throw StateError('AppDatabase is not initialized. Call init() first.');
@@ -294,10 +338,10 @@ class AppDatabase {
     _db!.execute('PRAGMA synchronous = NORMAL;');
     _db!.execute('PRAGMA cache_size = -64000;'); // 64MB memory page cache
 
-    _executeSchema(_db!);
+    _executeSchemaSync(_db!);
   }
 
-  Future<void> _executeSchema(Database db) async {
+  void _executeSchemaSync(Database db) {
     db.execute(AppDatabaseSchema.createArtistsTable);
     db.execute(AppDatabaseSchema.createAlbumsTable);
     db.execute(AppDatabaseSchema.createTracksTable);
@@ -306,6 +350,7 @@ class AppDatabase {
     db.execute(AppDatabaseSchema.createPlaylistsTable);
     db.execute(AppDatabaseSchema.createPlaylistEntriesTable);
     db.execute(AppDatabaseSchema.createLyricsCacheTable);
+    db.execute(AppDatabaseSchema.createLyricsSourceCacheTable);
 
     for (final sql in AppDatabaseSchema.indexes) {
       db.execute(sql);
@@ -982,13 +1027,136 @@ class AppDatabase {
     );
   }
 
+  /// Persists or updates a [LyricsSourceEntry] in SQLite.
+  /// Overwrites existing entries matching (key_hash, source).
+  /// If entry is found with lyrics, also mirrors to legacy [lyrics_cache].
+  Future<void> saveLyricsSourceEntry(LyricsSourceEntry entry) async {
+    await database.insert(
+      'lyrics_source_cache',
+      entry.toDbMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    if (entry.state == LyricsSourceState.found && entry.rawLrc != null) {
+      await database.insert(
+        'lyrics_cache',
+        {
+          'key_hash': entry.keyHash,
+          'raw_lrc': entry.rawLrc!,
+          'source': entry.source.dbValue,
+          'updated_at': entry.updatedAt,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+  }
+
+  /// Bulk-persists multiple [LyricsSourceEntry] instances within an atomic transaction.
+  Future<void> saveLyricsSourceEntries(List<LyricsSourceEntry> entries) async {
+    if (entries.isEmpty) return;
+    await database.transaction((txn) async {
+      for (final entry in entries) {
+        await txn.insert(
+          'lyrics_source_cache',
+          entry.toDbMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        if (entry.state == LyricsSourceState.found && entry.rawLrc != null) {
+          await txn.insert(
+            'lyrics_cache',
+            {
+              'key_hash': entry.keyHash,
+              'raw_lrc': entry.rawLrc!,
+              'source': entry.source.dbValue,
+              'updated_at': entry.updatedAt,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+    });
+  }
+
+  /// Retrieves the cached [LyricsSourceEntry] for a given [keyHash] and [source].
+  Future<LyricsSourceEntry?> getLyricsSourceEntry(
+    String keyHash,
+    LyricsSource source,
+  ) async {
+    final rows = await database.query(
+      'lyrics_source_cache',
+      where: 'key_hash = ? AND source = ?',
+      whereArgs: [keyHash, source.dbValue],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return LyricsSourceEntry.fromDbMap(rows.first);
+  }
+
+  /// Retrieves all cached entries for [keyHash] across all sources.
+  Future<Map<LyricsSource, LyricsSourceEntry>> getAllLyricsSourceEntries(
+    String keyHash,
+  ) async {
+    final rows = await database.query(
+      'lyrics_source_cache',
+      where: 'key_hash = ?',
+      whereArgs: [keyHash],
+    );
+    final map = <LyricsSource, LyricsSourceEntry>{};
+    for (final row in rows) {
+      final entry = LyricsSourceEntry.fromDbMap(row);
+      map[entry.source] = entry;
+    }
+    return map;
+  }
+
+  /// Clears all cached source entries and legacy cache for a given song [keyHash] (used by "Volver a buscar").
+  Future<int> clearLyricsSourceEntries(String keyHash) async {
+    await database.delete(
+      'lyrics_cache',
+      where: 'key_hash = ?',
+      whereArgs: [keyHash],
+    );
+    return database.delete(
+      'lyrics_source_cache',
+      where: 'key_hash = ?',
+      whereArgs: [keyHash],
+    );
+  }
+
+  /// Deletes the cached entry for a specific [source] of [keyHash].
+  Future<int> deleteLyricsSourceEntry(
+    String keyHash,
+    LyricsSource source,
+  ) async {
+    return database.delete(
+      'lyrics_source_cache',
+      where: 'key_hash = ? AND source = ?',
+      whereArgs: [keyHash, source.dbValue],
+    );
+  }
+
   Future<void> saveLyrics(String keyHash, String rawLrc, String source) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
     await database.insert('lyrics_cache', {
       'key_hash': keyHash,
       'raw_lrc': rawLrc,
       'source': source,
-      'updated_at': DateTime.now().millisecondsSinceEpoch,
+      'updated_at': now,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+    final parsedSource = LyricsSource.tryParse(source) ?? LyricsSource.embedded;
+    await database.insert(
+      'lyrics_source_cache',
+      {
+        'key_hash': keyHash,
+        'source': parsedSource.dbValue,
+        'state': LyricsSourceState.found.dbValue,
+        'raw_lrc': rawLrc,
+        'is_synced': RegExp(r'\[\d{1,}:\d{2}\.\d{2,3}\]').hasMatch(rawLrc) ? 1 : 0,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<String?> getLyrics(String keyHash) async {
@@ -999,8 +1167,25 @@ class AppDatabase {
       whereArgs: [keyHash],
       limit: 1,
     );
-    if (rows.isEmpty) return null;
-    return rows.first['raw_lrc'] as String?;
+    if (rows.isNotEmpty) {
+      return rows.first['raw_lrc'] as String?;
+    }
+
+    final sourceRows = await database.query(
+      'lyrics_source_cache',
+      where: 'key_hash = ? AND state = ? AND raw_lrc IS NOT NULL',
+      whereArgs: [keyHash, LyricsSourceState.found.dbValue],
+    );
+    if (sourceRows.isEmpty) return null;
+
+    LyricsSourceEntry? best;
+    for (final row in sourceRows) {
+      final entry = LyricsSourceEntry.fromDbMap(row);
+      if (best == null || entry.source.priority < best.source.priority) {
+        best = entry;
+      }
+    }
+    return best?.rawLrc;
   }
 
   Future<bool> isTrackLiked(int trackId) async {

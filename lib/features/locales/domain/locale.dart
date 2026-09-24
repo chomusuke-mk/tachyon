@@ -38,6 +38,62 @@ class AppStringKey {
   String get npLyricsEmpty => _cadenasLocalizadas['np_lyrics_empty'] ?? '';
   String get npLyricsSync => _cadenasLocalizadas['np_lyrics_sync'] ?? '';
   String get npLyricsUnsync => _cadenasLocalizadas['np_lyrics_unsync'] ?? '';
+  String get npLyricsTranslate =>
+      _cadenasLocalizadas['np_lyrics_translate'] ?? '';
+  String get npLyricsTranslating =>
+      _cadenasLocalizadas['np_lyrics_translating'] ?? '';
+  String get npLyricsTranslationMode =>
+      _cadenasLocalizadas['np_lyrics_translation_mode'] ?? '';
+  String get npLyricsOriginal =>
+      _cadenasLocalizadas['np_lyrics_original'] ?? '';
+  String get npLyricsTranslated =>
+      _cadenasLocalizadas['np_lyrics_translated'] ?? '';
+  String get npLyricsInterleaved =>
+      _cadenasLocalizadas['np_lyrics_interleaved'] ?? '';
+  String get npLyricsSources =>
+      _cadenasLocalizadas['np_lyrics_sources'] ?? '';
+  String get npLyricsResearch =>
+      _cadenasLocalizadas['np_lyrics_research'] ?? '';
+  String get npLyricsResumeSync =>
+      _cadenasLocalizadas['np_lyrics_resume_sync'] ?? '';
+  String get npLyricsSourcesTitle =>
+      _cadenasLocalizadas['np_lyrics_sources_title'] ?? '';
+  String get npLyricsSourceLocal =>
+      _cadenasLocalizadas['np_lyrics_source_local'] ?? '';
+  String get npLyricsSourceLocalDesc =>
+      _cadenasLocalizadas['np_lyrics_source_local_desc'] ?? '';
+  String get npLyricsSourceLrclib =>
+      _cadenasLocalizadas['np_lyrics_source_lrclib'] ?? '';
+  String get npLyricsSourceLrclibDesc =>
+      _cadenasLocalizadas['np_lyrics_source_lrclib_desc'] ?? '';
+  String get npLyricsSourceOvh =>
+      _cadenasLocalizadas['np_lyrics_source_ovh'] ?? '';
+  String get npLyricsSourceOvhDesc =>
+      _cadenasLocalizadas['np_lyrics_source_ovh_desc'] ?? '';
+  String get npLyricsSourcesResearch =>
+      _cadenasLocalizadas['np_lyrics_sources_research'] ?? '';
+  String get npLyricsSourcesResearchBtn =>
+      _cadenasLocalizadas['np_lyrics_sources_research_btn'] ?? '';
+  String get npLyricsSourcesClose =>
+      _cadenasLocalizadas['np_lyrics_sources_close'] ?? '';
+  String get npLyricsSourcesCloseBtn =>
+      _cadenasLocalizadas['np_lyrics_sources_close_btn'] ?? '';
+  String get npLyricsThresholdWaiting =>
+      _cadenasLocalizadas['np_lyrics_threshold_waiting'] ?? '';
+  String get npLyricsBannerDismiss =>
+      _cadenasLocalizadas['np_lyrics_banner_dismiss'] ?? '';
+  String get npLyricsSourceEmbedded =>
+      _cadenasLocalizadas['np_lyrics_source_embedded'] ?? '';
+  String get npLyricsSourceFile =>
+      _cadenasLocalizadas['np_lyrics_source_file'] ?? '';
+  String get npLyricsSourceNone =>
+      _cadenasLocalizadas['np_lyrics_source_none'] ?? '';
+  String get npLyricsLoading =>
+      _cadenasLocalizadas['np_lyrics_loading'] ?? '';
+  String get npLyricsError =>
+      _cadenasLocalizadas['np_lyrics_error'] ?? '';
+  String get npLyricsTranslateError =>
+      _cadenasLocalizadas['np_lyrics_translate_error'] ?? '';
   String get npAudioControls => _cadenasLocalizadas['np_audio_controls'] ?? '';
   String get npSpeed => _cadenasLocalizadas['np_speed'] ?? '';
   String get npPitch => _cadenasLocalizadas['np_pitch'] ?? '';
@@ -379,6 +435,8 @@ class AppStringKey {
       upDownloading.replaceAll('{progress}', progress.toString());
   String clVersionFormatted(String version) =>
       clVersion.replaceAll('{version}', version);
+  String npLyricsThresholdWaitingFormatted(int seconds) =>
+      npLyricsThresholdWaiting.replaceAll('{seconds}', seconds.toString());
 
   // ---------------------------------------------------------------------------
   // Registry Catalog
@@ -391,6 +449,17 @@ class AppStringKey {
     'np_remaining', 'np_duration', 'np_seek_forward', 'np_seek_backward',
     'np_queue', 'np_queue_clear', 'np_queue_empty', 'np_queue_reorder',
     'np_lyrics', 'np_lyrics_empty', 'np_lyrics_sync', 'np_lyrics_unsync',
+    'np_lyrics_translate', 'np_lyrics_translating', 'np_lyrics_translation_mode',
+    'np_lyrics_original', 'np_lyrics_translated', 'np_lyrics_interleaved',
+    'np_lyrics_sources', 'np_lyrics_research', 'np_lyrics_resume_sync',
+    'np_lyrics_sources_title', 'np_lyrics_source_local', 'np_lyrics_source_local_desc',
+    'np_lyrics_source_lrclib', 'np_lyrics_source_lrclib_desc',
+    'np_lyrics_source_ovh', 'np_lyrics_source_ovh_desc',
+    'np_lyrics_sources_research', 'np_lyrics_sources_research_btn',
+    'np_lyrics_sources_close', 'np_lyrics_sources_close_btn',
+    'np_lyrics_threshold_waiting', 'np_lyrics_banner_dismiss',
+    'np_lyrics_source_embedded', 'np_lyrics_source_file', 'np_lyrics_source_none',
+    'np_lyrics_loading', 'np_lyrics_error', 'np_lyrics_translate_error',
     'np_audio_controls', 'np_speed', 'np_pitch', 'np_volume_boost',
     'np_replay_gain', 'np_replay_gain_off', 'np_replay_gain_track',
     'np_replay_gain_album',
