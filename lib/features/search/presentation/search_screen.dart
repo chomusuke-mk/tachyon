@@ -29,7 +29,10 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final searchCtrl = context.watch<TachyonSearchController>();
-    final playback = context.watch<PlaybackController>();
+    final currentTrackUri = context.select<PlaybackController, String?>(
+      (c) => c.currentTrack?.uri,
+    );
+    final playback = context.read<PlaybackController>();
     final colorScheme = Theme.of(context).colorScheme;
 
     final matchedTracks = searchCtrl.matchedTracks;
@@ -202,7 +205,7 @@ class _SearchScreenState extends State<SearchScreen> {
                               ),
                               ...matchedTracks.map((track) {
                                 final isPlaying =
-                                    playback.currentTrack?.uri == track.uri;
+                                    currentTrackUri == track.uri;
                                 return TrackTile(
                                   key: ValueKey('search_${track.uri}'),
                                   track: track,

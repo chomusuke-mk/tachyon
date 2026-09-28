@@ -69,6 +69,7 @@ class LyricsController extends ChangeNotifier {
   })  : cooldownManager = cooldownManager ?? lyricsService.cooldownManager,
         translationClient = translationClient ?? LyricsTranslationClient() {
     playbackController.addListener(_onPlaybackUpdated);
+    playbackController.positionListenable.addListener(_onPositionUpdated);
     _onPlaybackUpdated();
   }
 
@@ -247,6 +248,15 @@ class LyricsController extends ChangeNotifier {
     }
 
     // 2. Resolve active lyric line based on current playback position
+    _updateActiveLyricLine();
+  }
+
+  void _onPositionUpdated() {
+    if (_isDisposed) return;
+    _updateActiveLyricLine();
+  }
+
+  void _updateActiveLyricLine() {
     if (_lyrics != null && _lyrics!.isSynced && lines.isNotEmpty) {
       final effectivePos =
           playbackController.position + Duration(milliseconds: _userOffsetMs);
@@ -657,6 +667,7 @@ class LyricsController extends ChangeNotifier {
     cooldownManager.cancelThresholdCountdown();
     cooldownManager.cancelDeferredRetry();
     playbackController.removeListener(_onPlaybackUpdated);
+    playbackController.positionListenable.removeListener(_onPositionUpdated);
     _userScrollLockTimer?.cancel();
     scrollController.dispose();
     super.dispose();

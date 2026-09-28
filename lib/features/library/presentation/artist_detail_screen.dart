@@ -18,7 +18,10 @@ class ArtistDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final playback = context.watch<PlaybackController>();
+    final currentTrackUri = context.select<PlaybackController, String?>(
+      (c) => c.currentTrack?.uri,
+    );
+    final playback = context.read<PlaybackController>();
 
     final artistTracks = library.allTracks
         .where(
@@ -208,7 +211,7 @@ class ArtistDetailScreen extends StatelessWidget {
           SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final track = artistTracks[index];
-              final isPlaying = playback.currentTrack?.uri == track.uri;
+              final isPlaying = currentTrackUri == track.uri;
 
               return TrackTile(
                 key: ValueKey(track.uri),

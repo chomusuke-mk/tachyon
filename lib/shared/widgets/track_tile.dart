@@ -66,7 +66,12 @@ class TrackTile extends StatelessWidget {
                 child: SizedBox(
                   width: 48,
                   height: 48,
-                  child: AlbumArtImage(uri: track.uri, fit: BoxFit.cover),
+                  child: AlbumArtImage(
+                    uri: track.uri,
+                    fit: BoxFit.cover,
+                    cacheWidth: 96,
+                    cacheHeight: 96,
+                  ),
                 ),
               ),
               if (isPlaying)

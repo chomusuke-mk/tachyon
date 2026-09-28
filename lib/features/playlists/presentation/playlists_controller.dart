@@ -54,13 +54,11 @@ class PlaylistsController extends ChangeNotifier {
       _playlists = await _database.getAllPlaylists();
 
       // Pre-cache liked track IDs for O(1) synchronous UI lookups
-      final likedTracks = await _database.getTracksForPlaylist(
+      final likedTrackIds = await _database.getTrackIdsForPlaylist(
         AppDatabase.likedSongsPlaylistId,
       );
       _likedTrackIds.clear();
-      for (final t in likedTracks) {
-        if (t.id != null) _likedTrackIds.add(t.id!);
-      }
+      _likedTrackIds.addAll(likedTrackIds);
 
       if (_selectedPlaylist != null) {
         final found = _playlists

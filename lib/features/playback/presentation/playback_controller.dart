@@ -18,6 +18,21 @@ class PlaybackController extends ChangeNotifier {
   late StreamSubscription<PlaybackState> _engineSubscription;
   PlaybackState _state = const PlaybackState.initial();
 
+  // Scoped high-frequency position notifier
+  final ValueNotifier<Duration> _positionNotifier =
+      ValueNotifier<Duration>(Duration.zero);
+
+  // Persistence throttling state
+  DateTime? _lastPersistenceTime;
+  String? _lastPersistedUri;
+  int? _lastPersistedPositionMs;
+  static const Duration _persistenceThrottle = Duration(seconds: 5);
+
+  @visibleForTesting
+  String? get lastPersistedUri => _lastPersistedUri;
+  @visibleForTesting
+  int? get lastPersistedPositionMs => _lastPersistedPositionMs;
+
   // History and persistence tracking
   bool _isDisposed = false;
   String? _currentlyLoggedHistoryUri;
@@ -29,11 +44,24 @@ class PlaybackController extends ChangeNotifier {
     required this._settingsRepository,
   }) : _audioEngine = audioEngineService {
     _state = _audioEngine.currentState;
+    _positionNotifier.value = _state.position;
     _engineSubscription = _audioEngine.stateStream.listen((newState) {
+      final oldState = _state;
       _state = newState;
+
+      // 1. Update high-frequency position notifier
+      if (_positionNotifier.value != newState.position) {
+        _positionNotifier.value = newState.position;
+      }
+
+      // 2. Perform background checks
       _checkHistoryLogging(newState);
-      _checkStatePersistence(newState);
-      notifyListeners();
+      _checkStatePersistence(oldState, newState);
+
+      // 3. Notify listeners ONLY on discrete state changes
+      if (_hasDiscreteStateChanged(oldState, newState)) {
+        notifyListeners();
+      }
     });
   }
 
@@ -46,7 +74,9 @@ class PlaybackController extends ChangeNotifier {
   bool get isBuffering => _state.buffering;
   bool get isCompleted => _state.completed;
 
-  Duration get position => _state.position;
+  Duration get position => _positionNotifier.value;
+  ValueNotifier<Duration> get positionNotifier => _positionNotifier;
+  ValueListenable<Duration> get positionListenable => _positionNotifier;
   Duration get duration => _state.duration;
   double get progress => _state.progress;
   Duration get remaining => _state.remaining;
@@ -217,14 +247,85 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  void _checkStatePersistence(PlaybackState newState) {
+  // ---------------------------------------------------------------------------
+  // Discrete State Change Detection
+  // ---------------------------------------------------------------------------
+  bool _hasDiscreteStateChanged(PlaybackState prev, PlaybackState next) {
+    return prev.index != next.index ||
+        prev.playing != next.playing ||
+        prev.buffering != next.buffering ||
+        prev.completed != next.completed ||
+        prev.duration != next.duration ||
+        prev.rate != next.rate ||
+        prev.pitch != next.pitch ||
+        prev.volume != next.volume ||
+        prev.shuffle != next.shuffle ||
+        prev.loop != next.loop ||
+        prev.crossfadeDuration != next.crossfadeDuration ||
+        prev.skipSilence != next.skipSilence ||
+        prev.audioBitrate != next.audioBitrate ||
+        prev.audioSampleRate != next.audioSampleRate ||
+        prev.audioChannels != next.audioChannels ||
+        prev.mixOffset != next.mixOffset ||
+        prev.hasPrevious != next.hasPrevious ||
+        prev.currentTrack?.uri != next.currentTrack?.uri ||
+        !listEquals(prev.playables, next.playables);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Throttled State Persistence
+  // ---------------------------------------------------------------------------
+  void _checkStatePersistence(PlaybackState oldState, PlaybackState newState) {
     final current = newState.currentTrack;
+    if (current == null) return;
+
+    final isTrackTransition = oldState.currentTrack?.uri != current.uri;
+    final isPauseTransition = oldState.playing && !newState.playing;
+    final isSeekTransition =
+        (newState.position - oldState.position).abs() >
+        const Duration(seconds: 2);
+    final isStopOrCompleted = oldState.playing && newState.completed;
+
+    final shouldForceWrite =
+        isTrackTransition ||
+        isPauseTransition ||
+        isSeekTransition ||
+        isStopOrCompleted;
+
+    if (shouldForceWrite) {
+      _flushStatePersistence(current.uri, newState.position.inMilliseconds);
+      return;
+    }
+
+    // Continuous playback throttling: flush once every 5 seconds
+    if (newState.playing) {
+      final now = DateTime.now();
+      if (_lastPersistenceTime == null ||
+          now.difference(_lastPersistenceTime!) >= _persistenceThrottle) {
+        _flushStatePersistence(current.uri, newState.position.inMilliseconds);
+      }
+    }
+  }
+
+  Future<void> flushStatePersistence() async {
+    final current = _state.currentTrack;
     if (current != null) {
-      _settingsRepository.setLastPlayed(
-        uri: current.uri,
-        positionMs: newState.position.inMilliseconds,
+      await _flushStatePersistence(
+        current.uri,
+        _positionNotifier.value.inMilliseconds,
       );
     }
+  }
+
+  Future<void> _flushStatePersistence(String uri, int positionMs) async {
+    _lastPersistenceTime = DateTime.now();
+    _lastPersistedUri = uri;
+    _lastPersistedPositionMs = positionMs;
+
+    await _settingsRepository.setLastPlayed(
+      uri: uri,
+      positionMs: positionMs,
+    );
   }
 
   @override
@@ -238,6 +339,13 @@ class PlaybackController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _engineSubscription.cancel();
+    if (_state.currentTrack != null) {
+      _settingsRepository.setLastPlayed(
+        uri: _state.currentTrack!.uri,
+        positionMs: _positionNotifier.value.inMilliseconds,
+      );
+    }
+    _positionNotifier.dispose();
     super.dispose();
   }
 }

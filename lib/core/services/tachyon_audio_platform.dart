@@ -91,7 +91,11 @@ class TachyonAudioPlatform extends JustAudioPlatform {
 /// - `cache-on-disk = no` (prevents FFmpeg lavf cache file creation failures)
 /// - `sub-auto = no` (suppresses redundant subtitle scanning on music tracks)
 /// - `audio-stream-silence = yes` (ensures continuous audio stream continuity)
-/// - `bufferSize = 8MB`
+/// - `bufferSize = 1MB`
+/// - `demuxer-max-bytes = 2097152` (2MB)
+/// - `demuxer-max-back-bytes = 524288` (512KB)
+/// - `demuxer-readahead-secs = 10`
+/// - `audio-buffer = 0.2`
 class TachyonMediaKitPlayer extends AudioPlayerPlatform {
   static const kErrorCode = 1;
 
@@ -140,7 +144,7 @@ class TachyonMediaKitPlayer extends AudioPlayerPlatform {
           'crypto',
         ],
         title: 'Tachyon Audio Player',
-        bufferSize: 8 * 1024 * 1024,
+        bufferSize: 1 * 1024 * 1024,
         logLevel: MPVLogLevel.error,
         ready: () async {
           if (_player.platform is NativePlayer) {
@@ -148,6 +152,10 @@ class TachyonMediaKitPlayer extends AudioPlayerPlatform {
             await native.setProperty('cache-on-disk', 'no');
             await native.setProperty('sub-auto', 'no');
             await native.setProperty('audio-stream-silence', 'yes');
+            await native.setProperty('demuxer-max-bytes', '2097152');
+            await native.setProperty('demuxer-max-back-bytes', '524288');
+            await native.setProperty('demuxer-readahead-secs', '10');
+            await native.setProperty('audio-buffer', '0.2');
           }
           if (!_readyCompleter.isCompleted) {
             _readyCompleter.complete();

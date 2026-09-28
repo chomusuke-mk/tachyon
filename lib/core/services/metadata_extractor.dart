@@ -130,7 +130,7 @@ class MetadataExtractor {
   void cancelScan() {
     _cancelPort?.send('cancel');
     _cancelPort = null;
-    _activeIsolate?.kill(priority: Isolate.beforeNextEvent);
+    _activeIsolate?.kill(priority: Isolate.immediate);
     _activeIsolate = null;
   }
 
@@ -256,6 +256,7 @@ class MetadataExtractor {
             }
             progressPort.close();
             if (!controller.isClosed) controller.close();
+            _activeIsolate?.kill(priority: Isolate.immediate);
             _activeIsolate = null;
             _cancelPort = null;
 
@@ -267,18 +268,25 @@ class MetadataExtractor {
         if (!controller.isClosed) controller.addError(err);
         progressPort.close();
         controller.close();
+        _activeIsolate?.kill(priority: Isolate.immediate);
         _activeIsolate = null;
         _cancelPort = null;
       },
       onDone: () {
         if (!controller.isClosed) controller.close();
+        _activeIsolate?.kill(priority: Isolate.immediate);
         _activeIsolate = null;
         _cancelPort = null;
       },
       cancelOnError: false,
     );
 
-    controller.onCancel = () => cancelSendPort.send('cancel');
+    controller.onCancel = () {
+      cancelSendPort.send('cancel');
+      _activeIsolate?.kill(priority: Isolate.immediate);
+      _activeIsolate = null;
+      _cancelPort = null;
+    };
   }
 }
 

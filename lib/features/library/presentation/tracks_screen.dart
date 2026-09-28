@@ -182,7 +182,10 @@ class _TracksScreenState extends State<TracksScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final playback = context.watch<PlaybackController>();
+    final currentTrackUri = context.select<PlaybackController, String?>(
+      (c) => c.currentTrack?.uri,
+    );
+    final playback = context.read<PlaybackController>();
     final playlists = context.watch<PlaylistsController>();
 
     final tracks = library.tracks;
@@ -346,7 +349,7 @@ class _TracksScreenState extends State<TracksScreen> {
               itemCount: tracks.length,
               itemBuilder: (context, index) {
                 final track = tracks[index];
-                final isPlaying = playback.currentTrack?.uri == track.uri;
+                final isPlaying = currentTrackUri == track.uri;
                 final isLiked =
                     track.id != null && playlists.isTrackLiked(track.id!);
                 final isSelected =

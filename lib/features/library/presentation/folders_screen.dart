@@ -15,7 +15,10 @@ class FoldersScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final playback = context.watch<PlaybackController>();
+    final currentTrackUri = context.select<PlaybackController, String?>(
+      (c) => c.currentTrack?.uri,
+    );
+    final playback = context.read<PlaybackController>();
     final settings = context.watch<SettingsController>();
 
     final currentFolder = library.currentFolderPath;
@@ -141,7 +144,7 @@ class FoldersScreen extends StatelessWidget {
                       }),
                       ...library.currentFolderTracks.map((track) {
                         final isPlaying =
-                            playback.currentTrack?.uri == track.uri;
+                            currentTrackUri == track.uri;
                         return TrackTile(
                           key: ValueKey(track.uri),
                           track: track,

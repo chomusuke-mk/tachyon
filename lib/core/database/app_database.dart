@@ -791,7 +791,7 @@ class AppDatabase {
         t.id, t.uri, t.title, t.album_id, t.artist_id, t.album_artist,
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
-        t.lyrics, t.has_cover,
+        NULL AS lyrics, t.has_cover,
         al.name AS album_name,
         ar.name AS artist_name
       FROM tracks t
@@ -801,6 +801,37 @@ class AppDatabase {
     ''');
 
     return rows.map((r) => Track.fromJson(r)).toList();
+  }
+
+  /// Retrieves raw embedded lyrics for a track by its [uri] on-demand.
+  /// Prevents loading heavy lyric blobs into memory during full catalog scans.
+  Future<String?> getTrackLyricsByUri(String uri) async {
+    final rows = await database.query(
+      'tracks',
+      columns: ['lyrics'],
+      where: 'uri = ?',
+      whereArgs: [uri],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      return rows.first['lyrics'] as String?;
+    }
+    return null;
+  }
+
+  /// Retrieves raw embedded lyrics for a track by its [trackId] on-demand.
+  Future<String?> getTrackLyrics(int trackId) async {
+    final rows = await database.query(
+      'tracks',
+      columns: ['lyrics'],
+      where: 'id = ?',
+      whereArgs: [trackId],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      return rows.first['lyrics'] as String?;
+    }
+    return null;
   }
 
   /// Returns a map of `uri` -> `(modifiedAt, fileSize)` for all tracks currently in the database.
@@ -897,6 +928,18 @@ class AppDatabase {
       [playlistId],
     );
     return rows.map((r) => Track.fromJson(r)).toList();
+  }
+
+  /// Returns the set of track IDs in the given [playlistId].
+  /// Directly queries the `playlist_entries` table without joining or instantiating [Track] models.
+  Future<Set<int>> getTrackIdsForPlaylist(int playlistId) async {
+    final rows = await database.query(
+      'playlist_entries',
+      columns: ['track_id'],
+      where: 'playlist_id = ? AND track_id IS NOT NULL',
+      whereArgs: [playlistId],
+    );
+    return rows.map((r) => r['track_id'] as int).toSet();
   }
 
   Future<int> createPlaylist(String name) async {
@@ -1014,7 +1057,7 @@ class AppDatabase {
         t.id, t.uri, t.title, t.album_id, t.artist_id, t.album_artist,
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
-        t.lyrics, t.has_cover,
+        NULL AS lyrics, t.has_cover,
         al.name AS album_name,
         ar.name AS artist_name
       FROM tracks t

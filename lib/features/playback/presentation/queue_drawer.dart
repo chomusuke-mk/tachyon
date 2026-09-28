@@ -5,6 +5,7 @@ import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 
+import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'playback_controller.dart';
 
 /// Modal bottom sheet representation of the playback queue on Mobile.
@@ -65,10 +66,14 @@ class QueueView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final playback = context.watch<PlaybackController>();
+    final queue = context.select<PlaybackController, List<QueueItem>>((c) => c.queue);
+    final currentIndex = context.select<PlaybackController, int>((c) => c.currentIndex);
+    final isPlaying = context.select<PlaybackController, bool>((c) => c.isPlaying);
+    final isInfiniteMixEnabled =
+        context.select<PlaybackController, bool>((c) => c.isInfiniteMixEnabled);
+    final playback = context.read<PlaybackController>();
     final strings = context.watch<LocaleController>().localeStrings;
     final colorScheme = Theme.of(context).colorScheme;
-    final queue = playback.queue;
 
     return Column(
       children: [
@@ -94,7 +99,7 @@ class QueueView extends StatelessWidget {
               IconButton(
                 icon: Icon(
                   Icons.all_inclusive_rounded,
-                  color: playback.isInfiniteMixEnabled
+                  color: isInfiniteMixEnabled
                       ? colorScheme.primary
                       : colorScheme.onSurfaceVariant,
                 ),
@@ -147,7 +152,7 @@ class QueueView extends StatelessWidget {
                   },
                   itemBuilder: (context, index) {
                     final item = queue[index];
-                    final isCurrent = index == playback.currentIndex;
+                    final isCurrent = index == currentIndex;
 
                     return Dismissible(
                       key: ValueKey('${item.uri}_$index'),
@@ -192,7 +197,7 @@ class QueueView extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(6.0),
                                   ),
                                   child: Icon(
-                                    playback.isPlaying
+                                    isPlaying
                                         ? Icons.graphic_eq_rounded
                                         : Icons.play_arrow_rounded,
                                     color: colorScheme.primary,

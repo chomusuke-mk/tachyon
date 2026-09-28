@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -177,9 +176,9 @@ Future<void> _runPipeline({
     );
 
     // 3. Concurrency-bounded extraction
-    final limiter = _ConcurrencyLimiter(workerCount);
+    // 3. Concurrency-bounded extraction streaming directly to workers
     final pendingTracks = <Track>[];
-    final tasks = <Future<void>>[];
+    final activeTasks = <Future<void>>{};
 
     void maybeSendBatch({bool force = false}) {
       if (pendingTracks.length >= 30 || (force && pendingTracks.isNotEmpty)) {
@@ -190,6 +189,38 @@ Future<void> _runPipeline({
         sendBatch(batch);
         send({'_type': 'progress', ...current.copyWith(phase: ScanPhase.extracting).toJson()});
       }
+    }
+
+    Future<void> processFile(DiscoveredAudioFile file, TrackFileMeta? existing) async {
+      if (cancellationToken.isCancelled) return;
+
+      final track = await _extractMetadata(file.path, coverService);
+      scannedCount++;
+
+      if (track != null) {
+        pendingTracks.add(track);
+        if (existing != null) {
+          updatedCount++;
+        } else {
+          newCount++;
+        }
+      } else {
+        failedCount++;
+      }
+
+      sendProgress(ScanProgress(
+        phase: ScanPhase.extracting,
+        scannedFiles: scannedCount,
+        totalFiles: totalFiles,
+        newTracks: newCount,
+        updatedTracks: updatedCount,
+        skippedTracks: skippedCount,
+        failedTracks: failedCount,
+        progress: totalFiles > 0 ? scannedCount / totalFiles : 1.0,
+        currentFile: file.path,
+      ));
+
+      maybeSendBatch();
     }
 
     for (final file in discoveredFiles) {
@@ -220,40 +251,20 @@ Future<void> _runPipeline({
         continue;
       }
 
-      tasks.add(limiter.run(() async {
-        if (cancellationToken.isCancelled) return;
+      late final Future<void> task;
+      task = processFile(file, existing).whenComplete(() {
+        activeTasks.remove(task);
+      });
+      activeTasks.add(task);
 
-        final track = await _extractMetadata(file.path, coverService);
-        scannedCount++;
-
-        if (track != null) {
-          pendingTracks.add(track);
-          if (existing != null) {
-            updatedCount++;
-          } else {
-            newCount++;
-          }
-        } else {
-          failedCount++;
-        }
-
-        sendProgress(ScanProgress(
-          phase: ScanPhase.extracting,
-          scannedFiles: scannedCount,
-          totalFiles: totalFiles,
-          newTracks: newCount,
-          updatedTracks: updatedCount,
-          skippedTracks: skippedCount,
-          failedTracks: failedCount,
-          progress: totalFiles > 0 ? scannedCount / totalFiles : 1.0,
-          currentFile: file.path,
-        ));
-
-        maybeSendBatch();
-      }));
+      if (activeTasks.length >= workerCount) {
+        await Future.any(activeTasks);
+      }
     }
 
-    await Future.wait(tasks);
+    if (activeTasks.isNotEmpty) {
+      await Future.wait(activeTasks);
+    }
 
     if (cancellationToken.isCancelled) {
       sendProgress(
@@ -415,31 +426,4 @@ Stream<DiscoveredAudioFile> _discoverFiles(
 }
 
 // ---------------------------------------------------------------------------
-// Bounded concurrency limiter (local to the scan isolate)
-// ---------------------------------------------------------------------------
 
-class _ConcurrencyLimiter {
-  final int maxConcurrent;
-  int _activeCount = 0;
-  final Queue<Completer<void>> _waiters = Queue<Completer<void>>();
-
-  _ConcurrencyLimiter(this.maxConcurrent)
-      : assert(maxConcurrent >= 1, 'maxConcurrent must be at least 1');
-
-  Future<R> run<R>(Future<R> Function() operation) async {
-    while (_activeCount >= maxConcurrent) {
-      final completer = Completer<void>();
-      _waiters.add(completer);
-      await completer.future;
-    }
-    _activeCount++;
-    try {
-      return await operation();
-    } finally {
-      _activeCount--;
-      if (_waiters.isNotEmpty) {
-        _waiters.removeFirst().complete();
-      }
-    }
-  }
-}

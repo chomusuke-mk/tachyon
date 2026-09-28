@@ -181,11 +181,13 @@ class _TachyonShellState extends State<TachyonShell> {
                       children: _screens,
                     ),
                   ),
-                  MiniPlayerBar(
-                    isDesktop: true,
-                    onTap:
-                        widget.onOpenNowPlaying ??
-                        () => _openNowPlaying(context),
+                  RepaintBoundary(
+                    child: MiniPlayerBar(
+                      isDesktop: true,
+                      onTap:
+                          widget.onOpenNowPlaying ??
+                          () => _openNowPlaying(context),
+                    ),
                   ),
                 ],
               ),
@@ -204,9 +206,11 @@ class _TachyonShellState extends State<TachyonShell> {
           Expanded(
             child: IndexedStack(index: _currentIndex, children: _screens),
           ),
-          MiniPlayerBar(
-            isDesktop: false,
-            onTap: widget.onOpenNowPlaying ?? () => _openNowPlaying(context),
+          RepaintBoundary(
+            child: MiniPlayerBar(
+              isDesktop: false,
+              onTap: widget.onOpenNowPlaying ?? () => _openNowPlaying(context),
+            ),
           ),
         ],
       ),

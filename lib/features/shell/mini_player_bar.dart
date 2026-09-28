@@ -28,82 +28,99 @@ class MiniPlayerBar extends StatelessWidget {
     if (currentTrack == null) return const SizedBox.shrink();
 
     final height = isDesktop ? 72.0 : 64.0;
-    final progress = playback.progress.clamp(0.0, 1.0);
 
-    return Material(
-      color: colorScheme.surfaceContainerHigh,
-      elevation: isDesktop ? 2 : 4,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          height: height,
-          child: Column(
-            children: [
-              // Top linear progress bar (2.5dp)
-              LinearProgressIndicator(
-                value: progress,
-                minHeight: 2.5,
-                backgroundColor: colorScheme.surfaceContainerHighest,
-                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-              ),
+    return RepaintBoundary(
+      child: Material(
+        color: colorScheme.surfaceContainerHigh,
+        elevation: isDesktop ? 2 : 4,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            height: height,
+            child: Column(
+              children: [
+                // Top linear progress bar (2.5dp)
+                RepaintBoundary(
+                  child: ValueListenableBuilder<Duration>(
+                    valueListenable: playback.positionListenable,
+                    builder: (context, pos, _) {
+                      final totalMs = playback.duration.inMilliseconds;
+                      final prog = totalMs > 0
+                          ? (pos.inMilliseconds / totalMs).clamp(0.0, 1.0)
+                          : 0.0;
+                      return LinearProgressIndicator(
+                        value: prog,
+                        minHeight: 2.5,
+                        backgroundColor: colorScheme.surfaceContainerHighest,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                      );
+                    },
+                  ),
+                ),
 
-              // Main Mini Player Row
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                  child: Row(
-                    children: [
-                      // Thumbnail
-                      Hero(
-                        tag: 'now_playing_art_${currentTrack.uri}',
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8.0),
-                          child: SizedBox(
-                            width: isDesktop ? 48 : 42,
-                            height: isDesktop ? 48 : 42,
-                            child: AlbumArtImage(
-                              uri: currentTrack.uri,
-                              fit: BoxFit.cover,
+                // Main Mini Player Row
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    child: Row(
+                      children: [
+                        // Thumbnail
+                        Hero(
+                          tag: 'now_playing_art_${currentTrack.uri}',
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8.0),
+                            child: SizedBox(
+                              width: isDesktop ? 48 : 42,
+                              height: isDesktop ? 48 : 42,
+                              child: AlbumArtImage(
+                                uri: currentTrack.uri,
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
+                        const SizedBox(width: 12),
 
-                      // Title & Artist
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              currentTrack.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
+                        // Title & Artist
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                currentTrack.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              currentTrack.artist,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
+                              const SizedBox(height: 2),
+                              Text(
+                                currentTrack.artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
 
-                      // Desktop Extra Controls (Duration & Repeat/Shuffle/Prev)
-                      if (isDesktop) ...[
-                        Text(
-                          '${_formatDuration(playback.position)} / ${_formatDuration(playback.duration)}',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                        const SizedBox(width: 16),
+                        // Desktop Extra Controls (Duration & Repeat/Shuffle/Prev)
+                        if (isDesktop) ...[
+                          ValueListenableBuilder<Duration>(
+                            valueListenable: playback.positionListenable,
+                            builder: (context, pos, _) {
+                              return Text(
+                                '${_formatDuration(pos)} / ${_formatDuration(playback.duration)}',
+                                style: theme.textTheme.bodySmall,
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 16),
                         IconButton(
                           icon: Icon(
                             playback.loopMode != Loop.off
@@ -169,6 +186,7 @@ class MiniPlayerBar extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

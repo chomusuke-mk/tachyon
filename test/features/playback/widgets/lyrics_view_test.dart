@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -23,6 +24,13 @@ import 'package:tachyon/features/playback/presentation/widgets/lyrics_sources_di
 class _FakePlaybackController extends ChangeNotifier implements PlaybackController {
   QueueItem? _currentTrack;
   Duration _position = Duration.zero;
+  final ValueNotifier<Duration> _positionNotifier = ValueNotifier<Duration>(Duration.zero);
+
+  @override
+  ValueNotifier<Duration> get positionNotifier => _positionNotifier;
+
+  @override
+  ValueListenable<Duration> get positionListenable => _positionNotifier;
 
   @override
   QueueItem? get currentTrack => _currentTrack;
@@ -37,7 +45,14 @@ class _FakePlaybackController extends ChangeNotifier implements PlaybackControll
 
   void setPosition(Duration position) {
     _position = position;
+    _positionNotifier.value = position;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _positionNotifier.dispose();
+    super.dispose();
   }
 
   @override

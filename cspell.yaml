@@ -188,6 +188,7 @@ words:
   - lavfi
   - lerp
   - libapp
+  - libass
   - libbz
   - libc
   - libdart

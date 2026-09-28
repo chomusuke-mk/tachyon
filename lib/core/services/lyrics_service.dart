@@ -134,16 +134,7 @@ class LyricsService {
       String? rawLyrics = embeddedLyrics;
       if (rawLyrics == null || rawLyrics.trim().isEmpty) {
         try {
-          final rows = await database.database.query(
-            'tracks',
-            columns: ['lyrics'],
-            where: 'uri = ?',
-            whereArgs: [uri],
-            limit: 1,
-          );
-          if (rows.isNotEmpty) {
-            rawLyrics = rows.first['lyrics'] as String?;
-          }
+          rawLyrics = await database.getTrackLyricsByUri(uri);
         } catch (_) {}
       }
 

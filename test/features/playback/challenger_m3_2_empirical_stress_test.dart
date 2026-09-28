@@ -19,6 +19,13 @@ import 'package:tachyon/features/playback/presentation/playback_controller.dart'
 class MockPlaybackController extends ChangeNotifier implements PlaybackController {
   QueueItem? _currentTrack;
   Duration _position = Duration.zero;
+  final ValueNotifier<Duration> _positionNotifier = ValueNotifier<Duration>(Duration.zero);
+
+  @override
+  ValueNotifier<Duration> get positionNotifier => _positionNotifier;
+
+  @override
+  ValueListenable<Duration> get positionListenable => _positionNotifier;
 
   @override
   QueueItem? get currentTrack => _currentTrack;
@@ -33,13 +40,21 @@ class MockPlaybackController extends ChangeNotifier implements PlaybackControlle
 
   void setPosition(Duration position) {
     _position = position;
+    _positionNotifier.value = position;
     notifyListeners();
   }
 
   @override
   Future<void> seek(Duration position) async {
     _position = position;
+    _positionNotifier.value = position;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _positionNotifier.dispose();
+    super.dispose();
   }
 
   @override

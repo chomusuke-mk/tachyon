@@ -25,6 +25,8 @@ import 'features/settings/presentation/settings_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  PaintingBinding.instance.imageCache.maximumSize = 60;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 15 * 1024 * 1024;
   await AudioPlayerAdapter.ensureInitialized();
   final sharedPreferences = await SharedPreferences.getInstance();
   final database = AppDatabase();

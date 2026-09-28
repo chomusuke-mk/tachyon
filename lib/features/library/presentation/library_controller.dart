@@ -238,36 +238,39 @@ class LibraryController extends ChangeNotifier {
   }
 
   void _applyFilters() {
-    var result = List<Track>.from(_tracks);
+    if (_selectedAlbum == null &&
+        _selectedArtist == null &&
+        _selectedGenre == null) {
+      _filteredTracks.clear();
+      return;
+    }
+
+    Iterable<Track> result = _tracks;
 
     if (_selectedAlbum != null) {
-      result = result
-          .where(
-            (t) =>
-                t.albumId == _selectedAlbum!.id ||
-                t.album == _selectedAlbum!.name,
-          )
-          .toList();
+      result = result.where(
+        (t) =>
+            t.albumId == _selectedAlbum!.id ||
+            t.album == _selectedAlbum!.name,
+      );
     }
 
     if (_selectedArtist != null) {
-      result = result
-          .where(
-            (t) =>
-                t.artistId == _selectedArtist!.id ||
-                t.artist == _selectedArtist!.name,
-          )
-          .toList();
+      result = result.where(
+        (t) =>
+            t.artistId == _selectedArtist!.id ||
+            t.artist == _selectedArtist!.name,
+      );
     }
 
     if (_selectedGenre != null) {
       final targetGenre = _selectedGenre!.name.toLowerCase();
-      result = result
-          .where((t) => t.genres.any((g) => g.toLowerCase() == targetGenre))
-          .toList();
+      result = result.where(
+        (t) => t.genres.any((g) => g.toLowerCase() == targetGenre),
+      );
     }
 
-    _filteredTracks = result;
+    _filteredTracks = result.toList();
   }
 
   // ---------------------------------------------------------------------------

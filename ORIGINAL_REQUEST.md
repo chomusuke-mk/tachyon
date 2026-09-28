@@ -131,4 +131,38 @@ Actualmente, `LyricsController` escucha a `PlaybackController` y dispara automá
 
 Por favor, aplicar este patrón de diseño en el Hito 3 y Hito 4 (desacoplar el listener global de `PlaybackController` para carga de red y delegar la carga activa al montaje de `LyricsView`).
 
+---
 
+## 2026-09-24T05:33:05Z
+
+[OPTIMIZACIÓN INTEGRAL Y MASIVA DE RENDIMIENTO EN LINUX]
+Optimización integral y masiva del rendimiento de Tachyon en Linux: reducción drástica de memoria RAM (de ~450-480MB hacia el rango de ~20-50MB o piso mínimo del engine), minimización del consumo de CPU y GPU en reproducción, y eliminación completa del parpadeo (flickering) al redimensionar la ventana. El usuario solicita explícitamente: "lanzar varios equipos de ser necesario".
+
+Working directory: /mnt/Proyectos/tachyon
+Integrity mode: development
+
+## Requirements
+
+### R1. Reducción masiva del consumo de memoria RAM (Reposo y Reproducción)
+Reducir de forma drástica el consumo de memoria RAM en modo release (actualmente ~450MB en reposo y ~480MB en reproducción) hacia el objetivo especificado por el usuario de ~20MB a 50MB (o el mínimo piso físico estricto que imponga el runtime del Flutter Engine/GTK3 en Linux), eliminando retenciones superfluas, ajustando agresivamente la memoria de caché de imágenes y optimizando el almacenamiento en memoria de colecciones y buffers.
+
+### R2. Minimización de consumo de CPU y GPU durante la reproducción
+Reducir el uso de CPU (del ~5% actual a niveles mínimos de reposo) y el uso de GPU (del 20-30% actual a menos del 3-5%) durante la reproducción activa de audio, eliminando repintados globales innecesarios y optimizando el renderizado de la barra de progreso y el `WaveformSlider` mediante aislamiento visual estricto y control de tasa de refresco.
+
+### R3. Eliminación de parpadeo (flickering) en la interfaz al redimensionar
+Eliminar los artefactos visuales, cuadros negros o parpadeos que ocurren al cambiar interactivamente el tamaño de la ventana en la pantalla de reproducción (`NowPlayingScreen`) o a lo largo del shell de la aplicación.
+
+### R4. Preservación de estabilidad, contratos y compatibilidad
+Garantizar que todas las características existentes (crossfade continuo sin interrupciones, letras sincronizadas y offline, escaneo incremental, persistencia SQLite en isolate principal y soporte i18n sin strings hardcodeados) permanezcan plenamente operativas y sin regresiones.
+
+## Acceptance Criteria
+
+### Rendimiento y Recursos (Métricas Objetivas)
+- [ ] En modo release (`flutter run -d linux --release` o binario release compilado), la memoria RAM residente (RSS) en estado de reposo se reduce radicalmente desde los ~450MB actuales acercándose al rango objetivo de ~20-50MB (o la cota mínima física del Flutter Engine en Linux).
+- [ ] Durante la reproducción continua de una pista de audio, el uso de CPU permanece por debajo del 2% y el uso de GPU se mantiene por debajo del 5%.
+- [ ] Al redimensionar interactivamente la ventana de la aplicación en `NowPlayingScreen`, la interfaz se redibuja fluidamente sin parpadeos visuales ni saltos en negro.
+
+### Calidad de Código y Regresiones
+- [ ] `dart analyze` reporta 0 errores y 0 advertencias en todo el proyecto.
+- [ ] El 100% de las pruebas unitarias y de integración existentes pasan exitosamente (`flutter test` sin fallos).
+- [ ] No se agregan cadenas hardcodeadas en widgets ni se introducen procesos binarios externos incompatibles con la arquitectura de Tachyon.

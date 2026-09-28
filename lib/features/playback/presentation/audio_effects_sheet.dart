@@ -20,7 +20,10 @@ class AudioEffectsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final playback = context.watch<PlaybackController>();
+    final rate = context.select<PlaybackController, double>((c) => c.rate);
+    final pitch = context.select<PlaybackController, double>((c) => c.pitch);
+    final volume = context.select<PlaybackController, double>((c) => c.volume);
+    final playback = context.read<PlaybackController>();
     final strings = context.watch<LocaleController>().localeStrings;
     final settings = context.watch<SettingsController>();
     final theme = Theme.of(context);
@@ -94,7 +97,7 @@ class AudioEffectsSheet extends StatelessWidget {
                       ),
                       Expanded(
                         child: Slider.adaptive(
-                          value: playback.rate.clamp(
+                          value: rate.clamp(
                             AppDefaults.playbackRateMin,
                             AppDefaults.playbackRateMax,
                           ),
@@ -109,7 +112,7 @@ class AudioEffectsSheet extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        playback.rate.toStringAsFixed(2),
+                        rate.toStringAsFixed(2),
                         style: theme.textTheme.labelLarge,
                       ),
                     ],
@@ -139,7 +142,7 @@ class AudioEffectsSheet extends StatelessWidget {
                       ),
                       Expanded(
                         child: Slider(
-                          value: playback.pitch.clamp(
+                          value: pitch.clamp(
                             AppDefaults.playbackPitchMin,
                             AppDefaults.playbackPitchMax,
                           ),
@@ -154,7 +157,7 @@ class AudioEffectsSheet extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        playback.pitch.toStringAsFixed(2),
+                        pitch.toStringAsFixed(2),
                         style: theme.textTheme.labelLarge,
                       ),
                     ],
@@ -188,7 +191,7 @@ class AudioEffectsSheet extends StatelessWidget {
                       ),
                       Expanded(
                         child: Slider(
-                          value: playback.volume.clamp(
+                          value: volume.clamp(
                             AppDefaults.volumeBoostMin,
                             AppDefaults.volumeBoostMax,
                           ),
@@ -202,7 +205,7 @@ class AudioEffectsSheet extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        playback.volume.toStringAsFixed(0),
+                        volume.toStringAsFixed(0),
                         style: theme.textTheme.labelLarge,
                       ),
                     ],

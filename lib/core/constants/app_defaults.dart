@@ -18,4 +18,6 @@ class AppDefaults {
   static const double playbackPitchMin = 0.5;
   static const double playbackPitchMax = 1.5;
   static const double playbackPitchDefault = 1.0;
+
+  static const bool audioPlayerAsyncEnabled = false;
 }

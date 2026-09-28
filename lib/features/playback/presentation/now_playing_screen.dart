@@ -218,7 +218,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         children: [
           // 1. Ambient Blurred Backdrop
           Positioned.fill(
-            child: _buildAmbientBackdrop(currentTrack.uri, colorScheme),
+            child: RepaintBoundary(
+              child: _buildAmbientBackdrop(currentTrack.uri, colorScheme),
+            ),
           ),
 
           // 2. Main Responsive Content Layer
@@ -359,24 +361,27 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               ),
             ],
           ),
-          WaveformSlider(
-            position: playback.position,
-            duration: playback.duration,
-            isBuffering: playback.isBuffering,
-            onSeek: playback.seek,
-            currentIndex: playback.currentIndex + 1,
-            totalCount: playback.queue.length + 1,
-            playlistPosition: () =>
-                playback.queue
-                    .take(playback.currentIndex)
-                    .fold<Duration>(
-                      Duration.zero,
-                      (sum, item) => sum + item.duration,
-                    ) +
-                playback.position,
-            playlistDuration: () => playback.queue.fold<Duration>(
-              Duration.zero,
-              (sum, item) => sum + item.duration,
+          RepaintBoundary(
+            child: WaveformSlider(
+              positionListenable: playback.positionListenable,
+              position: playback.position,
+              duration: playback.duration,
+              isBuffering: playback.isBuffering,
+              onSeek: playback.seek,
+              currentIndex: playback.currentIndex + 1,
+              totalCount: playback.queue.length + 1,
+              playlistPosition: () =>
+                  playback.queue
+                      .take(playback.currentIndex)
+                      .fold<Duration>(
+                        Duration.zero,
+                        (sum, item) => sum + item.duration,
+                      ) +
+                  playback.position,
+              playlistDuration: () => playback.queue.fold<Duration>(
+                Duration.zero,
+                (sum, item) => sum + item.duration,
+              ),
             ),
           ),
           Row(
@@ -557,25 +562,21 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             children: [
               Flexible(
                 fit: FlexFit.loose,
-                child: AnimatedSize(
+                child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: !hideQueue && _showQueue
-                        ? QueueView(key: const ValueKey('queue_view'))
-                        : !hideLyrics && _showLyrics
-                        ? LyricsView(
-                            key: const ValueKey('lyrics_view'),
-                            uri: currentTrack.uri,
-                            onSeek: playback.seek,
-                          )
-                        : _buildHeroCoverArt(
-                            currentTrack.uri,
-                            context,
-                            key: const ValueKey('cover_art_view'),
-                          ),
-                  ),
+                  child: !hideQueue && _showQueue
+                      ? QueueView(key: const ValueKey('queue_view'))
+                      : !hideLyrics && _showLyrics
+                      ? LyricsView(
+                          key: const ValueKey('lyrics_view'),
+                          uri: currentTrack.uri,
+                          onSeek: playback.seek,
+                        )
+                      : _buildHeroCoverArt(
+                          currentTrack.uri,
+                          context,
+                          key: const ValueKey('cover_art_view'),
+                        ),
                 ),
               ),
               Flexible(
@@ -596,25 +597,21 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             children: [
               Flexible(
                 fit: FlexFit.loose,
-                child: AnimatedSize(
+                child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: !hideQueue && _showQueue
-                        ? QueueView(key: const ValueKey('queue_view'))
-                        : !hideLyrics && _showLyrics
-                        ? LyricsView(
-                            key: const ValueKey('lyrics_view'),
-                            uri: currentTrack.uri,
-                            onSeek: playback.seek,
-                          )
-                        : _buildHeroCoverArt(
-                            currentTrack.uri,
-                            context,
-                            key: const ValueKey('cover_art_view'),
-                          ),
-                  ),
+                  child: !hideQueue && _showQueue
+                      ? QueueView(key: const ValueKey('queue_view'))
+                      : !hideLyrics && _showLyrics
+                      ? LyricsView(
+                          key: const ValueKey('lyrics_view'),
+                          uri: currentTrack.uri,
+                          onSeek: playback.seek,
+                        )
+                      : _buildHeroCoverArt(
+                          currentTrack.uri,
+                          context,
+                          key: const ValueKey('cover_art_view'),
+                        ),
                 ),
               ),
               playerTitle,
@@ -623,26 +620,22 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             ],
           );
         }
-        return AnimatedSize(
+        return AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: !hideQueue && _showQueue
-                ? QueueView(key: const ValueKey('queue_view'))
-                : !hideLyrics && _showLyrics
-                ? LyricsView(
-                    key: const ValueKey('lyrics_view'),
-                    uri: currentTrack.uri,
-                    onSeek: playback.seek,
-                  )
-                : Column(
-                    key: const ValueKey('cover_art_view'),
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [playerTitle, playerControls],
-                  ),
-          ),
+          child: !hideQueue && _showQueue
+              ? QueueView(key: const ValueKey('queue_view'))
+              : !hideLyrics && _showLyrics
+              ? LyricsView(
+                  key: const ValueKey('lyrics_view'),
+                  uri: currentTrack.uri,
+                  onSeek: playback.seek,
+                )
+              : Column(
+                  key: const ValueKey('cover_art_view'),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [playerTitle, playerControls],
+                ),
         );
       },
     );
@@ -698,60 +691,70 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   //  ),
   //),
   Widget _buildAmbientBackdrop(String uri, ColorScheme colorScheme) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (uri.isNotEmpty) AlbumArtImage(uri: uri, fit: BoxFit.cover),
-        BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 32.0, sigmaY: 32.0),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  colorScheme.surface.withValues(alpha: 0.65),
-                  colorScheme.surface.withValues(alpha: 0.82),
-                  colorScheme.surface.withValues(alpha: 0.95),
-                ],
+    return RepaintBoundary(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (uri.isNotEmpty)
+            AlbumArtImage(
+              uri: uri,
+              fit: BoxFit.cover,
+              cacheWidth: 128,
+              cacheHeight: 128,
+            ),
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 32.0, sigmaY: 32.0),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    colorScheme.surface.withValues(alpha: 0.65),
+                    colorScheme.surface.withValues(alpha: 0.82),
+                    colorScheme.surface.withValues(alpha: 0.95),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildHeroCoverArt(String uri, BuildContext context, {Key? key}) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = constraints.maxWidth < constraints.maxHeight
-            ? constraints.maxWidth * 0.8
-            : constraints.maxHeight * 0.8;
+    return RepaintBoundary(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = constraints.maxWidth < constraints.maxHeight
+              ? constraints.maxWidth * 0.8
+              : constraints.maxHeight * 0.8;
 
-        return Hero(
-          key: key,
-          tag: 'now_playing_art_$uri',
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24.0),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 28,
-                  offset: const Offset(0, 14),
-                ),
-              ],
+          return Hero(
+            key: key,
+            tag: 'now_playing_art_$uri',
+            child: Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 28,
+                    offset: const Offset(0, 14),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24.0),
+                child: AlbumArtImage(uri: uri, fit: BoxFit.cover),
+              ),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24.0),
-              child: AlbumArtImage(uri: uri, fit: BoxFit.cover),
-            ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
