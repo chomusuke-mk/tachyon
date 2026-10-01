@@ -143,11 +143,12 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                 final albumTrack =
                     albumTracks
                         .where(
-                          (t) => cacheService?.hasCachedCover(t.uri) == true,
+                          (t) =>
+                              cacheService?.hasCachedCover(t.filePath) == true,
                         )
                         .firstOrNull ??
                     albumTracks.firstOrNull;
-                final coverUri = albumTrack?.uri ?? '';
+                final coverFilePath = albumTrack?.filePath ?? '';
 
                 return InkWell(
                   borderRadius: BorderRadius.circular(12.0),
@@ -167,7 +168,7 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                           child: AspectRatio(
                             aspectRatio: 1.0,
                             child: AlbumArtImage(
-                              uri: coverUri,
+                              filePath: coverFilePath,
                               fit: BoxFit.cover,
                             ),
                           ),

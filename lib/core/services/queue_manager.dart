@@ -115,13 +115,13 @@ class QueueManager {
     }
   }
 
-  /// Finds the first element in [remaining] with a different URI than [current]
+  /// Finds the first element in [remaining] with a different filePath than [current]
   /// and moves it to index 0 to avoid immediate consecutive duplicates.
   void _avoidImmediateDuplicate(QueueItem current, List<QueueItem> remaining) {
     if (remaining.isNotEmpty &&
-        remaining[0].uri == current.uri &&
+        remaining[0].filePath == current.filePath &&
         remaining.length > 1) {
-      final nonDupIdx = remaining.indexWhere((it) => it.uri != current.uri);
+      final nonDupIdx = remaining.indexWhere((it) => it.filePath != current.filePath);
       if (nonDupIdx != -1) {
         final nonDup = remaining.removeAt(nonDupIdx);
         remaining.insert(0, nonDup);
@@ -182,7 +182,7 @@ class QueueManager {
       final current = _activeQueue[_currentIndex];
       int origIdx = _originalQueue.indexWhere((item) => item.id == current.id);
       if (origIdx == -1) {
-        origIdx = _originalQueue.indexWhere((item) => item.uri == current.uri);
+        origIdx = _originalQueue.indexWhere((item) => item.filePath == current.filePath);
       }
 
       _activeQueue = List<QueueItem>.from(_originalQueue);
@@ -287,7 +287,7 @@ class QueueManager {
     } else {
       int origIdx = _originalQueue.indexWhere((it) => it.id == removedItem.id);
       if (origIdx == -1) {
-        origIdx = _originalQueue.indexWhere((it) => it.uri == removedItem.uri);
+        origIdx = _originalQueue.indexWhere((it) => it.filePath == removedItem.filePath);
       }
       if (origIdx != -1) {
         _originalQueue.removeAt(origIdx);
@@ -398,9 +398,9 @@ class QueueManager {
     if (_loopMode == Loop.off && _infiniteMixEnabled && provider != null) {
       final rawTracks = await provider(25);
       if (rawTracks.isNotEmpty) {
-        final existingUris = _activeQueue.map((it) => it.uri).toSet();
+        final existingFilePaths = _activeQueue.map((it) => it.filePath).toSet();
         var mixTracks = rawTracks
-            .where((t) => !existingUris.contains(t.uri))
+            .where((t) => !existingFilePaths.contains(t.filePath))
             .map((t) => QueueItem.fromTrack(t))
             .toList();
 

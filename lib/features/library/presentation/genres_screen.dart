@@ -21,8 +21,8 @@ class _GenresScreenState extends State<GenresScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrackUri = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.uri,
+    final currentTrackFilePath = context.select<PlaybackController, String?>(
+      (c) => c.currentTrack?.filePath,
     );
     final playback = context.read<PlaybackController>();
 
@@ -61,10 +61,10 @@ class _GenresScreenState extends State<GenresScreen> {
           itemCount: genreTracks.length,
           itemBuilder: (context, index) {
             final track = genreTracks[index];
-            final isPlaying = currentTrackUri == track.uri;
+            final isPlaying = currentTrackFilePath == track.filePath;
 
             return TrackTile(
-              key: ValueKey(track.uri),
+              key: ValueKey(track.filePath),
               track: track,
               isPlaying: isPlaying,
               onTap: () =>

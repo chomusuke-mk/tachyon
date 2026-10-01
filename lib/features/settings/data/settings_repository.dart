@@ -37,6 +37,7 @@ class SettingsRepository {
   static const _keyVolumeBoost = 's_volume_boost';
   static const _keyTheme = 's_theme';
   static const _keyLanguage = 's_language';
+  static const _keyLastPlayedFilePath = 's_last_played_file_path';
   static const _keyLastPlayedUri = 's_last_played_uri';
   static const _keyLastPlayedPosition = 's_last_played_position';
   static const _keyEqualizerEnabled = 's_equalizer_enabled';
@@ -73,7 +74,9 @@ class SettingsRepository {
       volumeBoost: _prefs.getDouble(_keyVolumeBoost) ?? 100.0,
       themeMode: _getAppTheme(),
       appLanguage: _prefs.getString(_keyLanguage) ?? 'defaultOption',
-      lastPlayedUri: _prefs.getString(_keyLastPlayedUri),
+      lastPlayedFilePath:
+          _prefs.getString(_keyLastPlayedFilePath) ??
+          _prefs.getString(_keyLastPlayedUri),
       lastPlayedPositionMs: _prefs.getInt(_keyLastPlayedPosition) ?? 0,
       equalizerEnabled: _prefs.getBool(_keyEqualizerEnabled) ?? false,
       equalizerGains: getEqualizerGains(),
@@ -103,10 +106,12 @@ class SettingsRepository {
       ),
     ];
 
-    if (settings.lastPlayedUri != null) {
-      futures.add(_prefs.setString(_keyLastPlayedUri, settings.lastPlayedUri!));
+    if (settings.lastPlayedFilePath != null) {
+      futures.add(
+        _prefs.setString(_keyLastPlayedFilePath, settings.lastPlayedFilePath!),
+      );
     } else {
-      futures.add(_prefs.remove(_keyLastPlayedUri));
+      futures.add(_prefs.remove(_keyLastPlayedFilePath));
     }
 
     await Future.wait(futures);
@@ -151,10 +156,12 @@ class SettingsRepository {
       _prefs.setString(_keyLanguage, language);
 
   Future<void> setLastPlayed({
-    required String uri,
+    String? filePath,
+    @Deprecated('Use filePath') String? uri,
     required int positionMs,
   }) async {
-    await _prefs.setString(_keyLastPlayedUri, uri);
+    final effectivePath = filePath ?? uri ?? '';
+    await _prefs.setString(_keyLastPlayedFilePath, effectivePath);
     await _prefs.setInt(_keyLastPlayedPosition, positionMs);
   }
 

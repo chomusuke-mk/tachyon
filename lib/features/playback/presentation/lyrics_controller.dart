@@ -37,7 +37,7 @@ class LyricsController extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   int _currentIndex = 0;
-  String? _currentTrackUri;
+  String? _currentTrackFilePath;
 
   // Source configuration flags
   bool _enableLocalSources = true;
@@ -208,11 +208,11 @@ class LyricsController extends ChangeNotifier {
     if (_isDisposed) return;
 
     final track = playbackController.currentTrack;
-    final trackUri = track?.uri;
+    final trackFilePath = track?.filePath;
 
     // 1. Check for track transition
-    if (trackUri != _currentTrackUri) {
-      _currentTrackUri = trackUri;
+    if (trackFilePath != _currentTrackFilePath) {
+      _currentTrackFilePath = trackFilePath;
       _resetScrollLock();
       _currentIndex = 0;
       _translatedLines = const [];
@@ -282,7 +282,7 @@ class LyricsController extends ChangeNotifier {
     if (track == null) return;
 
     if (!forceRefresh &&
-        _currentTrackUri == track.uri &&
+        _currentTrackFilePath == track.filePath &&
         _lyrics != null &&
         _lyrics!.isNotEmpty &&
         _currentLyricsSource != null &&
@@ -306,7 +306,7 @@ class LyricsController extends ChangeNotifier {
           !_generationTracker.isCurrent(_generationTracker.activeToken)) {
         return;
       }
-      if (_currentTrackUri != track.uri) return;
+      if (_currentTrackFilePath != track.filePath) return;
 
       if (result != null) {
         _lyrics = result.lyrics;
@@ -348,8 +348,8 @@ class LyricsController extends ChangeNotifier {
         if (_enableLyricsOvh) LyricsSource.lyricsOvh,
       };
 
-      final result = await lyricsService.resolveLyricsByUri(
-        uri: track.uri,
+      final result = await lyricsService.resolveLyricsByFilePath(
+        filePath: track.filePath,
         title: track.title,
         artist: track.artist,
         album: track.album,
@@ -365,7 +365,7 @@ class LyricsController extends ChangeNotifier {
             seconds: seconds,
             onAutoRetry: () async {
               if (_isDisposed || !_isLyricsViewVisible) return;
-              if (_currentTrackUri == track.uri &&
+              if (_currentTrackFilePath == track.filePath &&
                   _generationTracker
                       .isCurrent(_generationTracker.activeToken)) {
                 final retryToken = _generationTracker.nextGeneration();
@@ -376,7 +376,7 @@ class LyricsController extends ChangeNotifier {
             isStillValid: () =>
                 !_isDisposed &&
                 _isLyricsViewVisible &&
-                _currentTrackUri == track.uri &&
+                _currentTrackFilePath == track.filePath &&
                 _generationTracker.isCurrent(_generationTracker.activeToken),
           );
           notifyListeners();
@@ -390,7 +390,7 @@ class LyricsController extends ChangeNotifier {
         return;
       }
 
-      if (_currentTrackUri != track.uri) {
+      if (_currentTrackFilePath != track.filePath) {
         return;
       }
 
@@ -417,11 +417,11 @@ class LyricsController extends ChangeNotifier {
           cooldownManager.isCooldownActive &&
           _enableLrclib) {
         cooldownManager.scheduleDeferredRetry(
-          trackUri: track.uri,
+          trackFilePath: track.filePath,
           token: _generationTracker.activeToken,
           onRetry: () async {
             if (_isDisposed || !_isLyricsViewVisible) return;
-            if (_currentTrackUri == track.uri &&
+            if (_currentTrackFilePath == track.filePath &&
                 _generationTracker.isCurrent(_generationTracker.activeToken) &&
                 (_currentLyricsSource == null ||
                     !_currentLyricsSource!.isLocal)) {

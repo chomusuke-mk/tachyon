@@ -332,7 +332,7 @@ void main() {
     for (final track in [sampleTrack1, sampleTrack2, sampleTrack3]) {
       await db.database.insert('tracks', {
         'id': track.trackId,
-        'uri': track.uri,
+        'file_path': track.filePath,
         'title': track.title,
         'duration_ms': track.duration.inMilliseconds,
         'file_size': 5000000,
@@ -601,6 +601,7 @@ void main() {
 
       // Toggle Lyrics off -> returns to Cover Art
       await tester.tap(find.byIcon(Icons.music_note_rounded));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.byKey(const ValueKey('cover_art_view')), findsOneWidget);
       expect(find.byType(LyricsView), findsNothing);
@@ -650,17 +651,20 @@ void main() {
 
       FlutterError.onError = oldOnError;
 
-      // Assert that this reproduces the duplicate key crash in AnimatedSwitcher
+      // Assert that AnimatedSwitcher does NOT crash with duplicate keys during in-flight resize
       final hasDuplicateKeyCrash = duplicateKeyErrors.any(
         (e) => e.toString().contains('Duplicate keys found') && e.toString().contains('player_only'),
       );
 
       expect(
         hasDuplicateKeyCrash,
-        isTrue,
-        reason: 'CRITICAL BUG CONFIRMED: AnimatedSwitcher crashes with duplicate key [player_only] '
+        isFalse,
+        reason: 'AnimatedSwitcher must not crash with duplicate key [player_only] '
             'when resizing across the 588px breakpoint during an in-flight view transition.',
       );
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Playback state events during window resizing at fixed layout modes', (

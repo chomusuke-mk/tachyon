@@ -33,7 +33,7 @@ class FakeAppDatabase extends Fake implements AppDatabase {
   final List<String> addedTracks = [];
 
   @override
-  Future<void> addTrackToPlaylist(int playlistId, int trackId) async {
+  Future<void> addTrackToPlaylist(int playlistId, int trackId, [String? filePath]) async {
     addedTracks.add('$playlistId:$trackId');
   }
 }
@@ -42,8 +42,13 @@ class FakeSettingsRepository extends Fake implements SettingsRepository {
   final List<({String uri, int positionMs})> lastPlayedWrites = [];
 
   @override
-  Future<void> setLastPlayed({required String uri, required int positionMs}) async {
-    lastPlayedWrites.add((uri: uri, positionMs: positionMs));
+  Future<void> setLastPlayed({
+    String? filePath,
+    required int positionMs,
+    String? uri,
+  }) async {
+    final effective = filePath ?? uri ?? '';
+    lastPlayedWrites.add((uri: effective, positionMs: positionMs));
   }
 }
 

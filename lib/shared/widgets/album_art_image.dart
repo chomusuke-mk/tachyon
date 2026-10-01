@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/core/services/cover_cache_service.dart';
 
 class AlbumArtImage extends StatelessWidget {
-  final String uri;
+  final String filePath;
   final double? width;
   final double? height;
   final int? cacheWidth;
@@ -18,16 +18,20 @@ class AlbumArtImage extends StatelessWidget {
   @visibleForTesting
   static void clearExistenceCache() => _existingCovers.clear();
 
+  @Deprecated('Use filePath instead')
+  String get uri => filePath;
+
   const AlbumArtImage({
     super.key,
-    required this.uri,
+    String? filePath,
+    @Deprecated('Use filePath instead') String? uri,
     this.width,
     this.height,
     this.cacheWidth,
     this.cacheHeight,
     this.fit = BoxFit.cover,
     this.borderRadius,
-  });
+  }) : filePath = filePath ?? uri ?? '';
 
   @override
   Widget build(BuildContext context) {
@@ -59,14 +63,14 @@ class AlbumArtImage extends StatelessWidget {
       ),
     );
 
-    if (cacheService == null || uri.isEmpty) {
+    if (cacheService == null || filePath.isEmpty) {
       if (borderRadius != null) {
         return ClipRRect(borderRadius: borderRadius!, child: fallback);
       }
       return fallback;
     }
 
-    final coverFile = cacheService.getCoverFile(uri);
+    final coverFile = cacheService.getCoverFile(filePath);
 
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
     final int defaultBound =

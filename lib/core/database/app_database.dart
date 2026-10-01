@@ -36,7 +36,7 @@ abstract final class AppDatabaseSchema {
   static const String createTracksTable = '''
     CREATE TABLE IF NOT EXISTS tracks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      uri TEXT UNIQUE NOT NULL,
+      file_path TEXT UNIQUE NOT NULL,
       title TEXT NOT NULL,
       album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL,
       artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL,
@@ -85,7 +85,7 @@ abstract final class AppDatabaseSchema {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
       track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE,
-      uri TEXT NOT NULL,
+      file_path TEXT NOT NULL,
       custom_title TEXT,
       position INTEGER NOT NULL,
       added_at INTEGER NOT NULL
@@ -114,7 +114,7 @@ abstract final class AppDatabaseSchema {
   ''';
 
   static const List<String> indexes = [
-    'CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_uri ON tracks(uri);',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path);',
     'CREATE INDEX IF NOT EXISTS idx_tracks_album_id ON tracks(album_id);',
     'CREATE INDEX IF NOT EXISTS idx_tracks_artist_id ON tracks(artist_id);',
     'CREATE INDEX IF NOT EXISTS idx_tracks_title ON tracks(title COLLATE NOCASE);',
@@ -342,6 +342,28 @@ class AppDatabase {
   }
 
   void _executeSchemaSync(Database db) {
+    // Migration: rename 'uri' column to 'file_path' in existing databases
+    try {
+      final trackCols = db
+          .select("PRAGMA table_info(tracks)")
+          .map((r) => r['name'] as String)
+          .toSet();
+      if (trackCols.contains('uri') && !trackCols.contains('file_path')) {
+        db.execute('DROP INDEX IF EXISTS idx_tracks_uri;');
+        db.execute('ALTER TABLE tracks RENAME COLUMN uri TO file_path;');
+      }
+    } catch (_) {}
+
+    try {
+      final entryCols = db
+          .select("PRAGMA table_info(playlist_entries)")
+          .map((r) => r['name'] as String)
+          .toSet();
+      if (entryCols.contains('uri') && !entryCols.contains('file_path')) {
+        db.execute('ALTER TABLE playlist_entries RENAME COLUMN uri TO file_path;');
+      }
+    } catch (_) {}
+
     db.execute(AppDatabaseSchema.createArtistsTable);
     db.execute(AppDatabaseSchema.createAlbumsTable);
     db.execute(AppDatabaseSchema.createTracksTable);
@@ -428,8 +450,8 @@ class AppDatabase {
       final existingTrack = await txn.query(
         'tracks',
         columns: ['id', 'artist_id', 'album_id'],
-        where: 'uri = ?',
-        whereArgs: [track.uri],
+        where: 'file_path = ?',
+        whereArgs: [track.filePath],
         limit: 1,
       );
 
@@ -447,7 +469,7 @@ class AppDatabase {
       if (existingTrack.isNotEmpty) {
         trackId = resolvedTrackId!;
         final updateMap = {
-          'uri': track.uri,
+          'file_path': track.filePath,
           'title': track.title,
           'album_id': albumId,
           'artist_id': artistId,
@@ -473,7 +495,7 @@ class AppDatabase {
       } else {
         final trackMap = {
           'id': ?resolvedTrackId,
-          'uri': track.uri,
+          'file_path': track.filePath,
           'title': track.title,
           'album_id': albumId,
           'artist_id': artistId,
@@ -642,23 +664,23 @@ class AppDatabase {
           }
         }
 
-        // 2. Query existing tracks in chunk by URI to preserve IDs and avoid CASCADE deletion
+        // 2. Query existing tracks in chunk by filePath to preserve IDs and avoid CASCADE deletion
         final Map<String, int> existingTrackMap = {};
-        final uris = chunk.map((t) => t.uri).toList();
-        for (int u = 0; u < uris.length; u += 500) {
-          final subUris = uris.sublist(
+        final filePaths = chunk.map((t) => t.filePath).toList();
+        for (int u = 0; u < filePaths.length; u += 500) {
+          final subFilePaths = filePaths.sublist(
             u,
-            (u + 500 < uris.length) ? u + 500 : uris.length,
+            (u + 500 < filePaths.length) ? u + 500 : filePaths.length,
           );
-          final placeholders = List.filled(subUris.length, '?').join(',');
+          final placeholders = List.filled(subFilePaths.length, '?').join(',');
           final rows = await txn.query(
             'tracks',
-            columns: ['id', 'uri'],
-            where: 'uri IN ($placeholders)',
-            whereArgs: subUris,
+            columns: ['id', 'file_path'],
+            where: 'file_path IN ($placeholders)',
+            whereArgs: subFilePaths,
           );
           for (final row in rows) {
-            existingTrackMap[row['uri'] as String] = row['id'] as int;
+            existingTrackMap[row['file_path'] as String] = row['id'] as int;
           }
         }
 
@@ -675,9 +697,9 @@ class AppDatabase {
               ? albumCache[alKey]
               : null;
 
-          final existingId = existingTrackMap[t.uri];
+          final existingId = existingTrackMap[t.filePath];
           final trackValues = {
-            'uri': t.uri,
+            'file_path': t.filePath,
             'title': t.title,
             'album_id': alId,
             'artist_id': arId,
@@ -788,7 +810,7 @@ class AppDatabase {
 
     final rows = await database.rawQuery('''
       SELECT 
-        t.id, t.uri, t.title, t.album_id, t.artist_id, t.album_artist,
+        t.id, t.file_path, t.title, t.album_id, t.artist_id, t.album_artist,
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
         NULL AS lyrics, t.has_cover,
@@ -803,14 +825,20 @@ class AppDatabase {
     return rows.map((r) => Track.fromJson(r)).toList();
   }
 
-  /// Retrieves raw embedded lyrics for a track by its [uri] on-demand.
+  /// Retrieves raw embedded lyrics for a track by its [filePath] on-demand.
   /// Prevents loading heavy lyric blobs into memory during full catalog scans.
-  Future<String?> getTrackLyricsByUri(String uri) async {
+  Future<String?> getTrackLyricsByFilePath(String filePath) async {
+    String cleanPath = filePath;
+    if (cleanPath.startsWith('file://')) {
+      try {
+        cleanPath = Uri.parse(cleanPath).toFilePath();
+      } catch (_) {}
+    }
     final rows = await database.query(
       'tracks',
       columns: ['lyrics'],
-      where: 'uri = ?',
-      whereArgs: [uri],
+      where: 'file_path = ? OR file_path = ?',
+      whereArgs: [cleanPath, filePath],
       limit: 1,
     );
     if (rows.isNotEmpty) {
@@ -818,6 +846,10 @@ class AppDatabase {
     }
     return null;
   }
+
+  @Deprecated('Use getTrackLyricsByFilePath instead')
+  Future<String?> getTrackLyricsByUri(String uri) =>
+      getTrackLyricsByFilePath(uri);
 
   /// Retrieves raw embedded lyrics for a track by its [trackId] on-demand.
   Future<String?> getTrackLyrics(int trackId) async {
@@ -834,20 +866,20 @@ class AppDatabase {
     return null;
   }
 
-  /// Returns a map of `uri` -> `(modifiedAt, fileSize)` for all tracks currently in the database.
+  /// Returns a map of `filePath` -> `(modifiedAt, fileSize)` for all tracks currently in the database.
   /// Used by `MetadataExtractor` to perform incremental scans without re-reading unchanged files.
   Future<Map<String, ({int modifiedAt, int fileSize})>> getExistingTrackMetas() async {
     final rows = await database.query(
       'tracks',
-      columns: ['uri', 'modified_at', 'file_size'],
+      columns: ['file_path', 'modified_at', 'file_size'],
     );
     final result = <String, ({int modifiedAt, int fileSize})>{};
     for (final row in rows) {
-      final uri = row['uri'] as String?;
+      final filePath = row['file_path'] as String?;
       final modifiedAt = row['modified_at'] as int?;
       final fileSize = row['file_size'] as int?;
-      if (uri != null && modifiedAt != null && fileSize != null) {
-        result[uri] = (modifiedAt: modifiedAt, fileSize: fileSize);
+      if (filePath != null && modifiedAt != null && fileSize != null) {
+        result[filePath] = (modifiedAt: modifiedAt, fileSize: fileSize);
       }
     }
     return result;
@@ -911,7 +943,7 @@ class AppDatabase {
     final rows = await database.rawQuery(
       '''
       SELECT 
-        t.id, t.uri, t.title, t.album_id, t.artist_id, t.album_artist,
+        t.id, t.file_path, t.title, t.album_id, t.artist_id, t.album_artist,
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
         t.lyrics, t.has_cover,
@@ -950,18 +982,18 @@ class AppDatabase {
     });
   }
 
-  Future<void> addTrackToPlaylist(int playlistId, int trackId) async {
+  Future<void> addTrackToPlaylist(int playlistId, int trackId, [String? filePath]) async {
     await database.transaction((txn) async {
       final trackRow = await txn.query(
         'tracks',
-        columns: ['uri', 'title'],
+        columns: ['file_path', 'title'],
         where: 'id = ?',
         whereArgs: [trackId],
         limit: 1,
       );
       if (trackRow.isEmpty) return;
 
-      final uri = trackRow.first['uri'] as String;
+      final resolvedFilePath = filePath ?? (trackRow.first['file_path'] as String);
       final title = trackRow.first['title'] as String;
 
       final posRes = await txn.rawQuery(
@@ -973,7 +1005,7 @@ class AppDatabase {
       await txn.insert('playlist_entries', {
         'playlist_id': playlistId,
         'track_id': trackId,
-        'uri': uri,
+        'file_path': resolvedFilePath,
         'custom_title': title,
         'position': nextPos,
         'added_at': DateTime.now().millisecondsSinceEpoch,
@@ -1054,7 +1086,7 @@ class AppDatabase {
     final rows = await database.rawQuery(
       '''
       SELECT 
-        t.id, t.uri, t.title, t.album_id, t.artist_id, t.album_artist,
+        t.id, t.file_path, t.title, t.album_id, t.artist_id, t.album_artist,
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
         NULL AS lyrics, t.has_cover,
@@ -1261,12 +1293,12 @@ class AppDatabase {
     return res.isNotEmpty;
   }
 
-  Future<void> toggleLikeTrack(int trackId, String uri) async {
+  Future<void> toggleLikeTrack(int trackId, [String? filePath]) async {
     final liked = await isTrackLiked(trackId);
     if (liked) {
       await removeTrackFromPlaylist(AppDatabase.likedSongsPlaylistId, trackId);
     } else {
-      await addTrackToPlaylist(AppDatabase.likedSongsPlaylistId, trackId);
+      await addTrackToPlaylist(AppDatabase.likedSongsPlaylistId, trackId, filePath);
     }
   }
 

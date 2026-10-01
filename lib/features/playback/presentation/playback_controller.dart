@@ -24,18 +24,20 @@ class PlaybackController extends ChangeNotifier {
 
   // Persistence throttling state
   DateTime? _lastPersistenceTime;
-  String? _lastPersistedUri;
+  String? _lastPersistedFilePath;
   int? _lastPersistedPositionMs;
   static const Duration _persistenceThrottle = Duration(seconds: 5);
 
   @visibleForTesting
-  String? get lastPersistedUri => _lastPersistedUri;
+  String? get lastPersistedFilePath => _lastPersistedFilePath;
+  @Deprecated('Use lastPersistedFilePath instead')
+  String? get lastPersistedUri => _lastPersistedFilePath;
   @visibleForTesting
   int? get lastPersistedPositionMs => _lastPersistedPositionMs;
 
   // History and persistence tracking
   bool _isDisposed = false;
-  String? _currentlyLoggedHistoryUri;
+  String? _currentlyLoggedHistoryFilePath;
   bool _historyLoggedForCurrentTrack = false;
 
   PlaybackController({
@@ -105,7 +107,7 @@ class PlaybackController extends ChangeNotifier {
         : [track];
 
     final queueItems = trackList.map((t) => QueueItem.fromTrack(t)).toList();
-    var startIndex = queueItems.indexWhere((q) => q.uri == track.uri);
+    var startIndex = queueItems.indexWhere((q) => q.filePath == track.filePath);
     if (startIndex == -1) startIndex = 0;
 
     await _audioEngine.open(
@@ -225,9 +227,9 @@ class PlaybackController extends ChangeNotifier {
   // History Logging & State Persistence Helpers
   // ---------------------------------------------------------------------------
   void _checkHistoryLogging(PlaybackState newState) {
-    final currentUri = newState.currentTrack?.uri;
-    if (currentUri != _currentlyLoggedHistoryUri) {
-      _currentlyLoggedHistoryUri = currentUri;
+    final currentFilePath = newState.currentTrack?.filePath;
+    if (currentFilePath != _currentlyLoggedHistoryFilePath) {
+      _currentlyLoggedHistoryFilePath = currentFilePath;
       _historyLoggedForCurrentTrack = false;
     }
 
@@ -268,7 +270,7 @@ class PlaybackController extends ChangeNotifier {
         prev.audioChannels != next.audioChannels ||
         prev.mixOffset != next.mixOffset ||
         prev.hasPrevious != next.hasPrevious ||
-        prev.currentTrack?.uri != next.currentTrack?.uri ||
+        prev.currentTrack?.filePath != next.currentTrack?.filePath ||
         !listEquals(prev.playables, next.playables);
   }
 
@@ -279,7 +281,7 @@ class PlaybackController extends ChangeNotifier {
     final current = newState.currentTrack;
     if (current == null) return;
 
-    final isTrackTransition = oldState.currentTrack?.uri != current.uri;
+    final isTrackTransition = oldState.currentTrack?.filePath != current.filePath;
     final isPauseTransition = oldState.playing && !newState.playing;
     final isSeekTransition =
         (newState.position - oldState.position).abs() >
@@ -293,7 +295,7 @@ class PlaybackController extends ChangeNotifier {
         isStopOrCompleted;
 
     if (shouldForceWrite) {
-      _flushStatePersistence(current.uri, newState.position.inMilliseconds);
+      _flushStatePersistence(current.filePath, newState.position.inMilliseconds);
       return;
     }
 
@@ -302,7 +304,7 @@ class PlaybackController extends ChangeNotifier {
       final now = DateTime.now();
       if (_lastPersistenceTime == null ||
           now.difference(_lastPersistenceTime!) >= _persistenceThrottle) {
-        _flushStatePersistence(current.uri, newState.position.inMilliseconds);
+        _flushStatePersistence(current.filePath, newState.position.inMilliseconds);
       }
     }
   }
@@ -311,19 +313,19 @@ class PlaybackController extends ChangeNotifier {
     final current = _state.currentTrack;
     if (current != null) {
       await _flushStatePersistence(
-        current.uri,
+        current.filePath,
         _positionNotifier.value.inMilliseconds,
       );
     }
   }
 
-  Future<void> _flushStatePersistence(String uri, int positionMs) async {
+  Future<void> _flushStatePersistence(String filePath, int positionMs) async {
     _lastPersistenceTime = DateTime.now();
-    _lastPersistedUri = uri;
+    _lastPersistedFilePath = filePath;
     _lastPersistedPositionMs = positionMs;
 
     await _settingsRepository.setLastPlayed(
-      uri: uri,
+      filePath: filePath,
       positionMs: positionMs,
     );
   }
@@ -341,7 +343,7 @@ class PlaybackController extends ChangeNotifier {
     _engineSubscription.cancel();
     if (_state.currentTrack != null) {
       _settingsRepository.setLastPlayed(
-        uri: _state.currentTrack!.uri,
+        filePath: _state.currentTrack!.filePath,
         positionMs: _positionNotifier.value.inMilliseconds,
       );
     }

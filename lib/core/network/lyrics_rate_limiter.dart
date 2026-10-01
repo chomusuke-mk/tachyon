@@ -266,11 +266,13 @@ class LyricsCooldownManager {
 
   // Deferred retry state
   Timer? _deferredRetryTimer;
-  String? _deferredTrackUri;
+  String? _deferredTrackFilePath;
   int? _deferredGenerationToken;
   Future<void> Function()? _deferredCallback;
 
-  String? get deferredTrackUri => _deferredTrackUri;
+  String? get deferredTrackFilePath => _deferredTrackFilePath;
+  @Deprecated('Use deferredTrackFilePath instead')
+  String? get deferredTrackUri => _deferredTrackFilePath;
   int? get deferredGenerationToken => _deferredGenerationToken;
 
   final StreamController<int?> _thresholdStreamController =
@@ -368,10 +370,12 @@ class LyricsCooldownManager {
 
   /// Schedules a deferred upgrade retry when cooldown expires.
   void scheduleDeferredRetry({
-    required String trackUri,
+    String? trackFilePath,
+    @Deprecated('Use trackFilePath instead') String? trackUri,
     required int token,
     required Future<void> Function() onRetry,
   }) {
+    final effectivePath = trackFilePath ?? trackUri ?? '';
     cancelDeferredRetry();
     if (_cooldownExpiry == null) return;
 
@@ -381,7 +385,7 @@ class LyricsCooldownManager {
       return;
     }
 
-    _deferredTrackUri = trackUri;
+    _deferredTrackFilePath = effectivePath;
     _deferredGenerationToken = token;
     _deferredCallback = onRetry;
 
@@ -402,7 +406,7 @@ class LyricsCooldownManager {
   void cancelDeferredRetry() {
     _deferredRetryTimer?.cancel();
     _deferredRetryTimer = null;
-    _deferredTrackUri = null;
+    _deferredTrackFilePath = null;
     _deferredGenerationToken = null;
     _deferredCallback = null;
   }
@@ -410,30 +414,32 @@ class LyricsCooldownManager {
   /// Updates active track for deferred retry if user skips songs during active cooldown.
   /// Defensively ensures that a running timer is scheduled if not already active.
   void updateDeferredTrack({
-    required String trackUri,
+    String? trackFilePath,
+    @Deprecated('Use trackFilePath instead') String? trackUri,
     required int token,
     required Future<void> Function() onRetry,
   }) {
     if (!isCooldownActive) return;
-    _deferredTrackUri = trackUri;
+    final effectivePath = trackFilePath ?? trackUri ?? '';
+    _deferredTrackFilePath = effectivePath;
     _deferredGenerationToken = token;
     _deferredCallback = onRetry;
 
-    // Defensive guarantee: ensure timer is running if not previously started
-    if (_deferredRetryTimer == null && _cooldownExpiry != null) {
+    // If timer is not running or completed, schedule a new timer for the remaining duration
+    if (_deferredRetryTimer == null || !_deferredRetryTimer!.isActive) {
       final remainingMs = _cooldownExpiry!.difference(now).inMilliseconds;
       if (remainingMs <= 0) {
-        cancelDeferredRetry();
         onRetry();
-        return;
+      } else {
+        _deferredRetryTimer =
+            Timer(Duration(milliseconds: remainingMs), () async {
+              if (_deferredCallback != null) {
+                final cb = _deferredCallback!;
+                cancelDeferredRetry();
+                await cb();
+              }
+            });
       }
-      _deferredRetryTimer = Timer(Duration(milliseconds: remainingMs), () async {
-        if (_deferredCallback != null) {
-          final cb = _deferredCallback!;
-          cancelDeferredRetry();
-          await cb();
-        }
-      });
     }
   }
 

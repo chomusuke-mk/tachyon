@@ -286,7 +286,7 @@ class LibraryController extends ChangeNotifier {
     try {
       final entities = dir.listSync(followLinks: false);
       final subDirs = <String>[];
-      final currentDirUris = <String>{};
+      final currentDirPaths = <String>{};
 
       for (final entity in entities) {
         if (entity is Directory) {
@@ -302,7 +302,7 @@ class LibraryController extends ChangeNotifier {
           if (supportedFileExtensions
               .map((e) => e.toLowerCase().replaceAll('.', ''))
               .contains(ext)) {
-            currentDirUris.add(entity.path);
+            currentDirPaths.add(entity.path);
           }
         }
       }
@@ -315,7 +315,7 @@ class LibraryController extends ChangeNotifier {
 
       // Cross-reference with indexed tracks
       _currentFolderTracks = _tracks
-          .where((t) => currentDirUris.contains(t.uri))
+          .where((t) => currentDirPaths.contains(t.filePath))
           .toList();
     } catch (e) {
       debugPrint('Error navigating folder $folderPath: $e');
@@ -401,7 +401,7 @@ class LibraryController extends ChangeNotifier {
       final prefix = folderPath.endsWith('/') ? folderPath : '$folderPath/';
       await _database.database.delete(
         'tracks',
-        where: "uri LIKE ?",
+        where: "file_path LIKE ?",
         whereArgs: ['${prefix.replaceAll('%', r'\%').replaceAll('_', r'\_')}%'],
       );
       await loadLibrary();

@@ -1,77 +1,58 @@
 import 'dart:async';
 
-import 'package:media_kit/media_kit.dart';
-import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:miniaudio_player/miniaudio_player.dart';
 
 // ============================================================================
 // AUDIO PLAYER ADAPTER
 // ============================================================================
 
-/// Production implementation of [AudioPlayerAdapter] backed by `media_kit.Player`.
-///
-/// Handles:
-/// - Native `libmpv` initialization via `MediaKit.ensureInitialized()`.
-/// - Platform audio output configuration (`ao` driver selection):
-///   * Android: `audiotrack,opensles`
-///   * iOS: `audiounit`
-///   * macOS: `coreaudio`
-///   * Windows / Linux: platform default (WASAPI / PipeWire / PulseAudio / ALSA)
-/// - Continuous stream continuity (`audio-stream-silence=yes`) on all platforms
-///   except iOS (where it is incompatible with `audiounit`).
-/// - Automatic subtitle scanning suppression (`sub-auto=no`).
-/// - Pitch preservation enabled by default via `PlayerConfiguration(pitch: true)`
-///   which activates mpv's `scaletempo2` time-stretching filter.
+/// Production implementation of [AudioPlayerAdapter] backed by `miniaudio_player.MiniaudioPlayer`.
 class AudioPlayerAdapter {
-  final Player _player;
+  final MiniaudioPlayer _player;
   bool _isDisposed = false;
 
-  AudioPlayerAdapter()
-    : _player = Player(
-        configuration: PlayerConfiguration(
-          pitch: true,
-          osc: false,
-          async: AppDefaults.audioPlayerAsyncEnabled,
-          bufferSize: AppDefaults.audioPlayerAsyncEnabled
-              ? 0
-              : 10 * 1024 * 1024, // 10 MB buffer for synchronous mode
-          libass: false,
-          muted: false,
-          title: 'tachyon',
-        ),
-      ) {
-    if (_player.platform is NativePlayer) {
-      final nativePlayer = _player.platform as NativePlayer;
-      nativePlayer.setProperty('audio-stream-silence', 'yes');
-      nativePlayer.setProperty('sub-auto', 'no');
-      nativePlayer.setProperty('vid', 'no');
+  AudioPlayerAdapter({int? bufferSize})
+    : _player = MiniaudioPlayer(bufferSize: bufferSize);
+
+  /// Ensures native miniaudio_player platform bindings are initialized once.
+  static Future<void> ensureInitialized({
+    MiniaudioLogLevel logLevel = MiniaudioLogLevel.info,
+  }) async {
+    MiniaudioPlayer.config(logLevel: logLevel);
+  }
+
+  /// Prepares and opens an audio file by its filesystem [filePath].
+  Future<void> open(String filePath, {bool play = true}) async {
+    final path = _normalizePath(filePath);
+    await _player.action.open(path, autoPlay: play);
+  }
+
+  static String _normalizePath(String filePath) {
+    if (filePath.startsWith('file://')) {
+      return Uri.parse(filePath).toFilePath();
     }
+    return filePath;
   }
 
-  /// Ensures native media_kit platform bindings are initialized once.
-  static Future<void> ensureInitialized() async {
-    MediaKit.ensureInitialized();
-  }
+  Future<void> play() => _player.action.play();
 
-  Future<void> open(String uri, {bool play = true}) async {
-    await _player.open(Media(uri), play: play);
-  }
+  Future<void> pause() => _player.action.pause();
 
-  Future<void> play() => _player.play();
+  Future<void> stop() => _player.action.stop();
 
-  Future<void> pause() => _player.pause();
+  Future<void> seek(Duration position) => _player.action.seek(position);
 
-  Future<void> stop() => _player.stop();
+  Future<void> setVolume(double volume) =>
+      _player.action.setVolume(volume / 100.0);
 
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> setRate(double rate) => _player.action.setRate(rate);
 
-  Future<void> setVolume(double volume) => _player.setVolume(volume / 100.0);
+  Future<void> setPitch(double pitch) => _player.action.setPitch(pitch);
 
-  Future<void> setRate(double rate) => _player.setRate(rate);
-
-  Future<void> setPitch(double pitch) => _player.setPitch(pitch);
+  Future<void> setEqualizer(Equalizer equalizer) =>
+      _player.action.setEqualizer(equalizer);
 
   Future<void> setSkipSilence(bool enabled) => Future.value();
-  //_player.setSkipSilenceEnabled(enabled);
 
   Future<void> dispose() async {
     _isDisposed = true;
@@ -95,8 +76,9 @@ class AudioPlayerAdapter {
 
   Stream<double> get pitchStream => _player.stream.pitch;
 
-  Stream<bool> get skipSilenceStream =>
-      Stream.value(false); //_player.stream.skipSilenceEnabled;
+  Stream<Equalizer> get equalizerStream => _player.stream.equalizer;
+
+  Stream<bool> get skipSilenceStream => Stream.value(false);
 
   Duration get position => _player.state.position;
 
@@ -114,7 +96,9 @@ class AudioPlayerAdapter {
 
   double get pitch => _player.state.pitch;
 
-  bool get skipSilence => false; //_player.state.skipSilenceEnabled;
+  Equalizer get equalizer => _player.state.equalizer;
+
+  bool get skipSilence => false;
 
   bool get isDisposed => _isDisposed;
 }

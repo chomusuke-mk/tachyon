@@ -28,7 +28,7 @@ enum Loop {
 class QueueItem {
   final String id;
   final int? trackId;
-  final String uri;
+  final String filePath;
   final String title;
   final String artist;
   final List<String> artists;
@@ -40,7 +40,8 @@ class QueueItem {
   const QueueItem({
     required this.id,
     this.trackId,
-    required this.uri,
+    String? filePath,
+    @Deprecated('Use filePath instead') String? uri,
     required this.title,
     required this.artist,
     this.artists = const [],
@@ -48,13 +49,16 @@ class QueueItem {
     required this.duration,
     this.coverPath,
     this.extras = const {},
-  });
+  }) : filePath = filePath ?? uri ?? '';
+
+  @Deprecated('Use filePath instead')
+  String get uri => filePath;
 
   factory QueueItem.fromTrack(Track track, {String? id}) {
     return QueueItem(
-      id: id ?? '${track.uri}_${DateTime.now().microsecondsSinceEpoch}',
+      id: id ?? '${track.filePath}_${DateTime.now().microsecondsSinceEpoch}',
       trackId: track.id,
-      uri: track.uri,
+      filePath: track.filePath,
       title: track.title,
       artist: track.artist ?? 'Unknown Artist',
       artists: track.artists,
@@ -76,7 +80,7 @@ class QueueItem {
   Track toTrack() {
     return Track(
       id: trackId,
-      uri: uri,
+      filePath: filePath,
       title: title,
       artist: artist,
       artists: artists,
@@ -91,7 +95,8 @@ class QueueItem {
   QueueItem copyWith({
     String? id,
     int? trackId,
-    String? uri,
+    String? filePath,
+    @Deprecated('Use filePath instead') String? uri,
     String? title,
     String? artist,
     List<String>? artists,
@@ -103,7 +108,7 @@ class QueueItem {
     return QueueItem(
       id: id ?? this.id,
       trackId: trackId ?? this.trackId,
-      uri: uri ?? this.uri,
+      filePath: filePath ?? uri ?? this.filePath,
       title: title ?? this.title,
       artist: artist ?? this.artist,
       artists: artists ?? this.artists,
@@ -118,7 +123,8 @@ class QueueItem {
     return {
       'id': id,
       'trackId': trackId,
-      'uri': uri,
+      'filePath': filePath,
+      'file_path': filePath,
       'title': title,
       'artist': artist,
       'artists': artists,
@@ -133,7 +139,7 @@ class QueueItem {
     return QueueItem(
       id: json['id'] as String? ?? '',
       trackId: json['trackId'] as int?,
-      uri: json['uri'] as String? ?? '',
+      filePath: (json['filePath'] ?? json['file_path'] ?? json['uri']) as String? ?? '',
       title: json['title'] as String? ?? '',
       artist: json['artist'] as String? ?? '',
       artists:
@@ -158,7 +164,7 @@ class QueueItem {
           runtimeType == other.runtimeType &&
           id == other.id &&
           trackId == other.trackId &&
-          uri == other.uri &&
+          filePath == other.filePath &&
           title == other.title &&
           artist == other.artist &&
           listEquals(artists, other.artists) &&
@@ -171,7 +177,7 @@ class QueueItem {
   int get hashCode => Object.hash(
     id,
     trackId,
-    uri,
+    filePath,
     title,
     artist,
     Object.hashAll(artists),

@@ -67,14 +67,14 @@ class MiniPlayerBar extends StatelessWidget {
                       children: [
                         // Thumbnail
                         Hero(
-                          tag: 'now_playing_art_${currentTrack.uri}',
+                          tag: 'now_playing_art_${currentTrack.filePath}',
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8.0),
                             child: SizedBox(
                               width: isDesktop ? 48 : 42,
                               height: isDesktop ? 48 : 42,
                               child: AlbumArtImage(
-                                uri: currentTrack.uri,
+                                filePath: currentTrack.filePath,
                                 fit: BoxFit.cover,
                               ),
                             ),

@@ -200,7 +200,7 @@ class PlaylistsController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _database.toggleLikeTrack(trackId, track.uri);
+      await _database.toggleLikeTrack(trackId, track.filePath);
       // Refresh Liked Songs playlist track count in background
       _playlists = await _database.getAllPlaylists();
       if (_selectedPlaylist?.id == AppDatabase.likedSongsPlaylistId) {

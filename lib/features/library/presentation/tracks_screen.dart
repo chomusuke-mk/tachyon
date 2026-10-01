@@ -54,7 +54,7 @@ class _TracksScreenState extends State<TracksScreen> {
           content: SingleChildScrollView(
             child: ListBody(
               children: [
-                _infoRow('File Path', track.uri),
+                _infoRow('File Path', track.filePath),
                 if (track.artist != null) _infoRow('Artist', track.artist!),
                 if (track.album != null) _infoRow('Album', track.album!),
                 if (track.codec != null)
@@ -182,8 +182,8 @@ class _TracksScreenState extends State<TracksScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrackUri = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.uri,
+    final currentTrackFilePath = context.select<PlaybackController, String?>(
+      (c) => c.currentTrack?.filePath,
     );
     final playback = context.read<PlaybackController>();
     final playlists = context.watch<PlaylistsController>();
@@ -349,14 +349,14 @@ class _TracksScreenState extends State<TracksScreen> {
               itemCount: tracks.length,
               itemBuilder: (context, index) {
                 final track = tracks[index];
-                final isPlaying = currentTrackUri == track.uri;
+                final isPlaying = currentTrackFilePath == track.filePath;
                 final isLiked =
                     track.id != null && playlists.isTrackLiked(track.id!);
                 final isSelected =
                     track.id != null && _selectedTrackIds.contains(track.id!);
 
                 return TrackTile(
-                  key: ValueKey(track.uri),
+                  key: ValueKey(track.filePath),
                   track: track,
                   isPlaying: isPlaying,
                   isSelected: isSelected,

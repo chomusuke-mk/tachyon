@@ -82,8 +82,8 @@ class LyricsService {
   /// [Visibility Gate: if !allowRemote, returns null without web queries]
   /// 3. Primary web API (lrclib.net) with 500ms pacing and 429 threshold handling
   /// 4. Secondary fallback web API (lyrics.ovh)
-  Future<LyricsResult?> resolveLyricsByUri({
-    required String uri,
+  Future<LyricsResult?> resolveLyricsByFilePath({
+    required String filePath,
     String? title,
     String? artist,
     String? album,
@@ -103,7 +103,7 @@ class LyricsService {
     if (cancelled()) return null;
 
     final keyHash = computeLyricsKey(
-      uri: uri,
+      filePath: filePath,
       title: title,
       artist: artist,
       durationMs: durationMs,
@@ -134,7 +134,7 @@ class LyricsService {
       String? rawLyrics = embeddedLyrics;
       if (rawLyrics == null || rawLyrics.trim().isEmpty) {
         try {
-          rawLyrics = await database.getTrackLyricsByUri(uri);
+          rawLyrics = await database.getTrackLyricsByFilePath(filePath);
         } catch (_) {}
       }
 
@@ -166,7 +166,7 @@ class LyricsService {
     // Tier 2: Contiguous local .lrc file in track folder
     // -------------------------------------------------------------------------
     if (activeSources.contains(LyricsSource.file)) {
-      final externalLrc = await _checkExternalLrcFile(uri);
+      final externalLrc = await _checkExternalLrcFile(filePath);
       if (externalLrc != null && externalLrc.trim().isNotEmpty) {
         final parsed = LrcParser.parse(externalLrc);
         if (parsed.isNotEmpty) {
@@ -412,8 +412,8 @@ class LyricsService {
     bool Function()? isCancelled,
     void Function(int seconds)? onThresholdCountdown,
   }) {
-    return resolveLyricsByUri(
-      uri: track.uri,
+    return resolveLyricsByFilePath(
+      filePath: track.filePath,
       title: track.title,
       artist: track.artist,
       album: track.album,
@@ -451,8 +451,8 @@ class LyricsService {
       };
     }
 
-    return resolveLyricsByUri(
-      uri: item.uri,
+    return resolveLyricsByFilePath(
+      filePath: item.filePath,
       title: item.title,
       artist: item.artist,
       album: item.album,
@@ -596,8 +596,39 @@ class LyricsService {
     return res?.lyrics;
   }
 
-  Future<ParsedLrc?> getLyricsByUri({
+  @Deprecated('Use resolveLyricsByFilePath instead')
+  Future<LyricsResult?> resolveLyricsByUri({
     required String uri,
+    String? title,
+    String? artist,
+    String? album,
+    int? durationMs,
+    String? embeddedLyrics,
+    bool allowRemote = true,
+    bool forceRefresh = false,
+    Set<LyricsSource>? enabledSources,
+    LyricsCancellationToken? cancellationToken,
+    bool Function()? isCancelled,
+    void Function(int seconds)? onThresholdCountdown,
+  }) {
+    return resolveLyricsByFilePath(
+      filePath: uri,
+      title: title,
+      artist: artist,
+      album: album,
+      durationMs: durationMs,
+      embeddedLyrics: embeddedLyrics,
+      allowRemote: allowRemote,
+      forceRefresh: forceRefresh,
+      enabledSources: enabledSources,
+      cancellationToken: cancellationToken,
+      isCancelled: isCancelled,
+      onThresholdCountdown: onThresholdCountdown,
+    );
+  }
+
+  Future<ParsedLrc?> getLyricsByFilePath({
+    required String filePath,
     String? title,
     String? artist,
     int? durationMs,
@@ -606,8 +637,8 @@ class LyricsService {
     bool allowRemote = true,
     Set<LyricsSource>? enabledSources,
   }) async {
-    final res = await resolveLyricsByUri(
-      uri: uri,
+    final res = await resolveLyricsByFilePath(
+      filePath: filePath,
       title: title,
       artist: artist,
       durationMs: durationMs,
@@ -619,19 +650,41 @@ class LyricsService {
     return res?.lyrics;
   }
 
-  /// Inspects directory of [uri] for `<track_name>.lrc` or `<track_name>.LRC`
-  Future<String?> _checkExternalLrcFile(String uri) async {
+  @Deprecated('Use getLyricsByFilePath instead')
+  Future<ParsedLrc?> getLyricsByUri({
+    required String uri,
+    String? title,
+    String? artist,
+    int? durationMs,
+    String? embeddedLyrics,
+    bool forceRefresh = false,
+    bool allowRemote = true,
+    Set<LyricsSource>? enabledSources,
+  }) =>
+      getLyricsByFilePath(
+        filePath: uri,
+        title: title,
+        artist: artist,
+        durationMs: durationMs,
+        embeddedLyrics: embeddedLyrics,
+        forceRefresh: forceRefresh,
+        allowRemote: allowRemote,
+        enabledSources: enabledSources,
+      );
+
+  /// Inspects directory of [filePath] for `<track_name>.lrc` or `<track_name>.LRC`
+  Future<String?> _checkExternalLrcFile(String filePath) async {
     try {
-      String filePath = uri;
-      if (filePath.startsWith('file://')) {
-        filePath = Uri.parse(filePath).toFilePath();
+      String cleanPath = filePath;
+      if (cleanPath.startsWith('file://')) {
+        cleanPath = Uri.parse(cleanPath).toFilePath();
       }
 
-      final file = File(filePath);
+      final file = File(cleanPath);
       if (!await file.exists()) return null;
 
-      final dir = p.dirname(filePath);
-      final baseName = p.basenameWithoutExtension(filePath);
+      final dir = p.dirname(cleanPath);
+      final baseName = p.basenameWithoutExtension(cleanPath);
 
       final candidates = [
         File(p.join(dir, '$baseName.lrc')),
@@ -680,11 +733,13 @@ class LyricsService {
 
   /// Computes a canonical SHA-256 hash for lyrics identification.
   static String computeLyricsKey({
-    required String uri,
+    String? filePath,
+    String? uri,
     String? title,
     String? artist,
     int? durationMs,
   }) {
+    final effectivePath = filePath ?? uri ?? '';
     if (title != null &&
         title.trim().isNotEmpty &&
         artist != null &&
@@ -693,6 +748,6 @@ class LyricsService {
           '${title.trim().toLowerCase()}|${artist.trim().toLowerCase()}|${durationMs ?? 0}';
       return sha256.convert(utf8.encode(canonical)).toString();
     }
-    return sha256.convert(utf8.encode(uri)).toString();
+    return sha256.convert(utf8.encode(effectivePath)).toString();
   }
 }

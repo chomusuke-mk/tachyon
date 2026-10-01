@@ -261,7 +261,7 @@ void main() {
     // Insert track row into SQLite for foreign key and like resolution
     await db.database.insert('tracks', {
       'id': 101,
-      'uri': '/storage/music/synthwave.mp3',
+      'file_path': '/storage/music/synthwave.mp3',
       'title': 'Neon Odyssey',
       'duration_ms': 240000,
       'file_size': 5000000,

@@ -131,7 +131,7 @@ The city is my church
         // Seed track in database with lyrics
         await db.database.insert('tracks', {
           'id': 10,
-          'uri': 'file:///music/track10.mp3',
+          'file_path': '/music/track10.mp3',
           'title': 'Track 10',
           'duration_ms': 200000,
           'bitrate': 320,

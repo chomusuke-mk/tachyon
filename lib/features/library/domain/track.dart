@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 @immutable
 class Track {
   final int? id;
-  final String uri;
+  final String filePath;
   final String title;
   final int? albumId;
   final String? album;
@@ -26,7 +26,8 @@ class Track {
 
   const Track({
     this.id,
-    required this.uri,
+    String? filePath,
+    @Deprecated('Use filePath instead') String? uri,
     required this.title,
     this.albumId,
     this.album,
@@ -46,7 +47,7 @@ class Track {
     required this.modifiedAt,
     this.lyrics,
     this.genres = const [],
-  });
+  }) : filePath = filePath ?? uri ?? '';
 
   Duration get duration => Duration(milliseconds: durationMs);
   DateTime get modifiedDateTime =>
@@ -56,9 +57,13 @@ class Track {
   String? get artistName => artist;
   String? get albumName => album;
 
+  @Deprecated('Use filePath instead')
+  String get uri => filePath;
+
   Track copyWith({
     int? id,
-    String? uri,
+    String? filePath,
+    @Deprecated('Use filePath instead') String? uri,
     String? title,
     int? albumId,
     String? album,
@@ -81,7 +86,7 @@ class Track {
   }) {
     return Track(
       id: id ?? this.id,
-      uri: uri ?? this.uri,
+      filePath: filePath ?? uri ?? this.filePath,
       title: title ?? this.title,
       albumId: albumId ?? this.albumId,
       album: album ?? this.album,
@@ -107,7 +112,7 @@ class Track {
   Map<String, dynamic> toDbMap() {
     return {
       if (id != null) 'id': id,
-      'uri': uri,
+      'file_path': filePath,
       'title': title,
       'album_id': albumId,
       'artist_id': artistId,
@@ -135,7 +140,7 @@ class Track {
   }) {
     return Track(
       id: map['id'] as int?,
-      uri: map['uri'] as String? ?? '',
+      filePath: (map['file_path'] ?? map['uri']) as String? ?? '',
       title: map['title'] as String? ?? '',
       albumId: map['album_id'] as int?,
       album:
@@ -171,7 +176,8 @@ class Track {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'uri': uri,
+      'filePath': filePath,
+      'file_path': filePath,
       'title': title,
       'albumId': albumId,
       'album': album,
@@ -197,7 +203,7 @@ class Track {
   factory Track.fromJson(Map<String, dynamic> json) {
     // Robustly handle both camelCase (API/JSON) and snake_case (raw DB query result)
     final id = json['id'] as int?;
-    final uri = (json['uri'] as String?) ?? '';
+    final filePath = (json['filePath'] ?? json['file_path'] ?? json['uri']) as String? ?? '';
     final title = (json['title'] as String?) ?? '';
     final albumId = (json['albumId'] ?? json['album_id']) as int?;
     final album = (json['album'] ?? json['album_name']) as String?;
@@ -234,7 +240,7 @@ class Track {
 
     return Track(
       id: id,
-      uri: uri,
+      filePath: filePath,
       title: title,
       albumId: albumId,
       album: album,
@@ -263,7 +269,7 @@ class Track {
       other is Track &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          uri == other.uri &&
+          filePath == other.filePath &&
           title == other.title &&
           albumId == other.albumId &&
           album == other.album &&
@@ -287,7 +293,7 @@ class Track {
   @override
   int get hashCode => Object.hashAll([
     id,
-    uri,
+    filePath,
     title,
     albumId,
     album,

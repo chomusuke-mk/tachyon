@@ -155,7 +155,7 @@ class QueueView extends StatelessWidget {
                     final isCurrent = index == currentIndex;
 
                     return Dismissible(
-                      key: ValueKey('${item.uri}_$index'),
+                      key: ValueKey('${item.filePath}_$index'),
                       direction: DismissDirection.endToStart,
                       background: Container(
                         alignment: Alignment.centerRight,
@@ -183,7 +183,7 @@ class QueueView extends StatelessWidget {
                                   width: 42,
                                   height: 42,
                                   child: AlbumArtImage(
-                                    uri: item.uri,
+                                    filePath: item.filePath,
                                     fit: BoxFit.cover,
                                   ),
                                 ),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:tachyon/core/services/audio_engine_service.dart';
 import 'package:tachyon/core/services/audio_player_adapter.dart';
 import 'package:tachyon/core/services/queue_manager.dart';
@@ -20,6 +21,7 @@ class FakeAudioPlayerAdapter implements AudioPlayerAdapter {
   final _rateController = StreamController<double>.broadcast();
   final _pitchController = StreamController<double>.broadcast();
   final _skipSilenceController = StreamController<bool>.broadcast();
+  final _equalizerController = StreamController<Equalizer>.broadcast();
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -29,10 +31,13 @@ class FakeAudioPlayerAdapter implements AudioPlayerAdapter {
   double _volume = 1.0;
   double _rate = 1.0;
   double _pitch = 1.0;
+  Equalizer _equalizer = Equalizer.flat;
   bool _skipSilence = false;
   bool _isDisposed = false;
 
-  String? lastOpenedUri;
+  String? lastOpenedFilePath;
+  String? get lastOpenedUri => lastOpenedFilePath;
+  set lastOpenedUri(String? val) => lastOpenedFilePath = val;
   int openCount = 0;
   int playCount = 0;
   int pauseCount = 0;
@@ -98,12 +103,24 @@ class FakeAudioPlayerAdapter implements AudioPlayerAdapter {
   Stream<bool> get skipSilenceStream => _skipSilenceController.stream;
 
   @override
+  Equalizer get equalizer => _equalizer;
+
+  @override
+  Stream<Equalizer> get equalizerStream => _equalizerController.stream;
+
+  @override
+  Future<void> setEqualizer(Equalizer equalizer) async {
+    _equalizer = equalizer;
+    _equalizerController.add(equalizer);
+  }
+
+  @override
   Future<void> open(
-    String uri, {
+    String filePath, {
     bool play = true,
-    Duration? startPosition,
   }) async {
-    lastOpenedUri = uri;
+    lastOpenedFilePath = filePath;
+    lastOpenedUri = filePath;
     openCount++;
     _isPlaying = play;
     _playingController.add(play);

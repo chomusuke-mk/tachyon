@@ -120,7 +120,7 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                           t.artist == artist.name,
                     )
                     .firstOrNull;
-                final coverUri = artistTrack?.uri ?? '';
+                final coverFilePath = artistTrack?.filePath ?? '';
 
                 return InkWell(
                   borderRadius: BorderRadius.circular(12.0),
@@ -139,13 +139,13 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                         backgroundColor: Theme.of(context)
                             .colorScheme
                             .surfaceContainerHighest,
-                        child: coverUri.isNotEmpty
+                        child: coverFilePath.isNotEmpty
                             ? ClipOval(
                                 child: SizedBox(
                                   width: 108,
                                   height: 108,
                                   child: AlbumArtImage(
-                                    uri: coverUri,
+                                    filePath: coverFilePath,
                                     fit: BoxFit.cover,
                                   ),
                                 ),

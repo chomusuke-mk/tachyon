@@ -29,8 +29,8 @@ class AlbumDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrackUri = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.uri,
+    final currentTrackFilePath = context.select<PlaybackController, String?>(
+      (c) => c.currentTrack?.filePath,
     );
     final playback = context.read<PlaybackController>();
 
@@ -48,7 +48,8 @@ class AlbumDetailScreen extends StatelessWidget {
             return (a.trackNumber ?? 0).compareTo(b.trackNumber ?? 0);
           });
 
-    final firstUri = albumTracks.isNotEmpty ? albumTracks.first.uri : '';
+    final firstFilePath =
+        albumTracks.isNotEmpty ? albumTracks.first.filePath : '';
 
     return Scaffold(
       appBar: AppBar(title: Text(album.name)),
@@ -64,7 +65,10 @@ class AlbumDetailScreen extends StatelessWidget {
                     child: SizedBox(
                       width: 200,
                       height: 200,
-                      child: AlbumArtImage(uri: firstUri, fit: BoxFit.cover),
+                      child: AlbumArtImage(
+                        filePath: firstFilePath,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -116,10 +120,10 @@ class AlbumDetailScreen extends StatelessWidget {
           SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final track = albumTracks[index];
-              final isPlaying = currentTrackUri == track.uri;
+              final isPlaying = currentTrackFilePath == track.filePath;
 
               return TrackTile(
-                key: ValueKey(track.uri),
+                key: ValueKey(track.filePath),
                 track: track,
                 isPlaying: isPlaying,
                 onTap: () =>

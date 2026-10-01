@@ -29,8 +29,11 @@ class AppSettings {
   final String appLanguage; // 'defaultOption', 'en', 'es'
 
   // Restorable Playback State
-  final String? lastPlayedUri;
+  final String? lastPlayedFilePath;
   final int lastPlayedPositionMs;
+
+  @Deprecated('Use lastPlayedFilePath instead')
+  String? get lastPlayedUri => lastPlayedFilePath;
 
   // Equalizer
   final bool equalizerEnabled;
@@ -51,7 +54,8 @@ class AppSettings {
     this.exclusiveAudio = false,
     this.themeMode = ThemeMode.dark,
     this.appLanguage = 'defaultOption',
-    this.lastPlayedUri,
+    String? lastPlayedFilePath,
+    @Deprecated('Use lastPlayedFilePath') String? lastPlayedUri,
     this.lastPlayedPositionMs = 0,
     this.equalizerEnabled = false,
     this.equalizerGains = const [
@@ -66,7 +70,7 @@ class AppSettings {
       0.0,
       0.0,
     ],
-  });
+  }) : lastPlayedFilePath = lastPlayedFilePath ?? lastPlayedUri;
 
   @override
   bool operator ==(Object other) =>
@@ -87,7 +91,7 @@ class AppSettings {
           exclusiveAudio == other.exclusiveAudio &&
           themeMode == other.themeMode &&
           appLanguage == other.appLanguage &&
-          lastPlayedUri == other.lastPlayedUri &&
+          lastPlayedFilePath == other.lastPlayedFilePath &&
           lastPlayedPositionMs == other.lastPlayedPositionMs &&
           equalizerEnabled == other.equalizerEnabled &&
           listEquals(equalizerGains, other.equalizerGains);
@@ -107,7 +111,8 @@ class AppSettings {
     bool? exclusiveAudio,
     ThemeMode? themeMode,
     String? appLanguage,
-    String? lastPlayedUri,
+    String? lastPlayedFilePath,
+    @Deprecated('Use lastPlayedFilePath') String? lastPlayedUri,
     int? lastPlayedPositionMs,
     bool? equalizerEnabled,
     List<double>? equalizerGains,
@@ -127,7 +132,7 @@ class AppSettings {
       exclusiveAudio: exclusiveAudio ?? this.exclusiveAudio,
       themeMode: themeMode ?? this.themeMode,
       appLanguage: appLanguage ?? this.appLanguage,
-      lastPlayedUri: lastPlayedUri ?? this.lastPlayedUri,
+      lastPlayedFilePath: lastPlayedFilePath ?? lastPlayedUri ?? this.lastPlayedFilePath,
       lastPlayedPositionMs: lastPlayedPositionMs ?? this.lastPlayedPositionMs,
       equalizerEnabled: equalizerEnabled ?? this.equalizerEnabled,
       equalizerGains: equalizerGains ?? this.equalizerGains,
@@ -150,7 +155,7 @@ class AppSettings {
     exclusiveAudio,
     themeMode,
     appLanguage,
-    lastPlayedUri,
+    lastPlayedFilePath,
     lastPlayedPositionMs,
     equalizerEnabled,
     Object.hashAll(equalizerGains),

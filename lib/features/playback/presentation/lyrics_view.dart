@@ -23,10 +23,18 @@ import 'widgets/lyrics_threshold_banner.dart';
 /// - Multi-mode translation display: Original, Translated, and Interleaved.
 /// - Manual scroll lock with 5-second auto-resume and localized sync button.
 class LyricsView extends StatelessWidget {
-  final String? uri;
+  final String? filePath;
   final ValueChanged<Duration>? onSeek;
 
-  const LyricsView({super.key, this.uri, this.onSeek});
+  const LyricsView({
+    super.key,
+    String? filePath,
+    @Deprecated('Use filePath') String? uri,
+    this.onSeek,
+  }) : filePath = filePath ?? uri;
+
+  @Deprecated('Use filePath')
+  String? get uri => filePath;
 
   @override
   Widget build(BuildContext context) {

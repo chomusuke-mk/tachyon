@@ -29,8 +29,8 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final searchCtrl = context.watch<TachyonSearchController>();
-    final currentTrackUri = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.uri,
+    final currentTrackFilePath = context.select<PlaybackController, String?>(
+      (c) => c.currentTrack?.filePath,
     );
     final playback = context.read<PlaybackController>();
     final colorScheme = Theme.of(context).colorScheme;
@@ -205,9 +205,9 @@ class _SearchScreenState extends State<SearchScreen> {
                               ),
                               ...matchedTracks.map((track) {
                                 final isPlaying =
-                                    currentTrackUri == track.uri;
+                                    currentTrackFilePath == track.filePath;
                                 return TrackTile(
-                                  key: ValueKey('search_${track.uri}'),
+                                  key: ValueKey('search_${track.filePath}'),
                                   track: track,
                                   isPlaying: isPlaying,
                                   onTap: () => playback.playTrack(
@@ -275,7 +275,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                                 width: 120,
                                                 height: 120,
                                                 child: AlbumArtImage(
-                                                  uri: '',
+                                                  filePath: '',
                                                   fit: BoxFit.cover,
                                                 ),
                                               ),

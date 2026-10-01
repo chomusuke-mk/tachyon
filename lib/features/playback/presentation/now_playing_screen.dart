@@ -30,7 +30,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   LyricsController? _lyricsController;
 
   bool _isCurrentTrackLiked = false;
-  String? _lastLikedCheckUri;
+  String? _lastLikedCheckFilePath;
   double _lastUnmutedVolume = AppDefaults.volumeDefault;
 
   @override
@@ -49,13 +49,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   Future<void> _checkLikedStatus() async {
     final playback = context.read<PlaybackController>();
     final track = playback.currentTrack;
-    if (track == null || track.uri == _lastLikedCheckUri) return;
+    if (track == null || track.filePath == _lastLikedCheckFilePath) return;
 
-    _lastLikedCheckUri = track.uri;
+    _lastLikedCheckFilePath = track.filePath;
     if (track.trackId != null) {
       final db = context.read<AppDatabase>();
       final liked = await db.isTrackLiked(track.trackId!);
-      if (mounted && _lastLikedCheckUri == track.uri) {
+      if (mounted && _lastLikedCheckFilePath == track.filePath) {
         setState(() => _isCurrentTrackLiked = liked);
       }
     } else {
@@ -71,7 +71,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     if (track == null || track.trackId == null) return;
 
     final db = context.read<AppDatabase>();
-    await db.toggleLikeTrack(track.trackId!, track.uri);
+    await db.toggleLikeTrack(track.trackId!, track.filePath);
     final liked = await db.isTrackLiked(track.trackId!);
     if (mounted) {
       setState(() => _isCurrentTrackLiked = liked);
@@ -164,7 +164,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     }
 
     // Refresh liked status if track changed
-    if (currentTrack.uri != _lastLikedCheckUri) {
+    if (currentTrack.filePath != _lastLikedCheckFilePath) {
       _checkLikedStatus();
     }
 
@@ -219,7 +219,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           // 1. Ambient Blurred Backdrop
           Positioned.fill(
             child: RepaintBoundary(
-              child: _buildAmbientBackdrop(currentTrack.uri, colorScheme),
+              child: _buildAmbientBackdrop(currentTrack.filePath, colorScheme),
             ),
           ),
 
@@ -245,7 +245,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                                   context,
                                   preferVertical: true,
                                   hideQueue: true,
-                                  hideLyrics: false,
+                                  hideLyrics: true,
                                 ),
                               ),
                             ],
@@ -256,7 +256,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                             children: [
                               Expanded(
                                 child: LyricsView(
-                                  uri: currentTrack.uri,
+                                  key: const ValueKey('lyrics_view'),
+                                  filePath: currentTrack.filePath,
                                   onSeek: playback.seek,
                                 ),
                               ),
@@ -274,7 +275,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                         : _buildPlayer(
                             currentTrack,
                             context,
-                            key: const ValueKey('player_only'),
+                            key: ValueKey(
+                              _showQueue
+                                  ? 'narrow_queue'
+                                  : _showLyrics
+                                  ? 'narrow_lyrics'
+                                  : 'player_only',
+                            ),
                           ),
                   ),
                 ),
@@ -569,11 +576,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       : !hideLyrics && _showLyrics
                       ? LyricsView(
                           key: const ValueKey('lyrics_view'),
-                          uri: currentTrack.uri,
+                          filePath: currentTrack.filePath,
                           onSeek: playback.seek,
                         )
                       : _buildHeroCoverArt(
-                          currentTrack.uri,
+                          currentTrack.filePath,
                           context,
                           key: const ValueKey('cover_art_view'),
                         ),
@@ -604,11 +611,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       : !hideLyrics && _showLyrics
                       ? LyricsView(
                           key: const ValueKey('lyrics_view'),
-                          uri: currentTrack.uri,
+                          filePath: currentTrack.filePath,
                           onSeek: playback.seek,
                         )
                       : _buildHeroCoverArt(
-                          currentTrack.uri,
+                          currentTrack.filePath,
                           context,
                           key: const ValueKey('cover_art_view'),
                         ),
@@ -627,7 +634,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               : !hideLyrics && _showLyrics
               ? LyricsView(
                   key: const ValueKey('lyrics_view'),
-                  uri: currentTrack.uri,
+                  filePath: currentTrack.filePath,
                   onSeek: playback.seek,
                 )
               : Column(
@@ -648,10 +655,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   //    child: _showLyrics
   //        ? LyricsView(
   //            key: const ValueKey('lyrics_view'),
-  //            uri: currentTrack.uri,
+  //            filePath: currentTrack.filePath,
   //            onSeek: playback.seek,
   //          )
-  //        : _buildHeroCoverArt(currentTrack.uri, context),
+  //        : _buildHeroCoverArt(currentTrack.filePath, context),
   //  ),
   //),
   //// Bottom Controls Block
@@ -690,14 +697,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   //    ],
   //  ),
   //),
-  Widget _buildAmbientBackdrop(String uri, ColorScheme colorScheme) {
+  Widget _buildAmbientBackdrop(String filePath, ColorScheme colorScheme) {
     return RepaintBoundary(
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (uri.isNotEmpty)
+          if (filePath.isNotEmpty)
             AlbumArtImage(
-              uri: uri,
+              filePath: filePath,
               fit: BoxFit.cover,
               cacheWidth: 128,
               cacheHeight: 128,
@@ -723,7 +730,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     );
   }
 
-  Widget _buildHeroCoverArt(String uri, BuildContext context, {Key? key}) {
+  Widget _buildHeroCoverArt(String filePath, BuildContext context, {Key? key}) {
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -733,7 +740,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
           return Hero(
             key: key,
-            tag: 'now_playing_art_$uri',
+            tag: 'now_playing_art_$filePath',
             child: Container(
               width: size,
               height: size,
@@ -749,7 +756,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(24.0),
-                child: AlbumArtImage(uri: uri, fit: BoxFit.cover),
+                child: AlbumArtImage(filePath: filePath, fit: BoxFit.cover),
               ),
             ),
           );

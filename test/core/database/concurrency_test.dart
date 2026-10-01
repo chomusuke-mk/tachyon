@@ -20,7 +20,7 @@ void main() {
       for (int i = 0; i < 20; i++) {
         await db.database.insert('tracks', {
           'id': i + 1,
-          'uri': '/music/initial_track_$i.mp3',
+          'file_path': '/music/initial_track_$i.mp3',
           'title': 'Initial Track $i',
           'duration_ms': 180000 + i * 1000,
           'file_size': 3000000 + i * 1000,
@@ -37,7 +37,7 @@ void main() {
           final trackId = 100 + index;
           await db.database.insert('tracks', {
             'id': trackId,
-            'uri': '/music/concurrent_track_$index.mp3',
+            'file_path': '/music/concurrent_track_$index.mp3',
             'title': 'Concurrent Track $index',
             'duration_ms': 200000,
             'file_size': 4000000,
@@ -92,31 +92,31 @@ void main() {
     test('Transaction rollback on write error releases lock and leaves database consistent', () async {
       await db.database.insert('tracks', {
         'id': 1,
-        'uri': '/music/existing.mp3',
+        'file_path': '/music/existing.mp3',
         'title': 'Existing Track',
         'duration_ms': 180000,
         'file_size': 3000000,
         'modified_at': 1700000000000,
       });
 
-      // Attempt transaction that violates UNIQUE constraint on uri
+      // Attempt transaction that violates UNIQUE constraint on file_path
       bool failedAsExpected = false;
       try {
         await db.database.transaction((txn) async {
           await txn.insert('tracks', {
             'id': 2,
-            'uri': '/music/new_valid.mp3',
+            'file_path': '/music/new_valid.mp3',
             'title': 'Valid Track',
             'duration_ms': 180000,
             'file_size': 3000000,
             'modified_at': 1700000000000,
           });
 
-          // Duplicate URI causes unique constraint abort
+          // Duplicate file_path causes unique constraint abort
           await txn.insert('tracks', {
             'id': 3,
-            'uri': '/music/existing.mp3', // Duplicate!
-            'title': 'Duplicate URI Track',
+            'file_path': '/music/existing.mp3', // Duplicate!
+            'title': 'Duplicate Track',
             'duration_ms': 180000,
             'file_size': 3000000,
             'modified_at': 1700000000000,
@@ -131,12 +131,12 @@ void main() {
       // Verify that 'new_valid.mp3' was rolled back completely
       final tracks = await db.getAllTracks();
       expect(tracks.length, equals(1));
-      expect(tracks.first.uri, equals('/music/existing.mp3'));
+      expect(tracks.first.filePath, equals('/music/existing.mp3'));
 
       // Verify database remains responsive to subsequent queries and writes
       await db.database.insert('tracks', {
         'id': 4,
-        'uri': '/music/after_rollback.mp3',
+        'file_path': '/music/after_rollback.mp3',
         'title': 'After Rollback',
         'duration_ms': 180000,
         'file_size': 3000000,

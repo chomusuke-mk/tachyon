@@ -332,7 +332,7 @@ Future<Track?> _extractMetadata(
     }
 
     return Track(
-      uri: filePath,
+      filePath: filePath,
       title: metadata.title ?? p.basenameWithoutExtension(filePath),
       album: metadata.album,
       artist: metadata.artist,

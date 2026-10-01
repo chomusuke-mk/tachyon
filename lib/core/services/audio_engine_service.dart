@@ -195,7 +195,7 @@ class AudioEngineService {
     await _activePlayer.setVolume(_masterVolume);
     await _activePlayer.setRate(_playbackRate);
     await _activePlayer.setPitch(_playbackPitch);
-    await _activePlayer.open(targetTrack.uri, play: play);
+    await _activePlayer.open(targetTrack.filePath, play: play);
 
     _emitState();
   }
@@ -273,7 +273,7 @@ class AudioEngineService {
 
     final nextItem = await _queueManager.next(isManual: true);
     if (nextItem != null) {
-      await _activePlayer.open(nextItem.uri, play: true);
+      await _activePlayer.open(nextItem.filePath, play: true);
       _emitState();
     } else {
       // Loop.off at end of queue
@@ -298,7 +298,7 @@ class AudioEngineService {
 
     final prevItem = _queueManager.previous(position: _activePlayer.position);
     if (prevItem != null) {
-      await _activePlayer.open(prevItem.uri, play: true);
+      await _activePlayer.open(prevItem.filePath, play: true);
       _emitState();
     } else {
       await _activePlayer.seek(Duration.zero);
@@ -375,7 +375,7 @@ class AudioEngineService {
     await _standbyPlayer.setVolume(0.0);
     await _standbyPlayer.setRate(_playbackRate);
     await _standbyPlayer.setPitch(_playbackPitch);
-    await _standbyPlayer.open(nextTrack.uri, play: true);
+    await _standbyPlayer.open(nextTrack.filePath, play: true);
 
     _fadeTimer?.cancel();
     _fadeTimer = Timer.periodic(tickerInterval, (_) {
@@ -489,7 +489,7 @@ class AudioEngineService {
     } else {
       final nextItem = await _queueManager.next(isManual: false);
       if (nextItem != null) {
-        await _activePlayer.open(nextItem.uri, play: true);
+        await _activePlayer.open(nextItem.filePath, play: true);
         _emitState();
       } else {
         await _activePlayer.stop();
@@ -590,7 +590,7 @@ class AudioEngineService {
     if (_queueManager.activeQueue.isEmpty) {
       await stop();
     } else if (wasCurrent && _queueManager.currentTrack != null) {
-      await _activePlayer.open(_queueManager.currentTrack!.uri, play: true);
+      await _activePlayer.open(_queueManager.currentTrack!.filePath, play: true);
     }
     _emitState();
   }

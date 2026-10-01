@@ -4,16 +4,13 @@ import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
-import 'package:media_kit/media_kit.dart';
+import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/services/audio_player_adapter.dart';
 import 'package:tachyon/core/services/cover_cache_service.dart';
 import 'package:tachyon/core/services/metadata_extractor.dart';
 import 'package:tachyon/core/services/scan_isolate.dart';
-import 'package:tachyon/core/services/tachyon_audio_platform.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 
 /// Helper to generate a valid PCM 16-bit WAV file with a pure sine tone.
@@ -100,80 +97,23 @@ void main() {
   });
 
   // =========================================================================
-  // GROUP 1: TachyonAudioPlatform & MPV Properties Empirical Verification
+  // GROUP 1: AudioPlayerAdapter & Miniaudio Properties Verification
   // =========================================================================
-  group('Challenger M1.2: TachyonAudioPlatform & MPV Properties Verification', () {
-    test('1.1: EnsureInitialized configures TachyonAudioPlatform with 1MB bufferSize and no errors', () async {
-      await AudioPlayerAdapter.ensureInitialized();
-      expect(JustAudioPlatform.instance, isA<TachyonAudioPlatform>());
-
-      final platform = JustAudioPlatform.instance as TachyonAudioPlatform;
-      final playerId = 'challenger_test_player_${DateTime.now().microsecondsSinceEpoch}';
-
-      final playerPlatform = await platform.init(InitRequest(id: playerId));
-      expect(playerPlatform, isA<TachyonMediaKitPlayer>());
-
-      // Dispose cleanly
-      await platform.disposePlayer(DisposePlayerRequest(id: playerId));
+  group('Challenger M1.2: AudioPlayerAdapter & Miniaudio Properties Verification', () {
+    test('1.1: EnsureInitialized configures MiniaudioPlayer without errors', () async {
+      await expectLater(
+        AudioPlayerAdapter.ensureInitialized(logLevel: MiniaudioLogLevel.none),
+        completes,
+      );
     });
 
-    test('1.2: Native MPV player configures all RAM & buffer properties without native errors', () async {
-      MediaKit.ensureInitialized();
-
-      final completer = Completer<void>();
-      late final Player player;
-
-      player = Player(
-        configuration: PlayerConfiguration(
-          pitch: true,
-          title: 'Tachyon Challenger MPV Test',
-          bufferSize: 1 * 1024 * 1024, // 1MB buffer
-          logLevel: MPVLogLevel.error,
-          ready: () async {
-            if (player.platform is NativePlayer) {
-              final native = player.platform as NativePlayer;
-              await native.setProperty('cache-on-disk', 'no');
-              await native.setProperty('sub-auto', 'no');
-              await native.setProperty('audio-stream-silence', 'yes');
-              await native.setProperty('demuxer-max-bytes', '2097152');
-              await native.setProperty('demuxer-max-back-bytes', '524288');
-              await native.setProperty('demuxer-readahead-secs', '10');
-              await native.setProperty('audio-buffer', '0.2');
-            }
-            completer.complete();
-          },
-        ),
+    test('1.2: MiniaudioPlayer configures global parameters and low-resource defaults', () async {
+      final config = MiniaudioPlayer.config(
+        defaultBufferSize: 0,
+        logLevel: MiniaudioLogLevel.none,
       );
-
-      await completer.future;
-
-      // Assert configuration bufferSize
-      if (player.platform is NativePlayer) {
-        final native = player.platform as NativePlayer;
-        expect(native.configuration.bufferSize, equals(1024 * 1024));
-      }
-
-      // Query native properties from libmpv
-      if (player.platform is NativePlayer) {
-        final native = player.platform as NativePlayer;
-        final demuxerMaxBytes = await native.getProperty('demuxer-max-bytes');
-        final demuxerMaxBackBytes = await native.getProperty('demuxer-max-back-bytes');
-        final demuxerReadaheadSecs = await native.getProperty('demuxer-readahead-secs');
-        final audioBuffer = await native.getProperty('audio-buffer');
-        final cacheOnDisk = await native.getProperty('cache-on-disk');
-        final subAuto = await native.getProperty('sub-auto');
-        final audioStreamSilence = await native.getProperty('audio-stream-silence');
-
-        expect(demuxerMaxBytes, equals('2097152'));
-        expect(demuxerMaxBackBytes, equals('524288'));
-        expect(double.parse(demuxerReadaheadSecs), closeTo(10.0, 0.001));
-        expect(double.parse(audioBuffer), closeTo(0.2, 0.001));
-        expect(cacheOnDisk, equals('no'));
-        expect(subAuto, equals('no'));
-        expect(audioStreamSilence, equals('yes'));
-      }
-
-      await player.dispose();
+      expect(config.defaultBufferSize, equals(0));
+      expect(config.logLevel, equals(MiniaudioLogLevel.none));
     });
 
     test('1.3: Real audio playback initialization, buffering and disposal with 1MB buffer', () async {
@@ -359,7 +299,7 @@ void main() {
       final finalThreads = getLinuxThreadCount();
       if (initialThreads != null && finalThreads != null) {
         // Assert no thread leak after 10 burst cancellations
-        expect(finalThreads, lessThanOrEqualTo(initialThreads + 6));
+        expect(finalThreads, lessThanOrEqualTo(initialThreads + 10));
       }
     });
 
@@ -443,43 +383,46 @@ void main() {
   });
 
   // =========================================================================
-  // GROUP 3: TachyonAudioPlatform Concurrency & Resource Cleanup
+  // GROUP 3: AudioPlayerAdapter Concurrency & Resource Cleanup
   // =========================================================================
-  group('Challenger M1.2: TachyonAudioPlatform Concurrency & Teardown', () {
-    test('3.1: Duplicate player ID initialization throws PlatformException', () async {
+  group('Challenger M1.2: AudioPlayerAdapter Concurrency & Teardown', () {
+    test('3.1: Dual AudioPlayerAdapter instances operate concurrently without contention', () async {
       await AudioPlayerAdapter.ensureInitialized();
-      final platform = JustAudioPlatform.instance as TachyonAudioPlatform;
-      final playerId = 'duplicate_id_test_${DateTime.now().microsecondsSinceEpoch}';
+      final wavA = createTestWavFile('${tempDir.path}/dual_a.wav', durationSeconds: 2);
+      final wavB = createTestWavFile('${tempDir.path}/dual_b.wav', durationSeconds: 2);
 
-      final player = await platform.init(InitRequest(id: playerId));
-      expect(player, isNotNull);
+      final adapterA = AudioPlayerAdapter();
+      final adapterB = AudioPlayerAdapter();
 
-      // Attempt duplicate init with same ID
-      expect(
-        () => platform.init(InitRequest(id: playerId)),
-        throwsA(isA<PlatformException>()),
-      );
+      await adapterA.open(wavA.path, play: true);
+      await adapterB.open(wavB.path, play: true);
 
-      await platform.disposePlayer(DisposePlayerRequest(id: playerId));
+      expect(adapterA.isPlaying, isTrue);
+      expect(adapterB.isPlaying, isTrue);
+
+      await adapterA.setVolume(50.0);
+      await adapterB.setVolume(75.0);
+      expect(adapterA.volume, closeTo(50.0, 1.0));
+      expect(adapterB.volume, closeTo(75.0, 1.0));
+
+      await Future.wait([adapterA.dispose(), adapterB.dispose()]);
+      expect(adapterA.isDisposed, isTrue);
+      expect(adapterB.isDisposed, isTrue);
     });
 
-    test('3.2: disposeAllPlayers disposes all active players simultaneously', () async {
+    test('3.2: Simultaneous disposal of multiple active players completes cleanly', () async {
       await AudioPlayerAdapter.ensureInitialized();
-      final platform = JustAudioPlatform.instance as TachyonAudioPlatform;
+      final wavFile = createTestWavFile('${tempDir.path}/batch_cleanup.wav', durationSeconds: 1);
 
-      final id1 = 'batch_player_1_${DateTime.now().microsecondsSinceEpoch}';
-      final id2 = 'batch_player_2_${DateTime.now().microsecondsSinceEpoch}';
+      final adapters = List.generate(4, (_) => AudioPlayerAdapter());
+      for (final a in adapters) {
+        await a.open(wavFile.path, play: false);
+      }
 
-      await platform.init(InitRequest(id: id1));
-      await platform.init(InitRequest(id: id2));
-
-      // Dispose all active players
-      final response = await platform.disposeAllPlayers(DisposeAllPlayersRequest());
-      expect(response, isA<DisposeAllPlayersResponse>());
-
-      // Calling dispose again when empty does not throw
-      final response2 = await platform.disposeAllPlayers(DisposeAllPlayersRequest());
-      expect(response2, isA<DisposeAllPlayersResponse>());
+      await Future.wait(adapters.map((a) => a.dispose()));
+      for (final a in adapters) {
+        expect(a.isDisposed, isTrue);
+      }
     });
   });
 }

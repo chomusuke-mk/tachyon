@@ -18,8 +18,8 @@ class ArtistDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrackUri = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.uri,
+    final currentTrackFilePath = context.select<PlaybackController, String?>(
+      (c) => c.currentTrack?.filePath,
     );
     final playback = context.read<PlaybackController>();
 
@@ -39,7 +39,8 @@ class ArtistDetailScreen extends StatelessWidget {
         )
         .toList();
 
-    final firstUri = artistTracks.isNotEmpty ? artistTracks.first.uri : '';
+    final firstFilePath =
+        artistTracks.isNotEmpty ? artistTracks.first.filePath : '';
 
     return Scaffold(
       appBar: AppBar(title: Text(artist.name)),
@@ -55,13 +56,13 @@ class ArtistDetailScreen extends StatelessWidget {
                     backgroundColor: Theme.of(context)
                         .colorScheme
                         .primaryContainer,
-                    child: firstUri.isNotEmpty
+                    child: firstFilePath.isNotEmpty
                         ? ClipOval(
                             child: SizedBox(
                               width: 128,
                               height: 128,
                               child: AlbumArtImage(
-                                uri: firstUri,
+                                filePath: firstFilePath,
                                 fit: BoxFit.cover,
                               ),
                             ),
@@ -139,7 +140,7 @@ class ArtistDetailScreen extends StatelessWidget {
                                     t.album == album.name,
                               )
                               .firstOrNull;
-                          final coverUri = albumTrack?.uri ?? '';
+                          final coverFilePath = albumTrack?.filePath ?? '';
 
                           return InkWell(
                             borderRadius: BorderRadius.circular(8.0),
@@ -162,7 +163,7 @@ class ArtistDetailScreen extends StatelessWidget {
                                       width: 110,
                                       height: 110,
                                       child: AlbumArtImage(
-                                        uri: coverUri,
+                                        filePath: coverFilePath,
                                         fit: BoxFit.cover,
                                       ),
                                     ),
@@ -211,10 +212,10 @@ class ArtistDetailScreen extends StatelessWidget {
           SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final track = artistTracks[index];
-              final isPlaying = currentTrackUri == track.uri;
+              final isPlaying = currentTrackFilePath == track.filePath;
 
               return TrackTile(
-                key: ValueKey(track.uri),
+                key: ValueKey(track.filePath),
                 track: track,
                 isPlaying: isPlaying,
                 onTap: () =>

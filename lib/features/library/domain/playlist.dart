@@ -23,7 +23,7 @@ class PlaylistEntry {
   final int? id;
   final int playlistId;
   final int? trackId;
-  final String uri;
+  final String filePath;
   final String? customTitle;
   final int position;
   final int addedAt;
@@ -33,18 +33,21 @@ class PlaylistEntry {
     this.id,
     required this.playlistId,
     this.trackId,
-    required this.uri,
+    required this.filePath,
     this.customTitle,
     required this.position,
     required this.addedAt,
     this.track,
   });
 
+  @Deprecated('Use filePath instead')
+  String get uri => filePath;
+
   PlaylistEntry copyWith({
     int? id,
     int? playlistId,
     int? trackId,
-    String? uri,
+    String? filePath,
     String? customTitle,
     int? position,
     int? addedAt,
@@ -54,7 +57,7 @@ class PlaylistEntry {
       id: id ?? this.id,
       playlistId: playlistId ?? this.playlistId,
       trackId: trackId ?? this.trackId,
-      uri: uri ?? this.uri,
+      filePath: filePath ?? this.filePath,
       customTitle: customTitle ?? this.customTitle,
       position: position ?? this.position,
       addedAt: addedAt ?? this.addedAt,
@@ -67,7 +70,7 @@ class PlaylistEntry {
       if (id != null) 'id': id,
       'playlist_id': playlistId,
       'track_id': trackId,
-      'uri': uri,
+      'file_path': filePath,
       'custom_title': customTitle,
       'position': position,
       'added_at': addedAt,
@@ -79,7 +82,7 @@ class PlaylistEntry {
       id: map['id'] as int?,
       playlistId: (map['playlist_id'] as int?) ?? 0,
       trackId: map['track_id'] as int?,
-      uri: map['uri'] as String? ?? '',
+      filePath: (map['file_path'] ?? map['uri']) as String? ?? '',
       customTitle: map['custom_title'] as String?,
       position: (map['position'] as int?) ?? 0,
       addedAt: (map['added_at'] as int?) ?? 0,
@@ -92,7 +95,8 @@ class PlaylistEntry {
       'id': id,
       'playlistId': playlistId,
       'trackId': trackId,
-      'uri': uri,
+      'filePath': filePath,
+      'file_path': filePath,
       'customTitle': customTitle,
       'position': position,
       'addedAt': addedAt,
@@ -106,7 +110,7 @@ class PlaylistEntry {
       playlistId:
           ((json['playlistId'] ?? json['playlist_id']) as num?)?.toInt() ?? 0,
       trackId: (json['trackId'] ?? json['track_id']) as int?,
-      uri: (json['uri'] as String?) ?? '',
+      filePath: (json['filePath'] ?? json['file_path'] ?? json['uri']) as String? ?? '',
       customTitle: (json['customTitle'] ?? json['custom_title']) as String?,
       position: ((json['position']) as num?)?.toInt() ?? 0,
       addedAt: ((json['addedAt'] ?? json['added_at']) as num?)?.toInt() ?? 0,
@@ -124,7 +128,7 @@ class PlaylistEntry {
           id == other.id &&
           playlistId == other.playlistId &&
           trackId == other.trackId &&
-          uri == other.uri &&
+          filePath == other.filePath &&
           customTitle == other.customTitle &&
           position == other.position &&
           addedAt == other.addedAt &&
@@ -135,7 +139,7 @@ class PlaylistEntry {
     id,
     playlistId,
     trackId,
-    uri,
+    filePath,
     customTitle,
     position,
     addedAt,

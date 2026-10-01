@@ -33,7 +33,7 @@ class MockAppDatabase extends Fake implements AppDatabase {
   final List<String> historyPlaylistLogs = [];
 
   @override
-  Future<void> addTrackToPlaylist(int playlistId, int trackId) async {
+  Future<void> addTrackToPlaylist(int playlistId, int trackId, [String? filePath]) async {
     historyPlaylistLogs.add('$playlistId:$trackId');
   }
 }
@@ -55,12 +55,14 @@ class MockSettingsRepository extends Fake implements SettingsRepository {
 
   @override
   Future<void> setLastPlayed({
-    required String uri,
+    String? filePath,
     required int positionMs,
+    String? uri,
   }) async {
+    final effective = filePath ?? uri ?? '';
     writes.add(
       RecordedWrite(
-        uri: uri,
+        uri: effective,
         positionMs: positionMs,
         timestamp: DateTime.now(),
       ),
