@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 
 import 'package:tachyon/shared/widgets/album_art_image.dart';
@@ -192,6 +193,7 @@ class _QueueViewState extends State<QueueView> {
               : ReorderableListView.builder(
                   scrollController: _effectiveController,
                   buildDefaultDragHandles: false,
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(720.0),
                   itemCount: queue.length,
                   onReorderItem: (from, to) {
                     playback.reorderQueue(from, to);
@@ -231,6 +233,8 @@ class _QueueViewState extends State<QueueView> {
                                   child: AlbumArtImage(
                                     filePath: item.filePath,
                                     fit: BoxFit.cover,
+                                    cacheWidth: 80,
+                                    cacheHeight: 80,
                                   ),
                                 ),
                               ),

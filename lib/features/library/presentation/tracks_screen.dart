@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
@@ -356,6 +357,9 @@ class _TracksScreenState extends State<TracksScreen> {
             )
           : ListView.builder(
               itemExtent: 72.0,
+              scrollCacheExtent: const ScrollCacheExtent.pixels(720.0),
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
               itemCount: tracks.length,
               itemBuilder: (context, index) {
                 final track = tracks[index];

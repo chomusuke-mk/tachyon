@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:crypto/crypto.dart';
@@ -13,7 +14,8 @@ enum ThumbnailQuality {
 }
 
 /// Service for cover and artist art extraction, directory artwork fallbacks,
-/// dual-quality SHA-256 disk caching, and non-distorting center-crop generation.
+/// dual-quality SHA-256 disk caching, and non-distorting center-crop generation
+/// (80x80 square for low quality, maximum 500x500 square for high quality).
 class CoverCacheService {
   final Directory cacheDirectory;
   final String defaultCoverAsset;
@@ -120,12 +122,13 @@ class CoverCacheService {
     return file.existsSync() && file.lengthSync() > 0;
   }
 
-  /// Extracts and caches track and artist artwork in both high quality (original)
-  /// and low quality (160x160 center-cropped square) formats without distortion.
+  /// Extracts and caches track and artist artwork in both high quality (max 500x500)
+  /// and low quality (80x80 center-cropped square) formats without distortion.
   Future<File?> saveCacheCover(
     String filePath, {
     String? artistName,
     String? albumName,
+    bool force = false,
   }) async {
     final hash = computeHash(filePath);
     final lqFile = File(p.join(_coversDir.path, '${hash}_lq.jpg'));
@@ -133,10 +136,12 @@ class CoverCacheService {
     final legacyFile = File(p.join(_coversDir.path, '$hash.jpg'));
 
     // 1. Return immediately if already cached
-    final hasLq = await lqFile.exists() && await lqFile.length() > 0;
-    final hasHq = await hqFile.exists() && await hqFile.length() > 0;
-    if (hasLq && hasHq) {
-      return hqFile;
+    if (!force) {
+      final hasLq = await lqFile.exists() && await lqFile.length() > 0;
+      final hasHq = await hqFile.exists() && await hqFile.length() > 0;
+      if (hasLq && hasHq) {
+        return hqFile;
+      }
     }
 
     await init();
@@ -238,25 +243,65 @@ class CoverCacheService {
     File legacyFile,
   ) async {
     try {
-      // 1. Write high-quality original image
-      await hqFile.writeAsBytes(rawBytes);
-      if (!await legacyFile.exists() || await legacyFile.length() == 0) {
-        await legacyFile.writeAsBytes(rawBytes);
-      }
-
-      // 2. Generate center-cropped 160x160 square thumbnail
       final decoded = img.decodeImage(rawBytes);
       if (decoded != null) {
-        final square = img.copyResizeCropSquare(decoded, size: 160);
-        final lqBytes = img.encodeJpg(square, quality: 80);
+        // Take min(width, height) and center-crop square to prevent any vertical or horizontal stretching
+        final minDim = math.min(decoded.width, decoded.height);
+        final cropX = (decoded.width - minDim) ~/ 2;
+        final cropY = (decoded.height - minDim) ~/ 2;
+
+        final squareImage = img.copyCrop(
+          decoded,
+          x: cropX,
+          y: cropY,
+          width: minDim,
+          height: minDim,
+        );
+
+        // 1. High Quality: maximum 500x500 square
+        img.Image hqImage;
+        if (minDim > 500) {
+          hqImage = img.copyResize(
+            squareImage,
+            width: 500,
+            height: 500,
+            interpolation: img.Interpolation.linear,
+          );
+        } else {
+          hqImage = squareImage;
+        }
+        final hqBytes = img.encodeJpg(hqImage, quality: 85);
+        await hqFile.writeAsBytes(hqBytes);
+        if (!await legacyFile.exists() || await legacyFile.length() == 0) {
+          await legacyFile.writeAsBytes(hqBytes);
+        }
+
+        // 2. Low Quality: 80x80 square
+        img.Image lqImage;
+        if (minDim == 80) {
+          lqImage = squareImage;
+        } else {
+          lqImage = img.copyResize(
+            squareImage,
+            width: 80,
+            height: 80,
+            interpolation: img.Interpolation.linear,
+          );
+        }
+        final lqBytes = img.encodeJpg(lqImage, quality: 75);
         await lqFile.writeAsBytes(lqBytes);
       } else {
+        await hqFile.writeAsBytes(rawBytes);
         await lqFile.writeAsBytes(rawBytes);
+        if (!await legacyFile.exists() || await legacyFile.length() == 0) {
+          await legacyFile.writeAsBytes(rawBytes);
+        }
       }
     } catch (e) {
       debugPrint('[CoverCache] Error generating dual quality images: $e');
       try {
         if (!await lqFile.exists()) await lqFile.writeAsBytes(rawBytes);
+        if (!await hqFile.exists()) await hqFile.writeAsBytes(rawBytes);
       } catch (_) {}
     }
   }

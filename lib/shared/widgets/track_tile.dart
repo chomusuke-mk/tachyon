@@ -69,8 +69,8 @@ class TrackTile extends StatelessWidget {
                   child: AlbumArtImage(
                     filePath: track.filePath,
                     fit: BoxFit.cover,
-                    cacheWidth: 96,
-                    cacheHeight: 96,
+                    cacheWidth: 80,
+                    cacheHeight: 80,
                   ),
                 ),
               ),

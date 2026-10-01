@@ -49,7 +49,7 @@ void main() {
       expect(aHq.path, endsWith('${expectedHash}_hq.jpg'));
     });
 
-    test('saveCacheCover creates both HQ and 160x160 center-cropped LQ images from directory art', () async {
+    test('saveCacheCover creates both max 500x500 square HQ and 80x80 center-cropped LQ images', () async {
       // Create a rectangular dummy test cover (400 x 200) to test center-crop without distortion
       final testImage = img.Image(width: 400, height: 200);
       img.fill(testImage, color: img.ColorRgb8(255, 0, 0));
@@ -58,8 +58,8 @@ void main() {
       final coverFile = File(p.join(musicDir.path, 'cover.jpg'));
       await coverFile.writeAsBytes(jpgBytes);
 
-      // Also create artist.jpg in the same directory
-      final artistImage = img.Image(width: 300, height: 300);
+      // Also create artist.jpg in the same directory (large: 800x600 to test max 500x500 clamping)
+      final artistImage = img.Image(width: 800, height: 600);
       img.fill(artistImage, color: img.ColorRgb8(0, 0, 255));
       final artistJpgBytes = img.encodeJpg(artistImage);
       final artistFile = File(p.join(musicDir.path, 'artist.jpg'));
@@ -86,19 +86,19 @@ void main() {
       expect(await lqDisk.exists(), isTrue);
       expect(await hqDisk.exists(), isTrue);
 
-      // Decode the generated LQ image and verify it is a 160x160 square
+      // Decode the generated LQ image and verify it is an 80x80 square
       final decodedLq = img.decodeImage(await lqDisk.readAsBytes());
       expect(decodedLq, isNotNull);
-      expect(decodedLq!.width, equals(160));
-      expect(decodedLq.height, equals(160));
+      expect(decodedLq!.width, equals(80));
+      expect(decodedLq.height, equals(80));
 
-      // Decode the HQ image and verify it kept original dimensions (400x200)
+      // Decode the HQ image and verify it is a square center-cropped image (min(400, 200) = 200x200 <= 500)
       final decodedHq = img.decodeImage(await hqDisk.readAsBytes());
       expect(decodedHq, isNotNull);
-      expect(decodedHq!.width, equals(400));
+      expect(decodedHq!.width, equals(200));
       expect(decodedHq.height, equals(200));
 
-      // Verify artist cover was also generated from artist.jpg
+      // Verify artist cover was generated from artist.jpg (800x600 -> min(800,600)=600 -> clamped to 500x500)
       final artistHash = service.computeHash('artist:test artist');
       final artistLqDisk = File(p.join(tempDir.path, 'covers', '${artistHash}_lq.jpg'));
       final artistHqDisk = File(p.join(tempDir.path, 'covers', '${artistHash}_hq.jpg'));
@@ -107,8 +107,12 @@ void main() {
       expect(await artistHqDisk.exists(), isTrue);
 
       final decodedArtistLq = img.decodeImage(await artistLqDisk.readAsBytes());
-      expect(decodedArtistLq!.width, equals(160));
-      expect(decodedArtistLq.height, equals(160));
+      expect(decodedArtistLq!.width, equals(80));
+      expect(decodedArtistLq.height, equals(80));
+
+      final decodedArtistHq = img.decodeImage(await artistHqDisk.readAsBytes());
+      expect(decodedArtistHq!.width, equals(500));
+      expect(decodedArtistHq.height, equals(500));
     });
   });
 }
