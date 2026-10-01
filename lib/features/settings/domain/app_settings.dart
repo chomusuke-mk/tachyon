@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:tachyon/features/settings/data/settings_repository.dart';
-
+import 'package:tachyon/features/library/domain/track_sort_option.dart';
+import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 typedef LoopMode = Loop;
 
@@ -14,6 +15,7 @@ class AppSettings {
   // Audio Playback
   final bool crossfadeEnabled;
   final int crossfadeDuration; // 2 to 30 seconds (default 5)
+  final int crossfadeManualDuration; // 0 to 30 seconds (default 3)
   final CrossfadeCurve crossfadeCurve; // 'equal_power' or 'linear'
   final double volume; // 0.0 to 100.0 (default 100.0)
   final double playbackRate; // 0.5 to 1.5 (default 1.0)
@@ -23,10 +25,21 @@ class AppSettings {
   final bool skipSilence; // default false
   final double volumeBoost; // 100.0% to 200.0% (default 100.0)
   final bool exclusiveAudio; // Windows WASAPI exclusive (default false)
+  final String? audioOutputDeviceId;
 
   // Appearance & Localization
   final ThemeMode themeMode; // ThemeMode.dark (default)
   final String appLanguage; // 'defaultOption', 'en', 'es'
+  final String lyricsTranslationTargetLang; // 'defaultOption', 'es', 'en', etc.
+
+  // Library Sorting
+  final TrackSortOption trackSortOption;
+  final bool trackSortAscending;
+
+  // Playback & Lyrics View Persistence
+  final LyricsDisplayMode lyricsDisplayMode;
+  final bool playbackShowLyrics;
+  final bool playbackShowQueue;
 
   // Restorable Playback State
   final String? lastPlayedFilePath;
@@ -37,12 +50,14 @@ class AppSettings {
 
   // Equalizer
   final bool equalizerEnabled;
-  final List<double> equalizerGains; // 10 bands (-12.0 to +12.0 dB)
+  final String equalizerPreset;
+  final List<double> equalizerGains; // 10 bands (-24.0 to +24.0 dB)
 
   const AppSettings({
     this.musicDirectories = const [],
     this.crossfadeEnabled = true,
     this.crossfadeDuration = 5,
+    this.crossfadeManualDuration = 3,
     this.crossfadeCurve = CrossfadeCurve.equalPower,
     this.volume = 100.0,
     this.playbackRate = 1.0,
@@ -52,12 +67,20 @@ class AppSettings {
     this.skipSilence = false,
     this.volumeBoost = 100.0,
     this.exclusiveAudio = false,
+    this.audioOutputDeviceId,
     this.themeMode = ThemeMode.dark,
     this.appLanguage = 'defaultOption',
+    this.lyricsTranslationTargetLang = 'defaultOption',
+    this.trackSortOption = TrackSortOption.title,
+    this.trackSortAscending = true,
+    this.lyricsDisplayMode = LyricsDisplayMode.original,
+    this.playbackShowLyrics = false,
+    this.playbackShowQueue = false,
     String? lastPlayedFilePath,
     @Deprecated('Use lastPlayedFilePath') String? lastPlayedUri,
     this.lastPlayedPositionMs = 0,
     this.equalizerEnabled = false,
+    this.equalizerPreset = 'flat',
     this.equalizerGains = const [
       0.0,
       0.0,
@@ -80,6 +103,7 @@ class AppSettings {
           listEquals(musicDirectories, other.musicDirectories) &&
           crossfadeEnabled == other.crossfadeEnabled &&
           crossfadeDuration == other.crossfadeDuration &&
+          crossfadeManualDuration == other.crossfadeManualDuration &&
           crossfadeCurve == other.crossfadeCurve &&
           volume == other.volume &&
           playbackRate == other.playbackRate &&
@@ -89,17 +113,26 @@ class AppSettings {
           skipSilence == other.skipSilence &&
           volumeBoost == other.volumeBoost &&
           exclusiveAudio == other.exclusiveAudio &&
+          audioOutputDeviceId == other.audioOutputDeviceId &&
           themeMode == other.themeMode &&
           appLanguage == other.appLanguage &&
+          lyricsTranslationTargetLang == other.lyricsTranslationTargetLang &&
+          trackSortOption == other.trackSortOption &&
+          trackSortAscending == other.trackSortAscending &&
+          lyricsDisplayMode == other.lyricsDisplayMode &&
+          playbackShowLyrics == other.playbackShowLyrics &&
+          playbackShowQueue == other.playbackShowQueue &&
           lastPlayedFilePath == other.lastPlayedFilePath &&
           lastPlayedPositionMs == other.lastPlayedPositionMs &&
           equalizerEnabled == other.equalizerEnabled &&
+          equalizerPreset == other.equalizerPreset &&
           listEquals(equalizerGains, other.equalizerGains);
 
   AppSettings copyWith({
     List<String>? musicDirectories,
     bool? crossfadeEnabled,
     int? crossfadeDuration,
+    int? crossfadeManualDuration,
     CrossfadeCurve? crossfadeCurve,
     double? volume,
     double? playbackRate,
@@ -109,18 +142,28 @@ class AppSettings {
     bool? skipSilence,
     double? volumeBoost,
     bool? exclusiveAudio,
+    String? audioOutputDeviceId,
     ThemeMode? themeMode,
     String? appLanguage,
+    String? lyricsTranslationTargetLang,
+    TrackSortOption? trackSortOption,
+    bool? trackSortAscending,
+    LyricsDisplayMode? lyricsDisplayMode,
+    bool? playbackShowLyrics,
+    bool? playbackShowQueue,
     String? lastPlayedFilePath,
     @Deprecated('Use lastPlayedFilePath') String? lastPlayedUri,
     int? lastPlayedPositionMs,
     bool? equalizerEnabled,
+    String? equalizerPreset,
     List<double>? equalizerGains,
   }) {
     return AppSettings(
       musicDirectories: musicDirectories ?? this.musicDirectories,
       crossfadeEnabled: crossfadeEnabled ?? this.crossfadeEnabled,
       crossfadeDuration: crossfadeDuration ?? this.crossfadeDuration,
+      crossfadeManualDuration:
+          crossfadeManualDuration ?? this.crossfadeManualDuration,
       crossfadeCurve: crossfadeCurve ?? this.crossfadeCurve,
       volume: volume ?? this.volume,
       playbackRate: playbackRate ?? this.playbackRate,
@@ -130,11 +173,21 @@ class AppSettings {
       skipSilence: skipSilence ?? this.skipSilence,
       volumeBoost: volumeBoost ?? this.volumeBoost,
       exclusiveAudio: exclusiveAudio ?? this.exclusiveAudio,
+      audioOutputDeviceId: audioOutputDeviceId ?? this.audioOutputDeviceId,
       themeMode: themeMode ?? this.themeMode,
       appLanguage: appLanguage ?? this.appLanguage,
-      lastPlayedFilePath: lastPlayedFilePath ?? lastPlayedUri ?? this.lastPlayedFilePath,
+      lyricsTranslationTargetLang:
+          lyricsTranslationTargetLang ?? this.lyricsTranslationTargetLang,
+      trackSortOption: trackSortOption ?? this.trackSortOption,
+      trackSortAscending: trackSortAscending ?? this.trackSortAscending,
+      lyricsDisplayMode: lyricsDisplayMode ?? this.lyricsDisplayMode,
+      playbackShowLyrics: playbackShowLyrics ?? this.playbackShowLyrics,
+      playbackShowQueue: playbackShowQueue ?? this.playbackShowQueue,
+      lastPlayedFilePath:
+          lastPlayedFilePath ?? lastPlayedUri ?? this.lastPlayedFilePath,
       lastPlayedPositionMs: lastPlayedPositionMs ?? this.lastPlayedPositionMs,
       equalizerEnabled: equalizerEnabled ?? this.equalizerEnabled,
+      equalizerPreset: equalizerPreset ?? this.equalizerPreset,
       equalizerGains: equalizerGains ?? this.equalizerGains,
     );
   }
@@ -144,6 +197,7 @@ class AppSettings {
     Object.hashAll(musicDirectories),
     crossfadeEnabled,
     crossfadeDuration,
+    crossfadeManualDuration,
     crossfadeCurve,
     volume,
     playbackRate,
@@ -153,11 +207,20 @@ class AppSettings {
     skipSilence,
     volumeBoost,
     exclusiveAudio,
+    audioOutputDeviceId,
     themeMode,
     appLanguage,
+    lyricsTranslationTargetLang,
+    trackSortOption,
+    trackSortAscending,
+    lyricsDisplayMode,
+    playbackShowLyrics,
+    playbackShowQueue,
     lastPlayedFilePath,
     lastPlayedPositionMs,
     equalizerEnabled,
+    equalizerPreset,
     Object.hashAll(equalizerGains),
   ]);
+
 }

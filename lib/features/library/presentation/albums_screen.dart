@@ -186,7 +186,7 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        album.artistName ?? 'Unknown Artist',
+                        album.artistName ?? strings.trUnknownArtist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

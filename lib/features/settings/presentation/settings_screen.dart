@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/features/settings/data/settings_repository.dart';
-
+import 'package:tachyon/core/constants/languages.dart';
 import 'package:tachyon/core/services/cover_cache_service.dart';
-import 'package:tachyon/shared/widgets/setting_row.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/shared/utils/file_picker_service.dart';
+import 'package:tachyon/shared/widgets/setting_row.dart';
 
 import 'settings_controller.dart';
 
@@ -15,44 +17,73 @@ class SettingsScreen extends StatelessWidget {
   void _showAddFolderDialog(BuildContext context) {
     final controller = TextEditingController();
     final settings = context.read<SettingsController>();
+    final strings = context.read<LocaleController>().localeStrings;
 
     showDialog<void>(
       context: context,
-      builder: (context) {
+      builder: (dialogCtx) {
         return AlertDialog(
-          title: const Text('Add Music Folder'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              hintText: '/path/to/music',
-              labelText: 'Directory Path',
-            ),
+          title: Text(strings.sAddFolderTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                decoration: InputDecoration(
+                  hintText: strings.sFolderPathHint,
+                  labelText: strings.sFolderPathLabel,
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.folder_open_rounded),
+                    tooltip: strings.sBrowseFolder,
+                    onPressed: () async {
+                      final picked = await FilePickerService.pickDirectory(
+                        dialogTitle: strings.sAddFolderTitle,
+                      );
+                      if (picked != null) {
+                        controller.text = picked;
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.folder_open_rounded),
+                label: Text(strings.sBrowseFolder),
+                onPressed: () async {
+                  final picked = await FilePickerService.pickDirectory(
+                    dialogTitle: strings.sAddFolderTitle,
+                  );
+                  if (picked != null) {
+                    controller.text = picked;
+                  }
+                },
+              ),
+            ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: Text(strings.sCancel),
             ),
             FilledButton(
               onPressed: () async {
                 final path = controller.text.trim();
                 if (path.isNotEmpty) {
                   final added = await settings.addMusicDirectory(path);
-                  if (context.mounted) {
-                    Navigator.of(context).pop();
-                    if (!added) {
+                  if (dialogCtx.mounted) {
+                    Navigator.of(dialogCtx).pop();
+                    if (!added && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Directory does not exist or is already added',
-                          ),
+                        SnackBar(
+                          content: Text(strings.sFolderErrorInvalid),
                         ),
                       );
                     }
                   }
                 }
               },
-              child: const Text('Add'),
+              child: Text(strings.sAdd),
             ),
           ],
         );
@@ -71,10 +102,12 @@ class SettingsScreen extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(strings.sCancel),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
               onPressed: () async {
                 CoverCacheService? cache;
                 try {
@@ -88,15 +121,143 @@ class SettingsScreen extends StatelessWidget {
                 if (context.mounted) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Cover cache cleared successfully'),
+                    SnackBar(
+                      content: Text(strings.sClearCacheSuccess),
                     ),
                   );
                 }
               },
-              child: const Text('Clear'),
+              child: Text(strings.sClear),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showTranslationLanguageDialog(
+    BuildContext context,
+    SettingsController settings,
+    AppStringKey strings,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filteredEntries = languagesEndonyms.entries.where((e) {
+              final query = searchQuery.toLowerCase().trim();
+              if (query.isEmpty) return true;
+              return e.key.toLowerCase().contains(query) ||
+                  e.value.toLowerCase().contains(query);
+            }).toList();
+
+            return AlertDialog(
+              title: Text(strings.sTranslationTargetLang),
+              content: SizedBox(
+                width: 400,
+                height: 450,
+                child: Column(
+                  children: [
+                    TextField(
+                      autofocus: false,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        hintText: strings.srHint,
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          searchQuery = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: searchQuery.isEmpty
+                            ? filteredEntries.length + 1
+                            : filteredEntries.length,
+                        itemBuilder: (context, index) {
+                          if (searchQuery.isEmpty && index == 0) {
+                            final isSelected =
+                                settings.lyricsTranslationTargetLang ==
+                                    'defaultOption';
+                            return ListTile(
+                              leading: Icon(
+                                Icons.auto_awesome_rounded,
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                              ),
+                              title: Text(
+                                strings.sTranslationLangDefault,
+                                style: TextStyle(
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                              trailing: isSelected
+                                  ? Icon(
+                                      Icons.check_rounded,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary,
+                                    )
+                                  : null,
+                              onTap: () {
+                                settings.setLyricsTranslationTargetLang(
+                                    'defaultOption');
+                                Navigator.of(dialogCtx).pop();
+                              },
+                            );
+                          }
+
+                          final item = filteredEntries[
+                              searchQuery.isEmpty ? index - 1 : index];
+                          final isSelected =
+                              settings.lyricsTranslationTargetLang == item.key;
+
+                          return ListTile(
+                            title: Text(
+                              item.value,
+                              style: TextStyle(
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: Text(item.key),
+                            trailing: isSelected
+                                ? Icon(
+                                    Icons.check_rounded,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary,
+                                  )
+                                : null,
+                            onTap: () {
+                              settings.setLyricsTranslationTargetLang(item.key);
+                              Navigator.of(dialogCtx).pop();
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: Text(strings.sCancel),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -137,7 +298,7 @@ class SettingsScreen extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
                       child: Text(
-                        'No music folders added yet.',
+                        strings.sNoFoldersYet,
                         style: TextStyle(
                           fontStyle: FontStyle.italic,
                           color: colorScheme.outline,
@@ -345,14 +506,60 @@ class SettingsScreen extends StatelessWidget {
                     type: ControllerType.dropdown,
                     child: DropdownButton<String>(
                       isExpanded: true,
-                      value: settings.appLanguage == 'es' ? 'es' : 'en',
-                      items: const [
-                        DropdownMenuItem(value: 'en', child: Text('English')),
-                        DropdownMenuItem(value: 'es', child: Text('Español')),
+                      value: (settings.appLanguage == 'en' ||
+                              settings.appLanguage == 'es')
+                          ? settings.appLanguage
+                          : 'default',
+                      items: [
+                        DropdownMenuItem(
+                          value: 'default',
+                          child: Text(strings.sTranslationLangDefault),
+                        ),
+                        const DropdownMenuItem(
+                          value: 'en',
+                          child: Text('English'),
+                        ),
+                        const DropdownMenuItem(
+                          value: 'es',
+                          child: Text('Español'),
+                        ),
                       ],
                       onChanged: (val) {
                         if (val != null) settings.setAppLanguage(val);
                       },
+                    ),
+                  ),
+                  const Divider(),
+                  SettingRow(
+                    title: strings.sTranslationTargetLang,
+                    description: strings.sTranslationTargetLangDesc,
+                    type: ControllerType.dropdown,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        alignment: Alignment.centerLeft,
+                      ),
+                      onPressed: () => _showTranslationLanguageDialog(
+                        context,
+                        settings,
+                        strings,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              settings.lyricsTranslationTargetLang ==
+                                      'defaultOption'
+                                  ? strings.sTranslationLangDefault
+                                  : (languagesEndonyms[settings
+                                          .lyricsTranslationTargetLang] ??
+                                      settings.lyricsTranslationTargetLang),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const Icon(Icons.arrow_drop_down_rounded),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -383,7 +590,7 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: Text(strings.sClearCacheDesc),
                     trailing: OutlinedButton(
                       onPressed: () => _showClearCacheConfirmation(context),
-                      child: const Text('Clear'),
+                      child: Text(strings.sClear),
                     ),
                   ),
                 ],

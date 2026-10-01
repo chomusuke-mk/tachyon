@@ -53,10 +53,56 @@ class QueueDrawerSheet extends StatelessWidget {
 }
 
 /// Reusable queue list view widget usable both inside modal bottom sheet and desktop side-panel.
-class QueueView extends StatelessWidget {
+class QueueView extends StatefulWidget {
   final ScrollController? scrollController;
 
   const QueueView({super.key, this.scrollController});
+
+  @override
+  State<QueueView> createState() => _QueueViewState();
+}
+
+class _QueueViewState extends State<QueueView> {
+  ScrollController? _internalController;
+  ScrollController get _effectiveController =>
+      widget.scrollController ?? (_internalController ??= ScrollController());
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToCurrentIndex(animated: false);
+    });
+  }
+
+  void _scrollToCurrentIndex({bool animated = true}) {
+    if (!mounted) return;
+    if (!_effectiveController.hasClients) return;
+    final playback = context.read<PlaybackController>();
+    final index = playback.currentIndex;
+    if (index <= 0 || index >= playback.queue.length) return;
+
+    const itemHeight = 72.0;
+    final viewportHeight = _effectiveController.position.viewportDimension;
+    final targetOffset = ((index * itemHeight) - (viewportHeight / 2) + (itemHeight / 2))
+        .clamp(0.0, _effectiveController.position.maxScrollExtent);
+
+    if (animated) {
+      _effectiveController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      _effectiveController.jumpTo(targetOffset);
+    }
+  }
+
+  @override
+  void dispose() {
+    _internalController?.dispose();
+    super.dispose();
+  }
 
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -144,7 +190,7 @@ class QueueView extends StatelessWidget {
                   ),
                 )
               : ReorderableListView.builder(
-                  scrollController: scrollController,
+                  scrollController: _effectiveController,
                   buildDefaultDragHandles: false,
                   itemCount: queue.length,
                   onReorderItem: (from, to) {

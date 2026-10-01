@@ -15,14 +15,19 @@ class CrossfadeConfig {
   static const Duration defaultDuration = Duration(
     seconds: AppDefaults.crossfadeDefaultDuration,
   );
+  static const Duration defaultManualDuration = Duration(
+    seconds: 3,
+  );
 
   final bool enabled;
   final Duration duration;
+  final Duration manualDuration;
   final CrossfadeCurve curve;
 
   const CrossfadeConfig({
     this.enabled = true,
     this.duration = defaultDuration,
+    this.manualDuration = defaultManualDuration,
     this.curve = CrossfadeCurve.equalPower,
   });
 
@@ -71,11 +76,13 @@ class CrossfadeConfig {
   CrossfadeConfig copyWith({
     bool? enabled,
     Duration? duration,
+    Duration? manualDuration,
     CrossfadeCurve? curve,
   }) {
     return CrossfadeConfig(
       enabled: enabled ?? this.enabled,
       duration: duration ?? this.duration,
+      manualDuration: manualDuration ?? this.manualDuration,
       curve: curve ?? this.curve,
     );
   }
@@ -84,6 +91,7 @@ class CrossfadeConfig {
     return {
       'enabled': enabled,
       'durationMs': duration.inMilliseconds,
+      'manualDurationMs': manualDuration.inMilliseconds,
       'curve': curve.name,
     };
   }
@@ -96,6 +104,11 @@ class CrossfadeConfig {
             ((json['durationMs'] ?? json['duration']) as num?)?.toInt() ??
             defaultDuration.inMilliseconds,
       ),
+      manualDuration: Duration(
+        milliseconds:
+            (json['manualDurationMs'] as num?)?.toInt() ??
+            defaultManualDuration.inMilliseconds,
+      ),
       curve: CrossfadeCurve.fromString(json['curve'] as String?),
     );
   }
@@ -107,8 +120,9 @@ class CrossfadeConfig {
           runtimeType == other.runtimeType &&
           enabled == other.enabled &&
           duration == other.duration &&
+          manualDuration == other.manualDuration &&
           curve == other.curve;
 
   @override
-  int get hashCode => Object.hash(enabled, duration, curve);
+  int get hashCode => Object.hash(enabled, duration, manualDuration, curve);
 }

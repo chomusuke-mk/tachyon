@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:miniaudio_player/miniaudio_player.dart' show AudioDevice, Equalizer;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/playback/domain/behavior_subject.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
@@ -58,6 +59,7 @@ class AudioEngineService {
   // Crossfade state
   CrossfadeConfig _crossfadeConfig = const CrossfadeConfig();
   bool _isCrossfading = false;
+  bool _isManualCrossfade = false;
   Timer? _fadeTimer;
   DateTime? _fadeTickStartTime;
   Duration _accumulatedFadeDuration = Duration.zero;
@@ -68,6 +70,8 @@ class AudioEngineService {
   double _playbackRate = AppDefaults.playbackRateDefault;
   double _playbackPitch = AppDefaults.playbackPitchDefault;
   bool _skipSilence = false;
+  Equalizer _equalizer = Equalizer.flat;
+  AudioDevice? _currentDevice;
 
   AudioEngineService({
     AudioPlayerAdapter? playerA,
@@ -91,6 +95,8 @@ class AudioEngineService {
   QueueManager get queueManager => _queueManager;
   bool get isCrossfading => _isCrossfading;
   CrossfadeConfig get crossfadeConfig => _crossfadeConfig;
+  Equalizer get equalizer => _equalizer;
+  AudioDevice? get currentDevice => _currentDevice;
 
   bool get isPlaying => _activePlayer.isPlaying;
 
@@ -157,8 +163,12 @@ class AudioEngineService {
 
     _activeSubscriptions.add(
       _activePlayer.completedStream.listen((completed) {
-        if (completed && !_isCrossfading) {
-          _handleTrackCompleted();
+        if (completed) {
+          if (_isCrossfading) {
+            _completeCrossfade();
+          } else {
+            _handleTrackCompleted();
+          }
         }
       }),
     );
@@ -195,6 +205,7 @@ class AudioEngineService {
     await _activePlayer.setVolume(_masterVolume);
     await _activePlayer.setRate(_playbackRate);
     await _activePlayer.setPitch(_playbackPitch);
+    await _activePlayer.setEqualizer(_equalizer);
     await _activePlayer.open(targetTrack.filePath, play: play);
 
     _emitState();
@@ -246,7 +257,6 @@ class AudioEngineService {
   Future<void> seek(Duration position) async {
     if (_queueManager.activeQueue.isEmpty) return;
 
-    // Seeking during active crossfade aborts preloaded instance
     if (_isCrossfading) {
       _abortActiveCrossfade();
     }
@@ -273,8 +283,7 @@ class AudioEngineService {
 
     final nextItem = await _queueManager.next(isManual: true);
     if (nextItem != null) {
-      await _activePlayer.open(nextItem.filePath, play: true);
-      _emitState();
+      await _performManualCrossfade(nextItem);
     } else {
       // Loop.off at end of queue
       await _activePlayer.stop();
@@ -286,7 +295,7 @@ class AudioEngineService {
     if (_queueManager.activeQueue.isEmpty) return;
 
     if (_isCrossfading) {
-      _abortActiveCrossfade();
+      await _fastForwardCrossfade();
     }
 
     // Standard behavior: if current track played > 3 seconds, restart it
@@ -298,12 +307,54 @@ class AudioEngineService {
 
     final prevItem = _queueManager.previous(position: _activePlayer.position);
     if (prevItem != null) {
-      await _activePlayer.open(prevItem.filePath, play: true);
-      _emitState();
+      await _performManualCrossfade(prevItem);
     } else {
       await _activePlayer.seek(Duration.zero);
       _emitState();
     }
+  }
+
+  Future<void> skipToIndex(int index) async {
+    if (index < 0 || index >= _queueManager.activeQueue.length) return;
+
+    if (_isCrossfading) {
+      await _fastForwardCrossfade();
+    }
+
+    final item = _queueManager.jumpTo(index);
+    if (item != null) {
+      await _performManualCrossfade(item);
+    }
+  }
+
+  Future<void> _performManualCrossfade(QueueItem targetTrack) async {
+    final manualDuration = _crossfadeConfig.manualDuration;
+    if (!_crossfadeConfig.enabled ||
+        manualDuration == Duration.zero ||
+        !_activePlayer.isPlaying) {
+      await _activePlayer.open(targetTrack.filePath, play: true);
+      _emitState();
+      return;
+    }
+
+    _isCrossfading = true;
+    _isManualCrossfade = true;
+    _accumulatedFadeDuration = Duration.zero;
+    _fadeTickStartTime = DateTime.now();
+    _effectiveCrossfadeDuration = manualDuration;
+
+    await _standbyPlayer.setVolume(0.0);
+    await _standbyPlayer.setRate(_playbackRate);
+    await _standbyPlayer.setPitch(_playbackPitch);
+    await _standbyPlayer.setEqualizer(_equalizer);
+    await _standbyPlayer.open(targetTrack.filePath, play: true);
+
+    _fadeTimer?.cancel();
+    _fadeTimer = Timer.periodic(tickerInterval, (_) {
+      _onCrossfadeTick();
+    });
+
+    _emitState();
   }
 
   // --------------------------------------------------------------------------
@@ -342,6 +393,13 @@ class AudioEngineService {
     if (effectiveCrossfade <= Duration.zero) return;
 
     final remaining = totalDuration - currentPosition;
+    if (remaining <= Duration.zero) return;
+
+    if (effectiveCrossfade > remaining) {
+      effectiveCrossfade = remaining;
+    }
+    if (effectiveCrossfade <= Duration.zero) return;
+
     if (remaining <= effectiveCrossfade) {
       _startCrossfade(effectiveCrossfade, nextTrack);
     }
@@ -367,6 +425,7 @@ class AudioEngineService {
     QueueItem nextTrack,
   ) async {
     _isCrossfading = true;
+    _isManualCrossfade = false;
     _accumulatedFadeDuration = Duration.zero;
     _fadeTickStartTime = DateTime.now();
     _effectiveCrossfadeDuration = effectiveDuration;
@@ -375,6 +434,7 @@ class AudioEngineService {
     await _standbyPlayer.setVolume(0.0);
     await _standbyPlayer.setRate(_playbackRate);
     await _standbyPlayer.setPitch(_playbackPitch);
+    await _standbyPlayer.setEqualizer(_equalizer);
     await _standbyPlayer.open(nextTrack.filePath, play: true);
 
     _fadeTimer?.cancel();
@@ -422,8 +482,10 @@ class AudioEngineService {
     // Ensure incoming player receives exact master volume
     await _standbyPlayer.setVolume(_masterVolume);
 
-    // Advance queue index
-    _advanceQueueIndex();
+    // Only auto-crossfade advances queue index at completion
+    if (!_isManualCrossfade) {
+      _advanceQueueIndex();
+    }
 
     // Role Swap: Standby becomes Active, Active becomes Standby
     final temp = _activePlayer;
@@ -431,6 +493,7 @@ class AudioEngineService {
     _standbyPlayer = temp;
 
     _isCrossfading = false;
+    _isManualCrossfade = false;
     _bindActivePlayerStreams();
     _emitState();
   }
@@ -444,13 +507,16 @@ class AudioEngineService {
     await _activePlayer.stop();
     await _standbyPlayer.setVolume(_masterVolume);
 
-    _advanceQueueIndex();
+    if (!_isManualCrossfade) {
+      _advanceQueueIndex();
+    }
 
     final temp = _activePlayer;
     _activePlayer = _standbyPlayer;
     _standbyPlayer = temp;
 
     _isCrossfading = false;
+    _isManualCrossfade = false;
     _bindActivePlayerStreams();
     _emitState();
   }
@@ -463,6 +529,7 @@ class AudioEngineService {
     _fadeTickStartTime = null;
     _accumulatedFadeDuration = Duration.zero;
     _isCrossfading = false;
+    _isManualCrossfade = false;
 
     // Reset outgoing player back to full master volume
     _activePlayer.setVolume(_masterVolume);
@@ -541,6 +608,21 @@ class AudioEngineService {
     await _standbyPlayer.setSkipSilence(enabled);
     _emitState();
   }
+
+  Future<void> setEqualizer(Equalizer equalizer) async {
+    _equalizer = equalizer;
+    await _playerA.setEqualizer(equalizer);
+    await _playerB.setEqualizer(equalizer);
+  }
+
+  Future<bool> setDevice(AudioDevice device) async {
+    _currentDevice = device;
+    final resA = await _playerA.setDevice(device);
+    final resB = await _playerB.setDevice(device);
+    return resA || resB;
+  }
+
+  Future<List<AudioDevice>> getAudioDevices() => _activePlayer.getAudioDevices();
 
   // --------------------------------------------------------------------------
   // Queue Management Delegation

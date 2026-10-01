@@ -95,11 +95,15 @@ Future<void> main() async {
           create: (context) {
             final repo = context.read<LocaleRepository>();
             final settings = context.read<SettingsController>();
-            return LocaleController(repo, settings.appLanguage);
+            String initialLang = settings.appLanguage;
+            if (initialLang == "defaultOption" || initialLang == "default") {
+              initialLang = ui.PlatformDispatcher.instance.locale.languageCode;
+            }
+            return LocaleController(repo, initialLang);
           },
           update: (context, repo, settings, prev) {
             String currentLang = settings.appLanguage;
-            if (currentLang == "defaultOption") {
+            if (currentLang == "defaultOption" || currentLang == "default") {
               currentLang = ui.PlatformDispatcher.instance.locale.languageCode;
             }
             if (prev != null && prev.currentLocaleCode != currentLang) {
@@ -109,23 +113,26 @@ Future<void> main() async {
           },
         ),
 
-        ChangeNotifierProxyProvider3<
+        ChangeNotifierProxyProvider4<
           AppDatabase,
           MetadataExtractor,
           CoverCacheService,
+          SettingsRepository,
           LibraryController
         >(
           create: (context) => LibraryController(
             database: context.read<AppDatabase>(),
             metadataExtractor: context.read<MetadataExtractor>(),
             coverCacheService: context.read<CoverCacheService>(),
+            settingsRepository: context.read<SettingsRepository>(),
           )..loadLibrary(),
-          update: (_, db, meta, cover, prev) =>
+          update: (_, db, meta, cover, settings, prev) =>
               prev ??
               LibraryController(
                 database: db,
                 metadataExtractor: meta,
                 coverCacheService: cover,
+                settingsRepository: settings,
               ),
         ),
 
@@ -163,20 +170,26 @@ Future<void> main() async {
               ),
         ),
 
-        ChangeNotifierProxyProvider2<
+        ChangeNotifierProxyProvider4<
           LyricsService,
           PlaybackController,
+          SettingsRepository,
+          AppDatabase,
           LyricsController
         >(
           create: (context) => LyricsController(
             lyricsService: context.read<LyricsService>(),
             playbackController: context.read<PlaybackController>(),
+            settingsRepository: context.read<SettingsRepository>(),
+            database: context.read<AppDatabase>(),
           ),
-          update: (_, lyrics, playback, prev) =>
+          update: (_, lyrics, playback, settings, db, prev) =>
               prev ??
               LyricsController(
                 lyricsService: lyrics,
                 playbackController: playback,
+                settingsRepository: settings,
+                database: db,
               ),
         ),
       ],

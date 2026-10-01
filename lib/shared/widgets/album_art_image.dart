@@ -4,8 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/services/cover_cache_service.dart';
 
+export 'package:tachyon/core/services/cover_cache_service.dart'
+    show ThumbnailQuality;
+
 class AlbumArtImage extends StatelessWidget {
   final String filePath;
+  final String? artistName;
+  final ThumbnailQuality quality;
   final double? width;
   final double? height;
   final int? cacheWidth;
@@ -14,9 +19,13 @@ class AlbumArtImage extends StatelessWidget {
   final BorderRadius? borderRadius;
 
   static final Set<String> _existingCovers = <String>{};
+  static final Set<String> _missingCovers = <String>{};
 
   @visibleForTesting
-  static void clearExistenceCache() => _existingCovers.clear();
+  static void clearExistenceCache() {
+    _existingCovers.clear();
+    _missingCovers.clear();
+  }
 
   @Deprecated('Use filePath instead')
   String get uri => filePath;
@@ -24,6 +33,8 @@ class AlbumArtImage extends StatelessWidget {
   const AlbumArtImage({
     super.key,
     String? filePath,
+    this.artistName,
+    this.quality = ThumbnailQuality.low,
     @Deprecated('Use filePath instead') String? uri,
     this.width,
     this.height,
@@ -54,7 +65,9 @@ class AlbumArtImage extends StatelessWidget {
       color: colorScheme.surfaceContainerHighest,
       child: Center(
         child: Icon(
-          Icons.album_rounded,
+          artistName != null && filePath.isEmpty
+              ? Icons.person_rounded
+              : Icons.album_rounded,
           size: (width != null && height != null)
               ? (width! < height! ? width! * 0.5 : height! * 0.5)
               : (width != null ? width! * 0.5 : 24),
@@ -63,20 +76,33 @@ class AlbumArtImage extends StatelessWidget {
       ),
     );
 
-    if (cacheService == null || filePath.isEmpty) {
+    if (cacheService == null ||
+        (filePath.isEmpty && (artistName == null || artistName!.trim().isEmpty))) {
       if (borderRadius != null) {
         return ClipRRect(borderRadius: borderRadius!, child: fallback);
       }
       return fallback;
     }
 
-    final coverFile = cacheService.getCoverFile(filePath);
+    final coverFile = (artistName != null &&
+            artistName!.trim().isNotEmpty &&
+            cacheService.hasCachedArtistCover(artistName!, quality: quality))
+        ? cacheService.getArtistCoverFile(artistName!, quality: quality)
+        : cacheService.getCoverFile(filePath, quality: quality);
+
+    if (_missingCovers.contains(coverFile.path)) {
+      if (borderRadius != null) {
+        return ClipRRect(borderRadius: borderRadius!, child: fallback);
+      }
+      return fallback;
+    }
 
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
-    final int defaultBound =
-        (width != null && width! > 200) || (height != null && height! > 200)
+    final int defaultBound = quality == ThumbnailQuality.high
+        ? 1000
+        : ((width != null && width! > 200) || (height != null && height! > 200)
             ? 400
-            : 150;
+            : 160);
     final int targetCacheWidth = cacheWidth ??
         (width != null ? (width! * dpr).round() : defaultBound);
     final int targetCacheHeight = cacheHeight ??
@@ -90,6 +116,13 @@ class AlbumArtImage extends StatelessWidget {
         cacheWidth: targetCacheWidth > 0 ? targetCacheWidth : null,
         cacheHeight: targetCacheHeight > 0 ? targetCacheHeight : null,
         fit: fit,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) {
+            return child;
+          }
+          return fallback;
+        },
         errorBuilder: (context, error, stackTrace) => fallback,
       );
     }
@@ -101,9 +134,14 @@ class AlbumArtImage extends StatelessWidget {
       imageWidget = FutureBuilder<bool>(
         future: coverFile.exists(),
         builder: (context, snapshot) {
-          if (snapshot.hasData && snapshot.data == true) {
-            _existingCovers.add(coverFile.path);
-            return buildImage(coverFile);
+          if (snapshot.connectionState == ConnectionState.done) {
+            if (snapshot.data == true) {
+              _existingCovers.add(coverFile.path);
+              return buildImage(coverFile);
+            } else {
+              _missingCovers.add(coverFile.path);
+              return fallback;
+            }
           }
           return fallback;
         },

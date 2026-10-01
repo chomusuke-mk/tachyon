@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
@@ -27,6 +29,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     with WidgetsBindingObserver {
   bool _showLyrics = false;
   bool _showQueue = false;
+  bool _hasInitializedViewSettings = false;
   LyricsController? _lyricsController;
 
   bool _isCurrentTrackLiked = false;
@@ -43,6 +46,19 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _lyricsController = context.read<LyricsController>();
+    if (!_hasInitializedViewSettings) {
+      _hasInitializedViewSettings = true;
+      try {
+        final settings = context.read<SettingsRepository>();
+        _showLyrics = settings.getPlaybackShowLyrics();
+        _showQueue = settings.getPlaybackShowQueue();
+      } catch (_) {
+        // Fallback if SettingsRepository is not provided (e.g. in isolated widget tests)
+      }
+      if (_showLyrics) {
+        _lyricsController?.setLyricsViewVisible(true);
+      }
+    }
     _checkLikedStatus();
   }
 
@@ -108,6 +124,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       }
     });
     _lyricsController?.setLyricsViewVisible(_showLyrics);
+    try {
+      final settings = context.read<SettingsRepository>();
+      settings.setPlaybackShowLyrics(_showLyrics);
+      settings.setPlaybackShowQueue(_showQueue);
+    } catch (_) {}
   }
 
   void _toggleQueue() {
@@ -119,6 +140,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         _lyricsController?.setLyricsViewVisible(false);
       }
     });
+    try {
+      final settings = context.read<SettingsRepository>();
+      settings.setPlaybackShowLyrics(_showLyrics);
+      settings.setPlaybackShowQueue(_showQueue);
+    } catch (_) {}
   }
 
   @override
@@ -182,9 +208,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.speaker_group_rounded),
-            tooltip: strings.npAudioControls,
+            tooltip: strings.npAudioDevices,
             color: colorScheme.onSurface,
-            onPressed: () => _openAudioControls(context),
+            onPressed: () => _showAudioDevicesDialog(context),
           ),
           IconButton(
             icon: Icon(
@@ -230,60 +256,55 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 // Top App Bar
                 appTopBar,
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    switchInCurve: Curves.easeInOut,
-                    switchOutCurve: Curves.easeInOut,
-                    child: currentWidth >= 588 && _showQueue
-                        ? Row(
-                            key: const ValueKey('queue_and_player'),
-                            children: [
-                              Expanded(child: QueueView()),
-                              Expanded(
-                                child: _buildPlayer(
-                                  currentTrack,
-                                  context,
-                                  preferVertical: true,
-                                  hideQueue: true,
-                                  hideLyrics: true,
-                                ),
+                  child: currentWidth >= 588 && _showQueue
+                      ? Row(
+                          key: const ValueKey('queue_and_player'),
+                          children: [
+                            Expanded(child: QueueView()),
+                            Expanded(
+                              child: _buildPlayer(
+                                currentTrack,
+                                context,
+                                preferVertical: true,
+                                hideQueue: true,
+                                hideLyrics: true,
                               ),
-                            ],
-                          )
-                        : currentWidth >= 588 && _showLyrics
-                        ? Row(
-                            key: const ValueKey('lyrics_and_player'),
-                            children: [
-                              Expanded(
-                                child: LyricsView(
-                                  key: const ValueKey('lyrics_view'),
-                                  filePath: currentTrack.filePath,
-                                  onSeek: playback.seek,
-                                ),
-                              ),
-                              Expanded(
-                                child: _buildPlayer(
-                                  currentTrack,
-                                  context,
-                                  preferVertical: true,
-                                  hideQueue: false,
-                                  hideLyrics: true,
-                                ),
-                              ),
-                            ],
-                          )
-                        : _buildPlayer(
-                            currentTrack,
-                            context,
-                            key: ValueKey(
-                              _showQueue
-                                  ? 'narrow_queue'
-                                  : _showLyrics
-                                  ? 'narrow_lyrics'
-                                  : 'player_only',
                             ),
+                          ],
+                        )
+                      : currentWidth >= 588 && _showLyrics
+                      ? Row(
+                          key: const ValueKey('lyrics_and_player'),
+                          children: [
+                            Expanded(
+                              child: LyricsView(
+                                key: const ValueKey('lyrics_view'),
+                                filePath: currentTrack.filePath,
+                                onSeek: playback.seek,
+                              ),
+                            ),
+                            Expanded(
+                              child: _buildPlayer(
+                                currentTrack,
+                                context,
+                                preferVertical: true,
+                                hideQueue: false,
+                                hideLyrics: true,
+                              ),
+                            ),
+                          ],
+                        )
+                      : _buildPlayer(
+                          currentTrack,
+                          context,
+                          key: ValueKey(
+                            _showQueue
+                                ? 'narrow_queue'
+                                : _showLyrics
+                                ? 'narrow_lyrics'
+                                : 'player_only',
                           ),
-                  ),
+                        ),
                 ),
               ],
             ),
@@ -703,25 +724,25 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         fit: StackFit.expand,
         children: [
           if (filePath.isNotEmpty)
-            AlbumArtImage(
-              filePath: filePath,
-              fit: BoxFit.cover,
-              cacheWidth: 128,
-              cacheHeight: 128,
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 32.0, sigmaY: 32.0),
+              child: AlbumArtImage(
+                filePath: filePath,
+                fit: BoxFit.cover,
+                cacheWidth: 128,
+                cacheHeight: 128,
+              ),
             ),
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 32.0, sigmaY: 32.0),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    colorScheme.surface.withValues(alpha: 0.65),
-                    colorScheme.surface.withValues(alpha: 0.82),
-                    colorScheme.surface.withValues(alpha: 0.95),
-                  ],
-                ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  colorScheme.surface.withValues(alpha: 0.65),
+                  colorScheme.surface.withValues(alpha: 0.82),
+                  colorScheme.surface.withValues(alpha: 0.95),
+                ],
               ),
             ),
           ),
@@ -756,7 +777,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(24.0),
-                child: AlbumArtImage(filePath: filePath, fit: BoxFit.cover),
+                child: AlbumArtImage(
+                  filePath: filePath,
+                  quality: ThumbnailQuality.high,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           );
@@ -774,6 +799,123 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       isScrollControlled: true,
       backgroundColor: colorScheme.surfaceContainerHigh,
       builder: (context) => const AudioEffectsSheet(),
+    );
+  }
+
+  void _showAudioDevicesDialog(BuildContext context) async {
+    final playback = context.read<PlaybackController>();
+    final settings = context.read<SettingsController>();
+    final strings = context.read<LocaleController>().localeStrings;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final devices = await playback.getAudioDevices();
+    if (!context.mounted) return;
+
+    final currentDeviceId = settings.audioOutputDeviceId;
+
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: colorScheme.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(Icons.speaker_group_rounded, color: colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      strings.npAudioDevices,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.settings_suggest_rounded),
+                      title: Text(strings.npAudioDeviceDefault),
+                      trailing: (currentDeviceId == null || currentDeviceId.isEmpty)
+                          ? Icon(Icons.check_rounded, color: colorScheme.primary)
+                          : null,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onTap: () async {
+                        await settings.setAudioOutputDeviceId(null);
+                        if (devices.isNotEmpty) {
+                          final defaultDev = devices.firstWhere(
+                            (d) => d.isDefault,
+                            orElse: () => devices.first,
+                          );
+                          await playback.setAudioDevice(defaultDev);
+                        }
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                    ),
+                    const Divider(),
+                    ...devices.map((device) {
+                      final isSelected = currentDeviceId == device.id ||
+                          ((currentDeviceId == null || currentDeviceId.isEmpty) &&
+                              device.isDefault);
+                      return ListTile(
+                        leading: Icon(
+                          device.name.toLowerCase().contains('headphone')
+                              ? Icons.headphones_rounded
+                              : Icons.speaker_rounded,
+                        ),
+                        title: Text(device.name),
+                        trailing: isSelected
+                            ? Icon(Icons.check_rounded, color: colorScheme.primary)
+                            : null,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        onTap: () async {
+                          await settings.setAudioOutputDeviceId(device.id);
+                          await playback.setAudioDevice(device);
+                          if (context.mounted) Navigator.of(context).pop();
+                        },
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

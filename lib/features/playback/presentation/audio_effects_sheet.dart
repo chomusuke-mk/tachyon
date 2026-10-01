@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
@@ -210,72 +208,252 @@ class AudioEffectsSheet extends StatelessWidget {
                       ),
                     ],
                   ),
-                  Text(
-                    strings.sCrossfadeEnable,
-                    style: theme.textTheme.titleSmall,
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          Icons.swap_horiz_rounded,
-                          size: 25,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        onPressed: () => settings.setCrossfadeDuration(
-                          AppDefaults.crossfadeDefaultDuration,
-                        ),
-                        iconSize: 25,
-                        color: colorScheme.onSurfaceVariant,
-                        constraints: const BoxConstraints(
-                          minWidth: 24,
-                          minHeight: 24,
-                        ),
-                        style: IconButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                        ),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: settings.crossfadeDuration.toDouble().clamp(
-                            AppDefaults.crossfadeMinDuration.toDouble(),
-                            AppDefaults.crossfadeMaxDuration.toDouble(),
-                          ),
-                          min: AppDefaults.crossfadeMinDuration.toDouble(),
-                          max: AppDefaults.crossfadeMaxDuration.toDouble(),
-                          divisions:
-                              AppDefaults.crossfadeMaxDuration -
-                              AppDefaults.crossfadeMinDuration,
-                          onChanged: (val) =>
-                              settings.setCrossfadeDuration(val.round()),
-                        ),
-                      ),
-                      Container(
-                        constraints: const BoxConstraints(minWidth: 25),
-                        child: Text(
-                          '${settings.crossfadeDuration}s',
-                          style: theme.textTheme.labelLarge,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (Platform.isAndroid)
-                    SwitchListTile(
-                      value: settings.skipSilence,
-                      onChanged: (val) => settings.setSkipSilence(val),
-                      title: Text(
-                        "SKIP SILENCE",
-                        style: theme.textTheme.titleSmall,
+                    const Divider(height: 32),
+                    Text(
+                      strings.sCrossfadeEnable,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    // Auto Crossfade Duration
+                    Text(
+                      strings.npCrossfadeAuto,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.swap_horiz_rounded),
+                          onPressed: () => settings.setCrossfadeDuration(
+                            AppDefaults.crossfadeDefaultDuration,
+                          ),
+                          iconSize: 24,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: settings.crossfadeDuration.toDouble().clamp(
+                              AppDefaults.crossfadeMinDuration.toDouble(),
+                              AppDefaults.crossfadeMaxDuration.toDouble(),
+                            ),
+                            min: AppDefaults.crossfadeMinDuration.toDouble(),
+                            max: AppDefaults.crossfadeMaxDuration.toDouble(),
+                            divisions: AppDefaults.crossfadeMaxDuration -
+                                AppDefaults.crossfadeMinDuration,
+                            onChanged: (val) =>
+                                settings.setCrossfadeDuration(val.round()),
+                          ),
+                        ),
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 32),
+                          child: Text(
+                            '${settings.crossfadeDuration}s',
+                            style: theme.textTheme.labelLarge,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Manual Skip Crossfade Duration
+                    Text(
+                      strings.npCrossfadeManual,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.skip_next_rounded),
+                          onPressed: () =>
+                              settings.setCrossfadeManualDuration(3),
+                          iconSize: 24,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: settings.crossfadeManualDuration
+                                .toDouble()
+                                .clamp(0.0, 10.0),
+                            min: 0.0,
+                            max: 10.0,
+                            divisions: 10,
+                            onChanged: (val) =>
+                                settings.setCrossfadeManualDuration(val.round()),
+                          ),
+                        ),
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 32),
+                          child: Text(
+                            '${settings.crossfadeManualDuration}s',
+                            style: theme.textTheme.labelLarge,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const _EqualizerSection(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+class _EqualizerSection extends StatelessWidget {
+  const _EqualizerSection();
+
+  static const _bandFrequencies = [
+    '60Hz',
+    '170Hz',
+    '310Hz',
+    '600Hz',
+    '1kHz',
+    '3kHz',
+    '6kHz',
+    '12kHz',
+    '14kHz',
+    '16kHz',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsController>();
+    final strings = context.watch<LocaleController>().localeStrings;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isEnabled = settings.equalizerEnabled;
+    final gains = settings.equalizerGains;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.tune_rounded, size: 20, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  strings.sEqualizerTitle,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            Switch.adaptive(
+              value: isEnabled,
+              onChanged: (val) => settings.setEqualizerEnabled(val),
+            ),
+          ],
+        ),
+        if (isEnabled) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Text(
+                strings.sEqualizerPreset,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              DropdownButton<String>(
+                value: settings.equalizerPreset,
+                underline: const SizedBox(),
+                borderRadius: BorderRadius.circular(12),
+                items: [
+                  DropdownMenuItem(value: 'flat', child: Text(strings.sEqPresetFlat)),
+                  DropdownMenuItem(value: 'rock', child: Text(strings.sEqPresetRock)),
+                  DropdownMenuItem(value: 'pop', child: Text(strings.sEqPresetPop)),
+                  DropdownMenuItem(value: 'jazz', child: Text(strings.sEqPresetJazz)),
+                  DropdownMenuItem(value: 'classical', child: Text(strings.sEqPresetClassical)),
+                  DropdownMenuItem(value: 'bassBoost', child: Text(strings.sEqPresetBassBoost)),
+                  DropdownMenuItem(value: 'custom', child: Text(strings.sEqPresetCustom)),
                 ],
+                onChanged: (val) {
+                  if (val != null) {
+                    settings.setEqualizerPreset(val);
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 180,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: List.generate(10, (index) {
+                  final gain = index < gains.length ? gains[index] : 0.0;
+                  final freqLabel = index < _bandFrequencies.length
+                      ? _bandFrequencies[index]
+                      : '${index + 1}';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '${gain > 0 ? '+' : ''}${gain.toStringAsFixed(1)}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontSize: 10,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          height: 120,
+                          width: 32,
+                          child: RotatedBox(
+                            quarterTurns: 3,
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 6,
+                                ),
+                                overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 12,
+                                ),
+                              ),
+                              child: Slider(
+                                value: gain.clamp(-24.0, 24.0),
+                                min: -24.0,
+                                max: 24.0,
+                                onChanged: (val) {
+                                  settings.setEqualizerBandGain(index, val);
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          freqLabel,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
               ),
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
+

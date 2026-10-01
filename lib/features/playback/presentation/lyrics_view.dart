@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
+import 'package:tachyon/features/playback/domain/lyric_line.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 
 import 'lyrics_controller.dart';
@@ -117,6 +118,7 @@ class LyricsView extends StatelessWidget {
   ) {
     final lines = lyricsController.lines;
     final activeIndex = lyricsController.currentIndex;
+    final isSynced = lyricsController.isSynced;
     final isTranslated = lyricsController.isTranslated;
     final isInterleaved = lyricsController.isInterleaved;
     final translatedLines = lyricsController.translatedLines;
@@ -128,130 +130,53 @@ class LyricsView extends StatelessWidget {
         }
         return false;
       },
-      child: ListView.builder(
-        controller: lyricsController.scrollController,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 24.0,
-          vertical: 120.0,
-        ),
-        itemCount: lines.length,
-        itemBuilder: (context, index) {
-          final line = lines[index];
-          final isActive = index == activeIndex;
-          final translatedText =
-              (index >= 0 && index < translatedLines.length)
-                  ? translatedLines[index]
-                  : null;
-          final hasTranslation =
-              translatedText != null && translatedText.trim().isNotEmpty;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final halfHeight = constraints.maxHeight > 0
+              ? constraints.maxHeight / 2
+              : 160.0;
 
-          return InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () {
-              lyricsController.seekToLine(index);
-              if (onSeek != null && line.isSynced) {
-                onSeek!(line.timestamp);
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                vertical: 10.0,
-                horizontal: 8.0,
-              ),
-              child: _buildLyricLineContent(
-                originalText: line.text,
-                translatedText: translatedText,
+          return ListView.builder(
+            controller: lyricsController.scrollController,
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.only(
+              left: 24.0,
+              right: 24.0,
+              top: isSynced ? (halfHeight - 28.0) : 100.0,
+              bottom: isSynced ? (halfHeight - 28.0) : 100.0,
+            ),
+            itemCount: lines.length,
+            itemBuilder: (context, index) {
+              final line = lines[index];
+              final isActive = isSynced && (index == activeIndex);
+              final translatedText =
+                  (index >= 0 && index < translatedLines.length)
+                      ? translatedLines[index]
+                      : null;
+              final hasTranslation =
+                  translatedText != null && translatedText.trim().isNotEmpty;
+
+              return _LyricLineItem(
+                key: ValueKey('line_${line.timestamp.inMilliseconds}_$index'),
+                line: line,
+                index: index,
+                isActive: isActive,
+                isSynced: isSynced,
                 hasTranslation: hasTranslation,
+                translatedText: translatedText,
                 isTranslated: isTranslated,
                 isInterleaved: isInterleaved,
-                isActive: isActive,
                 colorScheme: colorScheme,
-              ),
-            ),
+                lyricsController: lyricsController,
+                onSeek: onSeek,
+              );
+            },
           );
         },
       ),
     );
   }
 
-  Widget _buildLyricLineContent({
-    required String originalText,
-    required String? translatedText,
-    required bool hasTranslation,
-    required bool isTranslated,
-    required bool isInterleaved,
-    required bool isActive,
-    required ColorScheme colorScheme,
-  }) {
-    // Mode 1: Interleaved (Original on top, translated line beneath)
-    if (isTranslated && isInterleaved) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            originalText,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: isActive ? 22 : 16,
-              fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-              color: isActive
-                  ? colorScheme.primary
-                  : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-              height: 1.3,
-            ),
-          ),
-          if (hasTranslation) ...[
-            const SizedBox(height: 4.0),
-            Text(
-              translatedText!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: isActive ? 16 : 13,
-                fontWeight: isActive ? FontWeight.w500 : FontWeight.w300,
-                fontStyle: FontStyle.italic,
-                color: isActive
-                    ? colorScheme.secondary
-                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.35),
-                height: 1.3,
-              ),
-            ),
-          ],
-        ],
-      );
-    }
-
-    // Mode 2: Translated (replaces original)
-    if (isTranslated && hasTranslation) {
-      return Text(
-        translatedText!,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: isActive ? 22 : 16,
-          fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-          color: isActive
-              ? colorScheme.primary
-              : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-          height: 1.4,
-        ),
-      );
-    }
-
-    // Mode 3: Original
-    return Text(
-      originalText,
-      textAlign: TextAlign.center,
-      style: TextStyle(
-        fontSize: isActive ? 22 : 16,
-        fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-        color: isActive
-            ? colorScheme.primary
-            : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-        height: 1.4,
-      ),
-    );
-  }
 
   Widget _buildTopControlsBar(
     BuildContext context,
@@ -301,43 +226,94 @@ class LyricsView extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final sourceName = switch (controller.currentLyricsSource) {
-      LyricsSource.embedded => strings.npLyricsSourceEmbedded,
-      LyricsSource.file => strings.npLyricsSourceFile,
-      LyricsSource.lrclib => strings.npLyricsSourceLrclib,
-      LyricsSource.lyricsOvh => strings.npLyricsSourceOvh,
-      null => strings.npLyricsSourceNone,
+    final (badgeLabel, serverName, fullTooltip) =
+        switch (controller.currentLyricsSource) {
+      LyricsSource.embedded => (
+        'E',
+        'Tags',
+        strings.npLyricsSourceEmbedded,
+      ),
+      LyricsSource.file => (
+        'L',
+        '.lrc',
+        strings.npLyricsSourceFile,
+      ),
+      LyricsSource.lrclib => (
+        '1',
+        'lrclib.net',
+        strings.npLyricsSourceLrclib,
+      ),
+      LyricsSource.lyricsOvh => (
+        '2',
+        'lyrics.ovh',
+        strings.npLyricsSourceOvh,
+      ),
+      null => ('-', '', strings.npLyricsSourceNone),
     };
 
     final isSynced = controller.isSynced;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      decoration: BoxDecoration(
-        color: colorScheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isSynced ? Icons.timer_outlined : Icons.notes_rounded,
-            size: 14,
-            color: colorScheme.primary,
+    return Tooltip(
+      message: fullTooltip,
+      waitDuration: const Duration(milliseconds: 250),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+        decoration: BoxDecoration(
+          color: colorScheme.surface.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(10.0),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+            width: 0.8,
           ),
-          const SizedBox(width: 4),
-          Text(
-            sourceName,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: colorScheme.onSurfaceVariant,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 5.0,
+                vertical: 1.5,
+              ),
+              decoration: BoxDecoration(
+                color: isSynced
+                    ? colorScheme.primaryContainer
+                    : colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(4.0),
+              ),
+              child: Text(
+                badgeLabel,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isSynced
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onSecondaryContainer,
+                ),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 6),
+            Text(
+              serverName,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              isSynced ? Icons.timer_outlined : Icons.notes_rounded,
+              size: 13,
+              color: isSynced
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
       ),
     );
   }
+
 
   Widget _buildTranslationButton(
     BuildContext context,
@@ -455,3 +431,203 @@ class LyricsView extends StatelessWidget {
     );
   }
 }
+
+class _LyricLineItem extends StatefulWidget {
+  final LyricLine line;
+  final int index;
+  final bool isActive;
+  final bool isSynced;
+  final bool hasTranslation;
+  final String? translatedText;
+  final bool isTranslated;
+  final bool isInterleaved;
+  final ColorScheme colorScheme;
+  final LyricsController lyricsController;
+  final ValueChanged<Duration>? onSeek;
+
+  const _LyricLineItem({
+    super.key,
+    required this.line,
+    required this.index,
+    required this.isActive,
+    required this.isSynced,
+    required this.hasTranslation,
+    required this.translatedText,
+    required this.isTranslated,
+    required this.isInterleaved,
+    required this.colorScheme,
+    required this.lyricsController,
+    this.onSeek,
+  });
+
+  @override
+  State<_LyricLineItem> createState() => _LyricLineItemState();
+}
+
+class _LyricLineItemState extends State<_LyricLineItem> {
+  @override
+  void didUpdateWidget(covariant _LyricLineItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive && widget.isSynced) {
+      if (!widget.lyricsController.isUserScrollLocked) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.5,
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOutCubic,
+            );
+          }
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        widget.lyricsController.seekToLine(widget.index);
+        if (widget.onSeek != null && widget.line.isSynced) {
+          widget.onSeek!(widget.line.timestamp);
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          vertical: 10.0,
+          horizontal: 8.0,
+        ),
+        child: _buildContent(),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    final colorScheme = widget.colorScheme;
+    final isActive = widget.isActive;
+    final isSynced = widget.isSynced;
+    final isTranslated = widget.isTranslated;
+    final isInterleaved = widget.isInterleaved;
+    final hasTranslation = widget.hasTranslation;
+    final originalText = widget.line.text;
+    final translatedText = widget.translatedText;
+
+    // Plain text unsynced mode: uniform, clean presentation without highlighting or opacity fading
+    if (!isSynced) {
+      if (isTranslated && isInterleaved) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              originalText,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w400,
+                color: colorScheme.onSurface,
+                height: 1.4,
+              ),
+            ),
+            if (hasTranslation) ...[
+              const SizedBox(height: 4.0),
+              Text(
+                translatedText!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  fontStyle: FontStyle.italic,
+                  color: colorScheme.onSurfaceVariant,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ],
+        );
+      }
+
+      final textToDisplay =
+          (isTranslated && hasTranslation) ? translatedText! : originalText;
+      return Text(
+        textToDisplay,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w400,
+          color: colorScheme.onSurface,
+          height: 1.4,
+        ),
+      );
+    }
+
+    // Synchronized mode with active line highlight
+    if (isTranslated && isInterleaved) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            originalText,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: isActive ? 22 : 16,
+              fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+              color: isActive
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              height: 1.3,
+            ),
+          ),
+          if (hasTranslation) ...[
+            const SizedBox(height: 4.0),
+            Text(
+              translatedText!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: isActive ? 16 : 13,
+                fontWeight: isActive ? FontWeight.w500 : FontWeight.w300,
+                fontStyle: FontStyle.italic,
+                color: isActive
+                    ? colorScheme.secondary
+                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.35),
+                height: 1.3,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    if (isTranslated && hasTranslation) {
+      return Text(
+        translatedText!,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: isActive ? 22 : 16,
+          fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+          color: isActive
+              ? colorScheme.primary
+              : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+          height: 1.4,
+        ),
+      );
+    }
+
+    return Text(
+      originalText,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontSize: isActive ? 22 : 16,
+        fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+        color: isActive
+            ? colorScheme.primary
+            : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+        height: 1.4,
+      ),
+    );
+  }
+}
+

@@ -146,6 +146,7 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                                   height: 108,
                                   child: AlbumArtImage(
                                     filePath: coverFilePath,
+                                    artistName: artist.name,
                                     fit: BoxFit.cover,
                                   ),
                                 ),

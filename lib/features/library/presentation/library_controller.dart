@@ -13,43 +13,28 @@ import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/library/domain/track_sort_option.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
 
-enum TrackSortOption {
-  title,
-  artist,
-  album,
-  year,
-  duration,
-  dateAdded;
-
-  String toDbKey() {
-    switch (this) {
-      case TrackSortOption.title:
-        return 'title';
-      case TrackSortOption.artist:
-        return 'artist';
-      case TrackSortOption.album:
-        return 'album';
-      case TrackSortOption.year:
-        return 'year';
-      case TrackSortOption.duration:
-        return 'duration';
-      case TrackSortOption.dateAdded:
-        return 'dateadded';
-    }
-  }
-}
+export 'package:tachyon/features/library/domain/track_sort_option.dart';
 
 class LibraryController extends ChangeNotifier {
   final AppDatabase _database;
   final MetadataExtractor _metadataExtractor;
   final CoverCacheService? _coverCacheService;
+  final SettingsRepository? _settingsRepository;
 
   LibraryController({
     required this._database,
     required this._metadataExtractor,
     this._coverCacheService,
-  });
+    SettingsRepository? settingsRepository,
+  })  : _settingsRepository = settingsRepository {
+    if (settingsRepository != null) {
+      _sortOption = settingsRepository.getTrackSortOption();
+      _sortAscending = settingsRepository.getTrackSortAscending();
+    }
+  }
 
   CoverCacheService? get coverCacheService => _coverCacheService;
 
@@ -165,6 +150,9 @@ class LibraryController extends ChangeNotifier {
         _sortAscending = ascending;
       }
     }
+
+    _settingsRepository?.setTrackSortOption(_sortOption);
+    _settingsRepository?.setTrackSortAscending(_sortAscending);
 
     _isLoading = true;
     notifyListeners();
@@ -381,11 +369,7 @@ class LibraryController extends ChangeNotifier {
   Future<void> deleteTrack(Track track) async {
     if (track.id == null) return;
     try {
-      await _database.database.delete(
-        'tracks',
-        where: 'id = ?',
-        whereArgs: [track.id],
-      );
+      await _database.deleteTrack(track.id!);
       await loadLibrary();
     } catch (e) {
       _errorMessage = 'Failed to delete track: $e';
@@ -396,14 +380,7 @@ class LibraryController extends ChangeNotifier {
   /// Removes from the database all tracks whose file path starts with [folderPath].
   Future<void> deleteTracksInFolder(String folderPath) async {
     try {
-      // Normalise: ensure path ends with separator so we don't accidentally
-      // match "/music/rock" when looking for "/music/ro".
-      final prefix = folderPath.endsWith('/') ? folderPath : '$folderPath/';
-      await _database.database.delete(
-        'tracks',
-        where: "file_path LIKE ?",
-        whereArgs: ['${prefix.replaceAll('%', r'\%').replaceAll('_', r'\_')}%'],
-      );
+      await _database.deleteTracksInFolder(folderPath);
       await loadLibrary();
     } catch (e) {
       _errorMessage = 'Failed to delete tracks in folder: $e';

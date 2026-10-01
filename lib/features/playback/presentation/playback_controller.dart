@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' show AudioDevice, Equalizer;
 
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/services/audio_engine_service.dart';
@@ -164,10 +165,26 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> skipToQueueIndex(int index) async {
     if (index < 0 || index >= _state.queue.length) return;
-    await _audioEngine.open(_state.playables, index: index, play: true);
+    await _audioEngine.skipToIndex(index);
   }
 
   Future<void> playTrackAtIndex(int index) => skipToQueueIndex(index);
+
+  Equalizer get equalizer => _audioEngine.equalizer;
+  AudioDevice? get currentDevice => _audioEngine.currentDevice;
+
+  Future<void> setEqualizer(Equalizer equalizer) async {
+    await _audioEngine.setEqualizer(equalizer);
+    notifyListeners();
+  }
+
+  Future<List<AudioDevice>> getAudioDevices() => _audioEngine.getAudioDevices();
+
+  Future<bool> setAudioDevice(AudioDevice device) async {
+    final res = await _audioEngine.setDevice(device);
+    notifyListeners();
+    return res;
+  }
 
   bool get isInfiniteMixEnabled {
     final engine = _audioEngine;

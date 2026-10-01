@@ -327,7 +327,11 @@ Future<Track?> _extractMetadata(
 
     if (!coverService.hasCachedCover(file.path)) {
       try {
-        unawaited(coverService.saveCacheCover(file.path));
+        unawaited(coverService.saveCacheCover(
+          file.path,
+          artistName: metadata.artist,
+          albumName: metadata.album,
+        ));
       } catch (_) {}
     }
 

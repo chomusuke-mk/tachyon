@@ -3,22 +3,22 @@ import 'package:flutter/material.dart';
 abstract final class TachyonColors {
   // Brand Seeds
   static const Color electricVioletSeed = Color(0xFF7C4DFF);
-  static const Color secondarySeed = Color(0xFF9E86F0);
+  static const Color secondarySeed = Color(0xFF64748B);
   static const Color tertiarySeed = Color(0xFF00E5FF);
 
   // ---------------------------------------------------------------------------
   // 5-Tier Surface Hierarchy - Dark Theme (Default)
   // ---------------------------------------------------------------------------
-  static const Color darkCanvas = Color(0xFF0E0B16);
-  static const Color darkSurfaceLowest = Color(0xFF0A090E);
-  static const Color darkSurfaceLow = Color(0xFF161224);
-  static const Color darkSurface = Color(0xFF1E1831);
-  static const Color darkSurfaceHigh = Color(0xFF27203E);
-  static const Color darkSurfaceHighest = Color(0xFF31294C);
+  static const Color darkCanvas = Color(0xFF0A0C10);
+  static const Color darkSurfaceLowest = Color(0xFF07080B);
+  static const Color darkSurfaceLow = Color(0xFF11141B);
+  static const Color darkSurface = Color(0xFF171B24);
+  static const Color darkSurfaceHigh = Color(0xFF1F2532);
+  static const Color darkSurfaceHighest = Color(0xFF293142);
 
-  static const Color darkTextPrimary = Color(0xFFF3F0F9);
-  static const Color darkTextSecondary = Color(0xFFA8A1B7);
-  static const Color darkTextTertiary = Color(0xFF766E87);
+  static const Color darkTextPrimary = Color(0xFFF1F5F9);
+  static const Color darkTextSecondary = Color(0xFF94A3B8);
+  static const Color darkTextTertiary = Color(0xFF64748B);
   static const Color darkBorderSubtle = Color(0x1FFFFFFF);
 
   // ---------------------------------------------------------------------------
@@ -26,26 +26,26 @@ abstract final class TachyonColors {
   // ---------------------------------------------------------------------------
   static const Color oledCanvas = Color(0xFF000000);
   static const Color oledSurfaceLowest = Color(0xFF000000);
-  static const Color oledSurfaceLow = Color(0xFF0A0A0A);
-  static const Color oledSurface = Color(0xFF121212);
-  static const Color oledSurfaceHigh = Color(0xFF1C1C1C);
-  static const Color oledSurfaceHighest = Color(0xFF282828);
+  static const Color oledSurfaceLow = Color(0xFF07090C);
+  static const Color oledSurface = Color(0xFF0E1116);
+  static const Color oledSurfaceHigh = Color(0xFF151920);
+  static const Color oledSurfaceHighest = Color(0xFF1E232C);
   static const Color oledBorderSubtle = Color(0x28FFFFFF);
 
   // ---------------------------------------------------------------------------
   // 5-Tier Surface Hierarchy - Light Theme
   // ---------------------------------------------------------------------------
-  static const Color lightCanvas = Color(0xFFF9F7FC);
+  static const Color lightCanvas = Color(0xFFF8FAFC);
   static const Color lightSurfaceLowest = Color(0xFFFFFFFF);
-  static const Color lightSurfaceLow = Color(0xFFF3F0F8);
-  static const Color lightSurface = Color(0xFFEDE9F4);
-  static const Color lightSurfaceHigh = Color(0xFFE6E1EE);
-  static const Color lightSurfaceHighest = Color(0xFFDDD7E7);
+  static const Color lightSurfaceLow = Color(0xFFF1F4F9);
+  static const Color lightSurface = Color(0xFFE8EEF5);
+  static const Color lightSurfaceHigh = Color(0xFFDFE6F0);
+  static const Color lightSurfaceHighest = Color(0xFFD3DDEB);
 
-  static const Color lightTextPrimary = Color(0xFF191622);
-  static const Color lightTextSecondary = Color(0xFF534F61);
-  static const Color lightTextTertiary = Color(0xFF888398);
-  static const Color lightBorderSubtle = Color(0x14000000);
+  static const Color lightTextPrimary = Color(0xFF0F172A);
+  static const Color lightTextSecondary = Color(0xFF475569);
+  static const Color lightTextTertiary = Color(0xFF94A3B8);
+  static const Color lightBorderSubtle = Color(0x1F000000);
 }
 
 abstract final class TachyonBreakpoints {
@@ -215,11 +215,18 @@ abstract final class TachyonTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
       textTheme: textTheme,
+      appBarTheme: AppBarTheme(
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
+      ),
       cardTheme: CardThemeData(
         color: colorScheme.surfaceContainer,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: rimBorder, width: 1),
         ),
         margin: EdgeInsets.zero,
@@ -228,7 +235,7 @@ abstract final class TachyonTheme {
         backgroundColor: colorScheme.surfaceContainerHigh,
         elevation: 6,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           side: BorderSide(color: rimBorder, width: 1),
         ),
       ),
@@ -236,7 +243,48 @@ abstract final class TachyonTheme {
         backgroundColor: colorScheme.surfaceContainerHigh,
         elevation: 8,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: colorScheme.surfaceContainerHigh,
+        elevation: 6,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: rimBorder, width: 1),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          side: BorderSide(color: rimBorder, width: 1),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       ),
       navigationRailTheme: NavigationRailThemeData(

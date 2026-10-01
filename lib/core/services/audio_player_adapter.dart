@@ -52,6 +52,11 @@ class AudioPlayerAdapter {
   Future<void> setEqualizer(Equalizer equalizer) =>
       _player.action.setEqualizer(equalizer);
 
+  Future<bool> setDevice(AudioDevice device) => _player.setDevice(device);
+
+  Future<List<AudioDevice>> getAudioDevices({bool includeAuto = true}) =>
+      MiniaudioPlayer.getAudioDevices(includeAuto: includeAuto);
+
   Future<void> setSkipSilence(bool enabled) => Future.value();
 
   Future<void> dispose() async {
@@ -78,6 +83,8 @@ class AudioPlayerAdapter {
 
   Stream<Equalizer> get equalizerStream => _player.stream.equalizer;
 
+  Stream<AudioDevice> get audioDeviceStream => _player.stream.audioDevice;
+
   Stream<bool> get skipSilenceStream => Stream.value(false);
 
   Duration get position => _player.state.position;
@@ -97,6 +104,8 @@ class AudioPlayerAdapter {
   double get pitch => _player.state.pitch;
 
   Equalizer get equalizer => _player.state.equalizer;
+
+  AudioDevice get audioDevice => _player.state.audioDevice;
 
   bool get skipSilence => false;
 

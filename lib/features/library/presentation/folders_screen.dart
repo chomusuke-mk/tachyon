@@ -6,6 +6,8 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
+import 'package:tachyon/shared/utils/file_picker_service.dart';
+
 import 'library_controller.dart';
 
 class FoldersScreen extends StatelessWidget {
@@ -61,13 +63,32 @@ class FoldersScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Add music directories in Settings to browse folders.',
+                          strings.sBrowseFoldersDesc,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                                 color: Theme.of(context)
                                     .colorScheme
                                     .onSurfaceVariant,
                               ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          icon: const Icon(Icons.add_rounded),
+                          label: Text(strings.sAddFolder),
+                          onPressed: () async {
+                            final picked = await FilePickerService.pickDirectory(
+                              dialogTitle: strings.sAddFolderTitle,
+                            );
+                            if (picked != null) {
+                              final added = await settings.addMusicDirectory(picked);
+                              if (context.mounted && !added) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(strings.sFolderErrorInvalid)),
+                                );
+                              }
+                            }
+                          },
                         ),
                       ],
                     ),

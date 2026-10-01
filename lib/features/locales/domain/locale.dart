@@ -108,6 +108,12 @@ class AppStringKey {
   String get npCrossfade => _cadenasLocalizadas['np_crossfade'] ?? '';
   String get npCrossfadeDuration =>
       _cadenasLocalizadas['np_crossfade_duration'] ?? '';
+  String get npAudioDevices => _cadenasLocalizadas['np_audio_devices'] ?? '';
+  String get npAudioDeviceDefault =>
+      _cadenasLocalizadas['np_audio_device_default'] ?? '';
+  String get npCrossfadeAuto => _cadenasLocalizadas['np_crossfade_auto'] ?? '';
+  String get npCrossfadeManual =>
+      _cadenasLocalizadas['np_crossfade_manual'] ?? '';
   String get npExclusiveAudio =>
       _cadenasLocalizadas['np_exclusive_audio'] ?? '';
   String get npFullscreen => _cadenasLocalizadas['np_fullscreen'] ?? '';
@@ -157,6 +163,12 @@ class AppStringKey {
   String get trSortAscending => _cadenasLocalizadas['tr_sort_ascending'] ?? '';
   String get trSortDescending =>
       _cadenasLocalizadas['tr_sort_descending'] ?? '';
+  String get trFilePath => _cadenasLocalizadas['tr_file_path'] ?? '';
+  String get trCodec => _cadenasLocalizadas['tr_codec'] ?? '';
+  String get trFileSize => _cadenasLocalizadas['tr_file_size'] ?? '';
+  String get trUnknownArtist => _cadenasLocalizadas['tr_unknown_artist'] ?? '';
+  String get trAddedToPlaylist =>
+      _cadenasLocalizadas['tr_added_to_playlist'] ?? '';
 
   // ---------------------------------------------------------------------------
   // al_: Albums Screen & Detail
@@ -279,6 +291,40 @@ class AppStringKey {
   String get sMusicFoldersDesc =>
       _cadenasLocalizadas['s_music_folders_desc'] ?? '';
   String get sAddFolder => _cadenasLocalizadas['s_add_folder'] ?? '';
+  String get sAddFolderTitle => _cadenasLocalizadas['s_add_folder_title'] ?? '';
+  String get sFolderPathHint => _cadenasLocalizadas['s_folder_path_hint'] ?? '';
+  String get sFolderPathLabel => _cadenasLocalizadas['s_folder_path_label'] ?? '';
+  String get sBrowseFolder => _cadenasLocalizadas['s_browse_folder'] ?? '';
+  String get sFolderErrorInvalid =>
+      _cadenasLocalizadas['s_folder_error_invalid'] ?? '';
+  String get sNoFoldersYet => _cadenasLocalizadas['s_no_folders_yet'] ?? '';
+  String get sBrowseFoldersDesc =>
+      _cadenasLocalizadas['s_browse_folders_desc'] ?? '';
+  String get sCancel => _cadenasLocalizadas['s_cancel'] ?? '';
+  String get sAdd => _cadenasLocalizadas['s_add'] ?? '';
+  String get sClear => _cadenasLocalizadas['s_clear'] ?? '';
+  String get sTranslationTargetLang =>
+      _cadenasLocalizadas['s_translation_target_lang'] ?? '';
+  String get sTranslationTargetLangDesc =>
+      _cadenasLocalizadas['s_translation_target_lang_desc'] ?? '';
+  String get sTranslationLangDefault =>
+      _cadenasLocalizadas['s_translation_lang_default'] ?? '';
+  String get sAudioDevicesTitle =>
+      _cadenasLocalizadas['s_audio_devices_title'] ?? '';
+  String get sEqualizerTitle => _cadenasLocalizadas['s_equalizer_title'] ?? '';
+  String get sEqualizerEnabled =>
+      _cadenasLocalizadas['s_equalizer_enabled'] ?? '';
+  String get sEqualizerPreset =>
+      _cadenasLocalizadas['s_equalizer_preset'] ?? '';
+  String get sEqPresetFlat => _cadenasLocalizadas['s_eq_preset_flat'] ?? '';
+  String get sEqPresetRock => _cadenasLocalizadas['s_eq_preset_rock'] ?? '';
+  String get sEqPresetPop => _cadenasLocalizadas['s_eq_preset_pop'] ?? '';
+  String get sEqPresetJazz => _cadenasLocalizadas['s_eq_preset_jazz'] ?? '';
+  String get sEqPresetClassical =>
+      _cadenasLocalizadas['s_eq_preset_classical'] ?? '';
+  String get sEqPresetBassBoost =>
+      _cadenasLocalizadas['s_eq_preset_bass_boost'] ?? '';
+  String get sEqPresetCustom => _cadenasLocalizadas['s_eq_preset_custom'] ?? '';
   String get sRemoveFolder => _cadenasLocalizadas['s_remove_folder'] ?? '';
   String get sRescanLibrary => _cadenasLocalizadas['s_rescan_library'] ?? '';
   String get sRescanLibraryDesc =>
@@ -298,6 +344,10 @@ class AppStringKey {
       _cadenasLocalizadas['s_crossfade_duration'] ?? '';
   String get sCrossfadeDurationDesc =>
       _cadenasLocalizadas['s_crossfade_duration_desc'] ?? '';
+  String get sCrossfadeManualDuration =>
+      _cadenasLocalizadas['s_crossfade_manual_duration'] ?? '';
+  String get sCrossfadeManualDurationDesc =>
+      _cadenasLocalizadas['s_crossfade_manual_duration_desc'] ?? '';
   String get sCrossfadeCurve => _cadenasLocalizadas['s_crossfade_curve'] ?? '';
   String get sCrossfadeCurveDesc =>
       _cadenasLocalizadas['s_crossfade_curve_desc'] ?? '';
@@ -359,6 +409,8 @@ class AppStringKey {
   String get sStorageUsed => _cadenasLocalizadas['s_storage_used'] ?? '';
   String get sClearCache => _cadenasLocalizadas['s_clear_cache'] ?? '';
   String get sClearCacheDesc => _cadenasLocalizadas['s_clear_cache_desc'] ?? '';
+  String get sClearCacheSuccess =>
+      _cadenasLocalizadas['s_clear_cache_success'] ?? '';
 
   // ---------------------------------------------------------------------------
   // up_: Software Updater
@@ -396,6 +448,7 @@ class AppStringKey {
   // ---------------------------------------------------------------------------
   String get selSelectedCount =>
       _cadenasLocalizadas['sel_selected_count'] ?? '';
+  String get selSelect => _cadenasLocalizadas['sel_select'] ?? '';
   String get selCancel => _cadenasLocalizadas['sel_cancel'] ?? '';
   String get selSelectAll => _cadenasLocalizadas['sel_select_all'] ?? '';
   String get selDeselectAll => _cadenasLocalizadas['sel_deselect_all'] ?? '';
@@ -405,6 +458,8 @@ class AppStringKey {
   // ---------------------------------------------------------------------------
   String trCountFormatted(int count) =>
       trCount.replaceAll('{count}', count.toString());
+  String trAddedToPlaylistFormatted(String name) =>
+      trAddedToPlaylist.replaceAll('{name}', name);
   String selSelectedCountFormatted(int count) =>
       selSelectedCount.replaceAll('{count}', count.toString());
   String alTracksCountFormatted(int count) =>
@@ -466,6 +521,10 @@ class AppStringKey {
     'np_preamp',
     'np_crossfade',
     'np_crossfade_duration',
+    'np_audio_devices',
+    'np_audio_device_default',
+    'np_crossfade_auto',
+    'np_crossfade_manual',
     'np_exclusive_audio',
     'np_fullscreen',
     'np_exit_fullscreen',
@@ -484,7 +543,8 @@ class AppStringKey {
     'tr_deleted_success', 'tr_no_tracks', 'tr_no_tracks_desc', 'tr_count',
     'tr_sort', 'tr_sort_title', 'tr_sort_artist', 'tr_sort_album',
     'tr_sort_date_added', 'tr_sort_duration', 'tr_sort_ascending',
-    'tr_sort_descending',
+    'tr_sort_descending', 'tr_file_path', 'tr_codec', 'tr_file_size',
+    'tr_unknown_artist', 'tr_added_to_playlist',
     // al_
     'al_title', 'al_search_hint', 'al_tracks_count', 'al_release_year',
     'al_play_all', 'al_shuffle_all', 'al_add_queue', 'al_add_playlist',
@@ -525,12 +585,24 @@ class AppStringKey {
     'sr_clear_history',
     // s_
     's_title', 's_music_folders', 's_music_folders_desc', 's_add_folder',
+    's_add_folder_title', 's_folder_path_hint', 's_folder_path_label',
+    's_browse_folder', 's_folder_error_invalid', 's_no_folders_yet',
+    's_browse_folders_desc', 's_cancel', 's_add', 's_clear',
+    's_translation_target_lang', 's_translation_target_lang_desc',
+    's_translation_lang_default',
+    's_audio_devices_title', 's_equalizer_title', 's_equalizer_enabled',
+    's_equalizer_preset',
+    's_eq_preset_flat', 's_eq_preset_rock', 's_eq_preset_pop',
+    's_eq_preset_jazz', 's_eq_preset_classical', 's_eq_preset_bass_boost',
+    's_eq_preset_custom',
     's_remove_folder', 's_rescan_library', 's_rescan_library_desc',
     's_scanning_progress',
     's_clean_missing_tracks',
     's_clean_missing_tracks_desc',
     's_audio_section', 's_crossfade_enable', 's_crossfade_enable_desc',
-    's_crossfade_duration', 's_crossfade_duration_desc', 's_crossfade_curve',
+    's_crossfade_duration', 's_crossfade_duration_desc',
+    's_crossfade_manual_duration', 's_crossfade_manual_duration_desc',
+    's_crossfade_curve',
     's_crossfade_curve_desc',
     's_crossfade_curve_equal_power',
     's_crossfade_curve_linear',
@@ -554,7 +626,7 @@ class AppStringKey {
     's_media_notifications_desc', 's_about_section', 's_app_version',
     's_check_updates', 's_check_updates_desc', 's_view_changelog',
     's_github_repo', 's_license', 's_storage_used', 's_clear_cache',
-    's_clear_cache_desc',
+    's_clear_cache_desc', 's_clear_cache_success',
     // up_
     'up_title', 'up_available', 'up_available_desc', 'up_up_to_date',
     'up_checking', 'up_check_now', 'up_current_version', 'up_latest_version',
@@ -564,7 +636,8 @@ class AppStringKey {
     'cl_title', 'cl_close', 'cl_version', 'cl_latest_changes',
     'cl_error_loading', 'cl_view_on_github',
     // sel_
-    'sel_selected_count', 'sel_cancel', 'sel_select_all', 'sel_deselect_all',
+    'sel_selected_count', 'sel_select', 'sel_cancel', 'sel_select_all',
+    'sel_deselect_all',
   ];
 
   List<String> get allKeys => List.unmodifiable(_allAppStrings);

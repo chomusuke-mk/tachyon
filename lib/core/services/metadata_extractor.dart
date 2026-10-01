@@ -71,7 +71,11 @@ class MetadataExtractor {
 
       if (!coverCacheService.hasCachedCover(file.path)) {
         try {
-          unawaited(coverCacheService.saveCacheCover(file.path));
+          unawaited(coverCacheService.saveCacheCover(
+            file.path,
+            artistName: metadata.artist,
+            albumName: metadata.album,
+          ));
         } catch (_) {}
       }
 
@@ -242,6 +246,7 @@ class MetadataExtractor {
             // Wait for all pending DB inserts, then emit the final progress
             try {
               await Future.wait(pendingInserts);
+              await database.cleanOrphanAlbumsAndArtists();
             } catch (e) {
               debugPrint('[MetadataExtractor] Insert error during done: $e');
             }

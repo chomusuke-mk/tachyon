@@ -39,21 +39,51 @@ class MiniPlayerBar extends StatelessWidget {
             height: height,
             child: Column(
               children: [
-                // Top linear progress bar (2.5dp)
+                // Top linear progress bar (2.5dp / interactive click-to-seek in desktop mode)
                 RepaintBoundary(
-                  child: ValueListenableBuilder<Duration>(
-                    valueListenable: playback.positionListenable,
-                    builder: (context, pos, _) {
-                      final totalMs = playback.duration.inMilliseconds;
-                      final prog = totalMs > 0
-                          ? (pos.inMilliseconds / totalMs).clamp(0.0, 1.0)
-                          : 0.0;
-                      return LinearProgressIndicator(
-                        value: prog,
-                        minHeight: 2.5,
-                        backgroundColor: colorScheme.surfaceContainerHighest,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return ValueListenableBuilder<Duration>(
+                        valueListenable: playback.positionListenable,
+                        builder: (context, pos, _) {
+                          final totalMs = playback.duration.inMilliseconds;
+                          final prog = totalMs > 0
+                              ? (pos.inMilliseconds / totalMs).clamp(0.0, 1.0)
+                              : 0.0;
+                          final progressBar = LinearProgressIndicator(
+                            value: prog,
+                            minHeight: isDesktop ? 4.0 : 2.5,
+                            backgroundColor: colorScheme.surfaceContainerHighest,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              colorScheme.primary,
+                            ),
+                          );
+
+                          if (!isDesktop) return progressBar;
+
+                          return MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTapDown: (details) {
+                                if (totalMs <= 0) return;
+                                final width = constraints.maxWidth;
+                                if (width <= 0) return;
+                                final fraction = (details.localPosition.dx / width)
+                                    .clamp(0.0, 1.0);
+                                final seekTarget = Duration(
+                                  milliseconds: (totalMs * fraction).round(),
+                                );
+                                playback.seek(seekTarget);
+                              },
+                              child: Container(
+                                height: 8.0,
+                                alignment: Alignment.topCenter,
+                                child: progressBar,
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),

@@ -46,6 +46,7 @@ class _TracksScreenState extends State<TracksScreen> {
   }
 
   void _showFileInfoDialog(BuildContext context, Track track) {
+    final strings = context.read<LocaleController>().localeStrings;
     showDialog<void>(
       context: context,
       builder: (context) {
@@ -54,24 +55,27 @@ class _TracksScreenState extends State<TracksScreen> {
           content: SingleChildScrollView(
             child: ListBody(
               children: [
-                _infoRow('File Path', track.filePath),
-                if (track.artist != null) _infoRow('Artist', track.artist!),
-                if (track.album != null) _infoRow('Album', track.album!),
+                _infoRow(strings.trFilePath, track.filePath),
+                if (track.artist != null)
+                  _infoRow(strings.trSortArtist, track.artist!),
+                if (track.album != null)
+                  _infoRow(strings.trSortAlbum, track.album!),
                 if (track.codec != null)
-                  _infoRow('Codec', track.codec!.toUpperCase()),
+                  _infoRow(strings.trCodec, track.codec!.toUpperCase()),
                 if (track.bitrate != null)
-                  _infoRow('Bitrate', '${track.bitrate! ~/ 1000} kbps'),
+                  _infoRow(strings.npBitrate, '${track.bitrate! ~/ 1000} kbps'),
                 if (track.sampleRate != null)
-                  _infoRow('Sample Rate', '${track.sampleRate} Hz'),
+                  _infoRow(strings.npSampleRate, '${track.sampleRate} Hz'),
                 if (track.channels != null)
-                  _infoRow('Channels', track.channels.toString()),
-                if (track.year != null) _infoRow('Year', track.year.toString()),
+                  _infoRow(strings.npChannels, track.channels.toString()),
+                if (track.year != null)
+                  _infoRow(strings.alReleaseYear, track.year.toString()),
                 _infoRow(
-                  'Duration',
+                  strings.trSortDuration,
                   '${(track.durationMs / 1000).toStringAsFixed(1)} s',
                 ),
                 _infoRow(
-                  'Size',
+                  strings.trFileSize,
                   '${(track.fileSize / (1024 * 1024)).toStringAsFixed(2)} MB',
                 ),
               ],
@@ -80,7 +84,7 @@ class _TracksScreenState extends State<TracksScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
+              child: Text(strings.clClose),
             ),
           ],
         );
@@ -105,6 +109,7 @@ class _TracksScreenState extends State<TracksScreen> {
   }
 
   void _showAddToPlaylistDialog(BuildContext context, Track track) {
+    final strings = context.read<LocaleController>().localeStrings;
     final playlistsCtrl = context.read<PlaylistsController>();
     final playlists = playlistsCtrl.userPlaylists;
 
@@ -112,9 +117,9 @@ class _TracksScreenState extends State<TracksScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Add to Playlist'),
+          title: Text(strings.trAddPlaylist),
           content: playlists.isEmpty
-              ? const Text('No custom playlists created yet.')
+              ? Text(strings.plEmpty)
               : SizedBox(
                   width: 300,
                   child: ListView.builder(
@@ -131,7 +136,11 @@ class _TracksScreenState extends State<TracksScreen> {
                           }
                           Navigator.of(context).pop();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Added to ${pl.name}')),
+                            SnackBar(
+                              content: Text(
+                                strings.trAddedToPlaylistFormatted(pl.name),
+                              ),
+                            ),
                           );
                         },
                       );
@@ -141,7 +150,7 @@ class _TracksScreenState extends State<TracksScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(strings.selCancel),
             ),
           ],
         );
@@ -150,27 +159,28 @@ class _TracksScreenState extends State<TracksScreen> {
   }
 
   void _showDeleteConfirmation(BuildContext context, Track track) {
+    final strings = context.read<LocaleController>().localeStrings;
     final libraryCtrl = context.read<LibraryController>();
     showDialog<void>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Delete Track'),
-          content: Text(
-            'Are you sure you want to remove "${track.title}" from your library?',
-          ),
+          title: Text(strings.trDelete),
+          content: Text(strings.trDeleteConfirm),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(strings.selCancel),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
               onPressed: () {
                 libraryCtrl.deleteTrack(track);
                 Navigator.of(context).pop();
               },
-              child: const Text('Delete'),
+              child: Text(strings.trDelete),
             ),
           ],
         );
@@ -221,7 +231,7 @@ class _TracksScreenState extends State<TracksScreen> {
           ] else ...[
             IconButton(
               icon: const Icon(Icons.checklist_rounded),
-              tooltip: 'Select',
+              tooltip: strings.selSelect,
               onPressed: _toggleSelectionMode,
             ),
             PopupMenuButton<TrackSortOption>(

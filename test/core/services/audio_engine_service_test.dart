@@ -108,6 +108,32 @@ class FakeAudioPlayerAdapter implements AudioPlayerAdapter {
   @override
   Stream<Equalizer> get equalizerStream => _equalizerController.stream;
 
+  AudioDevice _audioDevice = const AudioDevice(
+    id: '',
+    name: 'Default',
+    isDefault: true,
+    isAuto: true,
+  );
+  final _audioDeviceController = StreamController<AudioDevice>.broadcast();
+
+  @override
+  AudioDevice get audioDevice => _audioDevice;
+
+  @override
+  Stream<AudioDevice> get audioDeviceStream => _audioDeviceController.stream;
+
+  @override
+  Future<bool> setDevice(AudioDevice device) async {
+    _audioDevice = device;
+    _audioDeviceController.add(device);
+    return true;
+  }
+
+  @override
+  Future<List<AudioDevice>> getAudioDevices({bool includeAuto = true}) async {
+    return [_audioDevice];
+  }
+
   @override
   Future<void> setEqualizer(Equalizer equalizer) async {
     _equalizer = equalizer;

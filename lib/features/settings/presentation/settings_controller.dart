@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' show Equalizer;
 import 'package:tachyon/core/constants/app_defaults.dart';
 
 import 'package:tachyon/core/services/audio_engine_service.dart';
@@ -31,6 +32,7 @@ class SettingsController extends ChangeNotifier {
   List<String> get musicDirectories => _settings.musicDirectories;
   bool get crossfadeEnabled => _settings.crossfadeEnabled;
   int get crossfadeDuration => _settings.crossfadeDuration;
+  int get crossfadeManualDuration => _settings.crossfadeManualDuration;
   CrossfadeCurve get crossfadeCurve => _settings.crossfadeCurve;
   double get volume => _settings.volume;
   double get playbackRate => _settings.playbackRate;
@@ -41,7 +43,10 @@ class SettingsController extends ChangeNotifier {
   double get volumeBoost => _settings.volumeBoost;
   ThemeMode get themeMode => _settings.themeMode;
   String get appLanguage => _settings.appLanguage;
+  String get lyricsTranslationTargetLang => _settings.lyricsTranslationTargetLang;
+  String? get audioOutputDeviceId => _settings.audioOutputDeviceId;
   bool get equalizerEnabled => _settings.equalizerEnabled;
+  String get equalizerPreset => _settings.equalizerPreset;
   List<double> get equalizerGains => _settings.equalizerGains;
 
   // ---------------------------------------------------------------------------
@@ -55,6 +60,7 @@ class SettingsController extends ChangeNotifier {
       CrossfadeConfig(
         enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
+        manualDuration: Duration(seconds: _settings.crossfadeManualDuration),
         curve: _settings.crossfadeCurve,
       ),
     );
@@ -63,6 +69,12 @@ class SettingsController extends ChangeNotifier {
     await _audioEngine.setPitch(_settings.playbackPitch);
     await _audioEngine.setSkipSilence(_settings.skipSilence);
     await _audioEngine.setLoopMode(_settings.loopMode);
+
+    if (_settings.equalizerEnabled) {
+      await _audioEngine.setEqualizer(Equalizer.fromList(_settings.equalizerGains));
+    } else {
+      await _audioEngine.setEqualizer(Equalizer.flat);
+    }
 
     notifyListeners();
   }
@@ -122,6 +134,21 @@ class SettingsController extends ChangeNotifier {
       CrossfadeConfig(
         enabled: enabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
+        manualDuration: Duration(seconds: _settings.crossfadeManualDuration),
+        curve: _settings.crossfadeCurve,
+      ),
+    );
+    notifyListeners();
+  }
+
+  Future<void> setCrossfadeManualDuration(int durationSeconds) async {
+    _settings = _settings.copyWith(crossfadeManualDuration: durationSeconds);
+    await _repository.setCrossfadeManualDuration(durationSeconds);
+    await _audioEngine.setCrossfadeConfig(
+      CrossfadeConfig(
+        enabled: _settings.crossfadeEnabled,
+        duration: Duration(seconds: _settings.crossfadeDuration),
+        manualDuration: Duration(seconds: durationSeconds),
         curve: _settings.crossfadeCurve,
       ),
     );
@@ -135,9 +162,77 @@ class SettingsController extends ChangeNotifier {
       CrossfadeConfig(
         enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
+        manualDuration: Duration(seconds: _settings.crossfadeManualDuration),
         curve: curve,
       ),
     );
+    notifyListeners();
+  }
+
+  Future<void> setEqualizerEnabled(bool enabled) async {
+    _settings = _settings.copyWith(equalizerEnabled: enabled);
+    await _repository.setEqualizerEnabled(enabled);
+    if (enabled) {
+      await _audioEngine.setEqualizer(Equalizer.fromList(_settings.equalizerGains));
+    } else {
+      await _audioEngine.setEqualizer(Equalizer.flat);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setEqualizerGains(List<double> gains) async {
+    _settings = _settings.copyWith(equalizerGains: gains);
+    await _repository.setEqualizerGains(gains);
+    if (_settings.equalizerEnabled) {
+      await _audioEngine.setEqualizer(Equalizer.fromList(gains));
+    }
+    notifyListeners();
+  }
+
+  Future<void> setEqualizerPreset(String preset) async {
+    _settings = _settings.copyWith(equalizerPreset: preset);
+    await _repository.setEqualizerPreset(preset);
+    List<double> gains;
+    switch (preset) {
+      case 'rock':
+        gains = Equalizer.rock.toList();
+        break;
+      case 'pop':
+        gains = Equalizer.pop.toList();
+        break;
+      case 'jazz':
+        gains = Equalizer.jazz.toList();
+        break;
+      case 'classical':
+        gains = Equalizer.classical.toList();
+        break;
+      case 'bassBoost':
+        gains = Equalizer.bassBoost.toList();
+        break;
+      case 'flat':
+        gains = Equalizer.flat.toList();
+        break;
+      default:
+        gains = _settings.equalizerGains;
+    }
+    await setEqualizerGains(gains);
+  }
+
+  Future<void> setEqualizerBandGain(int bandIndex, double gain) async {
+    if (bandIndex < 0 || bandIndex >= 10) return;
+    final newGains = List<double>.from(_settings.equalizerGains);
+    while (newGains.length < 10) {
+      newGains.add(0.0);
+    }
+    newGains[bandIndex] = gain;
+    _settings = _settings.copyWith(equalizerPreset: 'custom');
+    await _repository.setEqualizerPreset('custom');
+    await setEqualizerGains(newGains);
+  }
+
+  Future<void> setAudioOutputDeviceId(String? deviceId) async {
+    _settings = _settings.copyWith(audioOutputDeviceId: deviceId);
+    await _repository.setAudioOutputDeviceId(deviceId);
     notifyListeners();
   }
 
@@ -170,6 +265,12 @@ class SettingsController extends ChangeNotifier {
   Future<void> setAppLanguage(String languageCode) async {
     _settings = _settings.copyWith(appLanguage: languageCode);
     await _repository.setAppLanguage(languageCode);
+    notifyListeners();
+  }
+
+  Future<void> setLyricsTranslationTargetLang(String languageCode) async {
+    _settings = _settings.copyWith(lyricsTranslationTargetLang: languageCode);
+    await _repository.setLyricsTranslationTargetLang(languageCode);
     notifyListeners();
   }
 

@@ -969,7 +969,7 @@ void main() {
       );
 
       // 2. Ambient Backdrop RepaintBoundary verification
-      final backdropFilterFinder = find.byType(BackdropFilter);
+      final backdropFilterFinder = find.byType(ImageFiltered);
       expect(backdropFilterFinder, findsOneWidget);
 
       final backdropRepaintAncestor = find.ancestor(
@@ -1075,7 +1075,7 @@ void main() {
       );
 
       // Find the AlbumArtImage in the ambient backdrop
-      final backdropFilterFinder = find.byType(BackdropFilter);
+      final backdropFilterFinder = find.byType(ImageFiltered);
       expect(backdropFilterFinder, findsOneWidget);
 
       final backdropStackFinder = find.ancestor(

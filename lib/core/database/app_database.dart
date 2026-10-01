@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -113,6 +114,17 @@ abstract final class AppDatabaseSchema {
     );
   ''';
 
+  static const String createLyricsTranslationsTable = '''
+    CREATE TABLE IF NOT EXISTS lyrics_translations (
+      key_hash TEXT NOT NULL,
+      source TEXT NOT NULL,
+      target_lang TEXT NOT NULL,
+      translated_lines TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (key_hash, source, target_lang)
+    );
+  ''';
+
   static const List<String> indexes = [
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path);',
     'CREATE INDEX IF NOT EXISTS idx_tracks_album_id ON tracks(album_id);',
@@ -126,6 +138,7 @@ abstract final class AppDatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_playlist_entries_playlist_pos ON playlist_entries(playlist_id, position);',
     'CREATE INDEX IF NOT EXISTS idx_playlist_entries_track_id ON playlist_entries(track_id);',
     'CREATE INDEX IF NOT EXISTS idx_lyrics_source_cache_key ON lyrics_source_cache(key_hash);',
+    'CREATE INDEX IF NOT EXISTS idx_lyrics_translations_key ON lyrics_translations(key_hash);',
   ];
 }
 
@@ -339,6 +352,7 @@ class AppDatabase {
     _db!.execute('PRAGMA cache_size = -64000;'); // 64MB memory page cache
 
     _executeSchemaSync(_db!);
+    await cleanOrphanAlbumsAndArtists();
   }
 
   void _executeSchemaSync(Database db) {
@@ -373,6 +387,7 @@ class AppDatabase {
     db.execute(AppDatabaseSchema.createPlaylistEntriesTable);
     db.execute(AppDatabaseSchema.createLyricsCacheTable);
     db.execute(AppDatabaseSchema.createLyricsSourceCacheTable);
+    db.execute(AppDatabaseSchema.createLyricsTranslationsTable);
 
     for (final sql in AppDatabaseSchema.indexes) {
       db.execute(sql);
@@ -409,7 +424,7 @@ class AppDatabase {
         final existingArtist = await txn.query(
           'artists',
           columns: ['id'],
-          where: 'name = ?',
+          where: 'LOWER(name) = LOWER(?)',
           whereArgs: [arName],
           limit: 1,
         );
@@ -426,21 +441,34 @@ class AppDatabase {
 
       int? albumId = track.albumId;
       final alName = track.album?.trim();
+      final canonicalAlbumArtist = (track.albumArtist != null && track.albumArtist!.trim().isNotEmpty)
+          ? track.albumArtist!.trim()
+          : arName;
       if (alName != null && alName.isNotEmpty) {
         final existingAlbum = await txn.query(
           'albums',
-          columns: ['id'],
-          where: 'name = ? AND (artist_name = ? OR artist_name IS NULL)',
-          whereArgs: [alName, arName],
+          columns: ['id', 'artist_name'],
+          where: canonicalAlbumArtist != null
+              ? "LOWER(name) = LOWER(?) AND (LOWER(artist_name) = LOWER(?) OR artist_name IS NULL OR artist_name = '')"
+              : "LOWER(name) = LOWER(?) AND (artist_name IS NULL OR artist_name = '')",
+          whereArgs: canonicalAlbumArtist != null ? [alName, canonicalAlbumArtist] : [alName],
           limit: 1,
         );
         if (existingAlbum.isNotEmpty) {
           albumId = existingAlbum.first['id'] as int;
+          if (existingAlbum.first['artist_name'] == null && canonicalAlbumArtist != null) {
+            await txn.update(
+              'albums',
+              {'artist_name': canonicalAlbumArtist, 'artist_id': artistId},
+              where: 'id = ?',
+              whereArgs: [albumId],
+            );
+          }
         } else {
           albumId = await txn.insert('albums', {
             'name': alName,
             'artist_id': artistId,
-            'artist_name': arName,
+            'artist_name': canonicalAlbumArtist,
             'year': track.year,
             'track_count': 0,
           });
@@ -581,18 +609,18 @@ class AppDatabase {
           final arName = t.artist?.trim();
           if (arName != null &&
               arName.isNotEmpty &&
-              !artistCache.containsKey(arName)) {
+              !artistCache.containsKey(arName.toLowerCase())) {
             final res = await txn.query(
               'artists',
               columns: ['id'],
-              where: 'name = ?',
+              where: 'LOWER(name) = LOWER(?)',
               whereArgs: [arName],
               limit: 1,
             );
             if (res.isNotEmpty) {
-              artistCache[arName] = res.first['id'] as int;
+              artistCache[arName.toLowerCase()] = res.first['id'] as int;
             } else {
-              artistCache[arName] = await txn.insert('artists', {
+              artistCache[arName.toLowerCase()] = await txn.insert('artists', {
                 'name': arName,
                 'track_count': 0,
                 'album_count': 0,
@@ -601,23 +629,31 @@ class AppDatabase {
           }
 
           final alName = t.album?.trim();
+          final canonicalArtist = (t.albumArtist != null && t.albumArtist!.trim().isNotEmpty)
+              ? t.albumArtist!.trim()
+              : arName;
           if (alName != null && alName.isNotEmpty) {
-            final cacheKey = '$alName|${arName ?? ''}';
+            final cacheKey = '${alName.toLowerCase()}|${canonicalArtist?.toLowerCase() ?? ''}';
             if (!albumCache.containsKey(cacheKey)) {
               final res = await txn.query(
                 'albums',
                 columns: ['id'],
-                where: 'name = ? AND (artist_name = ? OR artist_name IS NULL)',
-                whereArgs: [alName, arName],
+                where: canonicalArtist != null
+                    ? "LOWER(name) = LOWER(?) AND (LOWER(artist_name) = LOWER(?) OR artist_name IS NULL OR artist_name = '')"
+                    : "LOWER(name) = LOWER(?) AND (artist_name IS NULL OR artist_name = '')",
+                whereArgs: canonicalArtist != null ? [alName, canonicalArtist] : [alName],
                 limit: 1,
               );
               if (res.isNotEmpty) {
                 albumCache[cacheKey] = res.first['id'] as int;
               } else {
+                final artistId = canonicalArtist != null
+                    ? artistCache[canonicalArtist.toLowerCase()]
+                    : (arName != null ? artistCache[arName.toLowerCase()] : null);
                 albumCache[cacheKey] = await txn.insert('albums', {
                   'name': alName,
-                  'artist_id': arName != null ? artistCache[arName] : null,
-                  'artist_name': arName,
+                  'artist_id': artistId,
+                  'artist_name': canonicalArtist,
                   'year': t.year,
                   'track_count': 0,
                 });
@@ -690,9 +726,12 @@ class AppDatabase {
         for (int idx = 0; idx < chunk.length; idx++) {
           final t = chunk[idx];
           final arId = (t.artist != null && t.artist!.trim().isNotEmpty)
-              ? artistCache[t.artist!.trim()]
+              ? artistCache[t.artist!.trim().toLowerCase()]
               : null;
-          final alKey = '${t.album?.trim() ?? ''}|${t.artist?.trim() ?? ''}';
+          final canonicalArtist = (t.albumArtist != null && t.albumArtist!.trim().isNotEmpty)
+              ? t.albumArtist!.trim()
+              : (t.artist != null && t.artist!.trim().isNotEmpty ? t.artist!.trim() : null);
+          final alKey = '${t.album?.trim().toLowerCase() ?? ''}|${canonicalArtist?.toLowerCase() ?? ''}';
           final alId = (t.album != null && t.album!.trim().isNotEmpty)
               ? albumCache[alKey]
               : null;
@@ -765,16 +804,101 @@ class AppDatabase {
       });
     }
 
-    // Refresh aggregated counts
-    database.execute('''
-      UPDATE artists SET 
-        track_count = (SELECT COUNT(*) FROM tracks WHERE tracks.artist_id = artists.id),
-        album_count = (SELECT COUNT(*) FROM albums WHERE albums.artist_id = artists.id);
-    ''');
-    database.execute('''
-      UPDATE albums SET 
-        track_count = (SELECT COUNT(*) FROM tracks WHERE tracks.album_id = albums.id);
-    ''');
+    // Refresh aggregated counts and purge orphans / duplicates
+    await cleanOrphanAlbumsAndArtists();
+  }
+
+  /// Cleans up orphan albums (0 tracks), orphan artists (0 tracks), and deduplicates
+  /// duplicate album entries (e.g. from case variations or NULL artist names).
+  Future<void> cleanOrphanAlbumsAndArtists() async {
+    await database.transaction((txn) async {
+      // 1. Deduplicate albums with the same (case-insensitive name, artist_name)
+      final duplicateGroups = await txn.rawQuery('''
+        SELECT LOWER(name) as low_name, LOWER(COALESCE(artist_name, '')) as low_artist, COUNT(*) as cnt
+        FROM albums
+        GROUP BY LOWER(name), LOWER(COALESCE(artist_name, ''))
+        HAVING COUNT(*) > 1
+      ''');
+
+      for (final group in duplicateGroups) {
+        final lowName = group['low_name'] as String;
+        final lowArtist = group['low_artist'] as String;
+        final rows = await txn.rawQuery(
+          '''
+          SELECT id FROM albums 
+          WHERE LOWER(name) = ? AND LOWER(COALESCE(artist_name, '')) = ?
+          ORDER BY id ASC
+        ''',
+          [lowName, lowArtist],
+        );
+        if (rows.length > 1) {
+          final canonicalId = rows.first['id'] as int;
+          final duplicateIds = rows.skip(1).map((r) => r['id'] as int).toList();
+          final placeholders = List.filled(duplicateIds.length, '?').join(',');
+
+          // Re-link tracks pointing to duplicate album IDs to the canonical album ID
+          await txn.rawUpdate(
+            'UPDATE tracks SET album_id = ? WHERE album_id IN ($placeholders)',
+            [canonicalId, ...duplicateIds],
+          );
+
+          // Delete the duplicate album rows
+          await txn.execute(
+            'DELETE FROM albums WHERE id IN ($placeholders)',
+            duplicateIds,
+          );
+        }
+      }
+
+      // 2. Remove orphan albums that have no tracks referencing them
+      await txn.execute('''
+        DELETE FROM albums 
+        WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE album_id IS NOT NULL);
+      ''');
+
+      // 3. Remove orphan artists that have no tracks or albums
+      await txn.execute('''
+        DELETE FROM artists 
+        WHERE id NOT IN (SELECT DISTINCT artist_id FROM tracks WHERE artist_id IS NOT NULL)
+          AND id NOT IN (SELECT DISTINCT artist_id FROM albums WHERE artist_id IS NOT NULL);
+      ''');
+
+      // 4. Remove orphan genres
+      await txn.execute('''
+        DELETE FROM genres 
+        WHERE id NOT IN (SELECT DISTINCT genre_id FROM track_genres);
+      ''');
+
+      // 5. Update counts
+      await txn.execute('''
+        UPDATE artists SET 
+          track_count = (SELECT COUNT(*) FROM tracks WHERE tracks.artist_id = artists.id),
+          album_count = (SELECT COUNT(*) FROM albums WHERE albums.artist_id = artists.id);
+      ''');
+      await txn.execute('''
+        UPDATE albums SET 
+          track_count = (SELECT COUNT(*) FROM tracks WHERE tracks.album_id = albums.id);
+      ''');
+    });
+  }
+
+  Future<void> deleteTrack(int trackId) async {
+    await database.delete(
+      'tracks',
+      where: 'id = ?',
+      whereArgs: [trackId],
+    );
+    await cleanOrphanAlbumsAndArtists();
+  }
+
+  Future<void> deleteTracksInFolder(String folderPath) async {
+    final prefix = folderPath.endsWith('/') ? folderPath : '$folderPath/';
+    await database.delete(
+      'tracks',
+      where: "file_path LIKE ?",
+      whereArgs: ['${prefix.replaceAll('%', r'\%').replaceAll('_', r'\_')}%'],
+    );
+    await cleanOrphanAlbumsAndArtists();
   }
 
   Future<List<Track>> getAllTracks({
@@ -893,6 +1017,7 @@ class AppDatabase {
       FROM albums al
       LEFT JOIN tracks t ON t.album_id = al.id
       GROUP BY al.id
+      HAVING COUNT(t.id) > 0
       ORDER BY al.name COLLATE NOCASE ASC
     ''');
     return rows.map((r) => Album.fromJson(r)).toList();
@@ -908,6 +1033,7 @@ class AppDatabase {
       LEFT JOIN tracks t ON t.artist_id = ar.id
       LEFT JOIN albums al ON al.artist_id = ar.id
       GROUP BY ar.id
+      HAVING COUNT(DISTINCT t.id) > 0
       ORDER BY ar.name COLLATE NOCASE ASC
     ''');
     return rows.map((r) => Artist.fromJson(r)).toList();
@@ -921,6 +1047,7 @@ class AppDatabase {
       FROM genres g
       LEFT JOIN track_genres tg ON g.id = tg.genre_id
       GROUP BY g.id
+      HAVING COUNT(tg.track_id) > 0
       ORDER BY g.name COLLATE NOCASE ASC
     ''');
     return rows.map((r) => Genre.fromJson(r)).toList();
@@ -1210,8 +1337,66 @@ class AppDatabase {
       where: 'key_hash = ?',
       whereArgs: [keyHash],
     );
+    await database.delete(
+      'lyrics_translations',
+      where: 'key_hash = ?',
+      whereArgs: [keyHash],
+    );
     return database.delete(
       'lyrics_source_cache',
+      where: 'key_hash = ?',
+      whereArgs: [keyHash],
+    );
+  }
+
+  /// Persists a translated version of lyrics for [keyHash], [source], and [targetLang].
+  Future<void> saveLyricsTranslation({
+    required String keyHash,
+    required String source,
+    required String targetLang,
+    required List<String> translatedLines,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await database.insert(
+      'lyrics_translations',
+      {
+        'key_hash': keyHash,
+        'source': source,
+        'target_lang': targetLang,
+        'translated_lines': jsonEncode(translatedLines),
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Retrieves cached translated lines for [keyHash], [source], and [targetLang].
+  Future<List<String>?> getLyricsTranslation({
+    required String keyHash,
+    required String source,
+    required String targetLang,
+  }) async {
+    final rows = await database.query(
+      'lyrics_translations',
+      columns: ['translated_lines'],
+      where: 'key_hash = ? AND source = ? AND target_lang = ?',
+      whereArgs: [keyHash, source, targetLang],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final jsonStr = rows.first['translated_lines'] as String;
+    try {
+      final list = jsonDecode(jsonStr) as List<dynamic>;
+      return list.map((e) => e.toString()).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Deletes all cached translations for a specific song [keyHash].
+  Future<int> clearLyricsTranslations(String keyHash) async {
+    return database.delete(
+      'lyrics_translations',
       where: 'key_hash = ?',
       whereArgs: [keyHash],
     );

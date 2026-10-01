@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/core/services/lrc_parser.dart';
@@ -10,6 +12,7 @@ import 'package:tachyon/features/playback/domain/lyric_line.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 import 'playback_controller.dart';
 
@@ -21,6 +24,8 @@ class LyricsController extends ChangeNotifier {
   final PlaybackController playbackController;
   final LyricsCooldownManager cooldownManager;
   final LyricsTranslationClient translationClient;
+  final SettingsRepository? settingsRepository;
+  final AppDatabase? database;
 
   final ScrollController scrollController = ScrollController();
 
@@ -34,6 +39,7 @@ class LyricsController extends ChangeNotifier {
   // Playback & Lyrics state
   ParsedLrc? _lyrics;
   LyricsSource? _currentLyricsSource;
+  String? _currentKeyHash;
   bool _isLoading = false;
   String? _errorMessage;
   int _currentIndex = 0;
@@ -66,8 +72,15 @@ class LyricsController extends ChangeNotifier {
     required this.playbackController,
     LyricsCooldownManager? cooldownManager,
     LyricsTranslationClient? translationClient,
+    this.settingsRepository,
+    this.database,
   })  : cooldownManager = cooldownManager ?? lyricsService.cooldownManager,
         translationClient = translationClient ?? LyricsTranslationClient() {
+    if (settingsRepository != null) {
+      final initialMode = settingsRepository!.getLyricsDisplayMode();
+      _isTranslated = initialMode != LyricsDisplayMode.original;
+      _isInterleaved = initialMode == LyricsDisplayMode.interleaved;
+    }
     playbackController.addListener(_onPlaybackUpdated);
     playbackController.positionListenable.addListener(_onPositionUpdated);
     _onPlaybackUpdated();
@@ -216,8 +229,9 @@ class LyricsController extends ChangeNotifier {
       _resetScrollLock();
       _currentIndex = 0;
       _translatedLines = const [];
-      _isTranslated = false;
-      _isInterleaved = false;
+      final savedMode = settingsRepository?.getLyricsDisplayMode() ?? LyricsDisplayMode.original;
+      _isTranslated = savedMode != LyricsDisplayMode.original;
+      _isInterleaved = savedMode == LyricsDisplayMode.interleaved;
       _translationError = null;
 
       // Cancel any active threshold waiting for prior track
@@ -396,6 +410,7 @@ class LyricsController extends ChangeNotifier {
 
       _lyrics = result?.lyrics;
       _currentLyricsSource = result?.source;
+      _currentKeyHash = result?.keyHash;
       _isLoading = false;
       _currentIndex = 0;
 
@@ -404,6 +419,10 @@ class LyricsController extends ChangeNotifier {
       }
 
       notifyListeners();
+
+      if (_isTranslated && _lyrics != null && lines.isNotEmpty) {
+        _loadOrFetchTranslation();
+      }
 
       // Center initial line after build
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -464,6 +483,13 @@ class LyricsController extends ChangeNotifier {
   Future<void> forceReSearch() async {
     final track = playbackController.currentTrack;
     if (track == null) return;
+    if (_currentKeyHash != null && database != null) {
+      try {
+        await database!.clearLyricsTranslations(_currentKeyHash!);
+      } catch (_) {}
+    }
+    _translatedLines = const [];
+    _translationError = null;
     cooldownManager.cancelThresholdCountdown();
     cooldownManager.cancelDeferredRetry();
     final token = _generationTracker.nextGeneration();
@@ -474,8 +500,44 @@ class LyricsController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Translation
   // ---------------------------------------------------------------------------
-  Future<void> translateLyrics({String targetLanguage = 'es'}) async {
+  String getEffectiveTargetLanguage() {
+    final saved = settingsRepository?.getLyricsTranslationTargetLang() ?? 'defaultOption';
+    if (saved != 'defaultOption') return saved;
+    final appLang = settingsRepository?.getSettings().appLanguage ?? 'defaultOption';
+    if (appLang != 'defaultOption') return appLang;
+    return ui.PlatformDispatcher.instance.locale.languageCode;
+  }
+
+  Future<void> _loadOrFetchTranslation({String? targetLanguage}) async {
     if (_lyrics == null || lines.isEmpty) return;
+    final targetLang = targetLanguage ?? getEffectiveTargetLanguage();
+    final keyHash = _currentKeyHash;
+
+    if (keyHash != null && database != null) {
+      final sourceKey = _currentLyricsSource?.name ?? 'unknown';
+      try {
+        final cached = await database!.getLyricsTranslation(
+          keyHash: keyHash,
+          source: sourceKey,
+          targetLang: targetLang,
+        );
+        if (cached != null && cached.isNotEmpty) {
+          if (_isDisposed) return;
+          _translatedLines = cached;
+          _translationError = null;
+          _isTranslating = false;
+          notifyListeners();
+          return;
+        }
+      } catch (_) {}
+    }
+
+    await translateLyrics(targetLanguage: targetLang);
+  }
+
+  Future<void> translateLyrics({String? targetLanguage}) async {
+    if (_lyrics == null || lines.isEmpty) return;
+    final targetLang = targetLanguage ?? getEffectiveTargetLanguage();
     _isTranslating = true;
     _translationError = null;
     notifyListeners();
@@ -484,13 +546,25 @@ class LyricsController extends ChangeNotifier {
       final originalTexts = lines.map((l) => l.text).toList();
       final result = await translationClient.translate(
         originalTexts,
-        targetLanguage: targetLanguage,
+        targetLanguage: targetLang,
       );
       if (_isDisposed) return;
       _isTranslating = false;
       if (result.isSuccess) {
         _translatedLines = result.translatedLines;
         _isTranslated = true;
+        final keyHash = _currentKeyHash;
+        if (keyHash != null && database != null) {
+          final sourceKey = _currentLyricsSource?.name ?? 'unknown';
+          try {
+            await database!.saveLyricsTranslation(
+              keyHash: keyHash,
+              source: sourceKey,
+              targetLang: targetLang,
+              translatedLines: result.translatedLines,
+            );
+          } catch (_) {}
+        }
       } else {
         _translationError = result.errorMessage;
       }
@@ -504,6 +578,7 @@ class LyricsController extends ChangeNotifier {
   }
 
   void setTranslationDisplayMode(LyricsDisplayMode mode) {
+    settingsRepository?.setLyricsDisplayMode(mode);
     switch (mode) {
       case LyricsDisplayMode.original:
         _isTranslated = false;
@@ -513,14 +588,14 @@ class LyricsController extends ChangeNotifier {
         _isTranslated = true;
         _isInterleaved = false;
         if (_translatedLines.isEmpty && !_isTranslating && hasLyrics) {
-          translateLyrics();
+          _loadOrFetchTranslation();
         }
         break;
       case LyricsDisplayMode.interleaved:
         _isTranslated = true;
         _isInterleaved = true;
         if (_translatedLines.isEmpty && !_isTranslating && hasLyrics) {
-          translateLyrics();
+          _loadOrFetchTranslation();
         }
         break;
     }
@@ -529,31 +604,23 @@ class LyricsController extends ChangeNotifier {
 
   /// Cycles translation modes: original -> translated -> interleaved -> original.
   ///
-  /// Automatically fetches translation via [translateLyrics] if not already cached.
+  /// Automatically fetches translation via [_loadOrFetchTranslation] if not already cached.
   Future<void> toggleTranslation() async {
     if (!_isTranslated) {
-      _isTranslated = true;
-      _isInterleaved = false;
-      notifyListeners();
-      if (_translatedLines.isEmpty && !_isTranslating && hasLyrics) {
-        await translateLyrics();
-      }
+      setTranslationDisplayMode(LyricsDisplayMode.translated);
     } else if (!_isInterleaved) {
-      _isInterleaved = true;
-      notifyListeners();
-      if (_translatedLines.isEmpty && !_isTranslating && hasLyrics) {
-        await translateLyrics();
-      }
+      setTranslationDisplayMode(LyricsDisplayMode.interleaved);
     } else {
-      _isTranslated = false;
-      _isInterleaved = false;
-      notifyListeners();
+      setTranslationDisplayMode(LyricsDisplayMode.original);
     }
   }
 
   void toggleInterleaved() {
-    _isInterleaved = !_isInterleaved;
-    notifyListeners();
+    if (_isInterleaved) {
+      setTranslationDisplayMode(LyricsDisplayMode.translated);
+    } else {
+      setTranslationDisplayMode(LyricsDisplayMode.interleaved);
+    }
   }
 
   /// Dismisses active threshold countdown and aborts auto-retry timer.
@@ -588,11 +655,9 @@ class LyricsController extends ChangeNotifier {
     if (lines.isEmpty || index < 0 || index >= lines.length) return;
 
     const double estimatedLineHeight = 56.0;
-    final viewportHeight = scrollController.position.viewportDimension;
-    final targetOffset =
-        (index * estimatedLineHeight) -
-        (viewportHeight / 2) +
-        (estimatedLineHeight / 2);
+    // With symmetric half-height viewport padding on top and bottom,
+    // (index * estimatedLineHeight) accurately targets the vertical center.
+    final targetOffset = index * estimatedLineHeight;
 
     final clampedOffset = targetOffset.clamp(
       0.0,

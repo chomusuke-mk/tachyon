@@ -47,20 +47,21 @@ class PlaylistsScreen extends StatelessWidget {
   void _showRenameDialog(BuildContext context, Playlist playlist) {
     final controller = TextEditingController(text: playlist.name);
 
+    final strings = context.read<LocaleController>().localeStrings;
     showDialog<void>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Rename Playlist'),
+          title: Text(strings.plRename),
           content: TextField(
             controller: controller,
             autofocus: true,
-            decoration: const InputDecoration(hintText: 'Enter playlist name'),
+            decoration: InputDecoration(hintText: strings.plNewNameHint),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(strings.plCancelButton),
             ),
             FilledButton(
               onPressed: () {
@@ -73,7 +74,7 @@ class PlaylistsScreen extends StatelessWidget {
                 }
                 Navigator.of(context).pop();
               },
-              child: const Text('Rename'),
+              child: Text(strings.plRename),
             ),
           ],
         );
