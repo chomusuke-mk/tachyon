@@ -93,20 +93,20 @@ class AlbumArtImage extends StatelessWidget {
     }
 
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
-    final int defaultBound = quality == ThumbnailQuality.high ? 500 : 80;
+    final int defaultBound = quality == ThumbnailQuality.high ? 1000 : 100;
     final int targetCacheWidth =
         cacheWidth ??
         (width != null
             ? (quality == ThumbnailQuality.high
-                  ? (width! * dpr).round().clamp(80, 500)
-                  : 80)
+                  ? (width! * dpr).round().clamp(100, 1000)
+                  : 100)
             : defaultBound);
     final int targetCacheHeight =
         cacheHeight ??
         (height != null
             ? (quality == ThumbnailQuality.high
-                  ? (height! * dpr).round().clamp(80, 500)
-                  : 80)
+                  ? (height! * dpr).round().clamp(100, 1000)
+                  : 100)
             : defaultBound);
 
     Widget buildImage(File file) {

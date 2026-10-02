@@ -556,5 +556,41 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('Unmounting NowPlayingScreen while lyrics view is active does not throw locked widget tree exception', (
+      WidgetTester tester,
+    ) async {
+      playbackController.setTrack(sampleTrack);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          playbackController: playbackController,
+          localeController: localeController,
+          db: db,
+          lyricsController: lyricsController,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open lyrics view
+      final lyricsBtn = find.byIcon(Icons.lyrics_rounded);
+      expect(lyricsBtn, findsOneWidget);
+      await tester.tap(lyricsBtn);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(lyricsController.isLyricsViewVisible, isTrue);
+
+      // Unmount NowPlayingScreen (replace with empty widget)
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: SizedBox.shrink()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Assert zero exceptions (no setState() or markNeedsBuild() on locked tree)
+      expect(tester.takeException(), isNull);
+      expect(lyricsController.isLyricsViewVisible, isFalse);
+    });
   });
 }

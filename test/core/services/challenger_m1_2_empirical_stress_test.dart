@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -10,7 +9,6 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
-import 'package:tachyon/core/backend/services/scan_isolate.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 
 /// Helper to generate a valid PCM 16-bit WAV file with a pure sine tone.
@@ -303,39 +301,19 @@ void main() {
       }
     });
 
-    test('2.5: Direct scan isolate exit listener confirms immediate termination on kill', () async {
-      final progressPort = ReceivePort();
-      final handshakePort = ReceivePort();
-      final exitPort = ReceivePort();
+    test('2.5: MetadataService worker pool executes in parallel via Isolate.run', () async {
+      for (int i = 0; i < 6; i++) {
+        createTestWavFile('${tempDir.path}/pool_$i.wav', durationSeconds: 1);
+      }
 
-      final args = ScanIsolateArgs(
-        progressPort: progressPort.sendPort,
-        handshakePort: handshakePort.sendPort,
-        directories: [tempDir.path],
-        coverCachePath: tempDir.path,
-        workerCount: 2,
-      );
+      final progressEvents = await extractor
+          .scanDirectories([tempDir.path])
+          .toList();
 
-      final isolate = await Isolate.spawn(scanIsolateEntry, args);
-      isolate.addOnExitListener(exitPort.sendPort, response: 'isolate_terminated');
-
-      // Handshake
-      final cancelSendPort = await handshakePort.first as SendPort;
-      handshakePort.close();
-
-      // Send cancel and kill immediately
-      cancelSendPort.send('cancel');
-      isolate.kill(priority: Isolate.immediate);
-
-      // Verify exit listener receives termination response
-      final exitResponse = await exitPort.first.timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => 'timeout',
-      );
-
-      expect(exitResponse, equals('isolate_terminated'));
-      progressPort.close();
-      exitPort.close();
+      expect(progressEvents.any((p) => p.phase == ScanPhase.completed), isTrue);
+      final completed = progressEvents.firstWhere((p) => p.phase == ScanPhase.completed);
+      expect(completed.scannedFiles, equals(6));
+      expect(completed.totalFiles, equals(6));
     });
 
     test('2.6: Starting a new scan while an existing scan is running gracefully cancels the first', () async {

@@ -1,11 +1,9 @@
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
-import 'package:tachyon/core/backend/services/scan_isolate.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
 void main() {
@@ -33,50 +31,18 @@ void main() {
     }
   });
 
-  group('ScanIsolateArgs & Incremental Scan Contract', () {
-    test('ScanIsolateArgs defaults existingMetas to empty map if omitted', () {
-      final port1 = ReceivePort();
-      final port2 = ReceivePort();
-
-      final args = ScanIsolateArgs(
-        progressPort: port1.sendPort,
-        handshakePort: port2.sendPort,
-        directories: ['/path/to/music'],
-        coverCachePath: '/path/to/cache',
-        workerCount: 4,
-      );
-
-      expect(args.existingMetas, isEmpty);
-      port1.close();
-      port2.close();
-    });
-
-    test('ScanIsolateArgs retains provided existingMetas record map', () {
-      final port1 = ReceivePort();
-      final port2 = ReceivePort();
-
+  group('MetadataService Incremental Scan Contract', () {
+    test('TrackFileMeta record stores modifiedAt and fileSize accurately', () {
       final Map<String, TrackFileMeta> metas = {
         '/path/track1.mp3': (modifiedAt: 123456789, fileSize: 1024),
         '/path/track2.flac': (modifiedAt: 987654321, fileSize: 2048),
       };
 
-      final args = ScanIsolateArgs(
-        progressPort: port1.sendPort,
-        handshakePort: port2.sendPort,
-        directories: ['/path/to/music'],
-        coverCachePath: '/path/to/cache',
-        workerCount: 4,
-        existingMetas: metas,
-      );
-
-      expect(args.existingMetas.length, equals(2));
-      expect(args.existingMetas['/path/track1.mp3']?.modifiedAt, equals(123456789));
-      expect(args.existingMetas['/path/track1.mp3']?.fileSize, equals(1024));
-      expect(args.existingMetas['/path/track2.flac']?.modifiedAt, equals(987654321));
-      expect(args.existingMetas['/path/track2.flac']?.fileSize, equals(2048));
-
-      port1.close();
-      port2.close();
+      expect(metas.length, equals(2));
+      expect(metas['/path/track1.mp3']?.modifiedAt, equals(123456789));
+      expect(metas['/path/track1.mp3']?.fileSize, equals(1024));
+      expect(metas['/path/track2.flac']?.modifiedAt, equals(987654321));
+      expect(metas['/path/track2.flac']?.fileSize, equals(2048));
     });
 
     test('MetadataService queries existing track metas from DB', () async {

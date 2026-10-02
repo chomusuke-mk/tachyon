@@ -114,13 +114,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
   void _toggleQueue() {
     final isNarrow = MediaQuery.sizeOf(context).width < 588;
+    bool shouldHideLyrics = false;
     setState(() {
       _showQueue = !_showQueue;
       if (_showQueue && isNarrow && _showLyrics) {
         _showLyrics = false;
-        _lyricsController?.setLyricsViewVisible(false);
+        shouldHideLyrics = true;
       }
     });
+    if (shouldHideLyrics) {
+      _lyricsController?.setLyricsViewVisible(false);
+    }
     try {
       final settings = context.read<SettingsRepository>();
       settings.setPlaybackShowLyrics(_showLyrics);
@@ -143,8 +147,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
   @override
   void dispose() {
-    _lyricsController?.setLyricsViewVisible(false);
     WidgetsBinding.instance.removeObserver(this);
+    final lyricsController = _lyricsController;
+    if (lyricsController != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        lyricsController.setLyricsViewVisible(false);
+      });
+    }
     super.dispose();
   }
 

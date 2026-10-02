@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
@@ -171,7 +172,25 @@ class LyricsController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Visibility Lifecycle Hook
   // ---------------------------------------------------------------------------
+  void _safeNotifyListeners() {
+    if (_isDisposed) return;
+    try {
+      final scheduler = SchedulerBinding.instance;
+      if (scheduler.schedulerPhase == SchedulerPhase.persistentCallbacks ||
+          scheduler.schedulerPhase == SchedulerPhase.midFrameMicrotasks) {
+        scheduler.addPostFrameCallback((_) {
+          if (!_isDisposed) {
+            notifyListeners();
+          }
+        });
+        return;
+      }
+    } catch (_) {}
+    notifyListeners();
+  }
+
   void setLyricsViewVisible(bool visible) {
+    if (_isDisposed) return;
     if (_isLyricsViewVisible == visible) return;
     _isLyricsViewVisible = visible;
 
@@ -189,9 +208,9 @@ class LyricsController extends ChangeNotifier {
       if (_isLoading) {
         _isLoading = false;
       }
-      notifyListeners();
+      _safeNotifyListeners();
     } else {
-      notifyListeners();
+      _safeNotifyListeners();
       // 4. View opened: ensure lyrics are loaded on-demand for active track
       if (playbackController.currentTrack != null) {
         if (_lyrics == null ||

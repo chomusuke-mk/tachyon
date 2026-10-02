@@ -302,7 +302,7 @@ void main() {
       expect(hero.height, equals(320));
     });
 
-    testWidgets('TrackTile strictly enforces 80x80 cacheWidth and cacheHeight', (tester) async {
+    testWidgets('TrackTile strictly enforces 100x100 cacheWidth and cacheHeight', (tester) async {
       const track = Track(
         filePath: '/music/heavy_cover_track.flac',
         title: 'Heavy Cover Track',
@@ -325,8 +325,8 @@ void main() {
       expect(artFinder, findsOneWidget);
       final widget = tester.widget<AlbumArtImage>(artFinder);
 
-      expect(widget.cacheWidth, equals(80));
-      expect(widget.cacheHeight, equals(80));
+      expect(widget.cacheWidth, equals(100));
+      expect(widget.cacheHeight, equals(100));
     });
 
     test('Existence cache Set (_existingCovers) stress and clearing', () {

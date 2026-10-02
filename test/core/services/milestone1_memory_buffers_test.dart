@@ -53,7 +53,7 @@ void main() {
   });
 
   group('Milestone 1: TrackTile Bounded Thumbnail Dimensions', () {
-    testWidgets('TrackTile instantiates AlbumArtImage with explicit cacheWidth 80 and cacheHeight 80', (tester) async {
+    testWidgets('TrackTile instantiates AlbumArtImage with explicit cacheWidth 100 and cacheHeight 100', (tester) async {
       const track = Track(
         filePath: '/music/tile_track.mp3',
         title: 'Tile Track',
@@ -76,8 +76,8 @@ void main() {
       final albumArtFinder = find.byType(AlbumArtImage);
       expect(albumArtFinder, findsOneWidget);
       final albumArt = tester.widget<AlbumArtImage>(albumArtFinder);
-      expect(albumArt.cacheWidth, equals(80));
-      expect(albumArt.cacheHeight, equals(80));
+      expect(albumArt.cacheWidth, equals(100));
+      expect(albumArt.cacheHeight, equals(100));
     });
   });
 

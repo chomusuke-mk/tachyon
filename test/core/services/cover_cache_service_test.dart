@@ -36,8 +36,8 @@ void main() {
       final lqFile = service.getCoverFile(trackPath, quality: ThumbnailQuality.low);
       final hqFile = service.getCoverFile(trackPath, quality: ThumbnailQuality.high);
 
-      expect(lqFile.path, endsWith('${hash}_lq.jpg'));
-      expect(hqFile.path, endsWith('${hash}_hq.jpg'));
+      expect(lqFile.path, endsWith('${hash}_lq.webp'));
+      expect(hqFile.path, endsWith('${hash}_hq.webp'));
     });
 
     test('getArtistCoverFile generates distinct hash for artist', () {
@@ -45,11 +45,11 @@ void main() {
       final aHq = service.getArtistCoverFile('Queen', quality: ThumbnailQuality.high);
 
       final expectedHash = service.computeHash('artist:queen');
-      expect(aLq.path, endsWith('${expectedHash}_lq.jpg'));
-      expect(aHq.path, endsWith('${expectedHash}_hq.jpg'));
+      expect(aLq.path, endsWith('${expectedHash}_lq.webp'));
+      expect(aHq.path, endsWith('${expectedHash}_hq.webp'));
     });
 
-    test('saveCacheCover creates both max 500x500 square HQ and 80x80 center-cropped LQ images', () async {
+    test('saveCacheCover creates both max 1000x1000 square HQ and 100x100 center-cropped LQ images in WebP', () async {
       // Create a rectangular dummy test cover (400 x 200) to test center-crop without distortion
       final testImage = img.Image(width: 400, height: 200);
       img.fill(testImage, color: img.ColorRgb8(255, 0, 0));
@@ -58,8 +58,8 @@ void main() {
       final coverFile = File(p.join(musicDir.path, 'cover.jpg'));
       await coverFile.writeAsBytes(jpgBytes);
 
-      // Also create artist.jpg in the same directory (large: 800x600 to test max 500x500 clamping)
-      final artistImage = img.Image(width: 800, height: 600);
+      // Also create artist.jpg in the same directory (large: 1400x1200 to test max 1000x1000 clamping)
+      final artistImage = img.Image(width: 1400, height: 1200);
       img.fill(artistImage, color: img.ColorRgb8(0, 0, 255));
       final artistJpgBytes = img.encodeJpg(artistImage);
       final artistFile = File(p.join(musicDir.path, 'artist.jpg'));
@@ -78,41 +78,43 @@ void main() {
       expect(saved, isNotNull);
       expect(await saved!.exists(), isTrue);
 
-      // Verify track cover: both HQ and LQ exist
+      // Verify track cover: both HQ and LQ exist as WebP
       final hash = service.computeHash(trackPath);
-      final lqDisk = File(p.join(tempDir.path, 'covers', '${hash}_lq.jpg'));
-      final hqDisk = File(p.join(tempDir.path, 'covers', '${hash}_hq.jpg'));
+      final lqDisk = File(p.join(tempDir.path, 'covers', '${hash}_lq.webp'));
+      final hqDisk = File(p.join(tempDir.path, 'covers', '${hash}_hq.webp'));
 
       expect(await lqDisk.exists(), isTrue);
       expect(await hqDisk.exists(), isTrue);
 
-      // Decode the generated LQ image and verify it is an 80x80 square
+      // Decode the generated LQ image and verify it is a 100x100 square
       final decodedLq = img.decodeImage(await lqDisk.readAsBytes());
       expect(decodedLq, isNotNull);
-      expect(decodedLq!.width, equals(80));
-      expect(decodedLq.height, equals(80));
+      expect(decodedLq!.width, equals(100));
+      expect(decodedLq.height, equals(100));
 
-      // Decode the HQ image and verify it is a square center-cropped image (min(400, 200) = 200x200 <= 500)
+      // Decode the HQ image and verify it is a square center-cropped image (min(400, 200) = 200x200 <= 1000)
       final decodedHq = img.decodeImage(await hqDisk.readAsBytes());
       expect(decodedHq, isNotNull);
       expect(decodedHq!.width, equals(200));
       expect(decodedHq.height, equals(200));
 
-      // Verify artist cover was generated from artist.jpg (800x600 -> min(800,600)=600 -> clamped to 500x500)
+      // Verify artist cover was generated from artist.jpg (1400x1200 -> min(1400,1200)=1200 -> clamped to 1000x1000)
       final artistHash = service.computeHash('artist:test artist');
-      final artistLqDisk = File(p.join(tempDir.path, 'covers', '${artistHash}_lq.jpg'));
-      final artistHqDisk = File(p.join(tempDir.path, 'covers', '${artistHash}_hq.jpg'));
+      final artistLqDisk = File(p.join(tempDir.path, 'covers', '${artistHash}_lq.webp'));
+      final artistHqDisk = File(p.join(tempDir.path, 'covers', '${artistHash}_hq.webp'));
 
       expect(await artistLqDisk.exists(), isTrue);
       expect(await artistHqDisk.exists(), isTrue);
 
       final decodedArtistLq = img.decodeImage(await artistLqDisk.readAsBytes());
-      expect(decodedArtistLq!.width, equals(80));
-      expect(decodedArtistLq.height, equals(80));
+      expect(decodedArtistLq, isNotNull);
+      expect(decodedArtistLq!.width, equals(100));
+      expect(decodedArtistLq.height, equals(100));
 
       final decodedArtistHq = img.decodeImage(await artistHqDisk.readAsBytes());
-      expect(decodedArtistHq!.width, equals(500));
-      expect(decodedArtistHq.height, equals(500));
+      expect(decodedArtistHq, isNotNull);
+      expect(decodedArtistHq!.width, equals(1000));
+      expect(decodedArtistHq.height, equals(1000));
     });
   });
 }

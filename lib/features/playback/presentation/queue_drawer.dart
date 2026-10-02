@@ -233,8 +233,8 @@ class _QueueViewState extends State<QueueView> {
                                   child: AlbumArtImage(
                                     filePath: item.filePath,
                                     fit: BoxFit.cover,
-                                    cacheWidth: 80,
-                                    cacheHeight: 80,
+                                    cacheWidth: 100,
+                                    cacheHeight: 100,
                                   ),
                                 ),
                               ),

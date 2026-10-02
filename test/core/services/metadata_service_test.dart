@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
+import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
@@ -119,8 +120,8 @@ void main() {
       final coversDir = Directory(p.join(tempCacheDir.path, 'covers'));
       await coversDir.create(recursive: true);
 
-      final lqFile = File(p.join(coversDir.path, '${hash}_lq.jpg'));
-      final hqFile = File(p.join(coversDir.path, '${hash}_hq.jpg'));
+      final lqFile = File(p.join(coversDir.path, '${hash}_lq.webp'));
+      final hqFile = File(p.join(coversDir.path, '${hash}_hq.webp'));
       await lqFile.writeAsString('dummy_lq_bytes');
       await hqFile.writeAsString('dummy_hq_bytes');
 
@@ -156,18 +157,18 @@ void main() {
       expect(generatedLqPath, isA<String>()); // Returns ONLY String paths, NO bytes!
       expect(File(generatedLqPath!).existsSync(), isTrue);
 
-      // Verify the generated LQ image on disk is exactly 80x80 square
+      // Verify the generated LQ image on disk is exactly 100x100 square
       final lqDecoded = img.decodeImage(await File(generatedLqPath).readAsBytes());
       expect(lqDecoded, isNotNull);
-      expect(lqDecoded!.width, equals(80));
-      expect(lqDecoded.height, equals(80));
+      expect(lqDecoded!.width, equals(100));
+      expect(lqDecoded.height, equals(100));
 
       // Request HQ thumbnail
       final generatedHqPath = await metadataService.getThumbnail(trackPath, isHighQuality: true);
       expect(generatedHqPath, isNotNull);
       expect(File(generatedHqPath!).existsSync(), isTrue);
 
-      // Original minDim was 300 (min(600, 300) = 300 <= 500), so HQ is 300x300 square without distortion
+      // Original minDim was 300 (min(600, 300) = 300 <= 1000), so HQ is 300x300 square without distortion
       final hqDecoded = img.decodeImage(await File(generatedHqPath).readAsBytes());
       expect(hqDecoded, isNotNull);
       expect(hqDecoded!.width, equals(300));
@@ -209,7 +210,7 @@ void main() {
       expect(inDb.title, equals('song_cache_miss'));
     });
 
-    test('scanDirectories spawns scan isolate via Isolate.spawn and reports progress', () async {
+    test('scanDirectories executes worker pool via Isolate.run and reports progress', () async {
       final audioPath = p.join(tempMusicDir.path, 'song_in_dir.wav');
       createTestWavFile(audioPath);
 
@@ -219,6 +220,60 @@ void main() {
 
       expect(progressEvents, isNotEmpty);
       expect(progressEvents.last.phase.name, equals('completed'));
+    });
+
+    test('AppDefaults.supportedAudioExtensions contains all miniaudio player formats', () {
+      const expectedFormats = {
+        'mp3',
+        'wav',
+        'flac',
+        'ogg',
+        'opus',
+        'aif',
+        'aiff',
+        'aifc',
+        'w64',
+        'rf64',
+        'bwf',
+        'rifx',
+        'mp2',
+        'mp1',
+        'oga',
+        'aac',
+        'm4a',
+      };
+      for (final format in expectedFormats) {
+        expect(
+          AppDefaults.supportedAudioExtensions.contains(format),
+          isTrue,
+          reason: 'Expected $format to be supported by AppDefaults',
+        );
+      }
+    });
+
+    test('extractMetadata returns fallback track when extension is not supported by audio_metadata_reader', () async {
+      final audioPath = p.join(tempMusicDir.path, 'sample_stream.aac');
+      final dummyFile = File(audioPath);
+      await dummyFile.writeAsString('AAC_DUMMY_BINARY_DATA');
+
+      final track = await metadataService.extractMetadata(audioPath);
+      expect(track, isNotNull);
+      expect(track!.filePath, equals(audioPath));
+      expect(track.title, equals('sample_stream'));
+      expect(track.codec, equals('AAC'));
+      expect(track.fileSize, isPositive);
+    });
+
+    test('extractMetadata returns fallback track when readMetadata throws parsing exception', () async {
+      final audioPath = p.join(tempMusicDir.path, 'corrupted_tag.mp3');
+      final dummyFile = File(audioPath);
+      await dummyFile.writeAsString('CORRUPTED_ID3_BYTES_HEADER_INVALID');
+
+      final track = await metadataService.extractMetadata(audioPath);
+      expect(track, isNotNull);
+      expect(track!.filePath, equals(audioPath));
+      expect(track.title, equals('corrupted_tag'));
+      expect(track.fileSize, isPositive);
     });
   });
 }

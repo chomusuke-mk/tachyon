@@ -65,14 +65,14 @@ El proyecto Tachyon opera bajo un desacoplamiento estricto entre el hilo visual 
   2. **Motor de Audio de Bajo Nivel (`AudioEngineService`):** Orquesta dos reproductores de audio (`miniaudio_player` con FFI nativo) mediante un ticker de 25 ms para crossfade real y fluido con curvas Equal-Power o Linear.
   3. **Servicio Unificado de Metadatos (`MetadataService`):**
      - Orquesta la extracción de metadatos de archivos únicos y generación de miniaturas usando `Isolate.run`.
-     - Orquesta escaneos masivos recursivos de carpetas mediante `scan_isolate.dart` con `Isolate.spawn`.
+     - Orquesta escaneos masivos recursivos de carpetas mediante un pool concurrente de `Isolate.run` proporcional a los procesadores del sistema (`Platform.numberOfProcessors`), extrayendo metadatos y guardando carátulas en una sola pasada.
      - **Regla de transferencia liviana:** Tanto el backend isolate como el main isolate **solo transmiten rutas en disco (`String`)**, **NUNCA** arreglos masivos de bytes crudos (`Uint8List`).
   4. **Gestión de Carátulas (`CoverCacheService`):**
      - Extrae preferentemente imágenes embebidas en los tags del archivo de audio mediante `audio_metadata_reader`.
      - **Respaldo en Directorio (Fallback):** Si el archivo no contiene carátula embebida, busca carátulas locales contiguas en su directorio (`cover.jpg`, `folder.jpg`, `front.jpg`, etc.) o de artista (`artist.jpg`, `band.jpg`, etc.).
-     - Caché dual con hash SHA-256 en disco:
-       - **HQ (High Quality):** Máximo 500x500 píxeles con recorte central cuadrado sin distorsión.
-       - **LQ (Low Quality):** Exactamente 80x80 píxeles con recorte central cuadrado sin distorsión.
+     - Caché dual con hash SHA-256 en disco en formato WebP:
+       - **HQ (High Quality):** Máximo 1000x1000 píxeles con recorte central cuadrado sin distorsión.
+       - **LQ (Low Quality):** Exactamente 100x100 píxeles con recorte central cuadrado sin distorsión.
   5. **Gestor de Cola (`QueueManager`):** Mantiene el historial, pista actual, cola de reproducción, modo shuffle (Fisher-Yates) y modos de repetición.
   6. **Servicio de Letras (`LyricsService`):** Resolución de letras jerárquica con caché persistente y rate limiting.
 
@@ -176,8 +176,8 @@ Todo texto visible en la aplicación debe estar internacionalizado siguiendo est
 
 3. **Optimización de Memoria y RAM:**
    - No mantener búferes de imágenes decodificadas en memoria sin límite.
-   - Usar miniaturas LQ (80x80) para listas y grillas de álbumes/canciones.
-   - Usar miniaturas HQ (500x500) únicamente para la vista activa de reproducción (_Now Playing_).
+   - Usar miniaturas LQ (100x100 WebP) para listas y grillas de álbumes/canciones.
+   - Usar miniaturas HQ (1000x1000 WebP) únicamente para la vista activa de reproducción (_Now Playing_).
 
 ---
 

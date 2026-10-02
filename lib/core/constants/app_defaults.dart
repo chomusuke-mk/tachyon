@@ -21,7 +21,61 @@ class AppDefaults {
 
   static const bool audioPlayerAsyncEnabled = false;
 
+  // METADATA EXTRACTOR SUPPORT
+  /*
+  '.mp3',
+  '.flac',
+  '.mp4',
+  '.m4a',
+  '.ape',
+  '.ogg',
+  '.opus',
+  '.wav',
+  '.aif',
+  '.aiff',
+  '.aifc',
+  '.mov',
+  '.webm',
+  '.mkv',
+   */
+  // PLAYER SUPPORT
+  /*
+  'mp3',
+  'wav',
+  'flac',
+  'ogg',
+  'opus',
+  'aif',
+  'aiff',
+  'aifc',
+  'w64',
+  'rf64',
+  'bwf',
+  'rifx',
+  'mp2',
+  'mp1',
+  'oga',
+  'aac',
+  'm4a',
+  */
   static const Set<String> supportedAudioExtensions = {
-    'mp3', 'flac', 'ogg', 'opus', 'm4a', 'aac', 'wav', 'aiff', 'wma'
+    'mp3',
+    'wav',
+    'flac',
+    'ogg',
+    'opus',
+    'aif',
+    'aiff',
+    'aifc',
+    'aiffc',
+    'w64',
+    'rf64',
+    'bwf',
+    'rifx',
+    'mp2',
+    'mp1',
+    'oga',
+    'aac',
+    'm4a',
   };
 }
