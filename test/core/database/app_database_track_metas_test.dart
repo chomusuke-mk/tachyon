@@ -23,14 +23,14 @@ void main() {
 
     test('returns populated map with exact uri, modifiedAt, and fileSize', () async {
       const track1 = Track(
-        uri: '/music/song1.mp3',
+        filePath: '/music/song1.mp3',
         title: 'Song 1',
         fileSize: 1024000,
         modifiedAt: 1700000000000,
         durationMs: 180000,
       );
       const track2 = Track(
-        uri: '/music/song2.flac',
+        filePath: '/music/song2.flac',
         title: 'Song 2',
         fileSize: 20480000,
         modifiedAt: 1700000500000,
@@ -55,7 +55,7 @@ void main() {
 
     test('reflects updated modifiedAt and fileSize after track re-insertion', () async {
       const initialTrack = Track(
-        uri: '/music/song1.mp3',
+        filePath: '/music/song1.mp3',
         title: 'Song 1',
         fileSize: 1024000,
         modifiedAt: 1700000000000,
@@ -68,7 +68,7 @@ void main() {
 
       // Update track with new size and timestamp
       const updatedTrack = Track(
-        uri: '/music/song1.mp3',
+        filePath: '/music/song1.mp3',
         title: 'Song 1 Remastered',
         fileSize: 1050000,
         modifiedAt: 1700000999000,
@@ -84,7 +84,7 @@ void main() {
 
     test('excludes tracks that were deleted', () async {
       const track1 = Track(
-        uri: '/music/song1.mp3',
+        filePath: '/music/song1.mp3',
         title: 'Song 1',
         fileSize: 1024000,
         modifiedAt: 1700000000000,

@@ -134,7 +134,7 @@ class QueueItem {
     return QueueItem(
       id: json['id'] as String? ?? '',
       trackId: json['trackId'] as int?,
-      filePath: (json['filePath'] ?? json['file_path'] ?? json['uri']) as String? ?? '',
+      filePath: (json['filePath'] ?? json['file_path']) as String? ?? '',
       title: json['title'] as String? ?? '',
       artist: json['artist'] as String? ?? '',
       artists:

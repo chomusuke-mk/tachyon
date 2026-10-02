@@ -59,7 +59,7 @@ The city is my church
   }) {
     return Track(
       id: id,
-      uri: uri,
+      filePath: uri,
       title: title,
       artist: artist,
       album: album,
@@ -81,7 +81,7 @@ The city is my church
   }) {
     return QueueItem(
       id: id,
-      uri: uri,
+      filePath: uri,
       title: title,
       artist: artist,
       album: album,
@@ -91,7 +91,7 @@ The city is my church
   }
 
   String trackKey(Track track) => LyricsService.computeLyricsKey(
-        uri: track.uri,
+        filePath: track.filePath,
         title: track.title,
         artist: track.artist,
         durationMs: track.durationMs,

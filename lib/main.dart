@@ -35,134 +35,68 @@ Future<void> main() async {
     cacheDirPath: cacheDirectory.path,
   );
 
+  final settingsRepository = SettingsRepository(sharedPreferences);
+  final localeRepository = LocaleRepository();
+
+  final settingsController = SettingsController(
+    repository: settingsRepository,
+    backend: backendClient,
+  );
+  await settingsController.init();
+
+  String initialLang = settingsController.appLanguage;
+  if (initialLang == "defaultOption" || initialLang == "default") {
+    initialLang = ui.PlatformDispatcher.instance.locale.languageCode;
+  }
+  final localeController = LocaleController(localeRepository, initialLang);
+  settingsController.addListener(() {
+    final lang = settingsController.appLanguage;
+    final effective = (lang == "defaultOption" || lang == "default")
+        ? ui.PlatformDispatcher.instance.locale.languageCode
+        : lang;
+    if (localeController.currentLocaleCode != effective) {
+      localeController.setLocale(effective);
+    }
+  });
+
+  final libraryController = LibraryController(
+    backend: backendClient,
+    settingsRepository: settingsRepository,
+  )..loadLibrary();
+
+  final playlistsController = PlaylistsController(
+    backend: backendClient,
+  )..loadPlaylists();
+
+  final searchController = TachyonSearchController(
+    backend: backendClient,
+  );
+
+  final playbackController = PlaybackController(
+    backend: backendClient,
+    settingsRepository: settingsRepository,
+  );
+
+  final lyricsController = LyricsController(
+    backendClient: backendClient,
+    playbackController: playbackController,
+    settingsRepository: settingsRepository,
+  );
+
   runApp(
     MultiProvider(
       providers: [
-        // =====================================================================
-        // CAPA 1: INFRAESTRUCTURA BASE Y BACKEND CLIENT
-        // =====================================================================
         Provider<SharedPreferences>.value(value: sharedPreferences),
         Provider<TachyonBackendClient>.value(value: backendClient),
-        Provider<LocaleRepository>(create: (_) => LocaleRepository()),
-        ProxyProvider<SharedPreferences, SettingsRepository>(
-          update: (_, prefs, prev) => prev ?? SettingsRepository(prefs),
-        ),
-
-        // =====================================================================
-        // CAPA 2: CONTROLADORES DE ESTADO (UI Y REACTIVIDAD DESACOPLADA)
-        // =====================================================================
-        ChangeNotifierProxyProvider2<
-          SettingsRepository,
-          TachyonBackendClient,
-          SettingsController
-        >(
-          create: (context) => SettingsController(
-            settingsRepository: context.read<SettingsRepository>(),
-            backendClient: context.read<TachyonBackendClient>(),
-          ),
-          update: (_, repo, backend, prev) =>
-              prev ??
-              SettingsController(
-                settingsRepository: repo,
-                backendClient: backend,
-              ),
-        ),
-
-        ChangeNotifierProxyProvider2<
-          LocaleRepository,
-          SettingsController,
-          LocaleController
-        >(
-          create: (context) {
-            final repo = context.read<LocaleRepository>();
-            final settings = context.read<SettingsController>();
-            String initialLang = settings.appLanguage;
-            if (initialLang == "defaultOption" || initialLang == "default") {
-              initialLang = ui.PlatformDispatcher.instance.locale.languageCode;
-            }
-            return LocaleController(repo, initialLang);
-          },
-          update: (context, repo, settings, prev) {
-            String currentLang = settings.appLanguage;
-            if (currentLang == "defaultOption" || currentLang == "default") {
-              currentLang = ui.PlatformDispatcher.instance.locale.languageCode;
-            }
-            if (prev != null && prev.currentLocaleCode != currentLang) {
-              prev.setLocale(currentLang);
-            }
-            return prev ?? LocaleController(repo, currentLang);
-          },
-        ),
-
-        ChangeNotifierProxyProvider2<
-          TachyonBackendClient,
-          SettingsRepository,
-          LibraryController
-        >(
-          create: (context) => LibraryController(
-            backendClient: context.read<TachyonBackendClient>(),
-            settingsRepository: context.read<SettingsRepository>(),
-          )..loadLibrary(),
-          update: (_, backend, settings, prev) =>
-              prev ??
-              LibraryController(
-                backendClient: backend,
-                settingsRepository: settings,
-              ),
-        ),
-
-        ChangeNotifierProxyProvider<TachyonBackendClient, PlaylistsController>(
-          create: (context) => PlaylistsController(
-            backendClient: context.read<TachyonBackendClient>(),
-          )..loadPlaylists(),
-          update: (_, backend, prev) =>
-              prev ?? PlaylistsController(backendClient: backend),
-        ),
-
-        ChangeNotifierProxyProvider<TachyonBackendClient, TachyonSearchController>(
-          create: (context) => TachyonSearchController(
-            backendClient: context.read<TachyonBackendClient>(),
-          ),
-          update: (_, backend, prev) =>
-              prev ?? TachyonSearchController(backendClient: backend),
-        ),
-
-        ChangeNotifierProxyProvider2<
-          TachyonBackendClient,
-          SettingsRepository,
-          PlaybackController
-        >(
-          create: (context) => PlaybackController(
-            backendClient: context.read<TachyonBackendClient>(),
-            settingsRepository: context.read<SettingsRepository>(),
-          ),
-          update: (_, backend, repo, prev) =>
-              prev ??
-              PlaybackController(
-                backendClient: backend,
-                settingsRepository: repo,
-              ),
-        ),
-
-        ChangeNotifierProxyProvider3<
-          TachyonBackendClient,
-          PlaybackController,
-          SettingsRepository,
-          LyricsController
-        >(
-          create: (context) => LyricsController(
-            backendClient: context.read<TachyonBackendClient>(),
-            playbackController: context.read<PlaybackController>(),
-            settingsRepository: context.read<SettingsRepository>(),
-          ),
-          update: (_, backend, playback, settings, prev) =>
-              prev ??
-              LyricsController(
-                backendClient: backend,
-                playbackController: playback,
-                settingsRepository: settings,
-              ),
-        ),
+        Provider<SettingsRepository>.value(value: settingsRepository),
+        Provider<LocaleRepository>.value(value: localeRepository),
+        ChangeNotifierProvider<SettingsController>.value(value: settingsController),
+        ChangeNotifierProvider<LocaleController>.value(value: localeController),
+        ChangeNotifierProvider<LibraryController>.value(value: libraryController),
+        ChangeNotifierProvider<PlaylistsController>.value(value: playlistsController),
+        ChangeNotifierProvider<TachyonSearchController>.value(value: searchController),
+        ChangeNotifierProvider<PlaybackController>.value(value: playbackController),
+        ChangeNotifierProvider<LyricsController>.value(value: lyricsController),
       ],
       child: const App(),
     ),

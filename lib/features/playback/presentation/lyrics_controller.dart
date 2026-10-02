@@ -68,7 +68,8 @@ class LyricsController extends ChangeNotifier {
     required this.backendClient,
     required this.playbackController,
     required this.settingsRepository,
-  }) : cooldownManager = LyricsCooldownManager() {
+    LyricsCooldownManager? cooldownManager,
+  }) : cooldownManager = cooldownManager ?? LyricsCooldownManager() {
     final initialMode = settingsRepository.getLyricsDisplayMode();
     _isTranslated = initialMode != LyricsDisplayMode.original;
     _isInterleaved = initialMode == LyricsDisplayMode.interleaved;
@@ -366,6 +367,29 @@ class LyricsController extends ChangeNotifier {
         allowRemote: _isLyricsViewVisible,
         bypassCache: forceRefresh,
         allowedSources: effectiveSources,
+        cancellationToken: token,
+        onThresholdCountdown: (seconds) {
+          if (_isDisposed || token.isCancelled) return;
+          cooldownManager.startThresholdCountdown(
+            seconds: seconds,
+            onAutoRetry: () async {
+              if (_isDisposed || !_isLyricsViewVisible) return;
+              if (_currentTrackFilePath == track.filePath &&
+                  _generationTracker
+                      .isCurrent(_generationTracker.activeToken)) {
+                final retryToken = _generationTracker.nextGeneration();
+                _currentCancellationToken = retryToken;
+                await _loadLyricsForTrack(track, retryToken);
+              }
+            },
+            isStillValid: () =>
+                !_isDisposed &&
+                _isLyricsViewVisible &&
+                _currentTrackFilePath == track.filePath &&
+                _generationTracker.isCurrent(_generationTracker.activeToken),
+          );
+          notifyListeners();
+        },
       );
 
       // Concurrency check: discard if token was cancelled or generation changed
@@ -478,6 +502,9 @@ class LyricsController extends ChangeNotifier {
     return ui.PlatformDispatcher.instance.locale.languageCode;
   }
 
+  Future<void> translateLyrics({String? targetLanguage}) =>
+      _loadOrFetchTranslation(targetLanguage: targetLanguage);
+
   Future<void> _loadOrFetchTranslation({String? targetLanguage}) async {
     if (_lyrics == null || lines.isEmpty) return;
     final targetLang = targetLanguage ?? getEffectiveTargetLanguage();
@@ -543,8 +570,14 @@ class LyricsController extends ChangeNotifier {
   Future<void> toggleTranslation() async {
     if (!_isTranslated) {
       setTranslationDisplayMode(LyricsDisplayMode.translated);
+      if (_translatedLines.isEmpty && hasLyrics) {
+        await _loadOrFetchTranslation();
+      }
     } else if (!_isInterleaved) {
       setTranslationDisplayMode(LyricsDisplayMode.interleaved);
+      if (_translatedLines.isEmpty && hasLyrics) {
+        await _loadOrFetchTranslation();
+      }
     } else {
       setTranslationDisplayMode(LyricsDisplayMode.original);
     }

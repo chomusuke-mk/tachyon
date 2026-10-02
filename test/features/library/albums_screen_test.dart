@@ -3,15 +3,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/backend/backend.dart';
-import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
-import 'package:tachyon/core/services/metadata_extractor.dart';
+import 'package:tachyon/core/backend/services/metadata_service.dart';
+import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/albums_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 class _FakeLocaleRepository implements LocaleRepository {
@@ -40,10 +42,11 @@ void main() {
   late Directory tempDir;
   late AppDatabase db;
   late CoverCacheService coverCacheService;
-  late MetadataExtractor extractor;
+  late MetadataService metadataService;
   late DirectTachyonBackendClient backend;
   late LibraryController libraryController;
   late LocaleController localeController;
+  late SettingsRepository settingsRepository;
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('tachyon_albums_test_');
@@ -51,17 +54,21 @@ void main() {
     coverCacheService = CoverCacheService(cacheDirectory: tempDir);
     await coverCacheService.init();
 
-    extractor = MetadataExtractor(
+    metadataService = MetadataService(
       database: db,
       coverCacheService: coverCacheService,
     );
     backend = DirectTachyonBackendClient(
       database: db,
-      metadataExtractor: extractor,
+      metadataService: metadataService,
       coverCacheService: coverCacheService,
     );
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    settingsRepository = SettingsRepository(prefs);
     libraryController = LibraryController(
-      backendClient: backend,
+      backend: backend,
+      settingsRepository: settingsRepository,
     );
     localeController = LocaleController(_FakeLocaleRepository(), 'en');
     await localeController.whenReady;
@@ -76,7 +83,7 @@ void main() {
 
   testWidgets('AlbumsScreen renders albums and passes album track uri to AlbumArtImage', (tester) async {
     const track1 = Track(
-      uri: '/media/album1/01-intro.mp3',
+      filePath: '/media/album1/01-intro.mp3',
       title: 'Intro',
       album: 'Greatest Hits',
       artist: 'Best Band',
@@ -85,7 +92,7 @@ void main() {
       modifiedAt: 1000,
     );
     const track2 = Track(
-      uri: '/media/album1/02-hit.mp3',
+      filePath: '/media/album1/02-hit.mp3',
       title: 'Hit Song',
       album: 'Greatest Hits',
       artist: 'Best Band',
@@ -119,6 +126,6 @@ void main() {
     final albumArtFinder = find.byType(AlbumArtImage);
     expect(albumArtFinder, findsOneWidget);
     final albumArtWidget = tester.widget<AlbumArtImage>(albumArtFinder);
-    expect(albumArtWidget.uri, equals(track2.uri));
+    expect(albumArtWidget.filePath, equals(track2.filePath));
   });
 }

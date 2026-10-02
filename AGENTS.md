@@ -1,39 +1,78 @@
-# 🤖 Guía para Agentes de IA en Tachyon
+# 🤖 Guía Normativa para Agentes de IA en Tachyon
 
-¡Bienvenido! Eres un agente de inteligencia artificial (IA) o asistente de código colaborando en el proyecto **Tachyon**. Esta guía contiene las instrucciones normativas, convenciones de arquitectura, reglas de código y flujos del proyecto para que puedas trabajar con máxima precisión y coherencia.
+¡Bienvenido! Eres un agente de inteligencia artificial (IA) o asistente de código colaborando en el proyecto **Tachyon**. Esta guía contiene las instrucciones normativas, convenciones de arquitectura, reglas de código, diseño de características y restricciones críticas del proyecto para que trabajes con máxima precisión, seguridad y coherencia.
+
+---
+
+## 🛑 REGLA DE ORO: PROHIBICIÓN ABSOLUTA DE COMANDOS GIT
+
+> [!CAUTION]
+> **ESTÁ TOTALMENTE PROHIBIDO EJECUTAR COMANDOS DE GIT PARA AGREGAR (`git add`), HACER COMMIT (`git commit`), PUSH (`git push`), PULL (`git pull`), REBASE, MERGE O CUALQUIER OTRA MUTACIÓN DEL REPOSITORIO ACTUAL.**
+
+- El control de versiones, el área de staging (`git add`), la creación de commits (`git commit`), la sincronización remota (`git push`, `git pull`), el cambio de ramas y la resolución de conflictos son **responsabilidad y potestad exclusiva del usuario humano**.
+- Los agentes de IA **NUNCA** deben ejecutar comandos que modifiquen el historial, el índice de git o el estado del repositorio remoto o local (`git add`, `git commit`, `git push`, `git pull`, `git checkout`, `git reset`, `git rebase`, `git merge`, `git cherry-pick`, `git stash`, etc.).
+- Comandos de solo lectura como `git status` o `git diff` para inspeccionar cambios de trabajo están permitidos únicamente cuando sea estrictamente necesario para diagnosticar el código.
 
 ---
 
 ## 🎯 Objetivo General del Proyecto
 
-**Tachyon** es un reproductor de música moderno, refinado, multiplataforma (Linux, Windows, macOS, Android, iOS) y 100% libre desarrollado en **Flutter (Dart)**. Su propósito es brindar una experiencia de reproducción de audio fluida, estética (Material 3 con esquema de color dinámico y modo OLED), con soporte nativo de crossfade continuo, biblioteca musical local ultrarrápida, y visualización sincronizada de letras con respaldo inteligente en APIs remotas.
+**Tachyon** es un reproductor de música moderno, refinado, multiplataforma (Linux, Windows, macOS, Android, iOS) y 100% libre desarrollado en **Flutter (Dart)**. Su propósito es brindar una experiencia de reproducción de audio fluida, estética (Material 3 con esquema de color dinámico y modo OLED), con soporte nativo de crossfade continuo de 25 ms, biblioteca musical local ultrarrápida, y visualización sincronizada de letras con respaldo inteligente en APIs remotas.
 
 ---
 
-## 🏛️ Principios Críticos de Arquitectura
+## 🏛️ Arquitectura Desacoplada: UI Isolate vs Backend Host Isolate
 
-El proyecto fue refactorizado para eliminar dependencias de herramientas externas nativas del sistema operativo (`ffmpeg`, `ffprobe` por CLI). La arquitectura se basa en las siguientes decisiones fundamentales:
+El proyecto Tachyon opera bajo un desacoplamiento estricto entre el hilo visual y la capa de servicios de fondo:
 
-1. **Extracción de Metadatos 100% en Dart e Isolate:**
-   - La lectura de etiquetas ID3/FLAC/Vorbis y metadatos se realiza mediante el paquete Dart `audio_metadata_reader`.
-   - El escaneo recursivo de directorios y la lectura de metadatos se ejecutan en un **Isolate secundario** (`lib/core/services/scan_isolate.dart`), comunicándose por mensajes con `MetadataExtractor`.
-   - **Cero bloqueos de UI (0 jank):** Todo el trabajo pesado de disco y parseo ocurre fuera del hilo principal.
-   - **Escrituras seguras en SQLite:** Solo el isolate principal realiza inserciones en la base de datos (`AppDatabase`) para evitar errores de bloqueo (`database is locked`).
+```
+┌──────────────────────────────────────────────────────────┐
+│                   MAIN ISOLATE (UI)                      │
+│  - Widgets Material 3, Temas, Animaciones                │
+│  - Controladores ChangeNotifier (Library, Playback, etc) │
+│  - CERO SQLite directa, CERO reproductores de audio      │
+│  - CERO extracción/procesamiento de imágenes             │
+└──────────────────────────┬───────────────────────────────┘
+                           │  TachyonBackendClient
+                           │  (SendPort / ReceivePort / DirectClient)
+                           ▼
+┌──────────────────────────────────────────────────────────┐
+│              CORE BACKEND HOST (ISOLATE)                 │
+│  - CoreBackendHost (Despacho de comandos y eventos)      │
+│  - AppDatabase (SQLite único con sqflite / sqlite3 FFI)  │
+│  - AudioEngineService (Crossfade dual con miniaudio)     │
+│  - MetadataService (Orquestación Isolate.run / spawn)   │
+│  - CoverCacheService (Extracción embebida y caché HQ/LQ) │
+│  - QueueManager (Cola, shuffle Fisher-Yates, loop)       │
+│  - LyricsService (Resolución jerárquica y caché origen)  │
+└──────────────────────────────────────────────────────────┘
+```
 
-2. **Caché de Carátulas (Cover Art):**
-   - Las imágenes embebidas extraídas por `audio_metadata_reader` o las carátulas locales (`cover.jpg`, `folder.jpg`, `front.jpg`) son escritas directamente a disco mediante `CoverCacheService` sin invocar ningún subproceso.
+### 1. Main Isolate (Hilo Principal de UI)
+- **Exclusivamente visual y reactivo:** Solo se encarga de renderizar la interfaz de usuario, escuchar cambios de estado y capturar la interacción del usuario.
+- **Restricciones estrictas en el Main Isolate:**
+  - **Cero acceso a Base de Datos:** No instancia ni consulta `AppDatabase` directamente.
+  - **Cero reproductores de audio directos:** No maneja instancias de reproductores ni FFI de audio.
+  - **Cero procesamiento de imágenes/metadatos:** No decodifica imágenes con `package:image` ni extrae tags ID3.
+  - **Cero bloqueo (0 jank):** Mantiene una tasa estable de 60/120 fps sin jank.
+- **Comunicación con el Backend:** Se realiza exclusivamente a través de la abstracción `TachyonBackendClient` (con `DirectTachyonBackendClient` para pruebas unitarias y cliente basado en puertos para el runtime).
 
-3. **Motor de Reproducción y Crossfade Continuo:**
-   - Construido sobre `just_audio` respaldado por `just_audio_media_kit` (`JustAudioMediaKit.ensureInitialized` en plataformas de escritorio).
-   - Coordinación de dos reproductores (`Player A` y `Player B`) en `AudioEngineService` para ejecutar crossfade real mediante un ticker periódico de 25 ms con curvas Equal-Power o Linear.
-
-4. **Persistencia Local Relacional:**
-   - Base de datos SQLite gestionada con `sqflite` (y `sqflite_common_ffi` con `sqlite3` en escritorio).
-   - Tablas normalizadas: `tracks`, `albums`, `artists`, `genres`, `playlists`, `playlist_tracks`, `lyrics_cache`.
-
-5. **Internacionalización Obligatoria (i18n):**
-   - Todos los textos de la interfaz deben estar localizados en `i18n/en.jsonc` y `i18n/es.jsonc`, y expuestos a través de getters fuertemente tipados en `AppStringKey` (`lib/features/locales/domain/locale.dart`).
-   - **Regla estricta:** CERO cadenas de texto hardcodeadas (*zero hardcoded strings*) en widgets o diálogos.
+### 2. Core Backend Host (Isolate de Servicios)
+- Corre en un isolate dedicado, centralizando toda la lógica de negocio pesada:
+  1. **Persistencia SQLite Centralizada (`AppDatabase`):** Todas las lecturas y escrituras relacionales se ejecutan exclusivamente en este isolate, garantizando concurrencia segura y eliminando bloqueos (`database is locked`).
+  2. **Motor de Audio de Bajo Nivel (`AudioEngineService`):** Orquesta dos reproductores de audio (`miniaudio_player` con FFI nativo) mediante un ticker de 25 ms para crossfade real y fluido con curvas Equal-Power o Linear.
+  3. **Servicio Unificado de Metadatos (`MetadataService`):**
+     - Orquesta la extracción de metadatos de archivos únicos y generación de miniaturas usando `Isolate.run`.
+     - Orquesta escaneos masivos recursivos de carpetas mediante `scan_isolate.dart` con `Isolate.spawn`.
+     - **Regla de transferencia liviana:** Tanto el backend isolate como el main isolate **solo transmiten rutas en disco (`String`)**, **NUNCA** arreglos masivos de bytes crudos (`Uint8List`).
+  4. **Gestión de Carátulas (`CoverCacheService`):**
+     - Extrae preferentemente imágenes embebidas en los tags del archivo de audio mediante `audio_metadata_reader`.
+     - **Respaldo en Directorio (Fallback):** Si el archivo no contiene carátula embebida, busca carátulas locales contiguas en su directorio (`cover.jpg`, `folder.jpg`, `front.jpg`, etc.) o de artista (`artist.jpg`, `band.jpg`, etc.).
+     - Caché dual con hash SHA-256 en disco:
+       - **HQ (High Quality):** Máximo 500x500 píxeles con recorte central cuadrado sin distorsión.
+       - **LQ (Low Quality):** Exactamente 80x80 píxeles con recorte central cuadrado sin distorsión.
+  5. **Gestor de Cola (`QueueManager`):** Mantiene el historial, pista actual, cola de reproducción, modo shuffle (Fisher-Yates) y modos de repetición.
+  6. **Servicio de Letras (`LyricsService`):** Resolución de letras jerárquica con caché persistente y rate limiting.
 
 ---
 
@@ -47,13 +86,13 @@ El sistema de letras de Tachyon está diseñado bajo una arquitectura jerárquic
 3. **API Primaria (`lrclib.net`):** Letras sincronizadas y en texto plano vía `GET /api/get` (con título, artista, álbum y duración con margen $\pm 2$ s).
 4. **API Secundaria / Respaldo (`lyrics.ovh`):** Letras en texto plano sin marcas de tiempo vía `GET https://api.lyrics.ovh/v1/{artist}/{title}`.
 
-### 2. Disparador de Consultas
-- La búsqueda y consulta de letras a las fuentes (especialmente APIs remotas) **está delegada al ciclo de vida de renderizado del widget `LyricsView`** (cuando se monta en pantalla porque el usuario activó `_showLyrics == true` en `NowPlayingScreen`).
+### 2. Disparador Exclusivo Bajo Demanda
+- La búsqueda y consulta de letras a las fuentes **está delegada al ciclo de vida de renderizado del widget `LyricsView`** (cuando se monta en pantalla porque el usuario activó `_showLyrics == true` en `NowPlayingScreen`).
 - `LyricsController` **no** debe buscar letras de forma automática ni anticipada en segundo plano simplemente porque una canción empiece a reproducirse en la vista estándar de reproducción (*Play View* con carátula y controles, `_showLyrics == false`).
 - Al montarse o estar visible `LyricsView`, este solicita la carga de letras para la pista activa. Si la canción cambia mientras `LyricsView` permanece en pantalla, este mismo solicita la letra de la nueva canción.
 
 ### 3. Persistencia con Estado por Origen en SQLite
-En la tabla de caché de letras de la base de datos se debe registrar el resultado individual por cada fuente (`embedded`, `lrc_file`, `lrclib`, `lyrics_ovh`):
+En la tabla `lyrics_source_cache` se registra el resultado individual por cada fuente (`embedded`, `lrc_file`, `lrclib`, `lyrics_ovh`):
 - `FOUND`: Letra encontrada y guardada.
 - `NOT_FOUND`: La fuente confirmó que la letra no existe (ej. HTTP 404 en `lrclib.net`). Se guarda para no volver a solicitar esa canción a ese servicio.
 - `TEMPORARY_ERROR`: Si la petición falló por error de red, respuesta 5xx o rate limit (HTTP 429), **no** se marca como `NOT_FOUND`, permitiendo reintentos futuros.
@@ -61,91 +100,83 @@ En la tabla de caché de letras de la base de datos se debe registrar el resulta
 ### 4. Rate Limiting, Umbrales y Control de Concurrencia
 - **lrclib.net:** Intervalo mínimo de 500 ms entre peticiones consecutivas e identificación de cliente mediante cabecera `User-Agent`.
 - **Manejo de HTTP 429 (`Retry-After`):**
-  - Si el tiempo de espera es $\le 10$ segundos: Mostrar banner o mensaje en pantalla ("Threshold de lrclib.net detectado esperando X segundos...") con cuenta regresiva en vivo y reintentar automáticamente al completarse el tiempo.
+  - Si el tiempo de espera es $\le 10$ segundos: Mostrar banner o mensaje en pantalla con cuenta regresiva en vivo y reintentar automáticamente al completarse el tiempo.
   - Si el tiempo de espera es $> 10$ segundos (ej. cooldown de 3 minutos): Recurrir de inmediato al servicio de respaldo (`lyrics.ovh`) para mostrar texto plano.
 - **Cooldown en memoria:** Si el cooldown expira mientras el usuario sigue en la misma canción, re-consultar `lrclib.net` y actualizar la visualización a letras sincronizadas. Si el usuario cambió de canción durante el bloqueo, omitir `lrclib.net`, consultar el respaldo y reintentar `lrclib.net` para la canción activa al vencer el tiempo.
 - **Salto rápido en cola:** Si el usuario adelanta varias canciones seguidas (ej. 1 → 2 → 3 → 4 → 5), descartar inmediatamente las peticiones intermedias (2, 3, 4) y procesar directamente la canción 5.
 
-### 5. Controles de UI en la Pantalla de Letras
-La barra superior de la vista de letras cuenta con 3 controles:
-1. **Botón de traducción:** Traducir las letras a través de un endpoint público gratuito sin credenciales.
-2. **Configuración de fuentes:** Diálogo flotante con switches individuales para prender/apagar:
-   - Archivos locales (embebido y `.lrc`).
-   - Servidor 1 (`lrclib.net`).
-   - Servidor 2 (`lyrics.ovh`).
-   Y un botón para re-buscar con la selección actual.
-3. **Botón de re-búsqueda ("Volver a buscar"):** Fuerza una nueva consulta en las fuentes activas ignorando estados temporales.
+---
+
+## 🛠️ Flujo de Creación de Características (Feature Workflow)
+
+Al implementar una nueva funcionalidad o modificar una existente, respeta el siguiente flujo arquitectónico por capas:
+
+### 1. Capa de Datos (SQLite)
+- Si la funcionalidad requiere persistencia relacional, modifica `AppDatabase` (`lib/core/database/app_database.dart`).
+- Agrega las consultas correspondientes y migraciones de esquema seguras.
+
+### 2. Capa de Servicios Backend
+- Ubica la lógica en `lib/core/backend/services/`.
+- No mezcles lógica de UI ni imports de Flutter visual en esta capa.
+
+### 3. Protocolo de Comunicación
+- Define los mensajes/comandos en `backend_protocol.dart`.
+- Agrega el handler correspondiente en `CoreBackendHost` (`backend_host.dart`).
+- Expón el método correspondiente en `TachyonBackendClient` (`backend_client.dart`) e impleméntalo en `DirectTachyonBackendClient` (`direct_backend_client.dart`) para tests.
+
+### 4. Capa de Presentación (UI y Controladores)
+- **Invariante Crítica:** **NO alteres arbitrariamente los constructores de los controladores existentes** en `lib/features/*/presentation/` para evitar romper la inyección de dependencias en `main.dart` o en las pruebas.
+- Los controladores extienden de `ChangeNotifier` y consumen `TachyonBackendClient`.
+- Flujo unidireccional: la UI observa el estado mediante `context.watch<T>()` o `Selector`, y despacha acciones mediante `context.read<T>()`.
+- Los métodos `build()` de los widgets deben ser funciones puras de renderizado: cero llamadas a disco o red en `build()`.
 
 ---
 
-## 📂 Estructura de Directorios
+## 🌐 Internacionalización Obligatoria (i18n)
 
-```
-lib/
-├── app.dart                                # MaterialApp entry (tema, rutas, soporte de localización)
-├── main.dart                               # Inicialización de servicios y MultiProvider
-├── core/
-│   ├── constants/
-│   │   └── app_defaults.dart              # Constantes de audio, volumen y tiempos
-│   ├── database/
-│   │   └── app_database.dart              # Esquema SQLite, migraciones, consultas y caché de letras
-│   ├── services/
-│   │   ├── audio_engine_service.dart      # Orquestador de crossfade dual (Player A & Player B)
-│   │   ├── audio_player_adapter.dart      # Adaptador de just_audio / just_audio_media_kit
-│   │   ├── audio_session_manager.dart     # Manejo de foco de audio e interrupciones
-│   │   ├── cover_cache_service.dart       # Extracción y almacenamiento en disco de carátulas
-│   │   ├── lrc_parser.dart                # Parseo de LRC y SplayTreeMap O(log n)
-│   │   ├── lyrics_service.dart            # Servicio de resolución de letras multiorigen
-│   │   ├── metadata_extractor.dart        # Puente entre el isolate de escaneo y el isolate principal
-│   │   ├── queue_manager.dart             # Lógica de cola, shuffle Fisher-Yates y loop
-│   │   └── scan_isolate.dart              # Isolate de escaneo en segundo plano con audio_metadata_reader
-├── features/
-│   ├── library/                           # Gestión y vistas de biblioteca (Tracks, Albums, Artists, Folders)
-│   ├── locales/                           # Sistema tipado de i18n JSONC (AppStringKey)
-│   ├── playback/                          # Now Playing, controles de transporte, lyrics_view y efectos
-│   ├── playlists/                         # CRUD y reordenamiento de listas de reproducción
-│   ├── search/                            # Búsqueda global en tiempo real
-│   ├── settings/                          # Pantalla y repositorio de configuración SharedPreferences
-│   └── shell/                             # Shell adaptativo (Desktop NavigationRail vs Mobile NavigationBar)
-└── shared/
-    ├── theme/                             # Sistema Material 3 con 5 niveles de superficie
-    └── widgets/                           # Componentes reutilizables (AlbumArtImage, SettingRow, TrackTile)
-```
+> [!IMPORTANT]
+> **REGLA ESTRICTA: CERO cadenas de texto hardcodeadas (*zero hardcoded strings*) en widgets, pantallas, diálogos, tooltips o mensajes de error visibles.**
+
+Todo texto visible en la aplicación debe estar internacionalizado siguiendo este procedimiento de 4 pasos:
+
+1. **Añadir la clave y traducción** en `i18n/en.jsonc` (inglés) e `i18n/es.jsonc` (español).
+2. **Añadir el getter fuertemente tipado** en `AppStringKey` (`lib/features/locales/domain/locale.dart`).
+3. **Registrar la clave** en la lista estática `_allAppStrings` dentro de `AppStringKey`.
+4. **Consumir en la UI** mediante:
+   ```dart
+   context.watch<LocaleController>().localeStrings.<nombreDelGetter>
+   ```
+- El test estático `test/ast_i18n_test.dart` audita el árbol de widgets para verificar que no existan cadenas literales sin traducir.
 
 ---
 
-## 🛠️ Estándares y Convenciones de Código
+## ⚡ Rendimiento, Plataformas y Cero Subprocesos CLI
 
-### 1. Gestión de Estado (`Provider`)
-- Se utiliza el paquete `provider` con clases `ChangeNotifier`.
-- Respetar el flujo unidireccional: la UI escucha cambios con `context.watch<T>()` o `Selector`, y despacha eventos con `context.read<T>()`.
-- No colocar lógica de negocio compleja ni llamadas directas de red/disco dentro de los métodos `build()` de los widgets.
+1. **Cero Binarios Nativos Externos:**
+   - **PROHIBIDO** invocar herramientas de línea de comandos externas como `ffmpeg` o `ffprobe` vía `Process.run`.
+   - La lectura y procesamiento de metadatos se realiza 100% en Dart (`audio_metadata_reader`).
+   - La reproducción de audio de bajo nivel se realiza vía `miniaudio_player` embebido vía FFI.
 
-### 2. Internacionalización (i18n)
-- Archivos fuente: `i18n/en.jsonc` e `i18n/es.jsonc`.
-- Clase de acceso: `AppStringKey` en `lib/features/locales/domain/locale.dart`.
-- Al agregar cualquier texto nuevo a la UI:
-  1. Agrega la clave y traducción en `i18n/en.jsonc` e `i18n/es.jsonc`.
-  2. Añade el getter tipado en `AppStringKey`.
-  3. Registra la clave en la lista interna `_allAppStrings`.
-  4. Úsalo en la UI como `context.watch<LocaleController>().localeStrings.<clave>`.
+2. **Multiplataforma Nativa:**
+   - Soporte para Linux, Windows, macOS, Android e iOS.
+   - El código debe ser agnóstico del sistema operativo, utilizando rutas normalizadas con `package:path` y adaptadores FFI cuando sea necesario.
 
-### 3. Rendimiento y Operaciones Asíncronas
-- **Nunca** ejecutes tareas intensivas de lectura de archivos o decodificación masiva en el hilo principal de la UI. Emplea `Isolate` o delegados en background.
-- Maneja siempre `try / catch` de forma defensiva para peticiones de red o acceso a archivos.
-- Evita llamadas duplicadas o innecesarias a la base de datos utilizando la caché en memoria cuando sea apropiado.
+3. **Optimización de Memoria y RAM:**
+   - No mantener búferes de imágenes decodificadas en memoria sin límite.
+   - Usar miniaturas LQ (80x80) para listas y grillas de álbumes/canciones.
+   - Usar miniaturas HQ (500x500) únicamente para la vista activa de reproducción (*Now Playing*).
 
 ---
 
-## 🚀 Flujo y Comandos Clave (CLI)
+## 🚀 Flujo y Comandos Clave Permitidos (CLI)
 
 - **Instalar dependencias:**
   ```bash
   flutter pub get
   ```
-- **Ejecutar análisis estático (debe mantenerse con 0 errores y 0 warnings):**
+- **Ejecutar análisis estático (debe mantenerse con 0 errores y 0 warnings en todo momento):**
   ```bash
-  dart analyze
+  dart analyze .
   ```
 - **Ejecutar suite de pruebas:**
   ```bash
@@ -158,9 +189,12 @@ lib/
 
 ---
 
-## 🤖 Reglas de Comportamiento para Agentes
+## 📋 Resumen de Reglas de Comportamiento para Agentes
 
-1. **Consistencia de Arquitectura:** No introduzcas binarios nativos externos o procesos CLI (`ffmpeg`/`ffprobe`). Utiliza las bibliotecas existentes de Dart puro (`audio_metadata_reader`, `just_audio_media_kit`).
-2. **Verificación Estática:** Siempre corre `dart analyze` tras modificar código Dart para asegurar que no queden errores ni advertencias de linting.
-3. **No romper i18n:** Todo nuevo string visible en la UI debe contar con su correspondiente clave en `i18n/en.jsonc` y `i18n/es.jsonc` y getter en `AppStringKey`.
-4. **Reutilización:** Antes de crear nuevos componentes, revisa `lib/shared/widgets/` y `lib/core/services/` para aprovechar los servicios y widgets existentes.
+1. **PROHIBICIÓN TOTAL DE GIT:** Nunca ejecutes `git add`, `git commit`, `git push`, `git pull` ni alteres el repositorio o ramas.
+2. **GESTIÓN DE CARÁTULAS:** En `CoverCacheService`, prioriza imágenes embebidas en los tags de audio y utiliza carátulas locales de directorio (`cover.jpg`, `folder.jpg`, etc.) como fallback sin invocar subprocesos CLI.
+3. **RESPETAR DESACOPLAMIENTO DE ISOLATES:** La UI solo interactúa con el backend a través de `TachyonBackendClient`. No instancies `AppDatabase` ni players en la UI.
+4. **TRANSMISIÓN DE RUTAS, NO BYTES:** Los isolates se comunican con rutas de archivos en disco (`String`), nunca con bytes (`Uint8List`).
+5. **VERIFICACIÓN ESTÁTICA Y TESTS:** Tras cualquier modificación, corre siempre `dart analyze .` (0 errores, 0 warnings) y valida con `flutter test`.
+6. **NO ROMPER I18N:** Nunca introduzcas cadenas de texto en crudo en la interfaz. Registra siempre las claves en `en.jsonc`, `es.jsonc` y `AppStringKey`.
+7. **INVARIANTE DE CONSTRUCTORES:** No modifiques las firmas de constructor de los controladores de UI en `lib/`.

@@ -10,11 +10,15 @@ import 'package:http/testing.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
+import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
+import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart';
 
 /// Test spy for PlaybackController.
 class SpyPlaybackController extends ChangeNotifier implements PlaybackController {
@@ -62,6 +66,23 @@ class SpyPlaybackController extends ChangeNotifier implements PlaybackController
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _FakeSettingsRepo implements SettingsRepository {
+  LyricsDisplayMode _displayMode = LyricsDisplayMode.original;
+
+  @override
+  LyricsDisplayMode getLyricsDisplayMode() => _displayMode;
+  @override
+  String getLyricsTranslationTargetLang() => 'defaultOption';
+  @override
+  AppSettings getSettings() => const AppSettings(lastPlayedFilePath: null);
+  @override
+  Future<void> setLyricsDisplayMode(LyricsDisplayMode mode) async {
+    _displayMode = mode;
+  }
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -90,6 +111,22 @@ void main() {
 [00:15.00]Line 3
 ''';
 
+  LyricsController createController({
+    required LyricsService lyricsService,
+    required PlaybackController playbackController,
+  }) {
+    final backend = DirectTachyonBackendClient(
+      database: db,
+      lyricsService: lyricsService,
+    );
+    return LyricsController(
+      backendClient: backend,
+      playbackController: playbackController,
+      settingsRepository: _FakeSettingsRepo(),
+      cooldownManager: lyricsService.cooldownManager,
+    );
+  }
+
   QueueItem createQueueItem({
     required String uri,
     required String title,
@@ -100,7 +137,7 @@ void main() {
   }) {
     return QueueItem(
       id: 'q_${uri.hashCode}',
-      uri: uri,
+      filePath: uri,
       title: title,
       artist: artist,
       album: album,
@@ -138,7 +175,7 @@ void main() {
         lyricsOvhClient: ovhClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -197,7 +234,7 @@ void main() {
         lyricsOvhClient: ovhClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -247,7 +284,7 @@ void main() {
         lyricsOvhClient: ovhClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -301,7 +338,7 @@ void main() {
         lrclibClient: lrclibClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -363,7 +400,7 @@ void main() {
         lrclibClient: lrclibClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -415,7 +452,7 @@ void main() {
         lrclibClient: lrclibClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -469,7 +506,7 @@ void main() {
         lrclibClient: lrclibClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -510,7 +547,7 @@ void main() {
         lrclibClient: lrclibClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -563,7 +600,7 @@ void main() {
         lyricsOvhClient: ovhClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -586,7 +623,7 @@ void main() {
 
       // Verify SQLite persisted NOT_FOUND for both
       final keyHash = LyricsService.computeLyricsKey(
-        uri: track404.uri,
+        filePath: track404.filePath,
         title: track404.title,
         artist: track404.artist,
         durationMs: track404.duration.inMilliseconds,
@@ -652,7 +689,7 @@ void main() {
         ),
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -672,7 +709,7 @@ void main() {
 
       // Verify SQLite persisted TEMPORARY_ERROR
       final keyHash = LyricsService.computeLyricsKey(
-        uri: track500.uri,
+        filePath: track500.filePath,
         title: track500.title,
         artist: track500.artist,
         durationMs: track500.duration.inMilliseconds,
@@ -728,7 +765,7 @@ void main() {
         lrclibClient: lrclibClient,
       );
 
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );

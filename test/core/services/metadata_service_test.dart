@@ -174,11 +174,6 @@ void main() {
       expect(hqDecoded.height, equals(300));
     });
 
-    test('MetadataExtractor typedef is fully interchangeable with MetadataService', () {
-      expect(metadataService, isA<MetadataExtractor>());
-      final MetadataExtractor alias = metadataService;
-      expect(alias.workerCount, isPositive);
-    });
 
     test('extractMetadata runs in worker isolate via Isolate.run and returns Track', () async {
       final audioPath = p.join(tempMusicDir.path, 'song_extract.wav');

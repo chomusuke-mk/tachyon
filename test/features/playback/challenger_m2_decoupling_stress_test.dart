@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
@@ -18,6 +19,9 @@ class MockAudioEngineService extends Fake implements AudioEngineService {
 
   @override
   PlaybackState get currentState => _currentState;
+
+  @override
+  PlaybackState get state => _currentState;
 
   void emitState(PlaybackState state) {
     _currentState = state;
@@ -78,7 +82,7 @@ void main() {
 
   const track1 = QueueItem(
     id: 'track_1',
-    uri: '/storage/music/track1.flac',
+    filePath: '/storage/music/track1.flac',
     title: 'Track One',
     artist: 'Artist A',
     album: 'Album A',
@@ -88,7 +92,7 @@ void main() {
 
   const track2 = QueueItem(
     id: 'track_2',
-    uri: '/storage/music/track2.flac',
+    filePath: '/storage/music/track2.flac',
     title: 'Track Two',
     artist: 'Artist B',
     album: 'Album B',
@@ -98,7 +102,7 @@ void main() {
 
   const track3 = QueueItem(
     id: 'track_3',
-    uri: '/storage/music/track3.flac',
+    filePath: '/storage/music/track3.flac',
     title: 'Track Three',
     artist: 'Artist C',
     album: 'Album C',
@@ -110,9 +114,12 @@ void main() {
     mockEngine = MockAudioEngineService();
     mockDatabase = MockAppDatabase();
     mockSettings = MockSettingsRepository();
-    controller = PlaybackController(
-      audioEngineService: mockEngine,
+    final backend = DirectTachyonBackendClient(
+      audioEngine: mockEngine,
       database: mockDatabase,
+    );
+    controller = PlaybackController(
+      backend: backend,
       settingsRepository: mockSettings,
     );
   });
@@ -295,7 +302,7 @@ void main() {
 
         // Initial track start wrote 1 entry
         expect(mockSettings.writes.length, equals(1));
-        expect(mockSettings.writes.first.uri, equals(track1.uri));
+        expect(mockSettings.writes.first.uri, equals(track1.filePath));
         expect(mockSettings.writes.first.positionMs, equals(0));
 
         // Simulate 15 seconds of audio playback ticks (750 ticks at 50Hz = 15,000ms)
@@ -464,7 +471,7 @@ void main() {
 
       // Invariant: MUST immediately force write on pause!
       expect(mockSettings.writes.length, equals(2));
-      expect(mockSettings.writes.last.uri, equals(track1.uri));
+      expect(mockSettings.writes.last.uri, equals(track1.filePath));
       expect(mockSettings.writes.last.positionMs, equals(2500));
     });
 
@@ -524,7 +531,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(mockSettings.writes.length, equals(writesCount + 1));
-      expect(mockSettings.writes.last.uri, equals(track2.uri));
+      expect(mockSettings.writes.last.uri, equals(track2.filePath));
       expect(mockSettings.writes.last.positionMs, equals(0));
     });
 
@@ -636,7 +643,7 @@ void main() {
 
       // STRESS ASSERTION: dispose MUST have flushed position 22000ms immediately!
       expect(mockSettings.writes.length, equals(writesBeforeDispose + 1));
-      expect(mockSettings.writes.last.uri, equals(track1.uri));
+      expect(mockSettings.writes.last.uri, equals(track1.filePath));
       expect(mockSettings.writes.last.positionMs, equals(22000));
     });
 
@@ -799,7 +806,7 @@ void main() {
         ),
       );
       await Future<void>.delayed(Duration.zero);
-      expect(mockSettings.writes.first.uri, equals(track1.uri));
+      expect(mockSettings.writes.first.uri, equals(track1.filePath));
 
       // Rapidly skip 1 -> 2 -> 3 without waiting
       mockEngine.emitState(
@@ -823,10 +830,10 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final uris = mockSettings.writes.map((w) => w.uri).toList();
-      expect(uris, contains(track1.uri));
-      expect(uris, contains(track2.uri));
-      expect(uris, contains(track3.uri));
-      expect(mockSettings.writes.last.uri, equals(track3.uri));
+      expect(uris, contains(track1.filePath));
+      expect(uris, contains(track2.filePath));
+      expect(uris, contains(track3.filePath));
+      expect(mockSettings.writes.last.uri, equals(track3.filePath));
     });
   });
 }

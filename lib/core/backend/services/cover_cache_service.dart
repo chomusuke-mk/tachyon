@@ -19,6 +19,30 @@ class CoverCacheService {
   final Directory cacheDirectory;
   final String defaultCoverAsset;
 
+  static const List<String> directoryCoverCandidates = [
+    'cover.jpg',
+    'cover.jpeg',
+    'cover.png',
+    'folder.jpg',
+    'folder.jpeg',
+    'folder.png',
+    'album.jpg',
+    'album.jpeg',
+    'album.png',
+    'front.jpg',
+    'front.jpeg',
+    'front.png',
+  ];
+
+  static const List<String> directoryArtistCandidates = [
+    'artist.jpg',
+    'artist.jpeg',
+    'artist.png',
+    'band.jpg',
+    'band.jpeg',
+    'band.png',
+  ];
+
   CoverCacheService({
     required this.cacheDirectory,
     this.defaultCoverAsset = 'assets/images/default_album.jpg',
@@ -49,11 +73,15 @@ class CoverCacheService {
     if (quality == ThumbnailQuality.low) {
       if (lqFile.existsSync() && lqFile.lengthSync() > 0) return lqFile;
       if (hqFile.existsSync() && hqFile.lengthSync() > 0) return hqFile;
-      if (legacyFile.existsSync() && legacyFile.lengthSync() > 0) return legacyFile;
+      if (legacyFile.existsSync() && legacyFile.lengthSync() > 0) {
+        return legacyFile;
+      }
       return lqFile;
     } else {
       if (hqFile.existsSync() && hqFile.lengthSync() > 0) return hqFile;
-      if (legacyFile.existsSync() && legacyFile.lengthSync() > 0) return legacyFile;
+      if (legacyFile.existsSync() && legacyFile.lengthSync() > 0) {
+        return legacyFile;
+      }
       if (lqFile.existsSync() && lqFile.lengthSync() > 0) return lqFile;
       return hqFile;
     }
@@ -71,11 +99,15 @@ class CoverCacheService {
     if (quality == ThumbnailQuality.low) {
       if (lqFile.existsSync() && lqFile.lengthSync() > 0) return lqFile;
       if (hqFile.existsSync() && hqFile.lengthSync() > 0) return hqFile;
-      if (legacyFile.existsSync() && legacyFile.lengthSync() > 0) return legacyFile;
+      if (legacyFile.existsSync() && legacyFile.lengthSync() > 0) {
+        return legacyFile;
+      }
       return lqFile;
     } else {
       if (hqFile.existsSync() && hqFile.lengthSync() > 0) return hqFile;
-      if (legacyFile.existsSync() && legacyFile.lengthSync() > 0) return legacyFile;
+      if (legacyFile.existsSync() && legacyFile.lengthSync() > 0) {
+        return legacyFile;
+      }
       if (lqFile.existsSync() && lqFile.lengthSync() > 0) return lqFile;
       return hqFile;
     }
@@ -162,7 +194,28 @@ class CoverCacheService {
       artistName ??= metadata.artist;
       albumName ??= metadata.album;
     } catch (e) {
-      debugPrint('[CoverCache] Error reading embedded pictures from $filePath: $e');
+      debugPrint(
+        '[CoverCache] Error reading embedded pictures from $filePath: $e',
+      );
+    }
+
+    // 3. Directory cover art fallback
+    if (coverBytes == null || coverBytes.isEmpty) {
+      final dirArt = findDirectoryCoverArt(filePath);
+      if (dirArt != null) {
+        try {
+          coverBytes = await dirArt.readAsBytes();
+        } catch (_) {}
+      }
+    }
+    // 4. Directory artist art fallback
+    if (artistBytes == null || artistBytes.isEmpty) {
+      final dirArtist = findDirectoryArtistArt(filePath);
+      if (dirArtist != null) {
+        try {
+          artistBytes = await dirArtist.readAsBytes();
+        } catch (_) {}
+      }
     }
 
     // 5. Write dual quality track/album cover
@@ -259,6 +312,56 @@ class CoverCacheService {
         if (!await hqFile.exists()) await hqFile.writeAsBytes(rawBytes);
       } catch (_) {}
     }
+  }
+
+  File? findDirectoryCoverArt(String filePath) {
+    final parentDir = Directory(p.dirname(filePath));
+    if (!parentDir.existsSync()) return null;
+    // Fast check for exact lowercase matches
+    for (final name in directoryCoverCandidates) {
+      final candidate = File(p.join(parentDir.path, name));
+      if (candidate.existsSync() && candidate.lengthSync() > 0) {
+        return candidate;
+      }
+    }
+    // Case-insensitive fallback scan
+    try {
+      final entries = parentDir.listSync(followLinks: false);
+      final candidateSet = directoryCoverCandidates.toSet();
+      for (final entry in entries) {
+        if (entry is File) {
+          final baseName = p.basename(entry.path).toLowerCase();
+          if (candidateSet.contains(baseName) && entry.lengthSync() > 0) {
+            return entry;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  File? findDirectoryArtistArt(String filePath) {
+    final parentDir = Directory(p.dirname(filePath));
+    if (!parentDir.existsSync()) return null;
+    for (final name in directoryArtistCandidates) {
+      final candidate = File(p.join(parentDir.path, name));
+      if (candidate.existsSync() && candidate.lengthSync() > 0) {
+        return candidate;
+      }
+    }
+    try {
+      final entries = parentDir.listSync(followLinks: false);
+      final candidateSet = directoryArtistCandidates.toSet();
+      for (final entry in entries) {
+        if (entry is File) {
+          final baseName = p.basename(entry.path).toLowerCase();
+          if (candidateSet.contains(baseName) && entry.lengthSync() > 0) {
+            return entry;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> clearCache() async {

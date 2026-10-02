@@ -5,16 +5,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:jsonc/jsonc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
-import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 class _FakePlaybackControllerForGating extends ChangeNotifier implements PlaybackController {
   QueueItem? _track;
@@ -43,8 +45,6 @@ class _FakePlaybackControllerForGating extends ChangeNotifier implements Playbac
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
-
-class _FakeTranslationClientForGating extends Fake implements LyricsTranslationClient {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -255,17 +255,22 @@ void main() {
       );
 
       final playback = _FakePlaybackControllerForGating();
-      final translationClient = _FakeTranslationClientForGating();
-      final controller = LyricsController(
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final settingsRepo = SettingsRepository(prefs);
+      final backend = DirectTachyonBackendClient(
+        database: db,
         lyricsService: lyricsService,
+      );
+      final controller = LyricsController(
+        backendClient: backend,
         playbackController: playback,
-        cooldownManager: cooldownManager,
-        translationClient: translationClient,
+        settingsRepository: settingsRepo,
       );
 
       final track = const QueueItem(
         id: 'track_1',
-        uri: '/storage/music/gate_test.mp3',
+        filePath: '/storage/music/gate_test.mp3',
         title: 'Hidden Gem',
         artist: 'Secret Band',
         album: 'Private Archive',
@@ -314,7 +319,7 @@ void main() {
 
       final track2 = const QueueItem(
         id: 'track_2',
-        uri: '/storage/music/gate_test_2.mp3',
+        filePath: '/storage/music/gate_test_2.mp3',
         title: 'Another Track',
         artist: 'Secret Band',
         album: 'Private Archive',

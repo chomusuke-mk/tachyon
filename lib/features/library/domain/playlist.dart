@@ -79,7 +79,7 @@ class PlaylistEntry {
       id: map['id'] as int?,
       playlistId: (map['playlist_id'] as int?) ?? 0,
       trackId: map['track_id'] as int?,
-      filePath: (map['file_path'] ?? map['uri']) as String? ?? '',
+      filePath: map['file_path'] as String? ?? '',
       customTitle: map['custom_title'] as String?,
       position: (map['position'] as int?) ?? 0,
       addedAt: (map['added_at'] as int?) ?? 0,
@@ -107,7 +107,7 @@ class PlaylistEntry {
       playlistId:
           ((json['playlistId'] ?? json['playlist_id']) as num?)?.toInt() ?? 0,
       trackId: (json['trackId'] ?? json['track_id']) as int?,
-      filePath: (json['filePath'] ?? json['file_path'] ?? json['uri']) as String? ?? '',
+      filePath: (json['filePath'] ?? json['file_path']) as String? ?? '',
       customTitle: (json['customTitle'] ?? json['custom_title']) as String?,
       position: ((json['position']) as num?)?.toInt() ?? 0,
       addedAt: ((json['addedAt'] ?? json['added_at']) as num?)?.toInt() ?? 0,

@@ -4,19 +4,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
-import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
@@ -187,22 +190,15 @@ class _FakeLocaleRepository implements LocaleRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _FakeTranslationClient implements LyricsTranslationClient {
+class _FakeSettingsRepository extends Fake implements SettingsRepository {
   @override
-  Future<TranslationResult> translate(
-    List<String> texts, {
-    required String targetLanguage,
-  }) async {
-    return TranslationResult(
-      originalLines: texts,
-      translatedLines: texts.map((t) => '[es] $t').toList(),
-      targetLanguage: targetLanguage,
-      isSuccess: true,
-    );
-  }
-
+  LyricsDisplayMode getLyricsDisplayMode() => LyricsDisplayMode.original;
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  String getLyricsTranslationTargetLang() => 'defaultOption';
+  @override
+  AppSettings getSettings() => const AppSettings(lastPlayedFilePath: null);
+  @override
+  Future<void> setLyricsDisplayMode(LyricsDisplayMode mode) async {}
 }
 
 class _TargetedTrackUriWidget extends StatelessWidget {
@@ -214,7 +210,7 @@ class _TargetedTrackUriWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     buildCount++;
     final trackUri = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.uri,
+      (c) => c.currentTrack?.filePath,
     );
     return Text(trackUri ?? 'No Track');
   }
@@ -243,7 +239,7 @@ void main() {
 
   const sampleTrack = QueueItem(
     id: 'track_1',
-    uri: '/music/synthwave.mp3',
+    filePath: '/music/synthwave.mp3',
     title: 'Neon Horizon',
     artist: 'Future City',
     album: 'Odyssey',
@@ -269,11 +265,14 @@ void main() {
       lrclibClient: mockLrclib,
       lyricsOvhClient: mockOvh,
     );
-    lyricsController = LyricsController(
+    final backend = DirectTachyonBackendClient(
+      database: db,
       lyricsService: lyricsService,
+    );
+    lyricsController = LyricsController(
+      backendClient: backend,
       playbackController: playbackController,
-      cooldownManager: LyricsCooldownManager(),
-      translationClient: _FakeTranslationClient(),
+      settingsRepository: _FakeSettingsRepository(),
     );
   });
 

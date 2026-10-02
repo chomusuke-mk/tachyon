@@ -269,7 +269,7 @@ void main() {
 
       var upgradeTriggered = false;
       manager.scheduleDeferredRetry(
-        trackUri: 'file:///song.mp3',
+        trackFilePath: 'file:///song.mp3',
         token: 1,
         onRetry: () async {
           upgradeTriggered = true;
@@ -288,7 +288,7 @@ void main() {
 
       var executedTrack = '';
       manager.scheduleDeferredRetry(
-        trackUri: 'file:///track1.mp3',
+        trackFilePath: 'file:///track1.mp3',
         token: 1,
         onRetry: () async {
           executedTrack = 'track1';
@@ -297,7 +297,7 @@ void main() {
 
       // Track switches to track2 during active cooldown
       manager.updateDeferredTrack(
-        trackUri: 'file:///track2.mp3',
+        trackFilePath: 'file:///track2.mp3',
         token: 2,
         onRetry: () async {
           executedTrack = 'track2';

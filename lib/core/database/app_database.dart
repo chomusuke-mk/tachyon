@@ -361,28 +361,6 @@ class AppDatabase {
   }
 
   void _executeSchemaSync(Database db) {
-    // Migration: rename 'uri' column to 'file_path' in existing databases
-    try {
-      final trackCols = db
-          .select("PRAGMA table_info(tracks)")
-          .map((r) => r['name'] as String)
-          .toSet();
-      if (trackCols.contains('uri') && !trackCols.contains('file_path')) {
-        db.execute('DROP INDEX IF EXISTS idx_tracks_uri;');
-        db.execute('ALTER TABLE tracks RENAME COLUMN uri TO file_path;');
-      }
-    } catch (_) {}
-
-    try {
-      final entryCols = db
-          .select("PRAGMA table_info(playlist_entries)")
-          .map((r) => r['name'] as String)
-          .toSet();
-      if (entryCols.contains('uri') && !entryCols.contains('file_path')) {
-        db.execute('ALTER TABLE playlist_entries RENAME COLUMN uri TO file_path;');
-      }
-    } catch (_) {}
-
     db.execute(AppDatabaseSchema.createArtistsTable);
     db.execute(AppDatabaseSchema.createAlbumsTable);
     db.execute(AppDatabaseSchema.createTracksTable);
@@ -1056,7 +1034,7 @@ class AppDatabase {
   }
 
   /// Returns a map of `filePath` -> `(modifiedAt, fileSize)` for all tracks currently in the database.
-  /// Used by `MetadataExtractor` to perform incremental scans without re-reading unchanged files.
+  /// Used by `MetadataService` to perform incremental scans without re-reading unchanged files.
   Future<Map<String, ({int modifiedAt, int fileSize})>> getExistingTrackMetas() async {
     final rows = await database.query(
       'tracks',

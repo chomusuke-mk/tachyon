@@ -41,7 +41,6 @@ class SettingsRepository {
   static const _keyTheme = 's_theme';
   static const _keyLanguage = 's_language';
   static const _keyLastPlayedFilePath = 's_last_played_file_path';
-  static const _keyLastPlayedUri = 's_last_played_uri';
   static const _keyLastPlayedPosition = 's_last_played_position';
   static const _keyEqualizerEnabled = 's_equalizer_enabled';
   static const _keyEqualizerGains = 's_equalizer_gains';
@@ -50,7 +49,8 @@ class SettingsRepository {
   static const _keyLyricsDisplayMode = 's_lyrics_display_mode';
   static const _keyPlaybackShowLyrics = 's_playback_show_lyrics';
   static const _keyPlaybackShowQueue = 's_playback_show_queue';
-  static const _keyLyricsTranslationTargetLang = 's_lyrics_translation_target_lang';
+  static const _keyLyricsTranslationTargetLang =
+      's_lyrics_translation_target_lang';
   static const _keyAudioOutputDeviceId = 's_audio_output_device_id';
   static const _keyEqualizerPreset = 's_equalizer_preset';
 
@@ -88,7 +88,9 @@ class SettingsRepository {
       appLanguage: _prefs.getString(_keyLanguage) ?? 'defaultOption',
       lyricsTranslationTargetLang:
           _prefs.getString(_keyLyricsTranslationTargetLang) ?? 'defaultOption',
-      trackSortOption: TrackSortOption.fromString(_prefs.getString(_keyTrackSortBy)),
+      trackSortOption: TrackSortOption.fromString(
+        _prefs.getString(_keyTrackSortBy),
+      ),
       trackSortAscending: _prefs.getBool(_keyTrackSortAscending) ?? true,
       lyricsDisplayMode: LyricsDisplayMode.values.firstWhere(
         (e) => e.name == _prefs.getString(_keyLyricsDisplayMode),
@@ -97,9 +99,7 @@ class SettingsRepository {
       playbackShowLyrics: _prefs.getBool(_keyPlaybackShowLyrics) ?? false,
       playbackShowQueue: _prefs.getBool(_keyPlaybackShowQueue) ?? false,
       audioOutputDeviceId: _prefs.getString(_keyAudioOutputDeviceId),
-      lastPlayedFilePath:
-          _prefs.getString(_keyLastPlayedFilePath) ??
-          _prefs.getString(_keyLastPlayedUri),
+      lastPlayedFilePath: _prefs.getString(_keyLastPlayedFilePath),
       lastPlayedPositionMs: _prefs.getInt(_keyLastPlayedPosition) ?? 0,
       equalizerEnabled: _prefs.getBool(_keyEqualizerEnabled) ?? false,
       equalizerPreset: _prefs.getString(_keyEqualizerPreset) ?? 'flat',
@@ -146,7 +146,10 @@ class SettingsRepository {
 
     if (settings.audioOutputDeviceId != null) {
       futures.add(
-        _prefs.setString(_keyAudioOutputDeviceId, settings.audioOutputDeviceId!),
+        _prefs.setString(
+          _keyAudioOutputDeviceId,
+          settings.audioOutputDeviceId!,
+        ),
       );
     } else {
       futures.add(_prefs.remove(_keyAudioOutputDeviceId));
@@ -170,7 +173,8 @@ class SettingsRepository {
   Future<void> setTrackSortOption(TrackSortOption option) =>
       _prefs.setString(_keyTrackSortBy, option.name);
 
-  bool getTrackSortAscending() => _prefs.getBool(_keyTrackSortAscending) ?? true;
+  bool getTrackSortAscending() =>
+      _prefs.getBool(_keyTrackSortAscending) ?? true;
 
   Future<void> setTrackSortAscending(bool ascending) =>
       _prefs.setBool(_keyTrackSortAscending, ascending);
@@ -186,7 +190,8 @@ class SettingsRepository {
   Future<void> setLyricsDisplayMode(LyricsDisplayMode mode) =>
       _prefs.setString(_keyLyricsDisplayMode, mode.name);
 
-  bool getPlaybackShowLyrics() => _prefs.getBool(_keyPlaybackShowLyrics) ?? false;
+  bool getPlaybackShowLyrics() =>
+      _prefs.getBool(_keyPlaybackShowLyrics) ?? false;
 
   Future<void> setPlaybackShowLyrics(bool show) =>
       _prefs.setBool(_keyPlaybackShowLyrics, show);

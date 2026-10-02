@@ -454,21 +454,21 @@ void main() {
 
         var retryCalled = false;
         manager.scheduleDeferredRetry(
-          trackUri: 'file:///track1.mp3',
+          trackFilePath: 'file:///track1.mp3',
           token: 1,
           onRetry: () async {
             retryCalled = true;
           },
         );
 
-        expect(manager.deferredTrackUri, equals('file:///track1.mp3'));
+        expect(manager.deferredTrackFilePath, equals('file:///track1.mp3'));
         expect(manager.deferredGenerationToken, equals(1));
 
         // Use manual expiration helper
         await manager.expireCooldownAndTriggerUpgrade();
         expect(retryCalled, isTrue);
         expect(manager.isCooldownActive, isFalse);
-        expect(manager.deferredTrackUri, isNull);
+        expect(manager.deferredTrackFilePath, isNull);
       });
 
       test('ADV-CD-2: updateDeferredTrack during active cooldown redirects callback to newest track', () async {
@@ -478,34 +478,34 @@ void main() {
         final executed = <String>[];
 
         manager.scheduleDeferredRetry(
-          trackUri: 'file:///track1.mp3',
+          trackFilePath: 'file:///track1.mp3',
           token: 1,
           onRetry: () async => executed.add('track1'),
         );
 
         // User rapidly advances tracks 1 -> 2 -> 3 -> 4 -> 5
         manager.updateDeferredTrack(
-          trackUri: 'file:///track2.mp3',
+          trackFilePath: 'file:///track2.mp3',
           token: 2,
           onRetry: () async => executed.add('track2'),
         );
         manager.updateDeferredTrack(
-          trackUri: 'file:///track3.mp3',
+          trackFilePath: 'file:///track3.mp3',
           token: 3,
           onRetry: () async => executed.add('track3'),
         );
         manager.updateDeferredTrack(
-          trackUri: 'file:///track4.mp3',
+          trackFilePath: 'file:///track4.mp3',
           token: 4,
           onRetry: () async => executed.add('track4'),
         );
         manager.updateDeferredTrack(
-          trackUri: 'file:///track5.mp3',
+          trackFilePath: 'file:///track5.mp3',
           token: 5,
           onRetry: () async => executed.add('track5'),
         );
 
-        expect(manager.deferredTrackUri, equals('file:///track5.mp3'));
+        expect(manager.deferredTrackFilePath, equals('file:///track5.mp3'));
         expect(manager.deferredGenerationToken, equals(5));
 
         await manager.expireCooldownAndTriggerUpgrade();
@@ -520,7 +520,7 @@ void main() {
 
         var retryCalled = false;
         manager.scheduleDeferredRetry(
-          trackUri: 'file:///track1.mp3',
+          trackFilePath: 'file:///track1.mp3',
           token: 1,
           onRetry: () async {
             retryCalled = true;
@@ -528,7 +528,7 @@ void main() {
         );
 
         manager.cancelDeferredRetry();
-        expect(manager.deferredTrackUri, isNull);
+        expect(manager.deferredTrackFilePath, isNull);
         expect(manager.deferredGenerationToken, isNull);
 
         await manager.expireCooldownAndTriggerUpgrade();
@@ -541,7 +541,7 @@ void main() {
 
         var retryCalled = false;
         manager.scheduleDeferredRetry(
-          trackUri: 'file:///track1.mp3',
+          trackFilePath: 'file:///track1.mp3',
           token: 1,
           onRetry: () async {
             retryCalled = true;
@@ -551,7 +551,7 @@ void main() {
         manager.clearCooldown();
         expect(manager.isCooldownActive, isFalse);
         expect(manager.cooldownExpiry, isNull);
-        expect(manager.deferredTrackUri, isNull);
+        expect(manager.deferredTrackFilePath, isNull);
 
         await manager.expireCooldownAndTriggerUpgrade();
         expect(retryCalled, isFalse);
@@ -567,7 +567,7 @@ void main() {
 
         var retryExecuted = false;
         manager.scheduleDeferredRetry(
-          trackUri: 'file:///track1.mp3',
+          trackFilePath: 'file:///track1.mp3',
           token: 1,
           onRetry: () async {
             retryExecuted = true;
@@ -583,7 +583,7 @@ void main() {
 
         int executionCount = 0;
         manager.scheduleDeferredRetry(
-          trackUri: 'file:///track1.mp3',
+          trackFilePath: 'file:///track1.mp3',
           token: 1,
           onRetry: () async {
             executionCount++;
@@ -601,7 +601,7 @@ void main() {
         final manager = LyricsCooldownManager();
         manager.setCooldown(const Duration(seconds: 60));
         manager.scheduleDeferredRetry(
-          trackUri: 'file:///track1.mp3',
+          trackFilePath: 'file:///track1.mp3',
           token: 1,
           onRetry: () async {},
         );
@@ -611,12 +611,12 @@ void main() {
         );
 
         expect(manager.isThresholdWaiting, isTrue);
-        expect(manager.deferredTrackUri, isNotNull);
+        expect(manager.deferredTrackFilePath, isNotNull);
 
         manager.dispose();
 
         expect(manager.isThresholdWaiting, isFalse);
-        expect(manager.deferredTrackUri, isNull);
+        expect(manager.deferredTrackFilePath, isNull);
       });
 
       test('ADV-CD-8: Defensive exception handling in deferred retry callback', () async {
@@ -624,7 +624,7 @@ void main() {
         manager.setCooldown(const Duration(seconds: 30));
 
         manager.scheduleDeferredRetry(
-          trackUri: 'file:///track1.mp3',
+          trackFilePath: 'file:///track1.mp3',
           token: 1,
           onRetry: () async {
             throw Exception('Network error during auto-upgrade');

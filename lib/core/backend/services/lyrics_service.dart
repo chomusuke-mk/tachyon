@@ -680,13 +680,12 @@ class LyricsService {
 
   /// Computes a canonical SHA-256 hash for lyrics identification.
   static String computeLyricsKey({
-    String? filePath,
-    String? uri,
+    required String filePath,
     String? title,
     String? artist,
     int? durationMs,
   }) {
-    final effectivePath = filePath ?? uri ?? '';
+    final effectivePath = filePath;
     if (title != null &&
         title.trim().isNotEmpty &&
         artist != null &&

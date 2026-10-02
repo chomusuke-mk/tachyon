@@ -9,7 +9,7 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
-import 'package:tachyon/core/services/metadata_extractor.dart';
+import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/backend/services/scan_isolate.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 
@@ -175,14 +175,14 @@ void main() {
   group('Challenger M1.2: Scan Isolate Lifecycle & Leak Prevention', () {
     late AppDatabase db;
     late CoverCacheService coverCacheService;
-    late MetadataExtractor extractor;
+    late MetadataService extractor;
 
     setUp(() async {
       db = AppDatabase.inMemory();
       await db.init();
       coverCacheService = CoverCacheService(cacheDirectory: tempDir);
       await coverCacheService.init();
-      extractor = MetadataExtractor(
+      extractor = MetadataService(
         database: db,
         coverCacheService: coverCacheService,
         customWorkerCount: 2,

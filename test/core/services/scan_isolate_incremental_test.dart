@@ -4,7 +4,7 @@ import 'dart:isolate';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
-import 'package:tachyon/core/services/metadata_extractor.dart';
+import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/backend/services/scan_isolate.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
@@ -14,13 +14,13 @@ void main() {
   late Directory tempDir;
   late AppDatabase db;
   late CoverCacheService coverCacheService;
-  late MetadataExtractor extractor;
+  late MetadataService metadataService;
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('tachyon_scan_test_');
     db = AppDatabase.inMemory();
     coverCacheService = CoverCacheService(cacheDirectory: tempDir);
-    extractor = MetadataExtractor(
+    metadataService = MetadataService(
       database: db,
       coverCacheService: coverCacheService,
     );
@@ -79,9 +79,9 @@ void main() {
       port2.close();
     });
 
-    test('MetadataExtractor queries existing track metas from DB', () async {
+    test('MetadataService queries existing track metas from DB', () async {
       const track = Track(
-        uri: '/media/test.mp3',
+        filePath: '/media/test.mp3',
         title: 'Test Track',
         fileSize: 4096,
         modifiedAt: 1600000000000,
@@ -89,7 +89,7 @@ void main() {
       );
       await db.batchInsertTracks([track]);
 
-      final metas = await extractor.database.getExistingTrackMetas();
+      final metas = await metadataService.database.getExistingTrackMetas();
       expect(metas.length, equals(1));
       expect(metas['/media/test.mp3']?.fileSize, equals(4096));
       expect(metas['/media/test.mp3']?.modifiedAt, equals(1600000000000));

@@ -7,14 +7,18 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/backend/direct_backend_client.dart';
+import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
-import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
+import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart';
 
 class MockPlaybackController extends ChangeNotifier implements PlaybackController {
   QueueItem? _currentTrack;
@@ -61,10 +65,27 @@ class MockPlaybackController extends ChangeNotifier implements PlaybackControlle
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _FakeSettingsRepo implements SettingsRepository {
+  LyricsDisplayMode _displayMode = LyricsDisplayMode.original;
+
+  @override
+  LyricsDisplayMode getLyricsDisplayMode() => _displayMode;
+  @override
+  String getLyricsTranslationTargetLang() => 'defaultOption';
+  @override
+  AppSettings getSettings() => const AppSettings(lastPlayedFilePath: null);
+  @override
+  Future<void> setLyricsDisplayMode(LyricsDisplayMode mode) async {
+    _displayMode = mode;
+  }
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 QueueItem makeItem(String id, String title, {String artist = 'Artist', int durationSec = 180}) {
   return QueueItem(
     id: id,
-    uri: 'file:///music/$id.mp3',
+    filePath: 'file:///music/$id.mp3',
     title: title,
     artist: artist,
     album: 'Album',
@@ -77,6 +98,25 @@ void main() {
 
   late AppDatabase db;
   late MockPlaybackController playbackController;
+
+  LyricsController createController({
+    required LyricsService lyricsService,
+    required PlaybackController playbackController,
+    LyricsCooldownManager? cooldownManager,
+  }) {
+    final effectiveCooldownManager =
+        cooldownManager ?? lyricsService.cooldownManager;
+    final backend = DirectTachyonBackendClient(
+      database: db,
+      lyricsService: lyricsService,
+    );
+    return LyricsController(
+      backendClient: backend,
+      playbackController: playbackController,
+      settingsRepository: _FakeSettingsRepo(),
+      cooldownManager: effectiveCooldownManager,
+    );
+  }
 
   setUp(() async {
     db = AppDatabase.inMemory();
@@ -149,7 +189,7 @@ void main() {
       );
 
       final service = LyricsService(database: db, lrclibClient: client);
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -207,7 +247,7 @@ void main() {
       );
 
       final service = LyricsService(database: db, lrclibClient: client);
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -264,7 +304,7 @@ void main() {
       );
 
       final service = LyricsService(database: db, lrclibClient: client);
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -283,7 +323,7 @@ void main() {
 
       // Check SQLite cache for Track 2: it must NOT have recorded NOT_FOUND because it was cancelled!
       final keyHashT2 = LyricsService.computeLyricsKey(
-        uri: 'file:///music/2.mp3',
+        filePath: 'file:///music/2.mp3',
         title: 'Track 2',
         artist: 'Artist',
         durationMs: 180000,
@@ -314,7 +354,7 @@ void main() {
       );
 
       final service = LyricsService(database: db, lrclibClient: client);
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
       );
@@ -363,7 +403,7 @@ void main() {
         lrclibClient: client,
         cooldownManager: cooldownManager,
       );
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
         cooldownManager: cooldownManager,
@@ -422,7 +462,7 @@ void main() {
         lrclibClient: client,
         cooldownManager: cooldownManager,
       );
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
         cooldownManager: cooldownManager,
@@ -458,7 +498,7 @@ void main() {
         lrclibClient: client,
         cooldownManager: cooldownManager,
       );
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
         cooldownManager: cooldownManager,
@@ -502,7 +542,7 @@ void main() {
         lyricsOvhClient: ovhClient,
         cooldownManager: cooldownManager,
       );
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
         cooldownManager: cooldownManager,
@@ -548,7 +588,7 @@ void main() {
         lyricsOvhClient: ovhClient,
         cooldownManager: cooldownManager,
       );
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
         cooldownManager: cooldownManager,
@@ -568,7 +608,7 @@ void main() {
       expect(lrclibCalls, equals(0), reason: 'lrclib skipped during active cooldown');
 
       // Verify that the controller registered the callback and timer is active
-      expect(cooldownManager.deferredTrackUri, equals('file:///music/cd_auto.mp3'));
+      expect(cooldownManager.deferredTrackFilePath, equals('file:///music/cd_auto.mp3'));
       expect(cooldownManager.isDeferredRetryScheduled, isTrue);
 
       // 2. Wait 500ms for the cooldown duration to completely expire in real time
@@ -619,7 +659,7 @@ void main() {
         lyricsOvhClient: ovhClient,
         cooldownManager: cooldownManager,
       );
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
         cooldownManager: cooldownManager,
@@ -645,7 +685,7 @@ void main() {
       expect(ovhCalls, equals(2), reason: 'Track B queries lyrics.ovh fallback immediately');
 
       // Verify deferred track uri is updated to Track B
-      expect(cooldownManager.deferredTrackUri, equals('file:///music/B.mp3'));
+      expect(cooldownManager.deferredTrackFilePath, equals('file:///music/B.mp3'));
     });
 
     test('3.4: [SPEC COMPLIANCE CHECK] Natural timer auto-upgrade upon cooldown expiry (Expected by R2/M3)', () async {
@@ -678,7 +718,7 @@ void main() {
         lyricsOvhClient: ovhClient,
         cooldownManager: cooldownManager,
       );
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
         cooldownManager: cooldownManager,
@@ -744,7 +784,7 @@ void main() {
         lyricsOvhClient: ovhClient,
         cooldownManager: cooldownManager,
       );
-      final controller = LyricsController(
+      final controller = createController(
         lyricsService: service,
         playbackController: playbackController,
         cooldownManager: cooldownManager,
@@ -764,7 +804,7 @@ void main() {
 
       // PROPOSED FIX: If scheduleDeferredRetry is invoked:
       cooldownManager.scheduleDeferredRetry(
-        trackUri: track.uri,
+        trackFilePath: track.filePath,
         token: 1,
         onRetry: () async {
           await controller.ensureLyricsLoaded(forceRefresh: true);

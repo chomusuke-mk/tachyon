@@ -61,7 +61,7 @@ void main() {
           buffer.writeln('[$mm:$ss.00] Synced line $line of song $i with metadata payload padding text');
         }
         return Track(
-          uri: '/music/stress_catalog/artist_${i % 25}/track_${i.toString().padLeft(4, '0')}.flac',
+          filePath: '/music/stress_catalog/artist_${i % 25}/track_${i.toString().padLeft(4, '0')}.flac',
           title: 'Catalog Track ${i.toString().padLeft(4, '0')}',
           artist: 'Stress Artist ${i % 25}',
           album: 'Stress Album ${i % 10}',
@@ -125,7 +125,7 @@ void main() {
       final tracks = List<Track>.generate(count, (i) {
         final lyrics = '[00:05.00]Song $i First Line\n[00:15.00]Song $i Chorus Line';
         return Track(
-          uri: '/music/album/track_$i.mp3',
+          filePath: '/music/album/track_$i.mp3',
           title: 'Track $i',
           artist: 'Artist $i',
           album: 'Album 1',
@@ -146,7 +146,7 @@ void main() {
       // 2. Fetch lyrics for individual tracks via LyricsService on-demand
       for (int i = 0; i < 5; i++) {
         final track = catalog[i];
-        final match = RegExp(r'track_(\d+)\.mp3').firstMatch(track.uri)!;
+        final match = RegExp(r'track_(\d+)\.mp3').firstMatch(track.filePath)!;
         final expectedSongId = match.group(1)!;
         final result = await service.resolveLyricsForTrack(track);
 
@@ -165,7 +165,7 @@ void main() {
 
       for (int k = 0; k < concurrentIndices.length; k++) {
         final track = catalog[concurrentIndices[k]];
-        final match = RegExp(r'track_(\d+)\.mp3').firstMatch(track.uri)!;
+        final match = RegExp(r'track_(\d+)\.mp3').firstMatch(track.filePath)!;
         final expectedSongId = match.group(1)!;
         final res = concurrentResults[k];
         expect(res, isNotNull);
@@ -175,7 +175,7 @@ void main() {
 
       // 4. Edge cases: track with null/empty lyrics
       const emptyTrack = Track(
-        uri: '/music/instrumental.mp3',
+        filePath: '/music/instrumental.mp3',
         title: 'Instrumental',
         artist: 'Composer',
         album: 'OST',
@@ -185,7 +185,7 @@ void main() {
         lyrics: null,
       );
       await db.batchInsertTracks([emptyTrack]);
-      final fetchedEmpty = (await db.getAllTracks()).firstWhere((t) => t.uri == '/music/instrumental.mp3');
+      final fetchedEmpty = (await db.getAllTracks()).firstWhere((t) => t.filePath == '/music/instrumental.mp3');
 
       final emptyResult = await service.resolveLyricsForTrack(
         fetchedEmpty,
@@ -193,10 +193,10 @@ void main() {
       );
       expect(emptyResult, isNull);
 
-      final emptyDirectUri = await db.getTrackLyricsByUri('/music/instrumental.mp3');
+      final emptyDirectUri = await db.getTrackLyricsByFilePath('/music/instrumental.mp3');
       expect(emptyDirectUri, isNull);
 
-      final nonExistentUri = await db.getTrackLyricsByUri('/music/non_existent.mp3');
+      final nonExistentUri = await db.getTrackLyricsByFilePath('/music/non_existent.mp3');
       expect(nonExistentUri, isNull);
 
       final nonExistentId = await db.getTrackLyrics(-999);
@@ -281,7 +281,7 @@ void main() {
 
       // Case A: Explicit list thumbnail dimensions
       const thumb = AlbumArtImage(
-        uri: '/music/song.mp3',
+        filePath: '/music/song.mp3',
         width: 48,
         height: 48,
         cacheWidth: 96,
@@ -292,7 +292,7 @@ void main() {
 
       // Case B: High-res Hero image with null explicit cache bounds
       const hero = AlbumArtImage(
-        uri: '/music/hero.mp3',
+        filePath: '/music/hero.mp3',
         width: 320,
         height: 320,
       );
@@ -304,7 +304,7 @@ void main() {
 
     testWidgets('TrackTile strictly enforces 80x80 cacheWidth and cacheHeight', (tester) async {
       const track = Track(
-        uri: '/music/heavy_cover_track.flac',
+        filePath: '/music/heavy_cover_track.flac',
         title: 'Heavy Cover Track',
         artist: 'Artist',
         album: 'Album',

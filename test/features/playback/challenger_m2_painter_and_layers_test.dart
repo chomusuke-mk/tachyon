@@ -10,22 +10,25 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
-import 'package:tachyon/core/network/lyrics_translation_client.dart';
+import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
-import 'package:tachyon/core/services/metadata_extractor.dart';
+import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/waveform_slider.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
@@ -184,8 +187,8 @@ class _FakeChallengerPlaybackController extends ChangeNotifier
   @override
   Future<void> playTrack(Track track, {List<Track>? contextTracks}) async {
     _currentTrack = QueueItem(
-      id: track.id?.toString() ?? track.uri,
-      uri: track.uri,
+      id: track.id?.toString() ?? track.filePath,
+      filePath: track.filePath,
       title: track.title,
       artist: track.artist ?? '',
       album: track.album ?? '',
@@ -203,8 +206,8 @@ class _FakeChallengerPlaybackController extends ChangeNotifier
     _queue = tracks
         .map(
           (t) => QueueItem(
-            id: t.id?.toString() ?? t.uri,
-            uri: t.uri,
+            id: t.id?.toString() ?? t.filePath,
+            filePath: t.filePath,
             title: t.title,
             artist: t.artist ?? '',
             album: t.album ?? '',
@@ -242,24 +245,6 @@ class _FakeLocaleRepo implements LocaleRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _FakeTranslationClient implements LyricsTranslationClient {
-  @override
-  Future<TranslationResult> translate(
-    List<String> texts, {
-    required String targetLanguage,
-  }) async {
-    return TranslationResult(
-      originalLines: texts,
-      translatedLines: texts.map((t) => '[es] $t').toList(),
-      targetLanguage: targetLanguage,
-      isSuccess: true,
-    );
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 /// Canvas recording stub for verifying batched paths and geometry caching
 class _RecordingCanvas extends Fake implements Canvas {
   final List<Path> recordedPaths = [];
@@ -291,7 +276,7 @@ class _TrackUriSelectedWatcher extends StatelessWidget {
   Widget build(BuildContext context) {
     onBuild();
     final uri = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.uri,
+      (c) => c.currentTrack?.filePath,
     );
     return Text(uri ?? 'no_track');
   }
@@ -325,6 +310,21 @@ class _QueueSelectedWatcher extends StatelessWidget {
   }
 }
 
+class _FakeSettingsRepository extends Fake implements SettingsRepository {
+  @override
+  LyricsDisplayMode getLyricsDisplayMode() => LyricsDisplayMode.original;
+  @override
+  String getLyricsTranslationTargetLang() => 'defaultOption';
+  @override
+  AppSettings getSettings() => const AppSettings(lastPlayedFilePath: null);
+  @override
+  Future<void> setLyricsDisplayMode(LyricsDisplayMode mode) async {}
+  @override
+  TrackSortOption getTrackSortOption() => TrackSortOption.title;
+  @override
+  bool getTrackSortAscending() => true;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -333,14 +333,14 @@ void main() {
   late Directory tempDir;
   late AppDatabase db;
   late CoverCacheService coverCacheService;
-  late MetadataExtractor extractor;
+  late MetadataService extractor;
   late LibraryController libraryController;
   late PlaylistsController playlistsController;
   late LyricsController lyricsController;
 
   const sampleTrack1 = Track(
     id: 1,
-    uri: '/music/cyberpunk.mp3',
+    filePath: '/music/cyberpunk.mp3',
     title: 'Cyberpunk 2099',
     artist: 'Neon Rider',
     album: 'Night City',
@@ -351,7 +351,7 @@ void main() {
 
   const sampleTrack2 = Track(
     id: 2,
-    uri: '/music/synthwave.mp3',
+    filePath: '/music/synthwave.mp3',
     title: 'Retro Sunset',
     artist: 'Synth Master',
     album: 'Neon Horizon',
@@ -362,7 +362,7 @@ void main() {
 
   final sampleQueueItem1 = QueueItem(
     id: '1',
-    uri: sampleTrack1.uri,
+    filePath: sampleTrack1.filePath,
     title: sampleTrack1.title,
     artist: sampleTrack1.artist ?? '',
     album: sampleTrack1.album ?? '',
@@ -371,7 +371,7 @@ void main() {
 
   final sampleQueueItem2 = QueueItem(
     id: '2',
-    uri: sampleTrack2.uri,
+    filePath: sampleTrack2.filePath,
     title: sampleTrack2.title,
     artist: sampleTrack2.artist ?? '',
     album: sampleTrack2.album ?? '',
@@ -388,16 +388,10 @@ void main() {
     coverCacheService = CoverCacheService(cacheDirectory: tempDir);
     await coverCacheService.init();
 
-    extractor = MetadataExtractor(
+    extractor = MetadataService(
       database: db,
       coverCacheService: coverCacheService,
     );
-    libraryController = LibraryController(
-      database: db,
-      metadataExtractor: extractor,
-    );
-    playlistsController = PlaylistsController(database: db);
-
     final mockLrclib = LrclibClient(
       httpClient: MockClient((_) async => http.Response('{}', 404)),
       minPacing: Duration.zero,
@@ -411,11 +405,22 @@ void main() {
       lrclibClient: mockLrclib,
       lyricsOvhClient: mockOvh,
     );
-    lyricsController = LyricsController(
+    final backend = DirectTachyonBackendClient(
+      database: db,
+      coverCacheService: coverCacheService,
+      metadataService: extractor,
       lyricsService: lyricsService,
+    );
+    final fakeSettings = _FakeSettingsRepository();
+    libraryController = LibraryController(
+      backend: backend,
+      settingsRepository: fakeSettings,
+    );
+    playlistsController = PlaylistsController(backend: backend);
+    lyricsController = LyricsController(
+      backendClient: backend,
       playbackController: playbackController,
-      cooldownManager: LyricsCooldownManager(),
-      translationClient: _FakeTranslationClient(),
+      settingsRepository: fakeSettings,
     );
 
     // Insert sample tracks into DB and load into library
@@ -839,12 +844,12 @@ void main() {
 
       // Verify that TrackTile for track 2 now has isPlaying == true and track 1 is false
       final track2Tile = tester.widget<TrackTile>(
-        find.byKey(ValueKey(sampleTrack2.uri)),
+        find.byKey(ValueKey(sampleTrack2.filePath)),
       );
       expect(track2Tile.isPlaying, isTrue);
 
       final track1Tile = tester.widget<TrackTile>(
-        find.byKey(ValueKey(sampleTrack1.uri)),
+        find.byKey(ValueKey(sampleTrack1.filePath)),
       );
       expect(track1Tile.isPlaying, isFalse);
     });

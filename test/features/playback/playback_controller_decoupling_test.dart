@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
@@ -18,6 +19,9 @@ class FakeAudioEngineService extends Fake implements AudioEngineService {
 
   @override
   PlaybackState get currentState => _currentState;
+
+  @override
+  PlaybackState get state => _currentState;
 
   void emitState(PlaybackState state) {
     _currentState = state;
@@ -60,7 +64,7 @@ void main() {
 
   const track1 = QueueItem(
     id: 'track_1',
-    uri: '/storage/music/song1.mp3',
+    filePath: '/storage/music/song1.mp3',
     title: 'Song One',
     artist: 'Artist A',
     album: 'Album A',
@@ -69,7 +73,7 @@ void main() {
 
   const track2 = QueueItem(
     id: 'track_2',
-    uri: '/storage/music/song2.mp3',
+    filePath: '/storage/music/song2.mp3',
     title: 'Song Two',
     artist: 'Artist B',
     album: 'Album B',
@@ -80,9 +84,12 @@ void main() {
     fakeEngine = FakeAudioEngineService();
     fakeDatabase = FakeAppDatabase();
     fakeSettings = FakeSettingsRepository();
-    controller = PlaybackController(
-      audioEngineService: fakeEngine,
+    final backend = DirectTachyonBackendClient(
+      audioEngine: fakeEngine,
       database: fakeDatabase,
+    );
+    controller = PlaybackController(
+      backend: backend,
       settingsRepository: fakeSettings,
     );
   });
@@ -210,7 +217,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(fakeSettings.lastPlayedWrites.length, equals(1));
-      expect(fakeSettings.lastPlayedWrites.first.uri, equals(track1.uri));
+      expect(fakeSettings.lastPlayedWrites.first.uri, equals(track1.filePath));
       expect(fakeSettings.lastPlayedWrites.first.positionMs, equals(0));
 
       // Ticks at 1s, 2s, 3s, 4s should be throttled and NOT write to disk
@@ -304,8 +311,8 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final uris = fakeSettings.lastPlayedWrites.map((w) => w.uri).toList();
-      expect(uris.contains(track1.uri), isTrue);
-      expect(uris.contains(track2.uri), isTrue);
+      expect(uris.contains(track1.filePath), isTrue);
+      expect(uris.contains(track2.filePath), isTrue);
     });
 
     test('Controller dispose() flushes final state immediately', () async {

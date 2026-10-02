@@ -246,7 +246,7 @@ void main() {
     final testTracks = [
       const QueueItem(
         id: 'track_1',
-        uri: '/music/song1.mp3',
+        filePath: '/music/song1.mp3',
         title: 'Song One',
         artist: 'Artist A',
         album: 'Album X',
@@ -254,7 +254,7 @@ void main() {
       ),
       const QueueItem(
         id: 'track_2',
-        uri: '/music/song2.mp3',
+        filePath: '/music/song2.mp3',
         title: 'Song Two',
         artist: 'Artist B',
         album: 'Album Y',
@@ -262,7 +262,7 @@ void main() {
       ),
       const QueueItem(
         id: 'track_3',
-        uri: '/music/song3.mp3',
+        filePath: '/music/song3.mp3',
         title: 'Song Three',
         artist: 'Artist C',
         album: 'Album Z',

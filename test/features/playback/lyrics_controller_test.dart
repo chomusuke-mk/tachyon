@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
@@ -16,6 +17,8 @@ import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart';
 
 class FakePlaybackController extends ChangeNotifier implements PlaybackController {
   QueueItem? _currentTrack;
@@ -62,15 +65,32 @@ class FakePlaybackController extends ChangeNotifier implements PlaybackControlle
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _FakeSettingsRepository extends Fake implements SettingsRepository {
+  LyricsDisplayMode _displayMode = LyricsDisplayMode.original;
+
+  @override
+  LyricsDisplayMode getLyricsDisplayMode() => _displayMode;
+  @override
+  String getLyricsTranslationTargetLang() => 'defaultOption';
+  @override
+  AppSettings getSettings() => const AppSettings(lastPlayedFilePath: null);
+  @override
+  Future<void> setLyricsDisplayMode(LyricsDisplayMode mode) async {
+    _displayMode = mode;
+  }
+}
+
+late FakePlaybackController _defaultPlaybackController;
+FakePlaybackController get playbackController => _defaultPlaybackController;
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AppDatabase db;
-  late FakePlaybackController playbackController;
 
   setUp(() async {
     db = AppDatabase.inMemory();
-    playbackController = FakePlaybackController();
+    _defaultPlaybackController = FakePlaybackController();
   });
 
   tearDown(() async {
@@ -103,12 +123,44 @@ The city is my church
   }) {
     return QueueItem(
       id: id,
-      uri: uri,
+      filePath: uri,
       title: title,
       artist: artist,
       album: album,
       duration: duration,
       extras: lyrics != null ? {'lyrics': lyrics} : const {},
+    );
+  }
+
+  LyricsController createController({
+    LyricsService? lyricsService,
+    PlaybackController? playbackController,
+    LyricsCooldownManager? cooldownManager,
+    SettingsRepository? settingsRepository,
+    LyricsTranslationClient? translationClient,
+    http.Client? translationHttpClient,
+  }) {
+    final effectiveCooldownManager =
+        cooldownManager ?? lyricsService?.cooldownManager ?? LyricsCooldownManager();
+    final effectiveLyricsService = lyricsService ??
+        LyricsService(
+          database: db,
+          cooldownManager: effectiveCooldownManager,
+        );
+    final backend = DirectTachyonBackendClient(
+      database: db,
+      lyricsService: effectiveLyricsService,
+      translationClient: translationClient ??
+          (translationHttpClient != null
+              ? LyricsTranslationClient(httpClient: translationHttpClient)
+              : null),
+    );
+    final settings = settingsRepository ?? _FakeSettingsRepository();
+    return LyricsController(
+      backendClient: backend,
+      playbackController: playbackController ?? _defaultPlaybackController,
+      settingsRepository: settings,
+      cooldownManager: effectiveCooldownManager,
     );
   }
 
@@ -119,7 +171,7 @@ The city is my church
     group('1. Visibility Gating & Background Decoupling', () {
       test('initial state has isLyricsViewVisible == false', () {
         final service = LyricsService(database: db);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -153,7 +205,7 @@ The city is my church
           lyricsOvhClient: mockOvh,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -175,7 +227,7 @@ The city is my church
 
       test('track change when isLyricsViewVisible == false resolves local embedded lyrics', () async {
         final service = LyricsService(database: db);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -220,7 +272,7 @@ The city is my church
           lrclibClient: mockLrclib,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -244,24 +296,16 @@ The city is my church
       });
 
       test('setLyricsViewVisible(false) cancels in-flight cancellation tokens and dismisses countdown', () async {
-        final cooldownManager = LyricsCooldownManager();
+        final controller = createController(
+          playbackController: playbackController,
+        );
+        final cooldownManager = controller.cooldownManager;
         cooldownManager.startThresholdCountdown(
           seconds: 8,
           onAutoRetry: () async {},
         );
 
         expect(cooldownManager.isThresholdWaiting, isTrue);
-
-        final service = LyricsService(
-          database: db,
-          cooldownManager: cooldownManager,
-        );
-
-        final controller = LyricsController(
-          lyricsService: service,
-          playbackController: playbackController,
-          cooldownManager: cooldownManager,
-        );
 
         controller.setLyricsViewVisible(true);
         expect(controller.isThresholdWaiting, isTrue);
@@ -293,7 +337,7 @@ The city is my church
         );
 
         final service = LyricsService(database: db, lrclibClient: mockLrclib);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -338,7 +382,7 @@ The city is my church
         );
 
         final service = LyricsService(database: db, lrclibClient: mockLrclib);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -397,7 +441,7 @@ The city is my church
         );
 
         final service = LyricsService(database: db, lrclibClient: mockLrclib);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -436,7 +480,7 @@ The city is my church
         );
 
         final service = LyricsService(database: db, lrclibClient: mockLrclib);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -458,7 +502,7 @@ The city is my church
 
       test('disposing LyricsController cancels active tokens safely', () {
         final service = LyricsService(database: db);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -489,7 +533,7 @@ The city is my church
           cooldownManager: cooldownManager,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           cooldownManager: cooldownManager,
@@ -533,7 +577,7 @@ The city is my church
           cooldownManager: cooldownManager,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           cooldownManager: cooldownManager,
@@ -589,7 +633,7 @@ The city is my church
           cooldownManager: cooldownManager,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           cooldownManager: cooldownManager,
@@ -644,7 +688,7 @@ The city is my church
           cooldownManager: cooldownManager,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           cooldownManager: cooldownManager,
@@ -694,7 +738,7 @@ The city is my church
           cooldownManager: cooldownManager,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           cooldownManager: cooldownManager,
@@ -735,7 +779,7 @@ The city is my church
           cooldownManager: cooldownManager,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           cooldownManager: cooldownManager,
@@ -776,7 +820,7 @@ The city is my church
           cooldownManager: cooldownManager,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           cooldownManager: cooldownManager,
@@ -827,7 +871,7 @@ The city is my church
           cooldownManager: cooldownManager,
         );
 
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           cooldownManager: cooldownManager,
@@ -860,7 +904,7 @@ The city is my church
         );
 
         final service = LyricsService(database: db, cooldownManager: cooldownManager);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           cooldownManager: cooldownManager,
@@ -894,7 +938,7 @@ The city is my church
         );
 
         final service = LyricsService(database: db, lrclibClient: mockLrclib);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -935,7 +979,7 @@ The city is my church
         );
 
         final service = LyricsService(database: db);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
           translationClient: mockTranslation,
@@ -950,7 +994,7 @@ The city is my church
         expect(controller.hasLyrics, isTrue);
         expect(controller.isTranslated, isFalse);
 
-        await controller.translateLyrics(targetLanguage: 'es');
+        await controller.toggleTranslation();
 
         expect(controller.isTranslated, isTrue);
         expect(controller.translatedLines.length, equals(3));
@@ -976,7 +1020,7 @@ The city is my church
     group('6. Tap-to-Seek & Manual Scroll Lock', () {
       test('seekToLine seeks playback to lyric line timestamp', () async {
         final service = LyricsService(database: db);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );
@@ -999,7 +1043,7 @@ The city is my church
 
       test('onUserScroll engages scroll lock and resumeAutoScroll releases it', () {
         final service = LyricsService(database: db);
-        final controller = LyricsController(
+        final controller = createController(
           lyricsService: service,
           playbackController: playbackController,
         );

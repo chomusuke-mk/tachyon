@@ -5,13 +5,17 @@ import 'package:provider/provider.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
+import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/lyrics_sources_dialog.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart';
 
 class _FakePlaybackController extends ChangeNotifier implements PlaybackController {
   QueueItem? _currentTrack;
@@ -71,6 +75,23 @@ class _FakeLocaleRepository implements LocaleRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _FakeSettingsRepo implements SettingsRepository {
+  LyricsDisplayMode _displayMode = LyricsDisplayMode.original;
+
+  @override
+  LyricsDisplayMode getLyricsDisplayMode() => _displayMode;
+  @override
+  String getLyricsTranslationTargetLang() => 'defaultOption';
+  @override
+  AppSettings getSettings() => const AppSettings(lastPlayedFilePath: null);
+  @override
+  Future<void> setLyricsDisplayMode(LyricsDisplayMode mode) async {
+    _displayMode = mode;
+  }
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -86,9 +107,14 @@ void main() {
     cooldownManager = LyricsCooldownManager();
     lyricsService = LyricsService(database: db, cooldownManager: cooldownManager);
     playbackController = _FakePlaybackController();
-    lyricsController = LyricsController(
+    final backend = DirectTachyonBackendClient(
+      database: db,
       lyricsService: lyricsService,
+    );
+    lyricsController = LyricsController(
+      backendClient: backend,
       playbackController: playbackController,
+      settingsRepository: _FakeSettingsRepo(),
       cooldownManager: cooldownManager,
     );
     localeController = LocaleController(_FakeLocaleRepository(), 'en');
@@ -195,7 +221,7 @@ void main() {
     playbackController.setTrack(
       const QueueItem(
         id: '1',
-        uri: 'file:///song.mp3',
+        filePath: 'file:///song.mp3',
         title: 'Song',
         artist: 'Artist',
         album: 'Album',

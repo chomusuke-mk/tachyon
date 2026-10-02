@@ -135,7 +135,7 @@ class Track {
   }) {
     return Track(
       id: map['id'] as int?,
-      filePath: (map['file_path'] ?? map['uri']) as String? ?? '',
+      filePath: (map['file_path']) as String? ?? '',
       title: map['title'] as String? ?? '',
       albumId: map['album_id'] as int?,
       album:
@@ -198,7 +198,7 @@ class Track {
   factory Track.fromJson(Map<String, dynamic> json) {
     // Robustly handle both camelCase (API/JSON) and snake_case (raw DB query result)
     final id = json['id'] as int?;
-    final filePath = (json['filePath'] ?? json['file_path'] ?? json['uri']) as String? ?? '';
+    final filePath = (json['filePath'] ?? json['file_path']) as String? ?? '';
     final title = (json['title'] as String?) ?? '';
     final albumId = (json['albumId'] ?? json['album_id']) as int?;
     final album = (json['album'] ?? json['album_name']) as String?;

@@ -11,10 +11,12 @@ import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/network/lyrics_translation_client.dart';
+import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_view.dart';
@@ -22,6 +24,25 @@ import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/queue_drawer.dart';
 import 'package:tachyon/features/playback/presentation/waveform_slider.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart';
+
+class _FakeSettingsRepo implements SettingsRepository {
+  LyricsDisplayMode _displayMode = LyricsDisplayMode.original;
+
+  @override
+  LyricsDisplayMode getLyricsDisplayMode() => _displayMode;
+  @override
+  String getLyricsTranslationTargetLang() => 'defaultOption';
+  @override
+  AppSettings getSettings() => const AppSettings(lastPlayedFilePath: null);
+  @override
+  Future<void> setLyricsDisplayMode(LyricsDisplayMode mode) async {
+    _displayMode = mode;
+  }
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 class _FakePlaybackController extends ChangeNotifier implements PlaybackController {
   QueueItem? _currentTrack;
@@ -243,7 +264,7 @@ void main() {
   final sampleTrack1 = const QueueItem(
     id: 'track_1',
     trackId: 101,
-    uri: '/storage/music/synthwave.mp3',
+    filePath: '/storage/music/synthwave.mp3',
     title: 'Neon Odyssey',
     artist: 'Cyber Runner',
     album: 'Future Metropolis',
@@ -253,7 +274,7 @@ void main() {
   final sampleTrack2 = const QueueItem(
     id: 'track_2',
     trackId: 102,
-    uri: '/storage/music/retrowave.mp3',
+    filePath: '/storage/music/retrowave.mp3',
     title: 'Digital Sunset',
     artist: 'Laser Velocity',
     album: 'Grid Horizon',
@@ -263,7 +284,7 @@ void main() {
   final sampleTrack3 = const QueueItem(
     id: 'track_3',
     trackId: 103,
-    uri: '/storage/music/ambient.mp3',
+    filePath: '/storage/music/ambient.mp3',
     title: 'Starlight Echoes',
     artist: 'Nebula Dreamer',
     album: 'Deep Cosmos',
@@ -321,11 +342,16 @@ void main() {
       lyricsOvhClient: mockOvh,
     );
     translationClient = _FakeTranslationClient();
-    lyricsController = LyricsController(
+    final backend = DirectTachyonBackendClient(
+      database: db,
       lyricsService: lyricsService,
-      playbackController: playbackController,
-      cooldownManager: cooldownManager,
       translationClient: translationClient,
+    );
+    lyricsController = LyricsController(
+      backendClient: backend,
+      playbackController: playbackController,
+      settingsRepository: _FakeSettingsRepo(),
+      cooldownManager: cooldownManager,
     );
 
     // Populate SQLite test rows

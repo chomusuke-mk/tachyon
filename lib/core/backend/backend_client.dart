@@ -6,6 +6,7 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:tachyon/core/backend/backend_host.dart';
 import 'package:tachyon/core/backend/backend_protocol.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
+import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/library/domain/album.dart';
@@ -107,6 +108,8 @@ abstract class TachyonBackendClient {
     bool allowRemote = false,
     bool bypassCache = false,
     Set<LyricsSource>? allowedSources,
+    LyricsCancellationToken? cancellationToken,
+    void Function(int seconds)? onThresholdCountdown,
   });
   Future<String?> translateLyrics({
     required String keyHash,
@@ -603,6 +606,8 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
     bool allowRemote = false,
     bool bypassCache = false,
     Set<LyricsSource>? allowedSources,
+    LyricsCancellationToken? cancellationToken,
+    void Function(int seconds)? onThresholdCountdown,
   }) =>
       _send<LyricsResult?>(BackendMethods.lyricsResolve, {
         'track': track,

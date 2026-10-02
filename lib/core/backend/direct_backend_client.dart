@@ -4,6 +4,7 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 
 import 'package:tachyon/core/backend/backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
@@ -32,7 +33,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   final MetadataService? metadataService;
   final CoverCacheService? coverCacheService;
   final LyricsService? lyricsService;
-  final LyricsTranslationClient _translationClient = LyricsTranslationClient();
+  final LyricsTranslationClient _translationClient;
 
   final StreamController<List<AudioDevice>> _devicesController =
       StreamController<List<AudioDevice>>.broadcast();
@@ -46,7 +47,8 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     this.metadataService,
     this.coverCacheService,
     this.lyricsService,
-  });
+    LyricsTranslationClient? translationClient,
+  }) : _translationClient = translationClient ?? LyricsTranslationClient();
 
   @override
   Stream<PlaybackState> get playbackStateStream {
@@ -404,12 +406,16 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     bool allowRemote = false,
     bool bypassCache = false,
     Set<LyricsSource>? allowedSources,
+    LyricsCancellationToken? cancellationToken,
+    void Function(int seconds)? onThresholdCountdown,
   }) async {
     return await lyricsService?.resolveLyricsForTrack(
       track,
       allowRemote: allowRemote,
       forceRefresh: bypassCache,
       enabledSources: allowedSources,
+      cancellationToken: cancellationToken,
+      onThresholdCountdown: onThresholdCountdown,
     );
   }
 
