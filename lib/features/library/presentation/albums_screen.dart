@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/library/domain/album.dart';
@@ -25,16 +24,6 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    CoverCacheService? cacheService;
-    try {
-      cacheService = Provider.of<CoverCacheService>(context, listen: false);
-    } catch (_) {
-      try {
-        cacheService = Provider.of<CoverCacheService?>(context, listen: false);
-      } catch (_) {
-        cacheService = null;
-      }
-    }
 
     final albums = List<Album>.from(library.albums);
     albums.sort((a, b) {
@@ -140,14 +129,7 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                       (album.id != null && t.albumId == album.id) ||
                       t.album == album.name,
                 );
-                final albumTrack =
-                    albumTracks
-                        .where(
-                          (t) =>
-                              cacheService?.hasCachedCover(t.filePath) == true,
-                        )
-                        .firstOrNull ??
-                    albumTracks.firstOrNull;
+                final albumTrack = albumTracks.firstOrNull;
                 final coverFilePath = albumTrack?.filePath ?? '';
 
                 return InkWell(

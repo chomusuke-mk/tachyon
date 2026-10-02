@@ -3,8 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
-
-import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
@@ -31,9 +31,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   bool _showQueue = false;
   bool _hasInitializedViewSettings = false;
   LyricsController? _lyricsController;
-
-  bool _isCurrentTrackLiked = false;
-  String? _lastLikedCheckFilePath;
   double _lastUnmutedVolume = AppDefaults.volumeDefault;
 
   @override
@@ -56,27 +53,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         // Fallback if SettingsRepository is not provided (e.g. in isolated widget tests)
       }
       if (_showLyrics) {
-        _lyricsController?.setLyricsViewVisible(true);
-      }
-    }
-    _checkLikedStatus();
-  }
-
-  Future<void> _checkLikedStatus() async {
-    final playback = context.read<PlaybackController>();
-    final track = playback.currentTrack;
-    if (track == null || track.filePath == _lastLikedCheckFilePath) return;
-
-    _lastLikedCheckFilePath = track.filePath;
-    if (track.trackId != null) {
-      final db = context.read<AppDatabase>();
-      final liked = await db.isTrackLiked(track.trackId!);
-      if (mounted && _lastLikedCheckFilePath == track.filePath) {
-        setState(() => _isCurrentTrackLiked = liked);
-      }
-    } else {
-      if (mounted) {
-        setState(() => _isCurrentTrackLiked = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _showLyrics) {
+            _lyricsController?.setLyricsViewVisible(true);
+          }
+        });
       }
     }
   }
@@ -86,12 +67,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final track = playback.currentTrack;
     if (track == null || track.trackId == null) return;
 
-    final db = context.read<AppDatabase>();
-    await db.toggleLikeTrack(track.trackId!, track.filePath);
-    final liked = await db.isTrackLiked(track.trackId!);
-    if (mounted) {
-      setState(() => _isCurrentTrackLiked = liked);
-    }
+    try {
+      final playlists = context.read<PlaylistsController?>();
+      if (playlists != null) {
+        await playlists.toggleLike(track.trackId!, track.filePath);
+      }
+    } catch (_) {}
   }
 
   void _handlePrevious(PlaybackController playback) {
@@ -187,11 +168,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           child: Text(strings.npQueueEmpty, style: theme.textTheme.titleMedium),
         ),
       );
-    }
-
-    // Refresh liked status if track changed
-    if (currentTrack.filePath != _lastLikedCheckFilePath) {
-      _checkLikedStatus();
     }
 
     final double currentWidth = MediaQuery.sizeOf(context).width;
@@ -326,6 +302,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final strings = context.watch<LocaleController>().localeStrings;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final playlists = context.watch<PlaylistsController?>();
+    final isCurrentTrackLiked = currentTrack.trackId != null &&
+        (playlists?.isTrackLiked(currentTrack.trackId!) ?? false);
 
     final Widget playerControls = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -344,7 +323,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 onToggleMute: () => _toggleMute(playback),
               ),
               IconButton(
-                tooltip: _isCurrentTrackLiked
+                tooltip: isCurrentTrackLiked
                     ? strings.npLiked
                     : strings.npUnliked,
                 onPressed: _toggleLike,
@@ -367,15 +346,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
                   // 4. El contenido: El ícono en sí
                   child: Icon(
-                    _isCurrentTrackLiked
+                    isCurrentTrackLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
 
                     // ¡EL KEY ES OBLIGATORIO! Le dice al Switcher que son dos widgets diferentes.
-                    key: ValueKey<bool>(_isCurrentTrackLiked),
+                    key: ValueKey<bool>(isCurrentTrackLiked),
 
                     size: 28,
-                    color: _isCurrentTrackLiked
+                    color: isCurrentTrackLiked
                         ? colorScheme.primary
                         : colorScheme.onSurfaceVariant,
                   ),

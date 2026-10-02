@@ -271,8 +271,6 @@ class LyricsCooldownManager {
   Future<void> Function()? _deferredCallback;
 
   String? get deferredTrackFilePath => _deferredTrackFilePath;
-  @Deprecated('Use deferredTrackFilePath instead')
-  String? get deferredTrackUri => _deferredTrackFilePath;
   int? get deferredGenerationToken => _deferredGenerationToken;
 
   final StreamController<int?> _thresholdStreamController =

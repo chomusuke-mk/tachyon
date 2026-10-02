@@ -5,6 +5,7 @@ import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 
 import 'album_detail_screen.dart';
 import 'library_controller.dart';

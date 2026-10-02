@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
-import 'package:tachyon/core/services/lyrics_service.dart';
+import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';

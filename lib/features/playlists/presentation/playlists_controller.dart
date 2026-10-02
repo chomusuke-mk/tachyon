@@ -1,13 +1,14 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
 class PlaylistsController extends ChangeNotifier {
-  final AppDatabase _database;
+  final TachyonBackendClient _backend;
 
-  PlaylistsController({required this._database});
+  PlaylistsController({required this._backend});
 
   // ---------------------------------------------------------------------------
   // State Fields
@@ -51,10 +52,10 @@ class PlaylistsController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _playlists = await _database.getAllPlaylists();
+      _playlists = await _backend.getPlaylists();
 
       // Pre-cache liked track IDs for O(1) synchronous UI lookups
-      final likedTrackIds = await _database.getTrackIdsForPlaylist(
+      final likedTrackIds = await _backend.getPlaylistTrackIds(
         AppDatabase.likedSongsPlaylistId,
       );
       _likedTrackIds.clear();
@@ -66,9 +67,7 @@ class PlaylistsController extends ChangeNotifier {
             .firstOrNull;
         if (found != null) {
           _selectedPlaylist = found;
-          _selectedPlaylistTracks = await _database.getTracksForPlaylist(
-            found.id!,
-          );
+          _selectedPlaylistTracks = await _backend.getPlaylistTracks(found.id!);
         } else {
           _selectedPlaylist = null;
           _selectedPlaylistTracks.clear();
@@ -90,7 +89,7 @@ class PlaylistsController extends ChangeNotifier {
 
     try {
       if (playlist.id != null) {
-        _selectedPlaylistTracks = await _database.getTracksForPlaylist(
+        _selectedPlaylistTracks = await _backend.getPlaylistTracks(
           playlist.id!,
         );
       } else {
@@ -108,7 +107,7 @@ class PlaylistsController extends ChangeNotifier {
     final clean = name.trim();
     if (clean.isEmpty) return -1;
 
-    final id = await _database.createPlaylist(clean);
+    final id = await _backend.createPlaylist(clean);
     await loadPlaylists();
     return id;
   }
@@ -121,12 +120,7 @@ class PlaylistsController extends ChangeNotifier {
       return; // Protected system playlist
     }
 
-    await _database.database.update(
-      'playlists',
-      {'name': clean},
-      where: 'id = ?',
-      whereArgs: [playlistId],
-    );
+    await _backend.renamePlaylist(playlistId, clean);
     await loadPlaylists();
   }
 
@@ -136,7 +130,7 @@ class PlaylistsController extends ChangeNotifier {
       return; // Protected system playlist
     }
 
-    await _database.deletePlaylist(playlistId);
+    await _backend.deletePlaylist(playlistId);
     if (_selectedPlaylist?.id == playlistId) {
       _selectedPlaylist = null;
       _selectedPlaylistTracks.clear();
@@ -145,27 +139,23 @@ class PlaylistsController extends ChangeNotifier {
   }
 
   Future<void> addTrackToPlaylist(int playlistId, int trackId) async {
-    await _database.addTrackToPlaylist(playlistId, trackId);
+    await _backend.addTracksToPlaylist(playlistId, [trackId]);
     if (playlistId == AppDatabase.likedSongsPlaylistId) {
       _likedTrackIds.add(trackId);
     }
     if (_selectedPlaylist?.id == playlistId) {
-      _selectedPlaylistTracks = await _database.getTracksForPlaylist(
-        playlistId,
-      );
+      _selectedPlaylistTracks = await _backend.getPlaylistTracks(playlistId);
     }
     await loadPlaylists();
   }
 
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) async {
-    await _database.removeTrackFromPlaylist(playlistId, trackId);
+    await _backend.removeTrackFromPlaylist(playlistId, trackId);
     if (playlistId == AppDatabase.likedSongsPlaylistId) {
       _likedTrackIds.remove(trackId);
     }
     if (_selectedPlaylist?.id == playlistId) {
-      _selectedPlaylistTracks = await _database.getTracksForPlaylist(
-        playlistId,
-      );
+      _selectedPlaylistTracks = await _backend.getPlaylistTracks(playlistId);
     }
     await loadPlaylists();
   }
@@ -183,13 +173,10 @@ class PlaylistsController extends ChangeNotifier {
     _selectedPlaylistTracks.insert(toIndex, item);
     notifyListeners();
 
-    await _database.reorderPlaylistEntries(playlistId, fromIndex, toIndex);
+    await _backend.reorderPlaylistTracks(playlistId, fromIndex, toIndex);
   }
 
-  Future<void> toggleLikeTrack(Track track) async {
-    if (track.id == null) return;
-    final trackId = track.id!;
-
+  Future<bool> toggleLike(int trackId, [String? filePath]) async {
     // Optimistic in-memory update
     final wasLiked = _likedTrackIds.contains(trackId);
     if (wasLiked) {
@@ -200,15 +187,21 @@ class PlaylistsController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _database.toggleLikeTrack(trackId, track.filePath);
+      final isLiked = await _backend.toggleLikeTrack(trackId, filePath);
+      if (isLiked) {
+        _likedTrackIds.add(trackId);
+      } else {
+        _likedTrackIds.remove(trackId);
+      }
       // Refresh Liked Songs playlist track count in background
-      _playlists = await _database.getAllPlaylists();
+      _playlists = await _backend.getPlaylists();
       if (_selectedPlaylist?.id == AppDatabase.likedSongsPlaylistId) {
-        _selectedPlaylistTracks = await _database.getTracksForPlaylist(
+        _selectedPlaylistTracks = await _backend.getPlaylistTracks(
           AppDatabase.likedSongsPlaylistId,
         );
       }
       notifyListeners();
+      return isLiked;
     } catch (e) {
       // Revert optimistic update on failure
       if (wasLiked) {
@@ -221,8 +214,13 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
+  Future<void> toggleLikeTrack(Track track) async {
+    if (track.id == null) return;
+    await toggleLike(track.id!, track.filePath);
+  }
+
   Future<void> clearHistory() async {
-    await _database.clearHistory();
+    await _backend.clearHistory();
     if (_selectedPlaylist?.id == AppDatabase.historyPlaylistId) {
       _selectedPlaylistTracks.clear();
     }

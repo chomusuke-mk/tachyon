@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/lyrics_service.dart';
+import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';

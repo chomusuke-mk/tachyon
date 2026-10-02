@@ -20,4 +20,8 @@ class AppDefaults {
   static const double playbackPitchDefault = 1.0;
 
   static const bool audioPlayerAsyncEnabled = false;
+
+  static const Set<String> supportedAudioExtensions = {
+    'mp3', 'flac', 'ogg', 'opus', 'm4a', 'aac', 'wav', 'aiff', 'wma'
+  };
 }

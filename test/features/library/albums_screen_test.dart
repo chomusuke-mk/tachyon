@@ -3,8 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
+import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/services/metadata_extractor.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/albums_screen.dart';
@@ -40,6 +41,7 @@ void main() {
   late AppDatabase db;
   late CoverCacheService coverCacheService;
   late MetadataExtractor extractor;
+  late DirectTachyonBackendClient backend;
   late LibraryController libraryController;
   late LocaleController localeController;
 
@@ -53,10 +55,13 @@ void main() {
       database: db,
       coverCacheService: coverCacheService,
     );
-    libraryController = LibraryController(
+    backend = DirectTachyonBackendClient(
       database: db,
       metadataExtractor: extractor,
       coverCacheService: coverCacheService,
+    );
+    libraryController = LibraryController(
+      backendClient: backend,
     );
     localeController = LocaleController(_FakeLocaleRepository(), 'en');
     await localeController.whenReady;
@@ -69,10 +74,7 @@ void main() {
     }
   });
 
-  testWidgets('AlbumsScreen selects track with cached cover over track without cover', (tester) async {
-    // Two tracks for "Greatest Hits" album:
-    // Track 1 does NOT have a cached cover
-    // Track 2 DOES have a cached cover
+  testWidgets('AlbumsScreen renders albums and passes album track uri to AlbumArtImage', (tester) async {
     const track1 = Track(
       uri: '/media/album1/01-intro.mp3',
       title: 'Intro',
@@ -95,29 +97,12 @@ void main() {
     await db.batchInsertTracks([track1, track2]);
     await libraryController.loadLibrary();
 
-    // Create a dummy cached cover image file for track2 only
-    final track2Cover = coverCacheService.getCoverFile(track2.uri);
-    final transparentPng = [
-      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-      0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-      0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-      0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-    ];
-    track2Cover.parent.createSync(recursive: true);
-    track2Cover.writeAsBytesSync(transparentPng);
-
-    expect(coverCacheService.hasCachedCover(track1.uri), isFalse);
-    expect(coverCacheService.hasCachedCover(track2.uri), isTrue);
-
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: localeController),
           ChangeNotifierProvider.value(value: libraryController),
-          Provider<CoverCacheService>.value(value: coverCacheService),
-          Provider<CoverCacheService?>.value(value: coverCacheService),
+          Provider<TachyonBackendClient>.value(value: backend),
         ],
         child: const MaterialApp(
           home: AlbumsScreen(),
@@ -130,7 +115,7 @@ void main() {
     // Verify album title is rendered
     expect(find.text('Greatest Hits'), findsOneWidget);
 
-    // Verify AlbumArtImage received the URI of track2 (the one with the cached cover)
+    // Verify AlbumArtImage received the URI of the first album track sorted by title (Hit Song)
     final albumArtFinder = find.byType(AlbumArtImage);
     expect(albumArtFinder, findsOneWidget);
     final albumArtWidget = tester.widget<AlbumArtImage>(albumArtFinder);

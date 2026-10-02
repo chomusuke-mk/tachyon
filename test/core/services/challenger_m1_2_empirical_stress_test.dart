@@ -7,10 +7,10 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/audio_player_adapter.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
+import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
+import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/services/metadata_extractor.dart';
-import 'package:tachyon/core/services/scan_isolate.dart';
+import 'package:tachyon/core/backend/services/scan_isolate.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 
 /// Helper to generate a valid PCM 16-bit WAV file with a pure sine tone.

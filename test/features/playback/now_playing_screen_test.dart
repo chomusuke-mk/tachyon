@@ -9,7 +9,7 @@ import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/network/lyrics_translation_client.dart';
-import 'package:tachyon/core/services/lyrics_service.dart';
+import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
@@ -20,6 +20,7 @@ import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/queue_drawer.dart';
 import 'package:tachyon/features/playback/presentation/waveform_slider.dart';
+import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 
 class _FakePlaybackController extends ChangeNotifier implements PlaybackController {
   QueueItem? _currentTrack;
@@ -195,11 +196,14 @@ Widget _buildTestApp({
   required LocaleController localeController,
   required AppDatabase db,
   required LyricsController lyricsController,
+  PlaylistsController? playlistsController,
 }) {
+  final playlists = playlistsController ?? PlaylistsController(database: db);
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<PlaybackController>.value(value: playbackController),
       ChangeNotifierProvider<LocaleController>.value(value: localeController),
+      ChangeNotifierProvider<PlaylistsController>.value(value: playlists),
       Provider<AppDatabase>.value(value: db),
       ChangeNotifierProvider<LyricsController>.value(value: lyricsController),
     ],

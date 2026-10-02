@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
-import 'package:tachyon/core/services/lyrics_service.dart';
+import 'package:tachyon/core/backend/services/cover_cache_service.dart';
+import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/services/metadata_extractor.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
@@ -190,7 +190,6 @@ void main() {
       final controller = LibraryController(
         database: db,
         metadataExtractor: extractor,
-        coverCacheService: coverCache,
       );
 
       const track1 = Track(uri: '/music/a.mp3', title: 'Track A', durationMs: 1000, fileSize: 100, modifiedAt: 100);

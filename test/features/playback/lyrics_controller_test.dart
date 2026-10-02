@@ -10,7 +10,7 @@ import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/network/lyrics_translation_client.dart';
-import 'package:tachyon/core/services/lyrics_service.dart';
+import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';

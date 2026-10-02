@@ -24,18 +24,10 @@ import 'widgets/lyrics_threshold_banner.dart';
 /// - Multi-mode translation display: Original, Translated, and Interleaved.
 /// - Manual scroll lock with 5-second auto-resume and localized sync button.
 class LyricsView extends StatelessWidget {
-  final String? filePath;
+  final String filePath;
   final ValueChanged<Duration>? onSeek;
 
-  const LyricsView({
-    super.key,
-    String? filePath,
-    @Deprecated('Use filePath') String? uri,
-    this.onSeek,
-  }) : filePath = filePath ?? uri;
-
-  @Deprecated('Use filePath')
-  String? get uri => filePath;
+  const LyricsView({super.key, required this.filePath, this.onSeek});
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +77,12 @@ class LyricsView extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildTopControlsBar(context, lyricsController, strings, colorScheme),
+                _buildTopControlsBar(
+                  context,
+                  lyricsController,
+                  strings,
+                  colorScheme,
+                ),
                 if (lyricsController.isThresholdWaiting)
                   const LyricsThresholdBanner(),
               ],
@@ -151,8 +148,8 @@ class LyricsView extends StatelessWidget {
               final isActive = isSynced && (index == activeIndex);
               final translatedText =
                   (index >= 0 && index < translatedLines.length)
-                      ? translatedLines[index]
-                      : null;
+                  ? translatedLines[index]
+                  : null;
               final hasTranslation =
                   translatedText != null && translatedText.trim().isNotEmpty;
 
@@ -177,7 +174,6 @@ class LyricsView extends StatelessWidget {
     );
   }
 
-
   Widget _buildTopControlsBar(
     BuildContext context,
     LyricsController lyricsController,
@@ -191,9 +187,14 @@ class LyricsView extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 2.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10.0,
+              vertical: 2.0,
+            ),
             decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+              color: colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.65,
+              ),
               borderRadius: BorderRadius.circular(16.0),
               border: Border.all(
                 color: colorScheme.outlineVariant.withValues(alpha: 0.25),
@@ -204,7 +205,12 @@ class LyricsView extends StatelessWidget {
               children: [
                 _buildSourceBadge(lyricsController, strings, colorScheme),
                 const Spacer(),
-                _buildTranslationButton(context, lyricsController, strings, colorScheme),
+                _buildTranslationButton(
+                  context,
+                  lyricsController,
+                  strings,
+                  colorScheme,
+                ),
                 const SizedBox(width: 4),
                 _buildSourcesButton(context, strings, colorScheme),
                 const SizedBox(width: 4),
@@ -226,28 +232,15 @@ class LyricsView extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final (badgeLabel, serverName, fullTooltip) =
-        switch (controller.currentLyricsSource) {
-      LyricsSource.embedded => (
-        'E',
-        'Tags',
-        strings.npLyricsSourceEmbedded,
-      ),
-      LyricsSource.file => (
-        'L',
-        '.lrc',
-        strings.npLyricsSourceFile,
-      ),
-      LyricsSource.lrclib => (
-        '1',
-        'lrclib.net',
-        strings.npLyricsSourceLrclib,
-      ),
-      LyricsSource.lyricsOvh => (
-        '2',
-        'lyrics.ovh',
-        strings.npLyricsSourceOvh,
-      ),
+    final (
+      badgeLabel,
+      serverName,
+      fullTooltip,
+    ) = switch (controller.currentLyricsSource) {
+      LyricsSource.embedded => ('E', 'Tags', strings.npLyricsSourceEmbedded),
+      LyricsSource.file => ('L', '.lrc', strings.npLyricsSourceFile),
+      LyricsSource.lrclib => ('1', 'lrclib.net', strings.npLyricsSourceLrclib),
+      LyricsSource.lyricsOvh => ('2', 'lyrics.ovh', strings.npLyricsSourceOvh),
       null => ('-', '', strings.npLyricsSourceNone),
     };
 
@@ -314,7 +307,6 @@ class LyricsView extends StatelessWidget {
     );
   }
 
-
   Widget _buildTranslationButton(
     BuildContext context,
     LyricsController controller,
@@ -340,8 +332,8 @@ class LyricsView extends StatelessWidget {
 
     final tooltip = isTranslated
         ? (isInterleaved
-            ? strings.npLyricsInterleaved
-            : strings.npLyricsTranslated)
+              ? strings.npLyricsInterleaved
+              : strings.npLyricsTranslated)
         : strings.npLyricsTranslate;
 
     return PopupMenuButton<LyricsDisplayMode>(
@@ -349,7 +341,9 @@ class LyricsView extends StatelessWidget {
       icon: Icon(
         Icons.translate_rounded,
         size: 20,
-        color: isTranslated ? colorScheme.primary : colorScheme.onSurfaceVariant,
+        color: isTranslated
+            ? colorScheme.primary
+            : colorScheme.onSurfaceVariant,
       ),
       onSelected: (mode) => controller.setTranslationDisplayMode(mode),
       itemBuilder: (context) => [
@@ -495,10 +489,7 @@ class _LyricLineItemState extends State<_LyricLineItem> {
         }
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: 10.0,
-          horizontal: 8.0,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 8.0),
         child: _buildContent(),
       ),
     );
@@ -549,8 +540,9 @@ class _LyricLineItemState extends State<_LyricLineItem> {
         );
       }
 
-      final textToDisplay =
-          (isTranslated && hasTranslation) ? translatedText! : originalText;
+      final textToDisplay = (isTranslated && hasTranslation)
+          ? translatedText!
+          : originalText;
       return Text(
         textToDisplay,
         textAlign: TextAlign.center,
@@ -630,4 +622,3 @@ class _LyricLineItemState extends State<_LyricLineItem> {
     );
   }
 }
-

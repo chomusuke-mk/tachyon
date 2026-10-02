@@ -11,8 +11,8 @@ import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/network/lyrics_translation_client.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
-import 'package:tachyon/core/services/lyrics_service.dart';
+import 'package:tachyon/core/backend/services/cover_cache_service.dart';
+import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/services/metadata_extractor.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
@@ -395,7 +395,6 @@ void main() {
     libraryController = LibraryController(
       database: db,
       metadataExtractor: extractor,
-      coverCacheService: coverCacheService,
     );
     playlistsController = PlaylistsController(database: db);
 

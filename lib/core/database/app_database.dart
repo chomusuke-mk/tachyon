@@ -338,11 +338,16 @@ class AppDatabase {
     return SqliteDatabase(_db!);
   }
 
-  Future<void> init() async {
+  Future<void> init([String? dbPathOverride]) async {
     if (_db != null) return;
 
-    final appSupportDir = await getApplicationSupportDirectory();
-    final dbPath = p.join(appSupportDir.path, 'music.db');
+    final String dbPath;
+    if (dbPathOverride != null) {
+      dbPath = dbPathOverride;
+    } else {
+      final appSupportDir = await getApplicationSupportDirectory();
+      dbPath = p.join(appSupportDir.path, 'music.db');
+    }
 
     _db = sqlite3.open(dbPath, mode: OpenMode.readWriteCreate);
 
@@ -946,7 +951,28 @@ class AppDatabase {
       ORDER BY $orderClause
     ''');
 
-    return rows.map((r) => Track.fromJson(r)).toList();
+    final tracks = rows.map((r) => Track.fromJson(r)).toList();
+    try {
+      final genreRows = await database.rawQuery('''
+        SELECT tg.track_id, g.name AS genre_name
+        FROM track_genres tg
+        JOIN genres g ON tg.genre_id = g.id
+      ''');
+      final trackGenreMap = <int, List<String>>{};
+      for (final row in genreRows) {
+        final tId = row['track_id'] as int;
+        final gName = row['genre_name'] as String;
+        (trackGenreMap[tId] ??= []).add(gName);
+      }
+      return tracks.map((t) {
+        if (t.id != null && trackGenreMap.containsKey(t.id)) {
+          return t.copyWith(genres: trackGenreMap[t.id]);
+        }
+        return t;
+      }).toList();
+    } catch (_) {
+      return tracks;
+    }
   }
 
   /// Retrieves raw embedded lyrics for a track by its [filePath] on-demand.
@@ -969,6 +995,49 @@ class AppDatabase {
       return rows.first['lyrics'] as String?;
     }
     return null;
+  }
+
+  /// Retrieves a full [Track] by its [filePath].
+  Future<Track?> getTrackByFilePath(String filePath) async {
+    String cleanPath = filePath;
+    if (cleanPath.startsWith('file://')) {
+      try {
+        cleanPath = Uri.parse(cleanPath).toFilePath();
+      } catch (_) {}
+    }
+    final rows = await database.rawQuery('''
+      SELECT 
+        t.id, t.file_path, t.title, t.album_id, t.artist_id, t.album_artist,
+        t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
+        t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
+        t.lyrics, t.has_cover,
+        al.name AS album_name,
+        ar.name AS artist_name
+      FROM tracks t
+      LEFT JOIN albums al ON t.album_id = al.id
+      LEFT JOIN artists ar ON t.artist_id = ar.id
+      WHERE t.file_path = ? OR t.file_path = ?
+      LIMIT 1
+    ''', [cleanPath, filePath]);
+
+    if (rows.isNotEmpty) {
+      return Track.fromJson(rows.first);
+    }
+    return null;
+  }
+
+  /// Updates the `has_cover` flag for a track identified by its [filePath].
+  Future<void> updateTrackCoverStatus(String filePath, bool hasCover) async {
+    String cleanPath = filePath;
+    if (cleanPath.startsWith('file://')) {
+      try {
+        cleanPath = Uri.parse(cleanPath).toFilePath();
+      } catch (_) {}
+    }
+    await database.execute(
+      'UPDATE tracks SET has_cover = ? WHERE file_path = ? OR file_path = ?',
+      [hasCover ? 1 : 0, cleanPath, filePath],
+    );
   }
 
   @Deprecated('Use getTrackLyricsByFilePath instead')
@@ -1246,6 +1315,102 @@ class AppDatabase {
       where: 'id = ? AND is_special = 0',
       whereArgs: [playlistId],
     );
+  }
+
+  Future<void> renamePlaylist(int playlistId, String name) async {
+    await database.update(
+      'playlists',
+      {'name': name.trim()},
+      where: 'id = ?',
+      whereArgs: [playlistId],
+    );
+  }
+
+  Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) async {
+    for (final trackId in trackIds) {
+      await addTrackToPlaylist(playlistId, trackId);
+    }
+  }
+
+  /// Convenience alias for [insertOrUpdateTrack].
+  Future<void> insertTrack(Track track) => insertOrUpdateTrack(track);
+
+  /// Retrieves tracks belonging to a given [albumId].
+  Future<List<Track>> getTracksByAlbumId(int albumId) async {
+    final rows = await database.rawQuery('''
+      SELECT 
+        t.id, t.file_path, t.title, t.album_id, t.artist_id, t.album_artist,
+        t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
+        t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
+        NULL AS lyrics, t.has_cover,
+        al.name AS album_name,
+        ar.name AS artist_name
+      FROM tracks t
+      LEFT JOIN albums al ON t.album_id = al.id
+      LEFT JOIN artists ar ON t.artist_id = ar.id
+      WHERE t.album_id = ?
+      ORDER BY t.disc_number ASC, t.track_number ASC
+    ''', [albumId]);
+    return rows.map((r) => Track.fromJson(r)).toList();
+  }
+
+  /// Retrieves tracks belonging to a given [artistId].
+  Future<List<Track>> getTracksByArtistId(int artistId) async {
+    final rows = await database.rawQuery('''
+      SELECT 
+        t.id, t.file_path, t.title, t.album_id, t.artist_id, t.album_artist,
+        t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
+        t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
+        NULL AS lyrics, t.has_cover,
+        al.name AS album_name,
+        ar.name AS artist_name
+      FROM tracks t
+      LEFT JOIN albums al ON t.album_id = al.id
+      LEFT JOIN artists ar ON t.artist_id = ar.id
+      WHERE t.artist_id = ?
+      ORDER BY t.title COLLATE NOCASE ASC
+    ''', [artistId]);
+    return rows.map((r) => Track.fromJson(r)).toList();
+  }
+
+  /// Searches albums by name or artist matching [query].
+  Future<List<Album>> searchAlbums(String query) async {
+    final clean = query.trim();
+    if (clean.isEmpty) return [];
+    final wildcard = '%$clean%';
+    final rows = await database.rawQuery('''
+      SELECT 
+        al.id, al.name, al.artist_id, al.artist_name, al.year,
+        COUNT(t.id) AS track_count
+      FROM albums al
+      LEFT JOIN tracks t ON t.album_id = al.id
+      WHERE al.name LIKE ? OR al.artist_name LIKE ?
+      GROUP BY al.id
+      HAVING COUNT(t.id) > 0
+      ORDER BY al.name COLLATE NOCASE ASC
+    ''', [wildcard, wildcard]);
+    return rows.map((r) => Album.fromJson(r)).toList();
+  }
+
+  /// Searches artists by name matching [query].
+  Future<List<Artist>> searchArtists(String query) async {
+    final clean = query.trim();
+    if (clean.isEmpty) return [];
+    final wildcard = '%$clean%';
+    final rows = await database.rawQuery('''
+      SELECT 
+        ar.id, ar.name,
+        COUNT(DISTINCT t.id) AS track_count,
+        COUNT(DISTINCT al.id) AS album_count
+      FROM artists ar
+      LEFT JOIN tracks t ON t.artist_id = ar.id
+      LEFT JOIN albums al ON al.artist_id = ar.id
+      WHERE ar.name LIKE ?
+      GROUP BY ar.id
+      HAVING COUNT(DISTINCT t.id) > 0
+      ORDER BY ar.name COLLATE NOCASE ASC
+    ''', [wildcard]);
+    return rows.map((r) => Artist.fromJson(r)).toList();
   }
 
   /// Persists or updates a [LyricsSourceEntry] in SQLite.

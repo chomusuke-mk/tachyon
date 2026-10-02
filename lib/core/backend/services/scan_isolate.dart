@@ -6,7 +6,8 @@ import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:tachyon/core/services/cover_cache_service.dart';
+import 'package:tachyon/core/backend/services/cover_cache_service.dart';
+import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
@@ -194,7 +195,10 @@ Future<void> _runPipeline({
     Future<void> processFile(DiscoveredAudioFile file, TrackFileMeta? existing) async {
       if (cancellationToken.isCancelled) return;
 
-      final track = await _extractMetadata(file.path, coverService);
+      final track = await extractTrackMetadata(
+        file.path,
+        coverCacheService: coverService,
+      );
       scannedCount++;
 
       if (track != null) {
@@ -300,63 +304,6 @@ Future<void> _runPipeline({
     });
   } finally {
     stopwatch.stop();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Helper: single-file metadata extraction (CPU-bound — runs in scan isolate)
-// ---------------------------------------------------------------------------
-
-Future<Track?> _extractMetadata(
-  String filePath,
-  CoverCacheService coverService,
-) async {
-  final file = File(filePath);
-  if (!file.existsSync() && !await file.exists()) return null;
-
-  int size = 0;
-  int modifiedAt = 0;
-  try {
-    final stat = await file.stat();
-    size = stat.size;
-    modifiedAt = stat.modified.millisecondsSinceEpoch;
-  } catch (_) {}
-
-  try {
-    final metadata = readMetadata(file, getImage: false);
-
-    if (!coverService.hasCachedCover(file.path)) {
-      try {
-        unawaited(coverService.saveCacheCover(
-          file.path,
-          artistName: metadata.artist,
-          albumName: metadata.album,
-        ));
-      } catch (_) {}
-    }
-
-    return Track(
-      filePath: filePath,
-      title: metadata.title ?? p.basenameWithoutExtension(filePath),
-      album: metadata.album,
-      artist: metadata.artist,
-      artists: metadata.performers,
-      albumArtist: metadata.albumArtist,
-      trackNumber: metadata.trackNumber,
-      discNumber: metadata.discNumber,
-      year: metadata.year?.year,
-      durationMs: metadata.duration?.inMilliseconds ?? 0,
-      bitrate: metadata.bitrate,
-      sampleRate: metadata.sampleRate,
-      channels: null,
-      codec: null,
-      fileSize: size,
-      modifiedAt: modifiedAt,
-      lyrics: metadata.lyrics,
-      genres: metadata.genres,
-    );
-  } catch (_) {
-    return null;
   }
 }
 

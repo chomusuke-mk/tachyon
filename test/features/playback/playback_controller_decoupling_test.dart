@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/audio_engine_service.dart';
+import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';

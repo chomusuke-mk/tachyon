@@ -6,6 +6,7 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 
 import 'library_controller.dart';
 

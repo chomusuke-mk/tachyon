@@ -2,9 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' show Equalizer;
+import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
-
-import 'package:tachyon/core/services/audio_engine_service.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
@@ -12,15 +11,14 @@ import 'package:tachyon/features/settings/domain/app_settings.dart';
 
 class SettingsController extends ChangeNotifier {
   final SettingsRepository _repository;
-  final AudioEngineService _audioEngine;
+  final TachyonBackendClient _backend;
 
   late AppSettings _settings;
 
   SettingsController({
-    required SettingsRepository settingsRepository,
-    required AudioEngineService audioEngineService,
-  }) : _repository = settingsRepository,
-       _audioEngine = audioEngineService {
+    required this._repository,
+    required this._backend,
+  }){
     _settings = _repository.getSettings();
   }
 
@@ -56,7 +54,7 @@ class SettingsController extends ChangeNotifier {
     _settings = _repository.getSettings();
 
     // Sync loaded settings with AudioEngineService
-    await _audioEngine.setCrossfadeConfig(
+    await _backend.setCrossfadeConfig(
       CrossfadeConfig(
         enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
@@ -64,16 +62,16 @@ class SettingsController extends ChangeNotifier {
         curve: _settings.crossfadeCurve,
       ),
     );
-    await _audioEngine.setVolume(_settings.volume);
-    await _audioEngine.setRate(_settings.playbackRate);
-    await _audioEngine.setPitch(_settings.playbackPitch);
-    await _audioEngine.setSkipSilence(_settings.skipSilence);
-    await _audioEngine.setLoopMode(_settings.loopMode);
+    await _backend.setVolume(_settings.volume);
+    await _backend.setRate(_settings.playbackRate);
+    await _backend.setPitch(_settings.playbackPitch);
+    await _backend.setSkipSilence(_settings.skipSilence);
+    await _backend.setLoopMode(_settings.loopMode);
 
     if (_settings.equalizerEnabled) {
-      await _audioEngine.setEqualizer(Equalizer.fromList(_settings.equalizerGains));
+      await _backend.setEqualizer(Equalizer.fromList(_settings.equalizerGains));
     } else {
-      await _audioEngine.setEqualizer(Equalizer.flat);
+      await _backend.setEqualizer(Equalizer.flat);
     }
 
     notifyListeners();
@@ -117,7 +115,7 @@ class SettingsController extends ChangeNotifier {
     );
     _settings = _settings.copyWith(crossfadeDuration: clamped);
     await _repository.setCrossfadeDuration(clamped);
-    await _audioEngine.setCrossfadeConfig(
+    await _backend.setCrossfadeConfig(
       CrossfadeConfig(
         enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: clamped),
@@ -130,7 +128,7 @@ class SettingsController extends ChangeNotifier {
   Future<void> setCrossfadeEnabled(bool enabled) async {
     _settings = _settings.copyWith(crossfadeEnabled: enabled);
     await _repository.setCrossfadeEnabled(enabled);
-    await _audioEngine.setCrossfadeConfig(
+    await _backend.setCrossfadeConfig(
       CrossfadeConfig(
         enabled: enabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
@@ -144,7 +142,7 @@ class SettingsController extends ChangeNotifier {
   Future<void> setCrossfadeManualDuration(int durationSeconds) async {
     _settings = _settings.copyWith(crossfadeManualDuration: durationSeconds);
     await _repository.setCrossfadeManualDuration(durationSeconds);
-    await _audioEngine.setCrossfadeConfig(
+    await _backend.setCrossfadeConfig(
       CrossfadeConfig(
         enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
@@ -158,7 +156,7 @@ class SettingsController extends ChangeNotifier {
   Future<void> setCrossfadeCurve(CrossfadeCurve curve) async {
     _settings = _settings.copyWith(crossfadeCurve: curve);
     await _repository.setCrossfadeCurve(curve);
-    await _audioEngine.setCrossfadeConfig(
+    await _backend.setCrossfadeConfig(
       CrossfadeConfig(
         enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
@@ -173,9 +171,9 @@ class SettingsController extends ChangeNotifier {
     _settings = _settings.copyWith(equalizerEnabled: enabled);
     await _repository.setEqualizerEnabled(enabled);
     if (enabled) {
-      await _audioEngine.setEqualizer(Equalizer.fromList(_settings.equalizerGains));
+      await _backend.setEqualizer(Equalizer.fromList(_settings.equalizerGains));
     } else {
-      await _audioEngine.setEqualizer(Equalizer.flat);
+      await _backend.setEqualizer(Equalizer.flat);
     }
     notifyListeners();
   }
@@ -184,7 +182,7 @@ class SettingsController extends ChangeNotifier {
     _settings = _settings.copyWith(equalizerGains: gains);
     await _repository.setEqualizerGains(gains);
     if (_settings.equalizerEnabled) {
-      await _audioEngine.setEqualizer(Equalizer.fromList(gains));
+      await _backend.setEqualizer(Equalizer.fromList(gains));
     }
     notifyListeners();
   }
@@ -239,7 +237,7 @@ class SettingsController extends ChangeNotifier {
   Future<void> setSkipSilence(bool enabled) async {
     _settings = _settings.copyWith(skipSilence: enabled);
     await _repository.setSkipSilence(enabled);
-    await _audioEngine.setSkipSilence(enabled);
+    await _backend.setSkipSilence(enabled);
     notifyListeners();
   }
 

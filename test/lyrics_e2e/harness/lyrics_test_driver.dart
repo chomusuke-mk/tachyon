@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import 'package:tachyon/core/services/lrc_parser.dart';
+import 'package:tachyon/core/backend/services/lrc_parser.dart';
 import 'package:tachyon/features/playback/domain/lyric_line.dart';
 
 import 'lyrics_e2e_models.dart';

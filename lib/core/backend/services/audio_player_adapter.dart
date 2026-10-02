@@ -5,8 +5,6 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 // ============================================================================
 // AUDIO PLAYER ADAPTER
 // ============================================================================
-
-/// Production implementation of [AudioPlayerAdapter] backed by `miniaudio_player.MiniaudioPlayer`.
 class AudioPlayerAdapter {
   final MiniaudioPlayer _player;
   bool _isDisposed = false;
@@ -34,25 +32,61 @@ class AudioPlayerAdapter {
     return filePath;
   }
 
-  Future<void> play() => _player.action.play();
+  Future<void> play() async {
+    try {
+      await _player.action.play();
+    } catch (_) {}
+  }
 
-  Future<void> pause() => _player.action.pause();
+  Future<void> pause() async {
+    try {
+      await _player.action.pause();
+    } catch (_) {}
+  }
 
-  Future<void> stop() => _player.action.stop();
+  Future<void> stop() async {
+    try {
+      await _player.action.stop();
+    } catch (_) {}
+  }
 
-  Future<void> seek(Duration position) => _player.action.seek(position);
+  Future<void> seek(Duration position) async {
+    try {
+      await _player.action.seek(position);
+    } catch (_) {}
+  }
 
-  Future<void> setVolume(double volume) =>
-      _player.action.setVolume(volume / 100.0);
+  Future<void> setVolume(double volume) async {
+    try {
+      await _player.action.setVolume(volume / 100.0);
+    } catch (_) {}
+  }
 
-  Future<void> setRate(double rate) => _player.action.setRate(rate);
+  Future<void> setRate(double rate) async {
+    try {
+      await _player.action.setRate(rate);
+    } catch (_) {}
+  }
 
-  Future<void> setPitch(double pitch) => _player.action.setPitch(pitch);
+  Future<void> setPitch(double pitch) async {
+    try {
+      await _player.action.setPitch(pitch);
+    } catch (_) {}
+  }
 
-  Future<void> setEqualizer(Equalizer equalizer) =>
-      _player.action.setEqualizer(equalizer);
+  Future<void> setEqualizer(Equalizer equalizer) async {
+    try {
+      await _player.action.setEqualizer(equalizer);
+    } catch (_) {}
+  }
 
-  Future<bool> setDevice(AudioDevice device) => _player.setDevice(device);
+  Future<bool> setDevice(AudioDevice device) async {
+    try {
+      return await _player.setDevice(device);
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<List<AudioDevice>> getAudioDevices({bool includeAuto = true}) =>
       MiniaudioPlayer.getAudioDevices(includeAuto: includeAuto);

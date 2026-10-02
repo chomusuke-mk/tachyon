@@ -8,10 +8,9 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
-enum ThumbnailQuality {
-  low,
-  high,
-}
+import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
+
+export 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 
 /// Service for cover and artist art extraction, directory artwork fallbacks,
 /// dual-quality SHA-256 disk caching, and non-distorting center-crop generation
@@ -19,30 +18,6 @@ enum ThumbnailQuality {
 class CoverCacheService {
   final Directory cacheDirectory;
   final String defaultCoverAsset;
-
-  static const List<String> directoryCoverCandidates = [
-    'cover.jpg',
-    'cover.jpeg',
-    'cover.png',
-    'folder.jpg',
-    'folder.jpeg',
-    'folder.png',
-    'album.jpg',
-    'album.jpeg',
-    'album.png',
-    'front.jpg',
-    'front.jpeg',
-    'front.png',
-  ];
-
-  static const List<String> directoryArtistCandidates = [
-    'artist.jpg',
-    'artist.jpeg',
-    'artist.png',
-    'band.jpg',
-    'band.jpeg',
-    'band.png',
-  ];
 
   CoverCacheService({
     required this.cacheDirectory,
@@ -190,26 +165,6 @@ class CoverCacheService {
       debugPrint('[CoverCache] Error reading embedded pictures from $filePath: $e');
     }
 
-    // 3. Directory cover art fallback
-    if (coverBytes == null || coverBytes.isEmpty) {
-      final dirArt = findDirectoryCoverArt(filePath);
-      if (dirArt != null) {
-        try {
-          coverBytes = await dirArt.readAsBytes();
-        } catch (_) {}
-      }
-    }
-
-    // 4. Directory artist art fallback
-    if (artistBytes == null || artistBytes.isEmpty) {
-      final dirArtist = findDirectoryArtistArt(filePath);
-      if (dirArtist != null) {
-        try {
-          artistBytes = await dirArtist.readAsBytes();
-        } catch (_) {}
-      }
-    }
-
     // 5. Write dual quality track/album cover
     if (coverBytes != null && coverBytes.isNotEmpty) {
       await _writeDualQualityImages(coverBytes, hqFile, lqFile, legacyFile);
@@ -304,62 +259,6 @@ class CoverCacheService {
         if (!await hqFile.exists()) await hqFile.writeAsBytes(rawBytes);
       } catch (_) {}
     }
-  }
-
-  File? findDirectoryCoverArt(String filePath) {
-    final parentDir = Directory(p.dirname(filePath));
-    if (!parentDir.existsSync()) return null;
-
-    // Fast check for exact lowercase matches
-    for (final name in directoryCoverCandidates) {
-      final candidate = File(p.join(parentDir.path, name));
-      if (candidate.existsSync() && candidate.lengthSync() > 0) {
-        return candidate;
-      }
-    }
-
-    // Case-insensitive fallback scan
-    try {
-      final entries = parentDir.listSync(followLinks: false);
-      final candidateSet = directoryCoverCandidates.toSet();
-      for (final entry in entries) {
-        if (entry is File) {
-          final baseName = p.basename(entry.path).toLowerCase();
-          if (candidateSet.contains(baseName) && entry.lengthSync() > 0) {
-            return entry;
-          }
-        }
-      }
-    } catch (_) {}
-
-    return null;
-  }
-
-  File? findDirectoryArtistArt(String filePath) {
-    final parentDir = Directory(p.dirname(filePath));
-    if (!parentDir.existsSync()) return null;
-
-    for (final name in directoryArtistCandidates) {
-      final candidate = File(p.join(parentDir.path, name));
-      if (candidate.existsSync() && candidate.lengthSync() > 0) {
-        return candidate;
-      }
-    }
-
-    try {
-      final entries = parentDir.listSync(followLinks: false);
-      final candidateSet = directoryArtistCandidates.toSet();
-      for (final entry in entries) {
-        if (entry is File) {
-          final baseName = p.basename(entry.path).toLowerCase();
-          if (candidateSet.contains(baseName) && entry.lengthSync() > 0) {
-            return entry;
-          }
-        }
-      }
-    } catch (_) {}
-
-    return null;
   }
 
   Future<void> clearCache() async {

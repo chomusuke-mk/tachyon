@@ -7,6 +7,7 @@ import 'package:tachyon/features/playback/domain/behavior_subject.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
 
 import 'audio_player_adapter.dart';
 import 'queue_manager.dart';
@@ -54,6 +55,8 @@ class AudioEngineService {
   final Duration tickerInterval;
 
   final BehaviorSubject<PlaybackState> _stateSubject;
+  final StreamController<Duration> _positionStreamController =
+      StreamController<Duration>.broadcast();
   final List<StreamSubscription> _activeSubscriptions = [];
 
   // Crossfade state
@@ -102,8 +105,30 @@ class AudioEngineService {
   bool get isPlaying => _activePlayer.isPlaying;
 
   Stream<PlaybackState> get stateStream => _stateSubject;
+  Stream<Duration> get positionStream => _positionStreamController.stream;
 
   PlaybackState get currentState => _stateSubject.value;
+  PlaybackState get state => _stateSubject.value;
+
+  Future<void> clearQueue() async {
+    await open([]);
+  }
+
+  Future<void> setCrossfadeDuration(Duration duration) async {
+    _crossfadeConfig = _crossfadeConfig.copyWith(duration: duration);
+    _emitState();
+  }
+
+  Future<void> setCrossfadeCurve(CrossfadeCurve curve) async {
+    _crossfadeConfig = _crossfadeConfig.copyWith(curve: curve);
+    _emitState();
+  }
+
+  Future<void> setShuffle(bool enabled) async {
+    if (_queueManager.isShuffled != enabled) {
+      await toggleShuffle();
+    }
+  }
 
   // --------------------------------------------------------------------------
   // Stream Management
@@ -139,6 +164,7 @@ class AudioEngineService {
 
     _activeSubscriptions.add(
       _activePlayer.positionStream.listen((pos) {
+        _positionStreamController.add(pos);
         _stateSubject.add(currentState.copyWith(position: pos));
         _checkCrossfadeTrigger(pos, _activePlayer.duration);
       }),
@@ -250,8 +276,12 @@ class AudioEngineService {
 
   Future<void> stop() async {
     await _abortActiveCrossfade();
-    await _activePlayer.stop();
-    await _standbyPlayer.stop();
+    try {
+      await _activePlayer.stop();
+    } catch (_) {}
+    try {
+      await _standbyPlayer.stop();
+    } catch (_) {}
     _emitState();
   }
 
@@ -347,22 +377,28 @@ class AudioEngineService {
     _fadeTimer = null;
 
     // 1. Terminate any previous background standby fade
-    await _standbyPlayer.setVolume(0.0);
-    await _standbyPlayer.stop();
+    try {
+      await _standbyPlayer.setVolume(0.0);
+      await _standbyPlayer.stop();
+    } catch (_) {}
 
     // 2. Open new track on standby player at full volume
-    await _standbyPlayer.setVolume(_masterVolume);
-    await _standbyPlayer.setRate(_playbackRate);
-    await _standbyPlayer.setPitch(_playbackPitch);
-    await _standbyPlayer.setEqualizer(_equalizer);
-    if (_currentDevice != null) {
-      await _standbyPlayer.setDevice(_currentDevice!);
-    }
+    try {
+      await _standbyPlayer.setVolume(_masterVolume);
+      await _standbyPlayer.setRate(_playbackRate);
+      await _standbyPlayer.setPitch(_playbackPitch);
+      await _standbyPlayer.setEqualizer(_equalizer);
+      if (_currentDevice != null) {
+        await _standbyPlayer.setDevice(_currentDevice!);
+      }
+    } catch (_) {}
     await _standbyPlayer.open(targetTrack.filePath, play: true);
 
     if (_crossfadeGeneration != generation) {
-      await _standbyPlayer.setVolume(0.0);
-      await _standbyPlayer.stop();
+      try {
+        await _standbyPlayer.setVolume(0.0);
+        await _standbyPlayer.stop();
+      } catch (_) {}
       return;
     }
 
@@ -538,11 +574,15 @@ class AudioEngineService {
     _accumulatedFadeDuration = Duration.zero;
 
     // Terminate outgoing player
-    await _activePlayer.setVolume(0.0);
-    await _activePlayer.stop();
+    try {
+      await _activePlayer.setVolume(0.0);
+      await _activePlayer.stop();
+    } catch (_) {}
 
     // Ensure incoming player receives exact master volume
-    await _standbyPlayer.setVolume(_masterVolume);
+    try {
+      await _standbyPlayer.setVolume(_masterVolume);
+    } catch (_) {}
 
     // Only auto-crossfade advances queue index at completion
     if (!_isManualCrossfade) {
@@ -567,9 +607,13 @@ class AudioEngineService {
     _fadeTickStartTime = null;
     _accumulatedFadeDuration = Duration.zero;
 
-    await _activePlayer.setVolume(0.0);
-    await _activePlayer.stop();
-    await _standbyPlayer.setVolume(_masterVolume);
+    try {
+      await _activePlayer.setVolume(0.0);
+      await _activePlayer.stop();
+    } catch (_) {}
+    try {
+      await _standbyPlayer.setVolume(_masterVolume);
+    } catch (_) {}
 
     if (!_isManualCrossfade) {
       _advanceQueueIndex();
@@ -597,10 +641,14 @@ class AudioEngineService {
     _isManualCrossfade = false;
 
     // Reset outgoing player back to full master volume
-    await _activePlayer.setVolume(_masterVolume);
+    try {
+      await _activePlayer.setVolume(_masterVolume);
+    } catch (_) {}
     // Stop and silence preloaded standby player
-    await _standbyPlayer.setVolume(0.0);
-    await _standbyPlayer.stop();
+    try {
+      await _standbyPlayer.setVolume(0.0);
+      await _standbyPlayer.stop();
+    } catch (_) {}
   }
 
   void _advanceQueueIndex() {
@@ -758,6 +806,7 @@ class AudioEngineService {
     }
     await _activePlayer.dispose();
     await _standbyPlayer.dispose();
+    await _positionStreamController.close();
     await _stateSubject.close();
   }
 }

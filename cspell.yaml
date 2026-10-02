@@ -25,6 +25,7 @@ words:
   - APSTUDIO
   - armeabi
   - Ascii
+  - asctime
   - asíncronamente
   - asincrónicamente
   - assetcatalog
@@ -115,6 +116,7 @@ words:
   - facebook
   - fastforge
   - fdroid
+  - FEFF
   - FETCHCONTENT
   - ffmpegmerger
   - ffmpegmetadata
@@ -232,6 +234,7 @@ words:
   - lrclib
   - LRESULT
   - LSTATUS
+  - lyricsovh
   - lzma
   - márcalo
   - Menlo
@@ -399,6 +402,7 @@ words:
   - taglib
   - TARG
   - telemetría
+  - TEMPORARYERROR
   - temurin
   - Testables
   - TEXTINCLUDE

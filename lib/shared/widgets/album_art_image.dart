@@ -2,10 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
-
-export 'package:tachyon/core/services/cover_cache_service.dart'
-    show ThumbnailQuality;
+import 'package:tachyon/core/backend/backend_client.dart';
+import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 
 class AlbumArtImage extends StatelessWidget {
   final String filePath;
@@ -20,11 +18,13 @@ class AlbumArtImage extends StatelessWidget {
 
   static final Set<String> _existingCovers = <String>{};
   static final Set<String> _missingCovers = <String>{};
+  static final Map<String, String> _resolvedPaths = <String, String>{};
 
   @visibleForTesting
   static void clearExistenceCache() {
     _existingCovers.clear();
     _missingCovers.clear();
+    _resolvedPaths.clear();
   }
 
   @Deprecated('Use filePath instead')
@@ -46,14 +46,14 @@ class AlbumArtImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    CoverCacheService? cacheService;
+    TachyonBackendClient? backendClient;
     try {
-      cacheService = Provider.of<CoverCacheService>(context, listen: false);
+      backendClient = Provider.of<TachyonBackendClient>(context, listen: false);
     } catch (_) {
       try {
-        cacheService = Provider.of<CoverCacheService?>(context, listen: false);
+        backendClient = Provider.of<TachyonBackendClient?>(context, listen: false);
       } catch (_) {
-        cacheService = null;
+        backendClient = null;
       }
     }
 
@@ -76,21 +76,16 @@ class AlbumArtImage extends StatelessWidget {
       ),
     );
 
-    if (cacheService == null ||
-        (filePath.isEmpty && (artistName == null || artistName!.trim().isEmpty))) {
+    if (filePath.isEmpty && (artistName == null || artistName!.trim().isEmpty)) {
       if (borderRadius != null) {
         return ClipRRect(borderRadius: borderRadius!, child: fallback);
       }
       return fallback;
     }
 
-    final coverFile = (artistName != null &&
-            artistName!.trim().isNotEmpty &&
-            cacheService.hasCachedArtistCover(artistName!, quality: quality))
-        ? cacheService.getArtistCoverFile(artistName!, quality: quality)
-        : cacheService.getCoverFile(filePath, quality: quality);
+    final String lookupKey = '${quality.name}:$filePath:${artistName ?? ''}';
 
-    if (_missingCovers.contains(coverFile.path)) {
+    if (_missingCovers.contains(lookupKey)) {
       if (borderRadius != null) {
         return ClipRRect(borderRadius: borderRadius!, child: fallback);
       }
@@ -131,26 +126,58 @@ class AlbumArtImage extends StatelessWidget {
       );
     }
 
-    Widget imageWidget;
-    if (_existingCovers.contains(coverFile.path)) {
-      imageWidget = buildImage(coverFile);
-    } else {
-      imageWidget = FutureBuilder<bool>(
-        future: coverFile.exists(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            if (snapshot.data == true) {
-              _existingCovers.add(coverFile.path);
-              return buildImage(coverFile);
-            } else {
-              _missingCovers.add(coverFile.path);
-              return fallback;
+    if (_resolvedPaths.containsKey(lookupKey)) {
+      final cachedPath = _resolvedPaths[lookupKey]!;
+      final image = buildImage(File(cachedPath));
+      if (borderRadius != null) {
+        return ClipRRect(borderRadius: borderRadius!, child: image);
+      }
+      return image;
+    }
+
+    Future<File?> resolveCoverFile() async {
+      if (backendClient != null) {
+        try {
+          String? path;
+          if (artistName != null && artistName!.trim().isNotEmpty && filePath.isEmpty) {
+            path = await backendClient.getArtistCover(
+              artistName!,
+              isHighQuality: quality == ThumbnailQuality.high,
+            );
+          } else if (filePath.isNotEmpty) {
+            path = await backendClient.getThumbnail(
+              filePath,
+              isHighQuality: quality == ThumbnailQuality.high,
+            );
+          }
+          if (path != null) {
+            final f = File(path);
+            if (await f.exists() && await f.length() > 0) {
+              _resolvedPaths[lookupKey] = path;
+              _existingCovers.add(f.path);
+              return f;
             }
           }
-          return fallback;
-        },
-      );
+        } catch (_) {}
+      }
+      _missingCovers.add(lookupKey);
+      return null;
     }
+
+    final Widget imageWidget = FutureBuilder<File?>(
+      future: resolveCoverFile(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done) {
+          final file = snapshot.data;
+          if (file != null) {
+            return buildImage(file);
+          } else {
+            return fallback;
+          }
+        }
+        return fallback;
+      },
+    );
 
     if (borderRadius != null) {
       return ClipRRect(borderRadius: borderRadius!, child: imageWidget);

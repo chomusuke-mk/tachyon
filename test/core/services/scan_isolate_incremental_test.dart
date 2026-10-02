@@ -3,9 +3,9 @@ import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
+import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/services/metadata_extractor.dart';
-import 'package:tachyon/core/services/scan_isolate.dart';
+import 'package:tachyon/core/backend/services/scan_isolate.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
 void main() {

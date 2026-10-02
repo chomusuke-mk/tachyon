@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
-import 'package:tachyon/core/services/metadata_extractor.dart';
+import 'package:tachyon/core/backend/backend.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
@@ -19,24 +17,16 @@ import 'package:tachyon/features/settings/data/settings_repository.dart';
 export 'package:tachyon/features/library/domain/track_sort_option.dart';
 
 class LibraryController extends ChangeNotifier {
-  final AppDatabase _database;
-  final MetadataExtractor _metadataExtractor;
-  final CoverCacheService? _coverCacheService;
-  final SettingsRepository? _settingsRepository;
+  final TachyonBackendClient _backend;
+  final SettingsRepository _settingsRepository;
 
   LibraryController({
-    required this._database,
-    required this._metadataExtractor,
-    this._coverCacheService,
-    SettingsRepository? settingsRepository,
-  })  : _settingsRepository = settingsRepository {
-    if (settingsRepository != null) {
-      _sortOption = settingsRepository.getTrackSortOption();
-      _sortAscending = settingsRepository.getTrackSortAscending();
-    }
+    required this._backend,
+    required this._settingsRepository,
+  }){
+    _sortOption = _settingsRepository.getTrackSortOption();
+    _sortAscending = _settingsRepository.getTrackSortAscending();
   }
-
-  CoverCacheService? get coverCacheService => _coverCacheService;
 
   // ---------------------------------------------------------------------------
   // State Fields
@@ -113,17 +103,13 @@ class LibraryController extends ChangeNotifier {
 
     try {
       final results = await Future.wait([
-        _database.getAllTracks(
-          sortBy: _sortOption.toDbKey(),
-          ascending: _sortAscending,
-        ),
-        _database.getAllAlbums(),
-        _database.getAllArtists(),
-        _database.getAllGenres(),
+        _backend.getTracks(sort: _sortOption, ascending: _sortAscending),
+        _backend.getAlbums(),
+        _backend.getArtists(),
+        _backend.getGenres(),
       ]);
 
-      final rawTracks = results[0] as List<Track>;
-      _tracks = await _populateTrackGenres(rawTracks);
+      _tracks = results[0] as List<Track>;
       _albums = results[1] as List<Album>;
       _artists = results[2] as List<Artist>;
       _genres = results[3] as List<Genre>;
@@ -151,48 +137,23 @@ class LibraryController extends ChangeNotifier {
       }
     }
 
-    _settingsRepository?.setTrackSortOption(_sortOption);
-    _settingsRepository?.setTrackSortAscending(_sortAscending);
+    _settingsRepository.setTrackSortOption(_sortOption);
+    _settingsRepository.setTrackSortAscending(_sortAscending);
 
     _isLoading = true;
     notifyListeners();
 
     try {
-      final rawTracks = await _database.getAllTracks(
-        sortBy: _sortOption.toDbKey(),
+      _tracks = await _backend.getTracks(
+        sort: _sortOption,
         ascending: _sortAscending,
       );
-      _tracks = await _populateTrackGenres(rawTracks);
       _applyFilters();
     } catch (e) {
       _errorMessage = 'Failed to sort tracks: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
-    }
-  }
-
-  Future<List<Track>> _populateTrackGenres(List<Track> tracks) async {
-    try {
-      final genreRows = await _database.database.rawQuery('''
-        SELECT tg.track_id, g.name AS genre_name
-        FROM track_genres tg
-        JOIN genres g ON tg.genre_id = g.id
-      ''');
-      final trackGenreMap = <int, List<String>>{};
-      for (final row in genreRows) {
-        final tId = row['track_id'] as int;
-        final gName = row['genre_name'] as String;
-        (trackGenreMap[tId] ??= []).add(gName);
-      }
-      return tracks.map((t) {
-        if (t.id != null && trackGenreMap.containsKey(t.id)) {
-          return t.copyWith(genres: trackGenreMap[t.id]);
-        }
-        return t;
-      }).toList();
-    } catch (_) {
-      return tracks;
     }
   }
 
@@ -238,8 +199,7 @@ class LibraryController extends ChangeNotifier {
     if (_selectedAlbum != null) {
       result = result.where(
         (t) =>
-            t.albumId == _selectedAlbum!.id ||
-            t.album == _selectedAlbum!.name,
+            t.albumId == _selectedAlbum!.id || t.album == _selectedAlbum!.name,
       );
     }
 
@@ -287,9 +247,7 @@ class LibraryController extends ChangeNotifier {
               .extension(entity.path)
               .toLowerCase()
               .replaceAll('.', '');
-          if (supportedFileExtensions
-              .map((e) => e.toLowerCase().replaceAll('.', ''))
-              .contains(ext)) {
+          if (AppDefaults.supportedAudioExtensions.contains(ext)) {
             currentDirPaths.add(entity.path);
           }
         }
@@ -330,34 +288,32 @@ class LibraryController extends ChangeNotifier {
     _scanProgress = const ScanProgress(phase: ScanPhase.discovering);
     notifyListeners();
 
-    _scanSubscription = _metadataExtractor
-        .scanDirectories(directories)
-        .listen(
-          (progress) {
-            _scanProgress = progress;
-            notifyListeners();
+    _scanSubscription = _backend.scanProgressStream.listen(
+      (progress) {
+        _scanProgress = progress;
+        notifyListeners();
 
-            if (progress.phase == ScanPhase.completed) {
-              loadLibrary();
-            }
-          },
-          onError: (Object err) {
-            _scanProgress = _scanProgress.copyWith(
-              phase: ScanPhase.failed,
-              errorMessage: err.toString(),
-            );
-            notifyListeners();
-          },
-          onDone: () {
-            _scanSubscription = null;
-          },
+        if (progress.phase == ScanPhase.completed) {
+          loadLibrary();
+        }
+      },
+      onError: (Object err) {
+        _scanProgress = _scanProgress.copyWith(
+          phase: ScanPhase.failed,
+          errorMessage: err.toString(),
         );
+        notifyListeners();
+      },
+      onDone: () {
+        _scanSubscription = null;
+      },
+    );
+
+    await _backend.startScanDirectories(directories);
   }
 
   void cancelScan() {
-    // Cancel the isolate-level pipeline via the extractor
-    _metadataExtractor.cancelScan();
-    // Cancel the stream subscription on the controller side
+    _backend.cancelScan();
     _scanSubscription?.cancel();
     _scanSubscription = null;
     if (_scanProgress.isRunning) {
@@ -369,7 +325,7 @@ class LibraryController extends ChangeNotifier {
   Future<void> deleteTrack(Track track) async {
     if (track.id == null) return;
     try {
-      await _database.deleteTrack(track.id!);
+      await _backend.deleteTrack(track.id!);
       await loadLibrary();
     } catch (e) {
       _errorMessage = 'Failed to delete track: $e';
@@ -380,7 +336,7 @@ class LibraryController extends ChangeNotifier {
   /// Removes from the database all tracks whose file path starts with [folderPath].
   Future<void> deleteTracksInFolder(String folderPath) async {
     try {
-      await _database.deleteTracksInFolder(folderPath);
+      await _backend.deleteTracksInFolder(folderPath);
       await loadLibrary();
     } catch (e) {
       _errorMessage = 'Failed to delete tracks in folder: $e';

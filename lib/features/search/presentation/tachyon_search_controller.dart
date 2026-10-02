@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
@@ -9,9 +9,9 @@ import 'package:tachyon/features/library/domain/track.dart';
 enum SearchFilterCategory { all, tracks, albums, artists }
 
 class TachyonSearchController extends ChangeNotifier {
-  final AppDatabase _database;
+  final TachyonBackendClient _backend;
 
-  TachyonSearchController({required this._database});
+  TachyonSearchController({required this._backend});
 
   // ---------------------------------------------------------------------------
   // State Fields
@@ -70,51 +70,10 @@ class TachyonSearchController extends ChangeNotifier {
 
   Future<void> _performSearch(String cleanQuery) async {
     try {
-      final wildcard = '%$cleanQuery%';
-
-      // Concurrent execution of multi-domain searches in SQLite
-      final trackFuture = _database.searchTracks(cleanQuery);
-
-      final albumFuture = _database.database.rawQuery(
-        '''
-        SELECT al.id, al.name, al.artist_id, al.artist_name, al.year, COUNT(t.id) AS track_count
-        FROM albums al
-        LEFT JOIN tracks t ON t.album_id = al.id
-        WHERE al.name LIKE ? OR al.artist_name LIKE ?
-        GROUP BY al.id
-        ORDER BY al.name COLLATE NOCASE ASC
-        LIMIT 25
-      ''',
-        [wildcard, wildcard],
-      );
-
-      final artistFuture = _database.database.rawQuery(
-        '''
-        SELECT ar.id, ar.name, COUNT(DISTINCT t.id) AS track_count, COUNT(DISTINCT al.id) AS album_count
-        FROM artists ar
-        LEFT JOIN tracks t ON t.artist_id = ar.id
-        LEFT JOIN albums al ON al.artist_id = ar.id
-        WHERE ar.name LIKE ?
-        GROUP BY ar.id
-        ORDER BY ar.name COLLATE NOCASE ASC
-        LIMIT 25
-      ''',
-        [wildcard],
-      );
-
-      final results = await Future.wait([
-        trackFuture,
-        albumFuture,
-        artistFuture,
-      ]);
-
-      _matchedTracks = results[0] as List<Track>;
-      _matchedAlbums = (results[1] as List<Map<String, dynamic>>)
-          .map((r) => Album.fromDbMap(r))
-          .toList();
-      _matchedArtists = (results[2] as List<Map<String, dynamic>>)
-          .map((r) => Artist.fromDbMap(r))
-          .toList();
+      final results = await _backend.search(cleanQuery);
+      _matchedTracks = (results['tracks'] as List? ?? []).cast<Track>();
+      _matchedAlbums = (results['albums'] as List? ?? []).cast<Album>();
+      _matchedArtists = (results['artists'] as List? ?? []).cast<Artist>();
     } catch (e) {
       debugPrint('Search query failed: $e');
     } finally {

@@ -1,10 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:miniaudio_player/miniaudio_player.dart' show AudioDevice, Equalizer;
+import 'package:miniaudio_player/miniaudio_player.dart'
+    show AudioDevice, Equalizer;
 
+import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/audio_engine_service.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
@@ -12,16 +13,21 @@ import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 
 class PlaybackController extends ChangeNotifier {
-  final AudioEngineService _audioEngine;
-  final AppDatabase _database;
+  final TachyonBackendClient _backend;
   final SettingsRepository _settingsRepository;
 
   late StreamSubscription<PlaybackState> _engineSubscription;
+  StreamSubscription<Duration>? _positionSubscription;
   PlaybackState _state = const PlaybackState.initial();
 
+  Equalizer _equalizer = Equalizer.flat;
+  AudioDevice? _currentDevice;
+  bool _isInfiniteMixEnabled = false;
+
   // Scoped high-frequency position notifier
-  final ValueNotifier<Duration> _positionNotifier =
-      ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<Duration> _positionNotifier = ValueNotifier<Duration>(
+    Duration.zero,
+  );
 
   // Persistence throttling state
   DateTime? _lastPersistenceTime;
@@ -42,13 +48,18 @@ class PlaybackController extends ChangeNotifier {
   bool _historyLoggedForCurrentTrack = false;
 
   PlaybackController({
-    required AudioEngineService audioEngineService,
-    required this._database,
+    required this._backend,
     required this._settingsRepository,
-  }) : _audioEngine = audioEngineService {
-    _state = _audioEngine.currentState;
-    _positionNotifier.value = _state.position;
-    _engineSubscription = _audioEngine.stateStream.listen((newState) {
+  }) {
+    _backend.getPlaybackState().then((s) {
+      if (!_isDisposed) {
+        _state = s;
+        _positionNotifier.value = s.position;
+        notifyListeners();
+      }
+    });
+
+    _engineSubscription = _backend.playbackStateStream.listen((newState) {
       final oldState = _state;
       _state = newState;
 
@@ -64,6 +75,12 @@ class PlaybackController extends ChangeNotifier {
       // 3. Notify listeners ONLY on discrete state changes
       if (_hasDiscreteStateChanged(oldState, newState)) {
         notifyListeners();
+      }
+    });
+
+    _positionSubscription = _backend.positionStream.listen((pos) {
+      if (_positionNotifier.value != pos) {
+        _positionNotifier.value = pos;
       }
     });
   }
@@ -111,7 +128,7 @@ class PlaybackController extends ChangeNotifier {
     var startIndex = queueItems.indexWhere((q) => q.filePath == track.filePath);
     if (startIndex == -1) startIndex = 0;
 
-    await _audioEngine.open(
+    await _backend.open(
       queueItems,
       index: startIndex,
       play: true,
@@ -127,7 +144,7 @@ class PlaybackController extends ChangeNotifier {
     if (tracks.isEmpty) return;
     final queueItems = tracks.map((t) => QueueItem.fromTrack(t)).toList();
 
-    await _audioEngine.open(
+    await _backend.open(
       queueItems,
       index: startIndex,
       play: true,
@@ -137,63 +154,62 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> playNext(Track track) async {
     final item = QueueItem.fromTrack(track);
-    await _audioEngine.insertNext(item);
+    await _backend.insertNext(item);
   }
 
   Future<void> addToQueue(Track track) async {
     final item = QueueItem.fromTrack(track);
-    await _audioEngine.append([item]);
+    await _backend.append([item]);
   }
 
   Future<void> appendTracks(List<Track> tracks) async {
     if (tracks.isEmpty) return;
     final items = tracks.map((t) => QueueItem.fromTrack(t)).toList();
-    await _audioEngine.append(items);
+    await _backend.append(items);
   }
 
   Future<void> removeFromQueue(int index) async {
-    await _audioEngine.remove(index);
+    await _backend.removeQueueItem(index);
   }
 
   Future<void> reorderQueue(int from, int to) async {
-    await _audioEngine.reorder(from, to);
+    await _backend.reorderQueue(from, to);
   }
 
   Future<void> clearQueue() async {
-    await _audioEngine.open([]);
+    await _backend.clearQueue();
   }
 
   Future<void> skipToQueueIndex(int index) async {
     if (index < 0 || index >= _state.queue.length) return;
-    await _audioEngine.skipToIndex(index);
+    await _backend.skipToIndex(index);
   }
 
   Future<void> playTrackAtIndex(int index) => skipToQueueIndex(index);
 
-  Equalizer get equalizer => _audioEngine.equalizer;
-  AudioDevice? get currentDevice => _audioEngine.currentDevice;
+  Equalizer get equalizer => _equalizer;
+  AudioDevice? get currentDevice => _currentDevice;
 
   Future<void> setEqualizer(Equalizer equalizer) async {
-    await _audioEngine.setEqualizer(equalizer);
+    _equalizer = equalizer;
+    await _backend.setEqualizer(equalizer);
     notifyListeners();
   }
 
-  Future<List<AudioDevice>> getAudioDevices() => _audioEngine.getAudioDevices();
+  Future<List<AudioDevice>> getAudioDevices() => _backend.getAudioDevices();
 
   Future<bool> setAudioDevice(AudioDevice device) async {
-    final res = await _audioEngine.setDevice(device);
+    _currentDevice = device;
+    await _backend.setOutputDevice(device);
     notifyListeners();
-    return res;
+    return true;
   }
 
-  bool get isInfiniteMixEnabled {
-    final engine = _audioEngine;
-    return engine.queueManager.infiniteMixEnabled;
-  }
+  bool get isInfiniteMixEnabled => _isInfiniteMixEnabled;
 
   void setInfiniteMix(bool enabled) {
-    final engine = _audioEngine;
-    engine.queueManager.setInfiniteMix(enabled);
+    _isInfiniteMixEnabled = enabled;
+    _backend.setInfiniteMix(enabled);
     notifyListeners();
   }
 
@@ -204,8 +220,8 @@ class PlaybackController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Transport Controls
   // ---------------------------------------------------------------------------
-  Future<void> play() => _audioEngine.play();
-  Future<void> pause() => _audioEngine.pause();
+  Future<void> play() => _backend.play();
+  Future<void> pause() => _backend.pause();
 
   Future<void> playOrPause() async {
     if (_state.playing) {
@@ -215,30 +231,29 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Future<void> stop() => _audioEngine.stop();
-  Future<void> next() => _audioEngine.next();
-  Future<void> previous() => _audioEngine.previous();
-  Future<void> seek(Duration pos) => _audioEngine.seek(pos);
+  Future<void> stop() => _backend.stop();
+  Future<void> next() => _backend.next();
+  Future<void> previous() => _backend.previous();
+  Future<void> seek(Duration pos) => _backend.seek(pos);
 
-  Future<void> setVolume(double vol) => _audioEngine.setVolume(vol);
-  Future<void> setRate(double rate) => _audioEngine.setRate(rate);
-  Future<void> setPitch(double pitch) => _audioEngine.setPitch(pitch);
+  Future<void> setVolume(double vol) => _backend.setVolume(vol);
+  Future<void> setRate(double rate) => _backend.setRate(rate);
+  Future<void> setPitch(double pitch) => _backend.setPitch(pitch);
 
-  Future<void> toggleShuffle() => _audioEngine.toggleShuffle();
-  Future<void> setLoopMode(Loop loop) => _audioEngine.setLoopMode(loop);
+  Future<void> toggleShuffle() => _backend.setShuffle(!_state.shuffle);
+  Future<void> setLoopMode(Loop loop) => _backend.setLoopMode(loop);
 
   Future<void> toggleLoopMode() async {
     final nextMode = _state.loop.next();
-    await _audioEngine.setLoopMode(nextMode);
+    await _backend.setLoopMode(nextMode);
   }
 
   Future<void> cycleLoopMode() => toggleLoopMode();
 
   Future<void> setCrossfadeConfig(CrossfadeConfig config) =>
-      _audioEngine.setCrossfadeConfig(config);
+      _backend.setCrossfadeConfig(config);
 
-  Future<void> setSkipSilence(bool enabled) =>
-      _audioEngine.setSkipSilence(enabled);
+  Future<void> setSkipSilence(bool enabled) => _backend.setSkipSilence(enabled);
 
   // ---------------------------------------------------------------------------
   // History Logging & State Persistence Helpers
@@ -260,7 +275,9 @@ class PlaybackController extends ChangeNotifier {
         _historyLoggedForCurrentTrack = true;
         final trackId = newState.currentTrack!.trackId;
         if (trackId != null) {
-          _database.addTrackToPlaylist(AppDatabase.historyPlaylistId, trackId);
+          _backend.addTracksToPlaylist(AppDatabase.historyPlaylistId, [
+            trackId,
+          ]);
         }
       }
     }
@@ -298,7 +315,8 @@ class PlaybackController extends ChangeNotifier {
     final current = newState.currentTrack;
     if (current == null) return;
 
-    final isTrackTransition = oldState.currentTrack?.filePath != current.filePath;
+    final isTrackTransition =
+        oldState.currentTrack?.filePath != current.filePath;
     final isPauseTransition = oldState.playing && !newState.playing;
     final isSeekTransition =
         (newState.position - oldState.position).abs() >
@@ -312,7 +330,10 @@ class PlaybackController extends ChangeNotifier {
         isStopOrCompleted;
 
     if (shouldForceWrite) {
-      _flushStatePersistence(current.filePath, newState.position.inMilliseconds);
+      _flushStatePersistence(
+        current.filePath,
+        newState.position.inMilliseconds,
+      );
       return;
     }
 
@@ -321,7 +342,10 @@ class PlaybackController extends ChangeNotifier {
       final now = DateTime.now();
       if (_lastPersistenceTime == null ||
           now.difference(_lastPersistenceTime!) >= _persistenceThrottle) {
-        _flushStatePersistence(current.filePath, newState.position.inMilliseconds);
+        _flushStatePersistence(
+          current.filePath,
+          newState.position.inMilliseconds,
+        );
       }
     }
   }
@@ -358,6 +382,7 @@ class PlaybackController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _engineSubscription.cancel();
+    _positionSubscription?.cancel();
     if (_state.currentTrack != null) {
       _settingsRepository.setLastPlayed(
         filePath: _state.currentTrack!.filePath,

@@ -3,9 +3,9 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
-import 'package:tachyon/core/services/audio_engine_service.dart';
-import 'package:tachyon/core/services/audio_player_adapter.dart';
-import 'package:tachyon/core/services/queue_manager.dart';
+import 'package:tachyon/core/backend/services/audio_engine_service.dart';
+import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
+import 'package:tachyon/core/backend/services/queue_manager.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';

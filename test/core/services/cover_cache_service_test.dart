@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
-import 'package:tachyon/core/services/cover_cache_service.dart';
+import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

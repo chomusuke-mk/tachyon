@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
-import 'package:tachyon/core/services/audio_player_adapter.dart';
+import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
 
 /// Helper to generate a valid PCM 16-bit WAV file with a pure sine tone.
 File _createTestWavFile(String path, {int durationSeconds = 1}) {

@@ -7,37 +7,29 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/services/cover_cache_service.dart';
-import 'package:tachyon/core/services/scan_isolate.dart';
+import 'package:tachyon/core/backend/services/cover_cache_service.dart';
+import 'package:tachyon/core/backend/services/scan_isolate.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
-export 'package:tachyon/core/services/scan_isolate.dart'
+export 'package:tachyon/core/backend/services/scan_isolate.dart'
     show DiscoveredAudioFile, TrackFileMeta;
 
-/// Manages spawning the scan Isolate and bridging its progress events and
-/// track batches back to the main isolate.
+/// Service running in the Core Service Isolate responsible for metadata
+/// orchestration, single-file tag extraction, thumbnail resolution, and full library scanning.
 ///
-/// ### Architecture
-/// The scan isolate performs CPU-heavy work (file discovery, `readMetadata`,
-/// cover caching) and communicates results to the main isolate via a typed
-/// message protocol over a single [ReceivePort]:
-///
-/// ```
-///  {'_type': 'progress', ...ScanProgress fields}  → emit to progress stream
-///  {'_type': 'batch',    'tracks': [Track.toJson(), ...]}  → DB insert (main)
-///  {'_type': 'done',     'progress': ScanProgress.toJson()}  → final stats
-/// ```
-///
-/// All SQLite writes stay in the main isolate so there is never more than one
-/// writer, avoiding the "database is locked" error that arises when a second
-/// isolate opens its own connection concurrently.
-class MetadataExtractor {
+/// Follows a strict Cache-First strategy:
+/// 1. Queries database or disk cache first (immediate return, 0 CPU).
+/// 2. If missing, delegates single-file operations to an ephemeral worker via [Isolate.run].
+/// 3. Runs multi-file directory scans in a dedicated isolate via [Isolate.spawn].
+/// 4. Workers write files directly to disk and return only string paths.
+///    Zero byte buffers are passed between isolates.
+class MetadataService {
   final AppDatabase database;
   final CoverCacheService coverCacheService;
   final int? customWorkerCount;
 
-  MetadataExtractor({
+  MetadataService({
     required this.database,
     required this.coverCacheService,
     this.customWorkerCount,
@@ -50,64 +42,102 @@ class MetadataExtractor {
   SendPort? _cancelPort;
 
   // ---------------------------------------------------------------------------
-  // Public: extractMetadata – single-file convenience (runs on caller isolate)
+  // Single-file operations (Isolate.run)
   // ---------------------------------------------------------------------------
 
-  /// Extracts metadata for a single [filePath]. Useful for one-off queries.
+  /// Extracts metadata for a single [filePath] in a dedicated worker isolate
+  /// via [Isolate.run]. Does not write to SQLite (pure extraction).
   Future<Track?> extractMetadata(String filePath) async {
     final file = File(filePath);
     if (!file.existsSync() && !await file.exists()) return null;
 
-    int size = 0;
-    int modifiedAt = 0;
-    try {
-      final stat = await file.stat();
-      size = stat.size;
-      modifiedAt = stat.modified.millisecondsSinceEpoch;
-    } catch (_) {}
-
-    try {
-      final metadata = readMetadata(file, getImage: false);
-
-      if (!coverCacheService.hasCachedCover(file.path)) {
-        try {
-          unawaited(coverCacheService.saveCacheCover(
-            file.path,
-            artistName: metadata.artist,
-            albumName: metadata.album,
-          ));
-        } catch (_) {}
-      }
-
-      return Track(
-        filePath: filePath,
-        title: metadata.title ?? p.basenameWithoutExtension(filePath),
-        album: metadata.album,
-        artist: metadata.artist,
-        artists: metadata.performers,
-        albumArtist: metadata.albumArtist,
-        trackNumber: metadata.trackNumber,
-        discNumber: metadata.discNumber,
-        year: metadata.year?.year,
-        durationMs: metadata.duration?.inMilliseconds ?? 0,
-        bitrate: metadata.bitrate,
-        sampleRate: metadata.sampleRate,
-        channels: null,
-        codec: null,
-        fileSize: size,
-        modifiedAt: modifiedAt,
-        lyrics: metadata.lyrics,
-        genres: metadata.genres,
+    final cachePath = coverCacheService.cacheDirectory.path;
+    return await Isolate.run(() async {
+      final coverService = CoverCacheService(cacheDirectory: Directory(cachePath));
+      return await extractTrackMetadata(
+        filePath,
+        coverCacheService: coverService,
+        awaitCover: true,
       );
-    } catch (_) {
-      return null;
+    });
+  }
+
+  /// Retrieves metadata for a file following a Cache-First strategy:
+  /// 1. Checks SQLite DB first (immediate return, 0 CPU).
+  /// 2. If absent, extracts via a worker isolate using [Isolate.run].
+  /// 3. Persists into SQLite DB on the calling isolate.
+  /// 4. Returns the track.
+  Future<Track?> getMetadata(String filePath) async {
+    final existing = await database.getTrackByFilePath(filePath);
+    if (existing != null) {
+      return existing;
     }
+
+    final track = await extractMetadata(filePath);
+    if (track != null) {
+      await database.insertTrack(track);
+    }
+    return track;
+  }
+
+  /// Retrieves the thumbnail image path for a file following a Cache-First strategy:
+  /// 1. Checks disk cache first (immediate return, 0 CPU).
+  /// 2. If absent, delegates image extraction, square center-cropping, and
+  ///    dual-quality JPEG encoding to a worker isolate via [Isolate.run].
+  /// 3. Updates track cover status in SQLite DB.
+  /// 4. Returns string path (never raw bytes across isolate boundary).
+  Future<String?> getThumbnail(
+    String filePath, {
+    bool isHighQuality = false,
+  }) async {
+    final quality = isHighQuality ? ThumbnailQuality.high : ThumbnailQuality.low;
+
+    // 1. Return immediately if cached image file exists on disk
+    if (coverCacheService.hasCachedCover(filePath, quality: quality)) {
+      final file = coverCacheService.getCoverFile(filePath, quality: quality);
+      return file.path;
+    }
+
+    // 2. Delegate image extraction and disk writing to a worker isolate via Isolate.run
+    final cacheDirPath = coverCacheService.cacheDirectory.path;
+    final paths = await Isolate.run(
+      () => extractAndSaveThumbnailWorker(
+        filePath: filePath,
+        cacheDirPath: cacheDirPath,
+      ),
+    );
+
+    if (paths != null) {
+      await database.updateTrackCoverStatus(filePath, true);
+      return isHighQuality ? paths['hq'] : paths['lq'];
+    }
+
+    return null;
+  }
+
+  /// Returns cached artist cover file path if available.
+  Future<String?> getArtistCover(
+    String artistName, {
+    bool isHighQuality = false,
+  }) async {
+    final quality = isHighQuality ? ThumbnailQuality.high : ThumbnailQuality.low;
+    if (coverCacheService.hasCachedArtistCover(artistName, quality: quality)) {
+      final file = coverCacheService.getArtistCoverFile(artistName, quality: quality);
+      return file.path;
+    }
+    return null;
+  }
+
+  /// Clears thumbnail disk cache directory.
+  Future<void> clearCoverCache() async {
+    await coverCacheService.clearCache();
   }
 
   // ---------------------------------------------------------------------------
-  // Public: discoverFiles – convenience wrapper (runs on caller isolate)
+  // Multi-file operations (Isolate.spawn)
   // ---------------------------------------------------------------------------
 
+  /// Convenience wrapper to discover audio files recursively on the caller isolate.
   Stream<DiscoveredAudioFile> discoverFiles(
     List<String> directories, {
     CancellationToken? cancellationToken,
@@ -115,12 +145,8 @@ class MetadataExtractor {
     return _discoverFilesLocal(directories, cancellationToken: cancellationToken);
   }
 
-  // ---------------------------------------------------------------------------
-  // Public: scanDirectories – spawns the Isolate
-  // ---------------------------------------------------------------------------
-
-  /// Starts the full scan pipeline in a dedicated [Isolate] and returns a
-  /// [Stream<ScanProgress>].
+  /// Starts the full scan pipeline in a dedicated [Isolate] via [Isolate.spawn]
+  /// and returns a [Stream<ScanProgress>].
   Stream<ScanProgress> scanDirectories(
     List<String> directories, {
     CancellationToken? cancellationToken,
@@ -130,7 +156,7 @@ class MetadataExtractor {
     return controller.stream;
   }
 
-  /// Cancels any active scan.
+  /// Cancels any active library scan isolate.
   void cancelScan() {
     _cancelPort?.send('cancel');
     _cancelPort = null;
@@ -139,7 +165,7 @@ class MetadataExtractor {
   }
 
   // ---------------------------------------------------------------------------
-  // Private: isolate orchestration
+  // Private: Isolate.spawn orchestration
   // ---------------------------------------------------------------------------
 
   Future<void> _spawnScanIsolate(
@@ -159,7 +185,7 @@ class MetadataExtractor {
     try {
       existingMetas = await database.getExistingTrackMetas();
     } catch (e) {
-      debugPrint('[MetadataExtractor] Failed to load existing track metas: $e');
+      debugPrint('[MetadataService] Failed to load existing track metas: $e');
     }
 
     if (cancellationToken?.isCancelled ?? false) {
@@ -214,18 +240,16 @@ class MetadataExtractor {
 
         switch (type) {
           case 'progress':
-            // Strip the internal '_type' key before deserialising
             final progressMap = Map<String, dynamic>.from(message)
               ..remove('_type');
             try {
               final progress = ScanProgress.fromJson(progressMap);
               if (!controller.isClosed) controller.add(progress);
             } catch (e) {
-              debugPrint('[MetadataExtractor] Failed to parse progress: $e');
+              debugPrint('[MetadataService] Failed to parse progress: $e');
             }
 
           case 'batch':
-            // Deserialise tracks and insert via the main-isolate DB connection
             try {
               final rawList = message['tracks'] as List<dynamic>;
               final tracks = rawList
@@ -234,21 +258,20 @@ class MetadataExtractor {
               if (tracks.isNotEmpty) {
                 pendingInserts.add(
                   database.batchInsertTracks(tracks).catchError((Object err) {
-                    debugPrint('[MetadataExtractor] batchInsert error: $err');
+                    debugPrint('[MetadataService] batchInsert error: $err');
                   }),
                 );
               }
             } catch (e) {
-              debugPrint('[MetadataExtractor] Failed to process batch: $e');
+              debugPrint('[MetadataService] Failed to process batch: $e');
             }
 
           case 'done':
-            // Wait for all pending DB inserts, then emit the final progress
             try {
               await Future.wait(pendingInserts);
               await database.cleanOrphanAlbumsAndArtists();
             } catch (e) {
-              debugPrint('[MetadataExtractor] Insert error during done: $e');
+              debugPrint('[MetadataService] Insert error during done: $e');
             }
             try {
               final progressMap = Map<String, dynamic>.from(
@@ -257,7 +280,7 @@ class MetadataExtractor {
               final finalProgress = ScanProgress.fromJson(progressMap);
               if (!controller.isClosed) controller.add(finalProgress);
             } catch (e) {
-              debugPrint('[MetadataExtractor] Failed to parse done progress: $e');
+              debugPrint('[MetadataService] Failed to parse done progress: $e');
             }
             progressPort.close();
             if (!controller.isClosed) controller.close();
@@ -266,7 +289,7 @@ class MetadataExtractor {
             _cancelPort = null;
 
           default:
-            debugPrint('[MetadataExtractor] Unknown message type: $type');
+            debugPrint('[MetadataService] Unknown message type: $type');
         }
       },
       onError: (Object err) {
@@ -295,6 +318,94 @@ class MetadataExtractor {
   }
 }
 
+// =============================================================================
+// SHARED WORKER FUNCTIONS (Used by Isolate.run and scan_isolate.dart)
+// =============================================================================
+
+/// Parses audio tags and metadata for a single file.
+/// If [coverCacheService] is provided and artwork is not yet cached, saves
+/// dual-quality artwork to disk.
+Future<Track?> extractTrackMetadata(
+  String filePath, {
+  CoverCacheService? coverCacheService,
+  bool awaitCover = false,
+}) async {
+  final file = File(filePath);
+  if (!file.existsSync() && !await file.exists()) return null;
+
+  int size = 0;
+  int modifiedAt = 0;
+  try {
+    final stat = await file.stat();
+    size = stat.size;
+    modifiedAt = stat.modified.millisecondsSinceEpoch;
+  } catch (_) {}
+
+  try {
+    final metadata = readMetadata(file, getImage: false);
+
+    if (coverCacheService != null && !coverCacheService.hasCachedCover(file.path)) {
+      try {
+        final future = coverCacheService.saveCacheCover(
+          file.path,
+          artistName: metadata.artist,
+          albumName: metadata.album,
+        );
+        if (awaitCover) {
+          await future;
+        } else {
+          unawaited(future);
+        }
+      } catch (_) {}
+    }
+
+    return Track(
+      filePath: filePath,
+      title: metadata.title ?? p.basenameWithoutExtension(filePath),
+      album: metadata.album,
+      artist: metadata.artist,
+      artists: metadata.performers,
+      albumArtist: metadata.albumArtist,
+      trackNumber: metadata.trackNumber,
+      discNumber: metadata.discNumber,
+      year: metadata.year?.year,
+      durationMs: metadata.duration?.inMilliseconds ?? 0,
+      bitrate: metadata.bitrate,
+      sampleRate: metadata.sampleRate,
+      channels: null,
+      codec: null,
+      fileSize: size,
+      modifiedAt: modifiedAt,
+      lyrics: metadata.lyrics,
+      genres: metadata.genres,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Worker function that extracts artwork from file or folder using [CoverCacheService],
+/// performs centered square crop (minDim x minDim), saves 80x80 LQ and max 500x500 HQ
+/// to disk, and returns the disk file paths. Never returns raw bytes.
+Future<Map<String, String>?> extractAndSaveThumbnailWorker({
+  required String filePath,
+  required String cacheDirPath,
+}) async {
+  final file = File(filePath);
+  if (!file.existsSync()) return null;
+
+  final coverCache = CoverCacheService(cacheDirectory: Directory(cacheDirPath));
+  final hqFile = await coverCache.saveCacheCover(filePath);
+  if (hqFile != null && hqFile.existsSync() && hqFile.lengthSync() > 0) {
+    final lqFile = coverCache.getCoverFile(filePath, quality: ThumbnailQuality.low);
+    return {
+      'hq': hqFile.path,
+      'lq': lqFile.path,
+    };
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Local file discovery (runs on caller isolate; used by discoverFiles helper)
 // ---------------------------------------------------------------------------
@@ -317,12 +428,12 @@ Stream<DiscoveredAudioFile> _discoverFilesLocal(
     try {
       entityStream = dir.list(recursive: true, followLinks: false);
     } catch (e) {
-      debugPrint('[MetadataExtractor] Unable to list directory $dirPath: $e');
+      debugPrint('[MetadataService] Unable to list directory $dirPath: $e');
       continue;
     }
 
     await for (final entity in entityStream.handleError((Object e) {
-      debugPrint('[MetadataExtractor] Error accessing filesystem entity: $e');
+      debugPrint('[MetadataService] Error accessing filesystem entity: $e');
     })) {
       if (cancellationToken?.isCancelled ?? false) break;
       if (entity is! File) continue;
@@ -347,4 +458,3 @@ Stream<DiscoveredAudioFile> _discoverFilesLocal(
     }
   }
 }
-
