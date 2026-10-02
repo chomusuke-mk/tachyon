@@ -49,6 +49,9 @@ words:
   - Buildables
   - buildlog
   - cancion
+  - carátula
+  - carátulas
+  - Carátulas
   - centis
   - cfbundle
   - cffi
@@ -140,6 +143,7 @@ words:
   - gradlew
   - greek
   - GWLP
+  - hardcodeadas
   - hardcodeados
   - healthcheck
   - herunterladen
@@ -156,6 +160,7 @@ words:
   - ifdef
   - ifndef
   - ignoreversion
+  - impleméntalo
   - inappwebview
   - includedeb
   - Inclusividad
@@ -388,6 +393,7 @@ words:
   - SUBLANG
   - Submenús
   - subosito
+  - subprocesos
   - subproyecto
   - Subproyectos
   - Subtags
@@ -418,6 +424,7 @@ words:
   - tombstoned
   - twofactor
   - typedef
+  - ultrarrápida
   - ultrarrápido
   - uncompromised
   - unhide

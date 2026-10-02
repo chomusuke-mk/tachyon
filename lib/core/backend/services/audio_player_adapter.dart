@@ -14,7 +14,7 @@ class AudioPlayerAdapter {
 
   /// Ensures native miniaudio_player platform bindings are initialized once.
   static Future<void> ensureInitialized({
-    MiniaudioLogLevel logLevel = MiniaudioLogLevel.info,
+    MiniaudioLogLevel logLevel = MiniaudioLogLevel.warning,
   }) async {
     MiniaudioPlayer.config(logLevel: logLevel);
   }

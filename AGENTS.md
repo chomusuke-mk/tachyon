@@ -25,7 +25,7 @@
 
 El proyecto Tachyon opera bajo un desacoplamiento estricto entre el hilo visual y la capa de servicios de fondo:
 
-```
+```raw
 ┌──────────────────────────────────────────────────────────┐
 │                   MAIN ISOLATE (UI)                      │
 │  - Widgets Material 3, Temas, Animaciones                │
@@ -49,6 +49,7 @@ El proyecto Tachyon opera bajo un desacoplamiento estricto entre el hilo visual 
 ```
 
 ### 1. Main Isolate (Hilo Principal de UI)
+
 - **Exclusivamente visual y reactivo:** Solo se encarga de renderizar la interfaz de usuario, escuchar cambios de estado y capturar la interacción del usuario.
 - **Restricciones estrictas en el Main Isolate:**
   - **Cero acceso a Base de Datos:** No instancia ni consulta `AppDatabase` directamente.
@@ -58,6 +59,7 @@ El proyecto Tachyon opera bajo un desacoplamiento estricto entre el hilo visual 
 - **Comunicación con el Backend:** Se realiza exclusivamente a través de la abstracción `TachyonBackendClient` (con `DirectTachyonBackendClient` para pruebas unitarias y cliente basado en puertos para el runtime).
 
 ### 2. Core Backend Host (Isolate de Servicios)
+
 - Corre en un isolate dedicado, centralizando toda la lógica de negocio pesada:
   1. **Persistencia SQLite Centralizada (`AppDatabase`):** Todas las lecturas y escrituras relacionales se ejecutan exclusivamente en este isolate, garantizando concurrencia segura y eliminando bloqueos (`database is locked`).
   2. **Motor de Audio de Bajo Nivel (`AudioEngineService`):** Orquesta dos reproductores de audio (`miniaudio_player` con FFI nativo) mediante un ticker de 25 ms para crossfade real y fluido con curvas Equal-Power o Linear.
@@ -81,23 +83,28 @@ El proyecto Tachyon opera bajo un desacoplamiento estricto entre el hilo visual 
 El sistema de letras de Tachyon está diseñado bajo una arquitectura jerárquica con caché persistente y manejo defensivo de APIs remotas:
 
 ### 1. Jerarquía Estricta de Búsqueda
+
 1. **Letras embebidas:** Tags de audio (USLT, LYRICS) extraídas por `audio_metadata_reader`.
 2. **Archivo local `.lrc`:** Archivos `.lrc` o `.LRC` contiguos a la pista en su directorio (`<nombre_archivo>.lrc`).
 3. **API Primaria (`lrclib.net`):** Letras sincronizadas y en texto plano vía `GET /api/get` (con título, artista, álbum y duración con margen $\pm 2$ s).
 4. **API Secundaria / Respaldo (`lyrics.ovh`):** Letras en texto plano sin marcas de tiempo vía `GET https://api.lyrics.ovh/v1/{artist}/{title}`.
 
 ### 2. Disparador Exclusivo Bajo Demanda
+
 - La búsqueda y consulta de letras a las fuentes **está delegada al ciclo de vida de renderizado del widget `LyricsView`** (cuando se monta en pantalla porque el usuario activó `_showLyrics == true` en `NowPlayingScreen`).
-- `LyricsController` **no** debe buscar letras de forma automática ni anticipada en segundo plano simplemente porque una canción empiece a reproducirse en la vista estándar de reproducción (*Play View* con carátula y controles, `_showLyrics == false`).
+- `LyricsController` **no** debe buscar letras de forma automática ni anticipada en segundo plano simplemente porque una canción empiece a reproducirse en la vista estándar de reproducción (_Play View_ con carátula y controles, `_showLyrics == false`).
 - Al montarse o estar visible `LyricsView`, este solicita la carga de letras para la pista activa. Si la canción cambia mientras `LyricsView` permanece en pantalla, este mismo solicita la letra de la nueva canción.
 
 ### 3. Persistencia con Estado por Origen en SQLite
+
 En la tabla `lyrics_source_cache` se registra el resultado individual por cada fuente (`embedded`, `lrc_file`, `lrclib`, `lyrics_ovh`):
+
 - `FOUND`: Letra encontrada y guardada.
 - `NOT_FOUND`: La fuente confirmó que la letra no existe (ej. HTTP 404 en `lrclib.net`). Se guarda para no volver a solicitar esa canción a ese servicio.
 - `TEMPORARY_ERROR`: Si la petición falló por error de red, respuesta 5xx o rate limit (HTTP 429), **no** se marca como `NOT_FOUND`, permitiendo reintentos futuros.
 
 ### 4. Rate Limiting, Umbrales y Control de Concurrencia
+
 - **lrclib.net:** Intervalo mínimo de 500 ms entre peticiones consecutivas e identificación de cliente mediante cabecera `User-Agent`.
 - **Manejo de HTTP 429 (`Retry-After`):**
   - Si el tiempo de espera es $\le 10$ segundos: Mostrar banner o mensaje en pantalla con cuenta regresiva en vivo y reintentar automáticamente al completarse el tiempo.
@@ -112,19 +119,23 @@ En la tabla `lyrics_source_cache` se registra el resultado individual por cada f
 Al implementar una nueva funcionalidad o modificar una existente, respeta el siguiente flujo arquitectónico por capas:
 
 ### 1. Capa de Datos (SQLite)
+
 - Si la funcionalidad requiere persistencia relacional, modifica `AppDatabase` (`lib/core/database/app_database.dart`).
 - Agrega las consultas correspondientes y migraciones de esquema seguras.
 
 ### 2. Capa de Servicios Backend
+
 - Ubica la lógica en `lib/core/backend/services/`.
 - No mezcles lógica de UI ni imports de Flutter visual en esta capa.
 
 ### 3. Protocolo de Comunicación
+
 - Define los mensajes/comandos en `backend_protocol.dart`.
 - Agrega el handler correspondiente en `CoreBackendHost` (`backend_host.dart`).
 - Expón el método correspondiente en `TachyonBackendClient` (`backend_client.dart`) e impleméntalo en `DirectTachyonBackendClient` (`direct_backend_client.dart`) para tests.
 
 ### 4. Capa de Presentación (UI y Controladores)
+
 - **Invariante Crítica:** **NO alteres arbitrariamente los constructores de los controladores existentes** en `lib/features/*/presentation/` para evitar romper la inyección de dependencias en `main.dart` o en las pruebas.
 - Los controladores extienden de `ChangeNotifier` y consumen `TachyonBackendClient`.
 - Flujo unidireccional: la UI observa el estado mediante `context.watch<T>()` o `Selector`, y despacha acciones mediante `context.read<T>()`.
@@ -135,7 +146,7 @@ Al implementar una nueva funcionalidad o modificar una existente, respeta el sig
 ## 🌐 Internacionalización Obligatoria (i18n)
 
 > [!IMPORTANT]
-> **REGLA ESTRICTA: CERO cadenas de texto hardcodeadas (*zero hardcoded strings*) en widgets, pantallas, diálogos, tooltips o mensajes de error visibles.**
+> **REGLA ESTRICTA: CERO cadenas de texto hardcodeadas (_zero hardcoded strings_) en widgets, pantallas, diálogos, tooltips o mensajes de error visibles.**
 
 Todo texto visible en la aplicación debe estar internacionalizado siguiendo este procedimiento de 4 pasos:
 
@@ -143,9 +154,11 @@ Todo texto visible en la aplicación debe estar internacionalizado siguiendo est
 2. **Añadir el getter fuertemente tipado** en `AppStringKey` (`lib/features/locales/domain/locale.dart`).
 3. **Registrar la clave** en la lista estática `_allAppStrings` dentro de `AppStringKey`.
 4. **Consumir en la UI** mediante:
+
    ```dart
    context.watch<LocaleController>().localeStrings.<nombreDelGetter>
    ```
+
 - El test estático `test/ast_i18n_test.dart` audita el árbol de widgets para verificar que no existan cadenas literales sin traducir.
 
 ---
@@ -164,25 +177,32 @@ Todo texto visible en la aplicación debe estar internacionalizado siguiendo est
 3. **Optimización de Memoria y RAM:**
    - No mantener búferes de imágenes decodificadas en memoria sin límite.
    - Usar miniaturas LQ (80x80) para listas y grillas de álbumes/canciones.
-   - Usar miniaturas HQ (500x500) únicamente para la vista activa de reproducción (*Now Playing*).
+   - Usar miniaturas HQ (500x500) únicamente para la vista activa de reproducción (_Now Playing_).
 
 ---
 
 ## 🚀 Flujo y Comandos Clave Permitidos (CLI)
 
 - **Instalar dependencias:**
+
   ```bash
   flutter pub get
   ```
+
 - **Ejecutar análisis estático (debe mantenerse con 0 errores y 0 warnings en todo momento):**
+
   ```bash
   dart analyze .
   ```
+
 - **Ejecutar suite de pruebas:**
+
   ```bash
   flutter test
   ```
+
 - **Ejecutar aplicación en modo desarrollo:**
+
   ```bash
   flutter run -d linux   # o -d windows, -d android
   ```

@@ -405,7 +405,8 @@ class TachyonBackendHost {
 
       case BackendMethods.playlistsGetTrackIds:
         final playlistId = params['playlistId'] as int;
-        return await _database.getTrackIdsForPlaylist(playlistId);
+        final trackIds = await _database.getTrackIdsForPlaylist(playlistId);
+        return trackIds.toList();
 
       case BackendMethods.playlistsToggleLike:
         final trackId = params['trackId'] as int;

@@ -567,7 +567,10 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
     final res = await _send<dynamic>(BackendMethods.playlistsGetTrackIds, {
       'playlistId': playlistId,
     });
-    return (res as List).cast<int>();
+    if (res is Iterable) {
+      return res.map((e) => e as int).toList();
+    }
+    return const [];
   }
 
   @override
