@@ -368,12 +368,11 @@ class LyricsCooldownManager {
 
   /// Schedules a deferred upgrade retry when cooldown expires.
   void scheduleDeferredRetry({
-    String? trackFilePath,
-    @Deprecated('Use trackFilePath instead') String? trackUri,
+    required String trackFilePath,
     required int token,
     required Future<void> Function() onRetry,
   }) {
-    final effectivePath = trackFilePath ?? trackUri ?? '';
+    final effectivePath = trackFilePath;
     cancelDeferredRetry();
     if (_cooldownExpiry == null) return;
 
@@ -412,13 +411,12 @@ class LyricsCooldownManager {
   /// Updates active track for deferred retry if user skips songs during active cooldown.
   /// Defensively ensures that a running timer is scheduled if not already active.
   void updateDeferredTrack({
-    String? trackFilePath,
-    @Deprecated('Use trackFilePath instead') String? trackUri,
+    required String trackFilePath,
     required int token,
     required Future<void> Function() onRetry,
   }) {
     if (!isCooldownActive) return;
-    final effectivePath = trackFilePath ?? trackUri ?? '';
+    final effectivePath = trackFilePath;
     _deferredTrackFilePath = effectivePath;
     _deferredGenerationToken = token;
     _deferredCallback = onRetry;

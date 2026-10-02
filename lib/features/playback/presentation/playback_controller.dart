@@ -37,8 +37,6 @@ class PlaybackController extends ChangeNotifier {
 
   @visibleForTesting
   String? get lastPersistedFilePath => _lastPersistedFilePath;
-  @Deprecated('Use lastPersistedFilePath instead')
-  String? get lastPersistedUri => _lastPersistedFilePath;
   @visibleForTesting
   int? get lastPersistedPositionMs => _lastPersistedPositionMs;
 

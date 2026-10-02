@@ -596,37 +596,6 @@ class LyricsService {
     return res?.lyrics;
   }
 
-  @Deprecated('Use resolveLyricsByFilePath instead')
-  Future<LyricsResult?> resolveLyricsByUri({
-    required String uri,
-    String? title,
-    String? artist,
-    String? album,
-    int? durationMs,
-    String? embeddedLyrics,
-    bool allowRemote = true,
-    bool forceRefresh = false,
-    Set<LyricsSource>? enabledSources,
-    LyricsCancellationToken? cancellationToken,
-    bool Function()? isCancelled,
-    void Function(int seconds)? onThresholdCountdown,
-  }) {
-    return resolveLyricsByFilePath(
-      filePath: uri,
-      title: title,
-      artist: artist,
-      album: album,
-      durationMs: durationMs,
-      embeddedLyrics: embeddedLyrics,
-      allowRemote: allowRemote,
-      forceRefresh: forceRefresh,
-      enabledSources: enabledSources,
-      cancellationToken: cancellationToken,
-      isCancelled: isCancelled,
-      onThresholdCountdown: onThresholdCountdown,
-    );
-  }
-
   Future<ParsedLrc?> getLyricsByFilePath({
     required String filePath,
     String? title,
@@ -649,28 +618,6 @@ class LyricsService {
     );
     return res?.lyrics;
   }
-
-  @Deprecated('Use getLyricsByFilePath instead')
-  Future<ParsedLrc?> getLyricsByUri({
-    required String uri,
-    String? title,
-    String? artist,
-    int? durationMs,
-    String? embeddedLyrics,
-    bool forceRefresh = false,
-    bool allowRemote = true,
-    Set<LyricsSource>? enabledSources,
-  }) =>
-      getLyricsByFilePath(
-        filePath: uri,
-        title: title,
-        artist: artist,
-        durationMs: durationMs,
-        embeddedLyrics: embeddedLyrics,
-        forceRefresh: forceRefresh,
-        allowRemote: allowRemote,
-        enabledSources: enabledSources,
-      );
 
   /// Inspects directory of [filePath] for `<track_name>.lrc` or `<track_name>.LRC`
   Future<String?> _checkExternalLrcFile(String filePath) async {

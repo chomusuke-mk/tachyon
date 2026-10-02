@@ -40,8 +40,7 @@ class QueueItem {
   const QueueItem({
     required this.id,
     this.trackId,
-    String? filePath,
-    @Deprecated('Use filePath instead') String? uri,
+    required this.filePath,
     required this.title,
     required this.artist,
     this.artists = const [],
@@ -49,10 +48,7 @@ class QueueItem {
     required this.duration,
     this.coverPath,
     this.extras = const {},
-  }) : filePath = filePath ?? uri ?? '';
-
-  @Deprecated('Use filePath instead')
-  String get uri => filePath;
+  });
 
   factory QueueItem.fromTrack(Track track, {String? id}) {
     return QueueItem(
@@ -96,7 +92,6 @@ class QueueItem {
     String? id,
     int? trackId,
     String? filePath,
-    @Deprecated('Use filePath instead') String? uri,
     String? title,
     String? artist,
     List<String>? artists,
@@ -108,7 +103,7 @@ class QueueItem {
     return QueueItem(
       id: id ?? this.id,
       trackId: trackId ?? this.trackId,
-      filePath: filePath ?? uri ?? this.filePath,
+      filePath: filePath ?? this.filePath,
       title: title ?? this.title,
       artist: artist ?? this.artist,
       artists: artists ?? this.artists,

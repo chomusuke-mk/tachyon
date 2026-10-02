@@ -45,9 +45,6 @@ class AppSettings {
   final String? lastPlayedFilePath;
   final int lastPlayedPositionMs;
 
-  @Deprecated('Use lastPlayedFilePath instead')
-  String? get lastPlayedUri => lastPlayedFilePath;
-
   // Equalizer
   final bool equalizerEnabled;
   final String equalizerPreset;
@@ -76,8 +73,7 @@ class AppSettings {
     this.lyricsDisplayMode = LyricsDisplayMode.original,
     this.playbackShowLyrics = false,
     this.playbackShowQueue = false,
-    String? lastPlayedFilePath,
-    @Deprecated('Use lastPlayedFilePath') String? lastPlayedUri,
+    required this.lastPlayedFilePath,
     this.lastPlayedPositionMs = 0,
     this.equalizerEnabled = false,
     this.equalizerPreset = 'flat',
@@ -93,7 +89,7 @@ class AppSettings {
       0.0,
       0.0,
     ],
-  }) : lastPlayedFilePath = lastPlayedFilePath ?? lastPlayedUri;
+  });
 
   @override
   bool operator ==(Object other) =>
@@ -152,7 +148,6 @@ class AppSettings {
     bool? playbackShowLyrics,
     bool? playbackShowQueue,
     String? lastPlayedFilePath,
-    @Deprecated('Use lastPlayedFilePath') String? lastPlayedUri,
     int? lastPlayedPositionMs,
     bool? equalizerEnabled,
     String? equalizerPreset,
@@ -183,8 +178,7 @@ class AppSettings {
       lyricsDisplayMode: lyricsDisplayMode ?? this.lyricsDisplayMode,
       playbackShowLyrics: playbackShowLyrics ?? this.playbackShowLyrics,
       playbackShowQueue: playbackShowQueue ?? this.playbackShowQueue,
-      lastPlayedFilePath:
-          lastPlayedFilePath ?? lastPlayedUri ?? this.lastPlayedFilePath,
+      lastPlayedFilePath: lastPlayedFilePath ?? this.lastPlayedFilePath,
       lastPlayedPositionMs: lastPlayedPositionMs ?? this.lastPlayedPositionMs,
       equalizerEnabled: equalizerEnabled ?? this.equalizerEnabled,
       equalizerPreset: equalizerPreset ?? this.equalizerPreset,
@@ -222,5 +216,4 @@ class AppSettings {
     equalizerPreset,
     Object.hashAll(equalizerGains),
   ]);
-
 }

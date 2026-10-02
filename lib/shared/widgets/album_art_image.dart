@@ -27,22 +27,18 @@ class AlbumArtImage extends StatelessWidget {
     _resolvedPaths.clear();
   }
 
-  @Deprecated('Use filePath instead')
-  String get uri => filePath;
-
   const AlbumArtImage({
     super.key,
-    String? filePath,
+    required this.filePath,
     this.artistName,
     this.quality = ThumbnailQuality.low,
-    @Deprecated('Use filePath instead') String? uri,
     this.width,
     this.height,
     this.cacheWidth,
     this.cacheHeight,
     this.fit = BoxFit.cover,
     this.borderRadius,
-  }) : filePath = filePath ?? uri ?? '';
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +47,10 @@ class AlbumArtImage extends StatelessWidget {
       backendClient = Provider.of<TachyonBackendClient>(context, listen: false);
     } catch (_) {
       try {
-        backendClient = Provider.of<TachyonBackendClient?>(context, listen: false);
+        backendClient = Provider.of<TachyonBackendClient?>(
+          context,
+          listen: false,
+        );
       } catch (_) {
         backendClient = null;
       }
@@ -76,7 +75,8 @@ class AlbumArtImage extends StatelessWidget {
       ),
     );
 
-    if (filePath.isEmpty && (artistName == null || artistName!.trim().isEmpty)) {
+    if (filePath.isEmpty &&
+        (artistName == null || artistName!.trim().isEmpty)) {
       if (borderRadius != null) {
         return ClipRRect(borderRadius: borderRadius!, child: fallback);
       }
@@ -94,17 +94,19 @@ class AlbumArtImage extends StatelessWidget {
 
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
     final int defaultBound = quality == ThumbnailQuality.high ? 500 : 80;
-    final int targetCacheWidth = cacheWidth ??
+    final int targetCacheWidth =
+        cacheWidth ??
         (width != null
             ? (quality == ThumbnailQuality.high
-                ? (width! * dpr).round().clamp(80, 500)
-                : 80)
+                  ? (width! * dpr).round().clamp(80, 500)
+                  : 80)
             : defaultBound);
-    final int targetCacheHeight = cacheHeight ??
+    final int targetCacheHeight =
+        cacheHeight ??
         (height != null
             ? (quality == ThumbnailQuality.high
-                ? (height! * dpr).round().clamp(80, 500)
-                : 80)
+                  ? (height! * dpr).round().clamp(80, 500)
+                  : 80)
             : defaultBound);
 
     Widget buildImage(File file) {
@@ -139,7 +141,9 @@ class AlbumArtImage extends StatelessWidget {
       if (backendClient != null) {
         try {
           String? path;
-          if (artistName != null && artistName!.trim().isNotEmpty && filePath.isEmpty) {
+          if (artistName != null &&
+              artistName!.trim().isNotEmpty &&
+              filePath.isEmpty) {
             path = await backendClient.getArtistCover(
               artistName!,
               isHighQuality: quality == ThumbnailQuality.high,

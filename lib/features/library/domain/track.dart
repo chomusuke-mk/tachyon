@@ -26,8 +26,7 @@ class Track {
 
   const Track({
     this.id,
-    String? filePath,
-    @Deprecated('Use filePath instead') String? uri,
+    required this.filePath,
     required this.title,
     this.albumId,
     this.album,
@@ -47,7 +46,7 @@ class Track {
     required this.modifiedAt,
     this.lyrics,
     this.genres = const [],
-  }) : filePath = filePath ?? uri ?? '';
+  });
 
   Duration get duration => Duration(milliseconds: durationMs);
   DateTime get modifiedDateTime =>
@@ -57,13 +56,9 @@ class Track {
   String? get artistName => artist;
   String? get albumName => album;
 
-  @Deprecated('Use filePath instead')
-  String get uri => filePath;
-
   Track copyWith({
     int? id,
     String? filePath,
-    @Deprecated('Use filePath instead') String? uri,
     String? title,
     int? albumId,
     String? album,
@@ -86,7 +81,7 @@ class Track {
   }) {
     return Track(
       id: id ?? this.id,
-      filePath: filePath ?? uri ?? this.filePath,
+      filePath: filePath ?? this.filePath,
       title: title ?? this.title,
       albumId: albumId ?? this.albumId,
       album: album ?? this.album,

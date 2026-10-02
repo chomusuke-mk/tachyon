@@ -1040,10 +1040,6 @@ class AppDatabase {
     );
   }
 
-  @Deprecated('Use getTrackLyricsByFilePath instead')
-  Future<String?> getTrackLyricsByUri(String uri) =>
-      getTrackLyricsByFilePath(uri);
-
   /// Retrieves raw embedded lyrics for a track by its [trackId] on-demand.
   Future<String?> getTrackLyrics(int trackId) async {
     final rows = await database.query(

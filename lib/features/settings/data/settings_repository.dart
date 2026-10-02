@@ -254,11 +254,10 @@ class SettingsRepository {
       _prefs.setString(_keyLanguage, language);
 
   Future<void> setLastPlayed({
-    String? filePath,
-    @Deprecated('Use filePath') String? uri,
+    required String filePath,
     required int positionMs,
   }) async {
-    final effectivePath = filePath ?? uri ?? '';
+    final effectivePath = filePath;
     await _prefs.setString(_keyLastPlayedFilePath, effectivePath);
     await _prefs.setInt(_keyLastPlayedPosition, positionMs);
   }

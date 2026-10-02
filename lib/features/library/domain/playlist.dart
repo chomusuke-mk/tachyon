@@ -40,9 +40,6 @@ class PlaylistEntry {
     this.track,
   });
 
-  @Deprecated('Use filePath instead')
-  String get uri => filePath;
-
   PlaylistEntry copyWith({
     int? id,
     int? playlistId,
