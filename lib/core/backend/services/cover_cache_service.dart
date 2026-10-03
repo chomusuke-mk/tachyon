@@ -2,13 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+import 'package:haudiotagger/haudiotagger.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
 
 export 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 
@@ -48,6 +49,25 @@ class CoverCacheService {
     'band.jpeg',
     'band.png',
   ];
+
+  static const Set<String> supportedTagExtensions = {
+    '.mp3',
+    '.flac',
+    '.m4a',
+    '.mp4',
+    '.aac',
+    '.ogg',
+    '.oga',
+    '.opus',
+    '.wav',
+    '.aif',
+    '.aiff',
+    '.aifc',
+    '.ape',
+    '.wv',
+    '.mpc',
+    '.spx',
+  };
 
   CoverCacheService({
     required this.cacheDirectory,
@@ -128,7 +148,7 @@ class CoverCacheService {
     String? artistName,
     String? albumName,
     bool force = false,
-    AudioMetadata? metadata,
+    Tag? tag,
   }) async {
     final hash = computeHash(filePath);
     final lqFile = File(p.join(_coversDir.path, '${hash}_lq.webp'));
@@ -150,42 +170,45 @@ class CoverCacheService {
 
     // 2. Read embedded pictures from file tags
     final ext = p.extension(filePath).toLowerCase();
-    if (metadata != null || supportedFileExtensions.contains(ext)) {
+    if (tag != null || supportedTagExtensions.contains(ext)) {
       try {
-        final meta = metadata ?? readMetadata(File(filePath), getImage: true);
-
-        // Search for front cover
-        for (final pic in meta.pictures) {
-          if (pic.pictureType == PictureType.coverFront) {
-            coverBytes = pic.bytes;
-            break;
-          }
-        }
-        // Fallback: first non-artist picture or first available
-        if (coverBytes == null && meta.pictures.isNotEmpty) {
-          for (final pic in meta.pictures) {
-            if (pic.pictureType != PictureType.leadArtist &&
-                pic.pictureType != PictureType.artistPerformer &&
-                pic.pictureType != PictureType.bandArtistLogotype) {
+        final parsedTag = tag ?? await Haudiotagger.read(filePath);
+        if (parsedTag != null) {
+          // Search for front cover
+          for (final pic in parsedTag.pictures) {
+            if (pic.pictureType == PictureType.coverFront) {
               coverBytes = pic.bytes;
               break;
             }
           }
-          coverBytes ??= meta.pictures.first.bytes;
-        }
-
-        // Search for artist picture
-        for (final pic in meta.pictures) {
-          if (pic.pictureType == PictureType.leadArtist ||
-              pic.pictureType == PictureType.artistPerformer ||
-              pic.pictureType == PictureType.bandArtistLogotype) {
-            artistBytes = pic.bytes;
-            break;
+          // Fallback: first non-artist picture or first available
+          if (coverBytes == null && parsedTag.pictures.isNotEmpty) {
+            for (final pic in parsedTag.pictures) {
+              if (pic.pictureType != PictureType.leadArtist &&
+                  pic.pictureType != PictureType.artist &&
+                  pic.pictureType != PictureType.band &&
+                  pic.pictureType != PictureType.bandLogo) {
+                coverBytes = pic.bytes;
+                break;
+              }
+            }
+            coverBytes ??= parsedTag.pictures.first.bytes;
           }
-        }
 
-        artistName ??= meta.artist;
-        albumName ??= meta.album;
+          // Search for artist picture
+          for (final pic in parsedTag.pictures) {
+            if (pic.pictureType == PictureType.leadArtist ||
+                pic.pictureType == PictureType.artist ||
+                pic.pictureType == PictureType.band ||
+                pic.pictureType == PictureType.bandLogo) {
+              artistBytes = pic.bytes;
+              break;
+            }
+          }
+
+          artistName ??= parsedTag.trackArtist ?? parsedTag.albumArtist;
+          albumName ??= parsedTag.album;
+        }
       } catch (e) {
         debugPrint(
           '[CoverCache] Error reading embedded pictures from $filePath: $e',
@@ -255,34 +278,46 @@ class CoverCacheService {
           height: minDim,
         );
 
-        // 1. High Quality: maximum 1000x1000 square
+        // 1. High Quality: maximum highQualitySize x highQualitySize square
         img.Image hqImage;
-        if (minDim > 1000) {
+        if (minDim > AppDefaults.highQualityResolution) {
           hqImage = img.copyResize(
             squareImage,
-            width: 1000,
-            height: 1000,
+            width: AppDefaults.highQualityResolution,
+            height: AppDefaults.highQualityResolution,
             interpolation: img.Interpolation.linear,
           );
         } else {
           hqImage = squareImage;
         }
-        final hqBytes = img.encodeWebP(hqImage, lossless: false, quality: 85);
+        final hqBytes = img.encodeWebP(
+          hqImage,
+          lossless: false,
+          quality: 85,
+          singleFrame: true,
+          method: 0,
+        );
         await hqFile.writeAsBytes(hqBytes);
 
-        // 2. Low Quality: 100x100 square
+        // 2. Low Quality: lowQualitySize x lowQualitySize square
         img.Image lqImage;
-        if (minDim == 100) {
+        if (minDim == AppDefaults.lowQualityResolution) {
           lqImage = squareImage;
         } else {
           lqImage = img.copyResize(
             squareImage,
-            width: 100,
-            height: 100,
+            width: AppDefaults.lowQualityResolution,
+            height: AppDefaults.lowQualityResolution,
             interpolation: img.Interpolation.linear,
           );
         }
-        final lqBytes = img.encodeWebP(lqImage, lossless: false, quality: 75);
+        final lqBytes = img.encodeWebP(
+          lqImage,
+          lossless: false,
+          quality: 50,
+          singleFrame: true,
+          method: 0,
+        );
         await lqFile.writeAsBytes(lqBytes);
       } else {
         await hqFile.writeAsBytes(rawBytes);

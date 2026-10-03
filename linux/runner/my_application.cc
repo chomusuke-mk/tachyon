@@ -25,6 +25,8 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
+  gtk_window_set_default_icon_name("tachyon");
+
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
   // desktop).
@@ -54,52 +56,13 @@ static void my_application_activate(GApplication* application) {
 
   gtk_window_set_default_size(window, 1280, 720);
 
-  // Feature 18: Linux Window Geometry Hints (min_width: 480, min_height: 360)
-  // Enforce minimum window geometry constraints both in GTK requisition and via
-  // the window manager (WM_NORMAL_HINTS on X11, xdg_toplevel on Wayland) to
-  // prevent resizing into micro-dimensions or zero-size render surfaces.
-  gtk_widget_set_size_request(GTK_WIDGET(window), 480, 360);
-  GdkGeometry geometry = {};
-  geometry.min_width = 480;
-  geometry.min_height = 360;
-  gtk_window_set_geometry_hints(window, nullptr, &geometry, GDK_HINT_MIN_SIZE);
-
-  // Feature 17: GTK FlView Background Color Sync & CSS Provider
-  // Apply CSS to prevent white/gray flashes during startup and interactive resizing.
-  // Synchronize native GTK window background to Tachyon darkCanvas (#0E0B16).
-  GdkScreen* default_screen = gtk_window_get_screen(window);
-  if (default_screen == nullptr) {
-    default_screen = gdk_screen_get_default();
-  }
-  if (default_screen != nullptr) {
-    g_autoptr(GtkCssProvider) provider = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(
-        provider,
-        "window, window.background { background-color: #0E0B16; }\n",
-        -1, nullptr);
-    gtk_style_context_add_provider_for_screen(
-        default_screen,
-        GTK_STYLE_PROVIDER(provider),
-        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-    GtkStyleContext* window_context =
-        gtk_widget_get_style_context(GTK_WIDGET(window));
-    gtk_style_context_add_provider(
-        window_context,
-        GTK_STYLE_PROVIDER(provider),
-        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-  }
-
   g_autoptr(FlDartProject) project = fl_dart_project_new();
-  fl_dart_project_set_dart_entrypoint_arguments(
-      project, self->dart_entrypoint_arguments);
+  fl_dart_project_set_dart_entrypoint_arguments(project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
-  // Match FlView background clear color to Tachyon darkCanvas (#0E0B16: r=14/255, g=11/255, b=22/255).
-  if (!gdk_rgba_parse(&background_color, "#0E0B16")) {
-    background_color = {14.0 / 255.0, 11.0 / 255.0, 22.0 / 255.0, 1.0};
-  }
+  // Background defaults to black, override it here if necessary, e.g. #00000000 for transparent.
+  gdk_rgba_parse(&background_color, "#000000");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));

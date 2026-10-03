@@ -252,7 +252,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                                 context,
                                 preferVertical: true,
                                 hideQueue: true,
-                                hideLyrics: true,
+                                hideLyrics: false,
                               ),
                             ),
                           ],

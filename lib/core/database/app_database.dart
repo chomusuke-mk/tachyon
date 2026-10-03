@@ -53,7 +53,11 @@ abstract final class AppDatabaseSchema {
       file_size INTEGER NOT NULL,
       modified_at INTEGER NOT NULL,
       lyrics TEXT,
-      has_cover INTEGER DEFAULT 0
+      has_cover INTEGER DEFAULT 0,
+      replay_gain_track_gain REAL,
+      replay_gain_track_peak REAL,
+      replay_gain_album_gain REAL,
+      replay_gain_album_peak REAL
     );
   ''';
 
@@ -372,6 +376,19 @@ class AppDatabase {
     db.execute(AppDatabaseSchema.createLyricsSourceCacheTable);
     db.execute(AppDatabaseSchema.createLyricsTranslationsTable);
 
+    try {
+      db.execute('ALTER TABLE tracks ADD COLUMN replay_gain_track_gain REAL;');
+    } catch (_) {}
+    try {
+      db.execute('ALTER TABLE tracks ADD COLUMN replay_gain_track_peak REAL;');
+    } catch (_) {}
+    try {
+      db.execute('ALTER TABLE tracks ADD COLUMN replay_gain_album_gain REAL;');
+    } catch (_) {}
+    try {
+      db.execute('ALTER TABLE tracks ADD COLUMN replay_gain_album_peak REAL;');
+    } catch (_) {}
+
     for (final sql in AppDatabaseSchema.indexes) {
       db.execute(sql);
     }
@@ -496,6 +513,10 @@ class AppDatabase {
           'file_size': track.fileSize,
           'modified_at': track.modifiedAt,
           'lyrics': track.lyrics,
+          'replay_gain_track_gain': track.replayGainTrackGain,
+          'replay_gain_track_peak': track.replayGainTrackPeak,
+          'replay_gain_album_gain': track.replayGainAlbumGain,
+          'replay_gain_album_peak': track.replayGainAlbumPeak,
         };
         await txn.update(
           'tracks',
@@ -522,6 +543,10 @@ class AppDatabase {
           'file_size': track.fileSize,
           'modified_at': track.modifiedAt,
           'lyrics': track.lyrics,
+          'replay_gain_track_gain': track.replayGainTrackGain,
+          'replay_gain_track_peak': track.replayGainTrackPeak,
+          'replay_gain_album_gain': track.replayGainAlbumGain,
+          'replay_gain_album_peak': track.replayGainAlbumPeak,
         };
         trackId = await txn.insert('tracks', trackMap);
       }
@@ -737,6 +762,10 @@ class AppDatabase {
             'file_size': t.fileSize,
             'modified_at': t.modifiedAt,
             'lyrics': t.lyrics,
+            'replay_gain_track_gain': t.replayGainTrackGain,
+            'replay_gain_track_peak': t.replayGainTrackPeak,
+            'replay_gain_album_gain': t.replayGainAlbumGain,
+            'replay_gain_album_peak': t.replayGainAlbumPeak,
           };
 
           if (existingId != null) {
@@ -921,6 +950,8 @@ class AppDatabase {
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
         NULL AS lyrics, t.has_cover,
+        t.replay_gain_track_gain, t.replay_gain_track_peak,
+        t.replay_gain_album_gain, t.replay_gain_album_peak,
         al.name AS album_name,
         ar.name AS artist_name
       FROM tracks t
@@ -989,6 +1020,8 @@ class AppDatabase {
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
         t.lyrics, t.has_cover,
+        t.replay_gain_track_gain, t.replay_gain_track_peak,
+        t.replay_gain_album_gain, t.replay_gain_album_peak,
         al.name AS album_name,
         ar.name AS artist_name
       FROM tracks t
@@ -1117,6 +1150,8 @@ class AppDatabase {
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
         t.lyrics, t.has_cover,
+        t.replay_gain_track_gain, t.replay_gain_track_peak,
+        t.replay_gain_album_gain, t.replay_gain_album_peak,
         al.name AS album_name,
         ar.name AS artist_name,
         pe.position, pe.added_at
@@ -1260,6 +1295,8 @@ class AppDatabase {
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
         NULL AS lyrics, t.has_cover,
+        t.replay_gain_track_gain, t.replay_gain_track_peak,
+        t.replay_gain_album_gain, t.replay_gain_album_peak,
         al.name AS album_name,
         ar.name AS artist_name
       FROM tracks t
@@ -1317,6 +1354,8 @@ class AppDatabase {
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
         NULL AS lyrics, t.has_cover,
+        t.replay_gain_track_gain, t.replay_gain_track_peak,
+        t.replay_gain_album_gain, t.replay_gain_album_peak,
         al.name AS album_name,
         ar.name AS artist_name
       FROM tracks t
@@ -1336,6 +1375,8 @@ class AppDatabase {
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
         t.sample_rate, t.channels, t.codec, t.file_size, t.modified_at,
         NULL AS lyrics, t.has_cover,
+        t.replay_gain_track_gain, t.replay_gain_track_peak,
+        t.replay_gain_album_gain, t.replay_gain_album_peak,
         al.name AS album_name,
         ar.name AS artist_name
       FROM tracks t

@@ -68,7 +68,7 @@ El proyecto Tachyon opera bajo un desacoplamiento estricto entre el hilo visual 
      - Orquesta escaneos masivos recursivos de carpetas mediante un pool concurrente de `Isolate.run` proporcional a los procesadores del sistema (`Platform.numberOfProcessors`), extrayendo metadatos y guardando carátulas en una sola pasada.
      - **Regla de transferencia liviana:** Tanto el backend isolate como el main isolate **solo transmiten rutas en disco (`String`)**, **NUNCA** arreglos masivos de bytes crudos (`Uint8List`).
   4. **Gestión de Carátulas (`CoverCacheService`):**
-     - Extrae preferentemente imágenes embebidas en los tags del archivo de audio mediante `audio_metadata_reader`.
+     - Extrae preferentemente imágenes embebidas en los tags del archivo de audio mediante `haudiotagger`.
      - **Respaldo en Directorio (Fallback):** Si el archivo no contiene carátula embebida, busca carátulas locales contiguas en su directorio (`cover.jpg`, `folder.jpg`, `front.jpg`, etc.) o de artista (`artist.jpg`, `band.jpg`, etc.).
      - Caché dual con hash SHA-256 en disco en formato WebP:
        - **HQ (High Quality):** Máximo 1000x1000 píxeles con recorte central cuadrado sin distorsión.
@@ -84,7 +84,7 @@ El sistema de letras de Tachyon está diseñado bajo una arquitectura jerárquic
 
 ### 1. Jerarquía Estricta de Búsqueda
 
-1. **Letras embebidas:** Tags de audio (USLT, LYRICS) extraídas por `audio_metadata_reader`.
+1. **Letras embebidas:** Tags de audio (USLT, LYRICS) extraídas por `haudiotagger`.
 2. **Archivo local `.lrc`:** Archivos `.lrc` o `.LRC` contiguos a la pista en su directorio (`<nombre_archivo>.lrc`).
 3. **API Primaria (`lrclib.net`):** Letras sincronizadas y en texto plano vía `GET /api/get` (con título, artista, álbum y duración con margen $\pm 2$ s).
 4. **API Secundaria / Respaldo (`lyrics.ovh`):** Letras en texto plano sin marcas de tiempo vía `GET https://api.lyrics.ovh/v1/{artist}/{title}`.
@@ -167,7 +167,7 @@ Todo texto visible en la aplicación debe estar internacionalizado siguiendo est
 
 1. **Cero Binarios Nativos Externos:**
    - **PROHIBIDO** invocar herramientas de línea de comandos externas como `ffmpeg` o `ffprobe` vía `Process.run`.
-   - La lectura y procesamiento de metadatos se realiza 100% en Dart (`audio_metadata_reader`).
+   - La lectura y procesamiento de metadatos se realiza de forma nativa de alto rendimiento con `haudiotagger`.
    - La reproducción de audio de bajo nivel se realiza vía `miniaudio_player` embebido vía FFI.
 
 2. **Multiplataforma Nativa:**

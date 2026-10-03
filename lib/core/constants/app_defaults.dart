@@ -78,4 +78,8 @@ class AppDefaults {
     'aac',
     'm4a',
   };
+
+  static const int lowQualityResolution = 50;
+  static const int mediumQualityResolution = 250;
+  static const int highQualityResolution = 800;
 }

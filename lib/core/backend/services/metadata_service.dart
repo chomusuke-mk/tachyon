@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 
-import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+import 'package:haudiotagger/haudiotagger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -458,7 +458,7 @@ class MetadataService {
 /// Reads audio metadata and embedded pictures in a single pass, caches HQ/LQ
 /// covers directly to disk, and returns the parsed [Track] model.
 /// Helper to construct a fallback [Track] when metadata cannot be read
-/// (e.g. extension not in [supportedFileExtensions] of audio_metadata_reader or parsing failed).
+/// (e.g. extension not in [CoverCacheService.supportedTagExtensions] of haudiotagger or parsing failed).
 Track _buildFallbackTrack({
   required String filePath,
   required int size,
@@ -512,21 +512,26 @@ Future<Track?> extractAndCacheTrackWorker({
 
   try {
     final ext = p.extension(filePath).toLowerCase();
-    final isSupportedByReader = supportedFileExtensions.contains(ext);
+    final isSupportedByReader = CoverCacheService.supportedTagExtensions
+        .contains(ext);
 
-    AudioMetadata? metadata;
+    Tag? tag;
+    AudioProperties? properties;
     if (!isSupportedByReader) {
       debugPrint(
-        '[MetadataService] Extension "$ext" is not in audio_metadata_reader supportedFileExtensions. Using fallback metadata for: $filePath',
+        '[MetadataService] Extension "$ext" is not in haudiotagger supported extensions. Using fallback metadata for: $filePath',
       );
     } else {
       try {
-        metadata = readMetadata(file, getImage: true);
+        tag = await Haudiotagger.read(filePath);
       } catch (e) {
         debugPrint(
-          '[MetadataService] Error reading metadata with audio_metadata_reader for $filePath: $e. Using fallback metadata.',
+          '[MetadataService] Error reading metadata with haudiotagger for $filePath: $e. Using fallback metadata.',
         );
       }
+      try {
+        properties = await Haudiotagger.readProperties(filePath);
+      } catch (_) {}
     }
 
     // 2. Cache covers immediately if not already cached
@@ -537,33 +542,73 @@ Future<Track?> extractAndCacheTrackWorker({
       try {
         await coverCache.saveCacheCover(
           filePath,
-          artistName: metadata?.artist,
-          albumName: metadata?.album,
-          metadata: metadata,
+          artistName: tag?.trackArtist ?? tag?.albumArtist,
+          albumName: tag?.album,
+          tag: tag,
         );
       } catch (_) {}
     }
 
-    if (metadata != null) {
+    if (tag != null) {
+      final durationMs = properties?.durationMicros != null
+          ? (properties!.durationMicros!.toInt() / 1000).round()
+          : (tag.duration != null ? tag.duration! * 1000 : 0);
+
       return Track(
         filePath: filePath,
-        title: metadata.title ?? p.basenameWithoutExtension(filePath),
-        album: metadata.album,
-        artist: metadata.artist,
-        artists: metadata.performers,
-        albumArtist: metadata.albumArtist,
-        trackNumber: metadata.trackNumber,
-        discNumber: metadata.discNumber,
-        year: metadata.year?.year,
-        durationMs: metadata.duration?.inMilliseconds ?? 0,
-        bitrate: metadata.bitrate,
-        sampleRate: metadata.sampleRate,
-        channels: null,
-        codec: null,
+        title: tag.title ?? p.basenameWithoutExtension(filePath),
+        album: tag.album,
+        artist:
+            tag.trackArtist?.split(', ').first ??
+            tag.albumArtist?.split(', ').first,
+        artists:
+            tag.trackArtist?.split(', ') ??
+            tag.albumArtist?.split(', ') ??
+            const <String>[],
+        albumArtist: tag.albumArtist,
+        trackNumber: tag.trackNumber,
+        discNumber: tag.discNumber,
+        year: tag.year,
+        durationMs: durationMs,
+        bitrate: properties?.bitrate,
+        sampleRate: properties?.sampleRate,
+        channels: properties?.channels,
+        codec: properties?.codec ?? (ext.replaceAll('.', '').toUpperCase()),
         fileSize: size,
         modifiedAt: modifiedAt,
-        lyrics: metadata.lyrics,
-        genres: metadata.genres,
+        lyrics: tag.lyrics,
+        genres: tag.genre != null ? [tag.genre!] : const <String>[],
+        replayGainTrackGain: Track.parseReplayGain(tag.replayGainTrackGain),
+        replayGainTrackPeak: Track.parseReplayGain(tag.replayGainTrackPeak),
+        replayGainAlbumGain: Track.parseReplayGain(tag.replayGainAlbumGain),
+        replayGainAlbumPeak: Track.parseReplayGain(tag.replayGainAlbumPeak),
+      );
+    }
+
+    if (properties != null) {
+      final durationMs = properties.durationMicros != null
+          ? (properties.durationMicros!.toInt() / 1000).round()
+          : 0;
+
+      return Track(
+        filePath: filePath,
+        title: p.basenameWithoutExtension(filePath),
+        album: null,
+        artist: null,
+        artists: const [],
+        albumArtist: null,
+        trackNumber: null,
+        discNumber: null,
+        year: null,
+        durationMs: durationMs,
+        bitrate: properties.bitrate,
+        sampleRate: properties.sampleRate,
+        channels: properties.channels,
+        codec: properties.codec,
+        fileSize: size,
+        modifiedAt: modifiedAt,
+        lyrics: null,
+        genres: const [],
       );
     }
 
@@ -612,43 +657,88 @@ Future<Track?> extractTrackMetadata(
 
   try {
     final ext = p.extension(filePath).toLowerCase();
-    final isSupportedByReader = supportedFileExtensions.contains(ext);
+    final isSupportedByReader = CoverCacheService.supportedTagExtensions
+        .contains(ext);
 
-    AudioMetadata? metadata;
+    Tag? tag;
+    AudioProperties? properties;
     if (!isSupportedByReader) {
       debugPrint(
-        '[MetadataService] Extension "$ext" is not in audio_metadata_reader supportedFileExtensions. Using fallback metadata for: $filePath',
+        '[MetadataService] Extension "$ext" is not in haudiotagger supported extensions. Using fallback metadata for: $filePath',
       );
     } else {
       try {
-        metadata = readMetadata(file, getImage: false);
+        tag = await Haudiotagger.read(filePath);
       } catch (e) {
         debugPrint(
-          '[MetadataService] Error reading metadata with audio_metadata_reader for $filePath: $e. Using fallback metadata.',
+          '[MetadataService] Error reading metadata with haudiotagger for $filePath: $e. Using fallback metadata.',
         );
       }
+      try {
+        properties = await Haudiotagger.readProperties(filePath);
+      } catch (_) {}
     }
 
-    if (metadata != null) {
+    if (tag != null) {
+      final durationMs = properties?.durationMicros != null
+          ? (properties!.durationMicros!.toInt() / 1000).round()
+          : (tag.duration != null ? tag.duration! * 1000 : 0);
+
       return Track(
         filePath: filePath,
-        title: metadata.title ?? p.basenameWithoutExtension(filePath),
-        album: metadata.album,
-        artist: metadata.artist,
-        artists: metadata.performers,
-        albumArtist: metadata.albumArtist,
-        trackNumber: metadata.trackNumber,
-        discNumber: metadata.discNumber,
-        year: metadata.year?.year,
-        durationMs: metadata.duration?.inMilliseconds ?? 0,
-        bitrate: metadata.bitrate,
-        sampleRate: metadata.sampleRate,
-        channels: null,
-        codec: null,
+        title: tag.title ?? p.basenameWithoutExtension(filePath),
+        album: tag.album,
+        artist:
+            tag.trackArtist?.split(', ').first ??
+            tag.albumArtist?.split(', ').first,
+        artists:
+            tag.trackArtist?.split(', ') ??
+            tag.albumArtist?.split(', ') ??
+            const <String>[],
+        albumArtist: tag.albumArtist,
+        trackNumber: tag.trackNumber,
+        discNumber: tag.discNumber,
+        year: tag.year,
+        durationMs: durationMs,
+        bitrate: properties?.bitrate,
+        sampleRate: properties?.sampleRate,
+        channels: properties?.channels,
+        codec: properties?.codec ?? (ext.replaceAll('.', '').toUpperCase()),
         fileSize: size,
         modifiedAt: modifiedAt,
-        lyrics: metadata.lyrics,
-        genres: metadata.genres,
+        lyrics: tag.lyrics,
+        genres: tag.genre != null ? [tag.genre!] : const <String>[],
+        replayGainTrackGain: Track.parseReplayGain(tag.replayGainTrackGain),
+        replayGainTrackPeak: Track.parseReplayGain(tag.replayGainTrackPeak),
+        replayGainAlbumGain: Track.parseReplayGain(tag.replayGainAlbumGain),
+        replayGainAlbumPeak: Track.parseReplayGain(tag.replayGainAlbumPeak),
+      );
+    }
+
+    if (properties != null) {
+      final durationMs = properties.durationMicros != null
+          ? (properties.durationMicros!.toInt() / 1000).round()
+          : 0;
+
+      return Track(
+        filePath: filePath,
+        title: p.basenameWithoutExtension(filePath),
+        album: null,
+        artist: null,
+        artists: const [],
+        albumArtist: null,
+        trackNumber: null,
+        discNumber: null,
+        year: null,
+        durationMs: durationMs,
+        bitrate: properties.bitrate,
+        sampleRate: properties.sampleRate,
+        channels: properties.channels,
+        codec: properties.codec,
+        fileSize: size,
+        modifiedAt: modifiedAt,
+        lyrics: null,
+        genres: const [],
       );
     }
 

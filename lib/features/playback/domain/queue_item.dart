@@ -69,9 +69,18 @@ class QueueItem {
         'channels': track.channels,
         'lyrics': track.lyrics,
         'codec': track.codec,
+        'replayGainTrackGain': track.replayGainTrackGain,
+        'replayGainTrackPeak': track.replayGainTrackPeak,
+        'replayGainAlbumGain': track.replayGainAlbumGain,
+        'replayGainAlbumPeak': track.replayGainAlbumPeak,
       },
     );
   }
+
+  double? get replayGainTrackGain => (extras['replayGainTrackGain'] as num?)?.toDouble();
+  double? get replayGainTrackPeak => (extras['replayGainTrackPeak'] as num?)?.toDouble();
+  double? get replayGainAlbumGain => (extras['replayGainAlbumGain'] as num?)?.toDouble();
+  double? get replayGainAlbumPeak => (extras['replayGainAlbumPeak'] as num?)?.toDouble();
 
   Track toTrack() {
     return Track(
@@ -85,6 +94,10 @@ class QueueItem {
       fileSize: 0,
       modifiedAt: 0,
       lyrics: extras['lyrics'] as String?,
+      replayGainTrackGain: replayGainTrackGain,
+      replayGainTrackPeak: replayGainTrackPeak,
+      replayGainAlbumGain: replayGainAlbumGain,
+      replayGainAlbumPeak: replayGainAlbumPeak,
     );
   }
 

@@ -198,10 +198,13 @@ void main() {
         createTestWavFile('${tempDir.path}/track_$i.wav', durationSeconds: 1);
       }
 
-      final progressEvents = <ScanProgress>[];
-      final completer = Completer<void>();
+      // Warm up tagger so one-time native library initialization threads are accounted for
+      await extractor.extractMetadata('${tempDir.path}/track_0.wav');
 
       final initialThreads = getLinuxThreadCount();
+
+      final progressEvents = <ScanProgress>[];
+      final completer = Completer<void>();
 
       final stream = extractor.scanDirectories([tempDir.path]);
       final sub = stream.listen(

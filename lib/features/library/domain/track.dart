@@ -23,6 +23,10 @@ class Track {
   final int modifiedAt;
   final String? lyrics;
   final List<String> genres;
+  final double? replayGainTrackGain;
+  final double? replayGainTrackPeak;
+  final double? replayGainAlbumGain;
+  final double? replayGainAlbumPeak;
 
   const Track({
     this.id,
@@ -46,6 +50,10 @@ class Track {
     required this.modifiedAt,
     this.lyrics,
     this.genres = const [],
+    this.replayGainTrackGain,
+    this.replayGainTrackPeak,
+    this.replayGainAlbumGain,
+    this.replayGainAlbumPeak,
   });
 
   Duration get duration => Duration(milliseconds: durationMs);
@@ -78,6 +86,10 @@ class Track {
     int? modifiedAt,
     String? lyrics,
     List<String>? genres,
+    double? replayGainTrackGain,
+    double? replayGainTrackPeak,
+    double? replayGainAlbumGain,
+    double? replayGainAlbumPeak,
   }) {
     return Track(
       id: id ?? this.id,
@@ -101,6 +113,10 @@ class Track {
       modifiedAt: modifiedAt ?? this.modifiedAt,
       lyrics: lyrics ?? this.lyrics,
       genres: genres ?? this.genres,
+      replayGainTrackGain: replayGainTrackGain ?? this.replayGainTrackGain,
+      replayGainTrackPeak: replayGainTrackPeak ?? this.replayGainTrackPeak,
+      replayGainAlbumGain: replayGainAlbumGain ?? this.replayGainAlbumGain,
+      replayGainAlbumPeak: replayGainAlbumPeak ?? this.replayGainAlbumPeak,
     );
   }
 
@@ -123,7 +139,21 @@ class Track {
       'file_size': fileSize,
       'modified_at': modifiedAt,
       'lyrics': lyrics,
+      'replay_gain_track_gain': replayGainTrackGain,
+      'replay_gain_track_peak': replayGainTrackPeak,
+      'replay_gain_album_gain': replayGainAlbumGain,
+      'replay_gain_album_peak': replayGainAlbumPeak,
     };
+  }
+
+  static double? parseReplayGain(dynamic val) {
+    if (val == null) return null;
+    if (val is num) return val.toDouble();
+    if (val is String) {
+      final cleaned = val.replaceAll(RegExp(r'[^\d.-]'), '').trim();
+      return double.tryParse(cleaned);
+    }
+    return null;
   }
 
   factory Track.fromDbMap(
@@ -165,6 +195,10 @@ class Track {
       modifiedAt: map['modified_at'] as int? ?? 0,
       lyrics: map['lyrics'] as String?,
       genres: genres,
+      replayGainTrackGain: parseReplayGain(map['replay_gain_track_gain']),
+      replayGainTrackPeak: parseReplayGain(map['replay_gain_track_peak']),
+      replayGainAlbumGain: parseReplayGain(map['replay_gain_album_gain']),
+      replayGainAlbumPeak: parseReplayGain(map['replay_gain_album_peak']),
     );
   }
 
@@ -192,6 +226,10 @@ class Track {
       'modifiedAt': modifiedAt,
       'lyrics': lyrics,
       'genres': genres,
+      'replayGainTrackGain': replayGainTrackGain,
+      'replayGainTrackPeak': replayGainTrackPeak,
+      'replayGainAlbumGain': replayGainAlbumGain,
+      'replayGainAlbumPeak': replayGainAlbumPeak,
     };
   }
 
@@ -255,6 +293,10 @@ class Track {
       modifiedAt: modifiedAt,
       lyrics: lyrics,
       genres: genres,
+      replayGainTrackGain: parseReplayGain(json['replayGainTrackGain'] ?? json['replay_gain_track_gain']),
+      replayGainTrackPeak: parseReplayGain(json['replayGainTrackPeak'] ?? json['replay_gain_track_peak']),
+      replayGainAlbumGain: parseReplayGain(json['replayGainAlbumGain'] ?? json['replay_gain_album_gain']),
+      replayGainAlbumPeak: parseReplayGain(json['replayGainAlbumPeak'] ?? json['replay_gain_album_peak']),
     );
   }
 
@@ -283,7 +325,11 @@ class Track {
           fileSize == other.fileSize &&
           modifiedAt == other.modifiedAt &&
           lyrics == other.lyrics &&
-          listEquals(genres, other.genres);
+          listEquals(genres, other.genres) &&
+          replayGainTrackGain == other.replayGainTrackGain &&
+          replayGainTrackPeak == other.replayGainTrackPeak &&
+          replayGainAlbumGain == other.replayGainAlbumGain &&
+          replayGainAlbumPeak == other.replayGainAlbumPeak;
 
   @override
   int get hashCode => Object.hashAll([
@@ -308,5 +354,9 @@ class Track {
     modifiedAt,
     lyrics,
     Object.hashAll(genres),
+    replayGainTrackGain,
+    replayGainTrackPeak,
+    replayGainAlbumGain,
+    replayGainAlbumPeak,
   ]);
 }

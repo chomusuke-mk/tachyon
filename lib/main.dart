@@ -27,6 +27,7 @@ Future<void> main() async {
   final appSupportDir = await getApplicationSupportDirectory();
   final cacheDirectory = await getApplicationCacheDirectory();
   final dbPath = p.join(appSupportDir.path, 'music.db');
+  debugPrint("CACHE DIR: ${cacheDirectory.path}");
 
   // Spawn and initialize the Core Service Isolate
   final backendClient = TachyonIsolateBackendClient();

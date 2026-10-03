@@ -251,20 +251,20 @@ void main() {
       }
     });
 
-    test('extractMetadata returns fallback track when extension is not supported by audio_metadata_reader', () async {
-      final audioPath = p.join(tempMusicDir.path, 'sample_stream.aac');
+    test('extractMetadata returns fallback track when extension is not supported by haudiotagger', () async {
+      final audioPath = p.join(tempMusicDir.path, 'sample_stream.w64');
       final dummyFile = File(audioPath);
-      await dummyFile.writeAsString('AAC_DUMMY_BINARY_DATA');
+      await dummyFile.writeAsString('W64_DUMMY_BINARY_DATA');
 
       final track = await metadataService.extractMetadata(audioPath);
       expect(track, isNotNull);
       expect(track!.filePath, equals(audioPath));
       expect(track.title, equals('sample_stream'));
-      expect(track.codec, equals('AAC'));
+      expect(track.codec, equals('W64'));
       expect(track.fileSize, isPositive);
     });
 
-    test('extractMetadata returns fallback track when readMetadata throws parsing exception', () async {
+    test('extractMetadata returns fallback track when read throws parsing exception', () async {
       final audioPath = p.join(tempMusicDir.path, 'corrupted_tag.mp3');
       final dummyFile = File(audioPath);
       await dummyFile.writeAsString('CORRUPTED_ID3_BYTES_HEADER_INVALID');
