@@ -17,8 +17,6 @@ abstract final class AppDatabaseSchema {
     CREATE TABLE IF NOT EXISTS artists (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE NOT NULL,
-      track_count INTEGER DEFAULT 0,
-      album_count INTEGER DEFAULT 0
     );
   ''';
 
@@ -26,11 +24,10 @@ abstract final class AppDatabaseSchema {
     CREATE TABLE IF NOT EXISTS albums (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL,
-      artist_name TEXT,
       year INTEGER,
-      track_count INTEGER DEFAULT 0,
-      UNIQUE(name, artist_name)
+
+      artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL,
+      UNIQUE(name, artist_id)
     );
   ''';
 
@@ -39,11 +36,8 @@ abstract final class AppDatabaseSchema {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       file_path TEXT UNIQUE NOT NULL,
       title TEXT NOT NULL,
-      album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL,
-      artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL,
-      album_artist TEXT,
       track_number INTEGER,
-      disc_number INTEGER DEFAULT 1,
+      disc_number INTEGER,
       year INTEGER,
       duration_ms INTEGER NOT NULL,
       bitrate INTEGER,
@@ -52,12 +46,13 @@ abstract final class AppDatabaseSchema {
       codec TEXT,
       file_size INTEGER NOT NULL,
       modified_at INTEGER NOT NULL,
-      lyrics TEXT,
-      has_cover INTEGER DEFAULT 0,
       replay_gain_track_gain REAL,
       replay_gain_track_peak REAL,
-      replay_gain_album_gain REAL,
-      replay_gain_album_peak REAL
+
+      album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL,
+      lyrics_id INTEGER REFERENCES lyrics(id) ON DELETE SET NULL,
+      artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL,
+      has_cover INTEGER DEFAULT 0,
     );
   ''';
 
@@ -76,73 +71,59 @@ abstract final class AppDatabaseSchema {
     );
   ''';
 
+  static const String createTrackArtistsTable = '''
+    CREATE TABLE IF NOT EXISTS track_artists (
+      track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+      artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
+      PRIMARY KEY(track_id, artist_id)
+    );
+  ''';
+
   static const String createPlaylistsTable = '''
     CREATE TABLE IF NOT EXISTS playlists (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      is_special INTEGER DEFAULT 0
+      type INTEGER DEFAULT 0
     );
   ''';
 
   static const String createPlaylistEntriesTable = '''
     CREATE TABLE IF NOT EXISTS playlist_entries (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
-      track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE,
-      file_path TEXT NOT NULL,
-      custom_title TEXT,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,      
       position INTEGER NOT NULL,
       added_at INTEGER NOT NULL
+      
+      playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+      track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE,
     );
   ''';
 
-  static const String createLyricsCacheTable = '''
-    CREATE TABLE IF NOT EXISTS lyrics_cache (
-      key_hash TEXT PRIMARY KEY,
-      raw_lrc TEXT NOT NULL,
+  static const String createLyricsTable = '''
+    CREATE TABLE IF NOT EXISTS lyrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      raw_lyrics TEXT NOT NULL,
       source TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-  ''';
+      language TEXT NOT NULL,
 
-  static const String createLyricsSourceCacheTable = '''
-    CREATE TABLE IF NOT EXISTS lyrics_source_cache (
-      key_hash TEXT NOT NULL,
-      source TEXT NOT NULL,
-      state TEXT NOT NULL,
-      raw_lrc TEXT,
-      is_synced INTEGER NOT NULL DEFAULT 0,
-      updated_at INTEGER NOT NULL,
-      PRIMARY KEY (key_hash, source)
-    );
-  ''';
-
-  static const String createLyricsTranslationsTable = '''
-    CREATE TABLE IF NOT EXISTS lyrics_translations (
-      key_hash TEXT NOT NULL,
-      source TEXT NOT NULL,
-      target_lang TEXT NOT NULL,
-      translated_lines TEXT NOT NULL,
-      updated_at INTEGER NOT NULL,
-      PRIMARY KEY (key_hash, source, target_lang)
+      track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+      UNIQUE(track_id, source, language)
     );
   ''';
 
   static const List<String> indexes = [
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path);',
     'CREATE INDEX IF NOT EXISTS idx_tracks_album_id ON tracks(album_id);',
-    'CREATE INDEX IF NOT EXISTS idx_tracks_artist_id ON tracks(artist_id);',
     'CREATE INDEX IF NOT EXISTS idx_tracks_title ON tracks(title COLLATE NOCASE);',
     'CREATE INDEX IF NOT EXISTS idx_albums_name ON albums(name COLLATE NOCASE);',
     'CREATE INDEX IF NOT EXISTS idx_albums_artist_id ON albums(artist_id);',
     'CREATE INDEX IF NOT EXISTS idx_artists_name ON artists(name COLLATE NOCASE);',
     'CREATE INDEX IF NOT EXISTS idx_genres_name ON genres(name COLLATE NOCASE);',
     'CREATE INDEX IF NOT EXISTS idx_track_genres_genre_id ON track_genres(genre_id);',
+    'CREATE INDEX IF NOT EXISTS idx_track_artists_artist_id ON track_artists(artist_id);',
     'CREATE INDEX IF NOT EXISTS idx_playlist_entries_playlist_pos ON playlist_entries(playlist_id, position);',
     'CREATE INDEX IF NOT EXISTS idx_playlist_entries_track_id ON playlist_entries(track_id);',
-    'CREATE INDEX IF NOT EXISTS idx_lyrics_source_cache_key ON lyrics_source_cache(key_hash);',
-    'CREATE INDEX IF NOT EXISTS idx_lyrics_translations_key ON lyrics_translations(key_hash);',
+    'CREATE INDEX IF NOT EXISTS idx_lyrics_track_id ON lyrics(track_id);',
   ];
 }
 
@@ -441,7 +422,8 @@ class AppDatabase {
 
       int? albumId = track.albumId;
       final alName = track.album?.trim();
-      final canonicalAlbumArtist = (track.albumArtist != null && track.albumArtist!.trim().isNotEmpty)
+      final canonicalAlbumArtist =
+          (track.albumArtist != null && track.albumArtist!.trim().isNotEmpty)
           ? track.albumArtist!.trim()
           : arName;
       if (alName != null && alName.isNotEmpty) {
@@ -451,12 +433,15 @@ class AppDatabase {
           where: canonicalAlbumArtist != null
               ? "LOWER(name) = LOWER(?) AND (LOWER(artist_name) = LOWER(?) OR artist_name IS NULL OR artist_name = '')"
               : "LOWER(name) = LOWER(?) AND (artist_name IS NULL OR artist_name = '')",
-          whereArgs: canonicalAlbumArtist != null ? [alName, canonicalAlbumArtist] : [alName],
+          whereArgs: canonicalAlbumArtist != null
+              ? [alName, canonicalAlbumArtist]
+              : [alName],
           limit: 1,
         );
         if (existingAlbum.isNotEmpty) {
           albumId = existingAlbum.first['id'] as int;
-          if (existingAlbum.first['artist_name'] == null && canonicalAlbumArtist != null) {
+          if (existingAlbum.first['artist_name'] == null &&
+              canonicalAlbumArtist != null) {
             await txn.update(
               'albums',
               {'artist_name': canonicalAlbumArtist, 'artist_id': artistId},
@@ -637,11 +622,13 @@ class AppDatabase {
           }
 
           final alName = t.album?.trim();
-          final canonicalArtist = (t.albumArtist != null && t.albumArtist!.trim().isNotEmpty)
+          final canonicalArtist =
+              (t.albumArtist != null && t.albumArtist!.trim().isNotEmpty)
               ? t.albumArtist!.trim()
               : arName;
           if (alName != null && alName.isNotEmpty) {
-            final cacheKey = '${alName.toLowerCase()}|${canonicalArtist?.toLowerCase() ?? ''}';
+            final cacheKey =
+                '${alName.toLowerCase()}|${canonicalArtist?.toLowerCase() ?? ''}';
             if (!albumCache.containsKey(cacheKey)) {
               final res = await txn.query(
                 'albums',
@@ -649,7 +636,9 @@ class AppDatabase {
                 where: canonicalArtist != null
                     ? "LOWER(name) = LOWER(?) AND (LOWER(artist_name) = LOWER(?) OR artist_name IS NULL OR artist_name = '')"
                     : "LOWER(name) = LOWER(?) AND (artist_name IS NULL OR artist_name = '')",
-                whereArgs: canonicalArtist != null ? [alName, canonicalArtist] : [alName],
+                whereArgs: canonicalArtist != null
+                    ? [alName, canonicalArtist]
+                    : [alName],
                 limit: 1,
               );
               if (res.isNotEmpty) {
@@ -657,7 +646,9 @@ class AppDatabase {
               } else {
                 final artistId = canonicalArtist != null
                     ? artistCache[canonicalArtist.toLowerCase()]
-                    : (arName != null ? artistCache[arName.toLowerCase()] : null);
+                    : (arName != null
+                          ? artistCache[arName.toLowerCase()]
+                          : null);
                 albumCache[cacheKey] = await txn.insert('albums', {
                   'name': alName,
                   'artist_id': artistId,
@@ -736,10 +727,14 @@ class AppDatabase {
           final arId = (t.artist != null && t.artist!.trim().isNotEmpty)
               ? artistCache[t.artist!.trim().toLowerCase()]
               : null;
-          final canonicalArtist = (t.albumArtist != null && t.albumArtist!.trim().isNotEmpty)
+          final canonicalArtist =
+              (t.albumArtist != null && t.albumArtist!.trim().isNotEmpty)
               ? t.albumArtist!.trim()
-              : (t.artist != null && t.artist!.trim().isNotEmpty ? t.artist!.trim() : null);
-          final alKey = '${t.album?.trim().toLowerCase() ?? ''}|${canonicalArtist?.toLowerCase() ?? ''}';
+              : (t.artist != null && t.artist!.trim().isNotEmpty
+                    ? t.artist!.trim()
+                    : null);
+          final alKey =
+              '${t.album?.trim().toLowerCase() ?? ''}|${canonicalArtist?.toLowerCase() ?? ''}';
           final alId = (t.album != null && t.album!.trim().isNotEmpty)
               ? albumCache[alKey]
               : null;
@@ -895,11 +890,7 @@ class AppDatabase {
   }
 
   Future<void> deleteTrack(int trackId) async {
-    await database.delete(
-      'tracks',
-      where: 'id = ?',
-      whereArgs: [trackId],
-    );
+    await database.delete('tracks', where: 'id = ?', whereArgs: [trackId]);
     await cleanOrphanAlbumsAndArtists();
   }
 
@@ -1014,7 +1005,8 @@ class AppDatabase {
         cleanPath = Uri.parse(cleanPath).toFilePath();
       } catch (_) {}
     }
-    final rows = await database.rawQuery('''
+    final rows = await database.rawQuery(
+      '''
       SELECT 
         t.id, t.file_path, t.title, t.album_id, t.artist_id, t.album_artist,
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
@@ -1029,7 +1021,9 @@ class AppDatabase {
       LEFT JOIN artists ar ON t.artist_id = ar.id
       WHERE t.file_path = ? OR t.file_path = ?
       LIMIT 1
-    ''', [cleanPath, filePath]);
+    ''',
+      [cleanPath, filePath],
+    );
 
     if (rows.isNotEmpty) {
       return Track.fromJson(rows.first);
@@ -1068,7 +1062,8 @@ class AppDatabase {
 
   /// Returns a map of `filePath` -> `(modifiedAt, fileSize)` for all tracks currently in the database.
   /// Used by `MetadataService` to perform incremental scans without re-reading unchanged files.
-  Future<Map<String, ({int modifiedAt, int fileSize})>> getExistingTrackMetas() async {
+  Future<Map<String, ({int modifiedAt, int fileSize})>>
+  getExistingTrackMetas() async {
     final rows = await database.query(
       'tracks',
       columns: ['file_path', 'modified_at', 'file_size'],
@@ -1187,7 +1182,11 @@ class AppDatabase {
     });
   }
 
-  Future<void> addTrackToPlaylist(int playlistId, int trackId, [String? filePath]) async {
+  Future<void> addTrackToPlaylist(
+    int playlistId,
+    int trackId, [
+    String? filePath,
+  ]) async {
     await database.transaction((txn) async {
       final trackRow = await txn.query(
         'tracks',
@@ -1198,7 +1197,8 @@ class AppDatabase {
       );
       if (trackRow.isEmpty) return;
 
-      final resolvedFilePath = filePath ?? (trackRow.first['file_path'] as String);
+      final resolvedFilePath =
+          filePath ?? (trackRow.first['file_path'] as String);
       final title = trackRow.first['title'] as String;
 
       final posRes = await txn.rawQuery(
@@ -1348,7 +1348,8 @@ class AppDatabase {
 
   /// Retrieves tracks belonging to a given [albumId].
   Future<List<Track>> getTracksByAlbumId(int albumId) async {
-    final rows = await database.rawQuery('''
+    final rows = await database.rawQuery(
+      '''
       SELECT 
         t.id, t.file_path, t.title, t.album_id, t.artist_id, t.album_artist,
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
@@ -1363,13 +1364,16 @@ class AppDatabase {
       LEFT JOIN artists ar ON t.artist_id = ar.id
       WHERE t.album_id = ?
       ORDER BY t.disc_number ASC, t.track_number ASC
-    ''', [albumId]);
+    ''',
+      [albumId],
+    );
     return rows.map((r) => Track.fromJson(r)).toList();
   }
 
   /// Retrieves tracks belonging to a given [artistId].
   Future<List<Track>> getTracksByArtistId(int artistId) async {
-    final rows = await database.rawQuery('''
+    final rows = await database.rawQuery(
+      '''
       SELECT 
         t.id, t.file_path, t.title, t.album_id, t.artist_id, t.album_artist,
         t.track_number, t.disc_number, t.year, t.duration_ms, t.bitrate,
@@ -1384,7 +1388,9 @@ class AppDatabase {
       LEFT JOIN artists ar ON t.artist_id = ar.id
       WHERE t.artist_id = ?
       ORDER BY t.title COLLATE NOCASE ASC
-    ''', [artistId]);
+    ''',
+      [artistId],
+    );
     return rows.map((r) => Track.fromJson(r)).toList();
   }
 
@@ -1393,7 +1399,8 @@ class AppDatabase {
     final clean = query.trim();
     if (clean.isEmpty) return [];
     final wildcard = '%$clean%';
-    final rows = await database.rawQuery('''
+    final rows = await database.rawQuery(
+      '''
       SELECT 
         al.id, al.name, al.artist_id, al.artist_name, al.year,
         COUNT(t.id) AS track_count
@@ -1403,7 +1410,9 @@ class AppDatabase {
       GROUP BY al.id
       HAVING COUNT(t.id) > 0
       ORDER BY al.name COLLATE NOCASE ASC
-    ''', [wildcard, wildcard]);
+    ''',
+      [wildcard, wildcard],
+    );
     return rows.map((r) => Album.fromJson(r)).toList();
   }
 
@@ -1412,7 +1421,8 @@ class AppDatabase {
     final clean = query.trim();
     if (clean.isEmpty) return [];
     final wildcard = '%$clean%';
-    final rows = await database.rawQuery('''
+    final rows = await database.rawQuery(
+      '''
       SELECT 
         ar.id, ar.name,
         COUNT(DISTINCT t.id) AS track_count,
@@ -1424,7 +1434,9 @@ class AppDatabase {
       GROUP BY ar.id
       HAVING COUNT(DISTINCT t.id) > 0
       ORDER BY ar.name COLLATE NOCASE ASC
-    ''', [wildcard]);
+    ''',
+      [wildcard],
+    );
     return rows.map((r) => Artist.fromJson(r)).toList();
   }
 
@@ -1439,16 +1451,12 @@ class AppDatabase {
     );
 
     if (entry.state == LyricsSourceState.found && entry.rawLrc != null) {
-      await database.insert(
-        'lyrics_cache',
-        {
-          'key_hash': entry.keyHash,
-          'raw_lrc': entry.rawLrc!,
-          'source': entry.source.dbValue,
-          'updated_at': entry.updatedAt,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await database.insert('lyrics_cache', {
+        'key_hash': entry.keyHash,
+        'raw_lrc': entry.rawLrc!,
+        'source': entry.source.dbValue,
+        'updated_at': entry.updatedAt,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
   }
 
@@ -1463,16 +1471,12 @@ class AppDatabase {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
         if (entry.state == LyricsSourceState.found && entry.rawLrc != null) {
-          await txn.insert(
-            'lyrics_cache',
-            {
-              'key_hash': entry.keyHash,
-              'raw_lrc': entry.rawLrc!,
-              'source': entry.source.dbValue,
-              'updated_at': entry.updatedAt,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          await txn.insert('lyrics_cache', {
+            'key_hash': entry.keyHash,
+            'raw_lrc': entry.rawLrc!,
+            'source': entry.source.dbValue,
+            'updated_at': entry.updatedAt,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       }
     });
@@ -1537,17 +1541,13 @@ class AppDatabase {
     required List<String> translatedLines,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    await database.insert(
-      'lyrics_translations',
-      {
-        'key_hash': keyHash,
-        'source': source,
-        'target_lang': targetLang,
-        'translated_lines': jsonEncode(translatedLines),
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await database.insert('lyrics_translations', {
+      'key_hash': keyHash,
+      'source': source,
+      'target_lang': targetLang,
+      'translated_lines': jsonEncode(translatedLines),
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Retrieves cached translated lines for [keyHash], [source], and [targetLang].
@@ -1604,18 +1604,16 @@ class AppDatabase {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
 
     final parsedSource = LyricsSource.tryParse(source) ?? LyricsSource.embedded;
-    await database.insert(
-      'lyrics_source_cache',
-      {
-        'key_hash': keyHash,
-        'source': parsedSource.dbValue,
-        'state': LyricsSourceState.found.dbValue,
-        'raw_lrc': rawLrc,
-        'is_synced': RegExp(r'\[\d{1,}:\d{2}\.\d{2,3}\]').hasMatch(rawLrc) ? 1 : 0,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await database.insert('lyrics_source_cache', {
+      'key_hash': keyHash,
+      'source': parsedSource.dbValue,
+      'state': LyricsSourceState.found.dbValue,
+      'raw_lrc': rawLrc,
+      'is_synced': RegExp(r'\[\d{1,}:\d{2}\.\d{2,3}\]').hasMatch(rawLrc)
+          ? 1
+          : 0,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<String?> getLyrics(String keyHash) async {
@@ -1663,7 +1661,11 @@ class AppDatabase {
     if (liked) {
       await removeTrackFromPlaylist(AppDatabase.likedSongsPlaylistId, trackId);
     } else {
-      await addTrackToPlaylist(AppDatabase.likedSongsPlaylistId, trackId, filePath);
+      await addTrackToPlaylist(
+        AppDatabase.likedSongsPlaylistId,
+        trackId,
+        filePath,
+      );
     }
   }
 

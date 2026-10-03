@@ -12,44 +12,11 @@ import 'package:tachyon/features/settings/data/settings_repository.dart' show Cr
 import 'audio_player_adapter.dart';
 import 'queue_manager.dart';
 
-// ============================================================================
-// AUDIO ENGINE SERVICE INTERFACE
-// ============================================================================
-
-// ============================================================================
-// EXCLUSIVE AUDIO / CROSSFADE CONFLICT EXCEPTION
-// ============================================================================
-
-class ExclusiveAudioCrossfadeException implements Exception {
-  final String message;
-  const ExclusiveAudioCrossfadeException(this.message);
-
-  @override
-  String toString() => 'ExclusiveAudioCrossfadeException: $message';
-}
-
-// ============================================================================
-// AUDIO ENGINE SERVICE IMPLEMENTATION
-// ============================================================================
-
-/// Production and testable implementation of [AudioEngineService].
-///
-/// Coordinates two [AudioPlayerAdapter] instances (Player A and Player B):
-/// - Role Swapping: Player A and Player B alternate roles between active and standby.
-/// - Active Player plays current song and drives UI progress streams.
-/// - When remaining track duration <= effective crossfade duration, standby player
-///   preloads and starts the next track at volume 0.0.
-/// - 25ms periodic ticker automates the volume curve (Equal-Power or Linear).
-/// - On completion, outgoing player stops, roles swap, and the incoming player
-///   continues uninterrupted.
-/// - Gapless mode: when crossfade duration == 0s, transitions instantly.
-/// - Integrates with [QueueManager] for queue, shuffle, loop, and infinite mix.
-/// - Implements [AudioSessionPlayerDelegate] for audio focus and session handling.
 class AudioEngineService {
   final AudioPlayerAdapter _playerA;
   final AudioPlayerAdapter _playerB;
   late AudioPlayerAdapter _activePlayer;
-  late AudioPlayerAdapter _standbyPlayer;
+  late AudioPlayerAdapter _backgroundPlayer;
 
   final QueueManager _queueManager;
   final Duration tickerInterval;
@@ -90,12 +57,12 @@ class AudioEngineService {
          const PlaybackState.initial(),
        ) {
     _activePlayer = _playerA;
-    _standbyPlayer = _playerB;
+    _backgroundPlayer = _playerB;
     _bindActivePlayerStreams();
   }
 
   AudioPlayerAdapter get activePlayer => _activePlayer;
-  AudioPlayerAdapter get standbyPlayer => _standbyPlayer;
+  AudioPlayerAdapter get standbyPlayer => _backgroundPlayer;
   QueueManager get queueManager => _queueManager;
   bool get isCrossfading => _isCrossfading;
   CrossfadeConfig get crossfadeConfig => _crossfadeConfig;
@@ -216,7 +183,7 @@ class AudioEngineService {
     if (playables.isEmpty) {
       _queueManager.clear();
       await _activePlayer.stop();
-      await _standbyPlayer.stop();
+      await _backgroundPlayer.stop();
       _emitState();
       return;
     }
@@ -242,7 +209,7 @@ class AudioEngineService {
     if (_queueManager.activeQueue.isEmpty) return;
     if (_isCrossfading) {
       await _activePlayer.play();
-      await _standbyPlayer.play();
+      await _backgroundPlayer.play();
       if (_fadeTimer == null || !_fadeTimer!.isActive) {
         _fadeTickStartTime = DateTime.now();
         _fadeTimer?.cancel();
@@ -267,7 +234,7 @@ class AudioEngineService {
       _fadeTimer?.cancel();
       _fadeTimer = null;
       await _activePlayer.pause();
-      await _standbyPlayer.pause();
+      await _backgroundPlayer.pause();
     } else {
       await _activePlayer.pause();
     }
@@ -280,7 +247,7 @@ class AudioEngineService {
       await _activePlayer.stop();
     } catch (_) {}
     try {
-      await _standbyPlayer.stop();
+      await _backgroundPlayer.stop();
     } catch (_) {}
     _emitState();
   }
@@ -378,34 +345,34 @@ class AudioEngineService {
 
     // 1. Terminate any previous background standby fade
     try {
-      await _standbyPlayer.setVolume(0.0);
-      await _standbyPlayer.stop();
+      await _backgroundPlayer.setVolume(0.0);
+      await _backgroundPlayer.stop();
     } catch (_) {}
 
     // 2. Open new track on standby player at full volume
     try {
-      await _standbyPlayer.setVolume(_masterVolume);
-      await _standbyPlayer.setRate(_playbackRate);
-      await _standbyPlayer.setPitch(_playbackPitch);
-      await _standbyPlayer.setEqualizer(_equalizer);
+      await _backgroundPlayer.setVolume(_masterVolume);
+      await _backgroundPlayer.setRate(_playbackRate);
+      await _backgroundPlayer.setPitch(_playbackPitch);
+      await _backgroundPlayer.setEqualizer(_equalizer);
       if (_currentDevice != null) {
-        await _standbyPlayer.setDevice(_currentDevice!);
+        await _backgroundPlayer.setDevice(_currentDevice!);
       }
     } catch (_) {}
-    await _standbyPlayer.open(targetTrack.filePath, play: true);
+    await _backgroundPlayer.open(targetTrack.filePath, play: true);
 
     if (_crossfadeGeneration != generation) {
       try {
-        await _standbyPlayer.setVolume(0.0);
-        await _standbyPlayer.stop();
+        await _backgroundPlayer.setVolume(0.0);
+        await _backgroundPlayer.stop();
       } catch (_) {}
       return;
     }
 
     // 3. Swap roles immediately so active player is the incoming new track
     final outgoingPlayer = _activePlayer;
-    _activePlayer = _standbyPlayer;
-    _standbyPlayer = outgoingPlayer;
+    _activePlayer = _backgroundPlayer;
+    _backgroundPlayer = outgoingPlayer;
 
     // Active streams now immediately reflect the new track at 0:00
     _bindActivePlayerStreams();
@@ -498,18 +465,18 @@ class AudioEngineService {
     _effectiveCrossfadeDuration = effectiveDuration;
 
     // Prime standby player
-    await _standbyPlayer.setVolume(0.0);
-    await _standbyPlayer.setRate(_playbackRate);
-    await _standbyPlayer.setPitch(_playbackPitch);
-    await _standbyPlayer.setEqualizer(_equalizer);
+    await _backgroundPlayer.setVolume(0.0);
+    await _backgroundPlayer.setRate(_playbackRate);
+    await _backgroundPlayer.setPitch(_playbackPitch);
+    await _backgroundPlayer.setEqualizer(_equalizer);
     if (_currentDevice != null) {
-      await _standbyPlayer.setDevice(_currentDevice!);
+      await _backgroundPlayer.setDevice(_currentDevice!);
     }
-    await _standbyPlayer.open(nextTrack.filePath, play: true);
+    await _backgroundPlayer.open(nextTrack.filePath, play: true);
 
     if (_crossfadeGeneration != generation) {
-      await _standbyPlayer.setVolume(0.0);
-      await _standbyPlayer.stop();
+      await _backgroundPlayer.setVolume(0.0);
+      await _backgroundPlayer.stop();
       return;
     }
 
@@ -538,13 +505,13 @@ class AudioEngineService {
       // Manual crossfade: _activePlayer is playing new track at full volume
       // _standbyPlayer is fading out outgoing track from _masterVolume to 0.0
       final vOut = _crossfadeConfig.calculateFadeOutVolume(progress, _masterVolume);
-      _standbyPlayer.setVolume(vOut);
+      _backgroundPlayer.setVolume(vOut);
 
       if (progress >= 1.0) {
         _fadeTimer?.cancel();
         _fadeTimer = null;
-        _standbyPlayer.setVolume(0.0);
-        _standbyPlayer.stop();
+        _backgroundPlayer.setVolume(0.0);
+        _backgroundPlayer.stop();
         _isCrossfading = false;
         _isManualCrossfade = false;
       }
@@ -557,7 +524,7 @@ class AudioEngineService {
       final vIn = _crossfadeConfig.calculateFadeInVolume(progress, _masterVolume);
 
       _activePlayer.setVolume(vOut);
-      _standbyPlayer.setVolume(vIn);
+      _backgroundPlayer.setVolume(vIn);
 
       if (progress >= 1.0) {
         _completeCrossfade(generation);
@@ -581,7 +548,7 @@ class AudioEngineService {
 
     // Ensure incoming player receives exact master volume
     try {
-      await _standbyPlayer.setVolume(_masterVolume);
+      await _backgroundPlayer.setVolume(_masterVolume);
     } catch (_) {}
 
     // Only auto-crossfade advances queue index at completion
@@ -591,8 +558,8 @@ class AudioEngineService {
 
     // Role Swap: Standby becomes Active, Active becomes Standby
     final temp = _activePlayer;
-    _activePlayer = _standbyPlayer;
-    _standbyPlayer = temp;
+    _activePlayer = _backgroundPlayer;
+    _backgroundPlayer = temp;
 
     _isCrossfading = false;
     _isManualCrossfade = false;
@@ -612,7 +579,7 @@ class AudioEngineService {
       await _activePlayer.stop();
     } catch (_) {}
     try {
-      await _standbyPlayer.setVolume(_masterVolume);
+      await _backgroundPlayer.setVolume(_masterVolume);
     } catch (_) {}
 
     if (!_isManualCrossfade) {
@@ -620,8 +587,8 @@ class AudioEngineService {
     }
 
     final temp = _activePlayer;
-    _activePlayer = _standbyPlayer;
-    _standbyPlayer = temp;
+    _activePlayer = _backgroundPlayer;
+    _backgroundPlayer = temp;
 
     _isCrossfading = false;
     _isManualCrossfade = false;
@@ -646,8 +613,8 @@ class AudioEngineService {
     } catch (_) {}
     // Stop and silence preloaded standby player
     try {
-      await _standbyPlayer.setVolume(0.0);
-      await _standbyPlayer.stop();
+      await _backgroundPlayer.setVolume(0.0);
+      await _backgroundPlayer.stop();
     } catch (_) {}
   }
 
@@ -702,7 +669,7 @@ class AudioEngineService {
       AppDefaults.playbackRateMax,
     );
     await _activePlayer.setRate(_playbackRate);
-    await _standbyPlayer.setRate(_playbackRate);
+    await _backgroundPlayer.setRate(_playbackRate);
     _emitState();
   }
 
@@ -712,14 +679,14 @@ class AudioEngineService {
       AppDefaults.playbackPitchMax,
     );
     await _activePlayer.setPitch(_playbackPitch);
-    await _standbyPlayer.setPitch(_playbackPitch);
+    await _backgroundPlayer.setPitch(_playbackPitch);
     _emitState();
   }
 
   Future<void> setSkipSilence(bool enabled) async {
     _skipSilence = enabled;
     await _activePlayer.setSkipSilence(enabled);
-    await _standbyPlayer.setSkipSilence(enabled);
+    await _backgroundPlayer.setSkipSilence(enabled);
     _emitState();
   }
 
@@ -805,7 +772,7 @@ class AudioEngineService {
       await sub.cancel();
     }
     await _activePlayer.dispose();
-    await _standbyPlayer.dispose();
+    await _backgroundPlayer.dispose();
     await _positionStreamController.close();
     await _stateSubject.close();
   }
