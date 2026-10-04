@@ -27,10 +27,11 @@ class _GenresScreenState extends State<GenresScreen> {
     final playback = context.read<PlaybackController>();
 
     if (_selectedGenre != null) {
-      final target = _selectedGenre!.name.toLowerCase();
-      final genreTracks = library.allTracks
-          .where((t) => t.genres.any((g) => g.toLowerCase() == target))
-          .toList();
+      final currentGenre = (_selectedGenre!.id != null
+              ? library.store.getGenreById(_selectedGenre!.id!)
+              : null) ??
+          _selectedGenre!;
+      final genreTracks = currentGenre.tracks;
 
       return Scaffold(
         appBar: AppBar(

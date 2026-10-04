@@ -113,14 +113,7 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
               itemCount: artists.length,
               itemBuilder: (context, index) {
                 final artist = artists[index];
-                final artistTrack = library.allTracks
-                    .where(
-                      (t) =>
-                          (artist.id != null && t.artistId == artist.id) ||
-                          t.artist == artist.name,
-                    )
-                    .firstOrNull;
-                final coverFilePath = artistTrack?.filePath ?? '';
+                final coverFilePath = artist.tracks.firstOrNull?.filePath ?? '';
 
                 return InkWell(
                   borderRadius: BorderRadius.circular(12.0),

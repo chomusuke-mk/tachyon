@@ -12,6 +12,7 @@ import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
@@ -39,6 +40,8 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
       StreamController<List<AudioDevice>>.broadcast();
   final StreamController<ScanProgress> _scanProgressController =
       StreamController<ScanProgress>.broadcast();
+  final StreamController<void> _catalogUpdatedController =
+      StreamController<void>.broadcast();
   StreamSubscription<ScanProgress>? _scanSubscription;
 
   DirectTachyonBackendClient({
@@ -73,6 +76,9 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
 
   @override
   Stream<ScanProgress> get scanProgressStream => _scanProgressController.stream;
+
+  @override
+  Stream<void> get catalogUpdatedStream => _catalogUpdatedController.stream;
 
   @override
   Future<void> play() async => await audioEngine?.play();
@@ -197,36 +203,31 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
       audioEngine?.queueManager.setInfiniteMix(enabled);
 
   @override
-  Future<List<Track>> getTracks({
-    TrackSortOption? sort,
-    bool ascending = true,
-  }) async {
-    return await database?.getAllTracks(
-          sortBy: sort?.name,
-          ascending: ascending,
-        ) ??
-        const [];
+  Future<CatalogSnapshot> getCatalogSnapshot() async {
+    return database?.getCatalogSnapshot() ?? const CatalogSnapshot.empty();
   }
 
   @override
-  Future<List<Album>> getAlbums() async =>
-      await database?.getAllAlbums() ?? const [];
+  Future<List<Track>> getTracks({
+    TrackSortOption? sort,
+    bool ascending = true,
+  }) async =>
+      const [];
 
   @override
-  Future<List<Artist>> getArtists() async =>
-      await database?.getAllArtists() ?? const [];
+  Future<List<Album>> getAlbums() async => const [];
 
   @override
-  Future<List<Genre>> getGenres() async =>
-      await database?.getAllGenres() ?? const [];
+  Future<List<Artist>> getArtists() async => const [];
 
   @override
-  Future<List<Track>> getAlbumTracks(int albumId) async =>
-      await database?.getTracksByAlbumId(albumId) ?? const [];
+  Future<List<Genre>> getGenres() async => const [];
 
   @override
-  Future<List<Track>> getArtistTracks(int artistId) async =>
-      await database?.getTracksByArtistId(artistId) ?? const [];
+  Future<List<Track>> getAlbumTracks(int albumId) async => const [];
+
+  @override
+  Future<List<Track>> getArtistTracks(int artistId) async => const [];
 
   @override
   Future<void> startScan(String directoryPath) async {
@@ -240,6 +241,9 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     await _scanSubscription?.cancel();
     _scanSubscription = scanner.scanDirectories(directories).listen((progress) {
       _scanProgressController.add(progress);
+      if (progress.phase == ScanPhase.completed) {
+        _catalogUpdatedController.add(null);
+      }
     });
   }
 
@@ -251,20 +255,22 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
 
   @override
   Future<void> deleteTrack(int trackId) async {
-    await database?.deleteTrack(trackId);
+    database?.deleteTrack(trackId);
+    _catalogUpdatedController.add(null);
   }
 
   @override
   Future<void> deleteTracksInFolder(String folderPath) async {
-    await database?.deleteTracksInFolder(folderPath);
+    database?.deleteTracksInFolder(folderPath);
+    _catalogUpdatedController.add(null);
   }
 
   @override
-  Future<Track?> getMetadata(String filePath) async {
+  Future<ExtractedTrackData?> getMetadata(String filePath) async {
     if (metadataService != null) {
       return await metadataService!.getMetadata(filePath);
     }
-    return await database?.getTrackByFilePath(filePath);
+    return null;
   }
 
   @override
@@ -319,28 +325,33 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   }
 
   @override
-  Future<List<Playlist>> getPlaylists() async =>
-      await database?.getAllPlaylists() ?? const [];
+  Future<List<Playlist>> getPlaylists() async => const [];
 
   @override
-  Future<int> createPlaylist(String name) async =>
-      await database?.createPlaylist(name) ?? -1;
+  Future<int> createPlaylist(String name) async {
+    final id = database?.createPlaylist(name) ?? -1;
+    _catalogUpdatedController.add(null);
+    return id;
+  }
 
   @override
-  Future<void> deletePlaylist(int playlistId) async =>
-      await database?.deletePlaylist(playlistId);
+  Future<void> deletePlaylist(int playlistId) async {
+    database?.deletePlaylist(playlistId);
+    _catalogUpdatedController.add(null);
+  }
 
   @override
-  Future<void> renamePlaylist(int playlistId, String name) async =>
-      await database?.renamePlaylist(playlistId, name);
+  Future<void> renamePlaylist(int playlistId, String name) async {
+    database?.renamePlaylist(playlistId, name);
+    _catalogUpdatedController.add(null);
+  }
 
   @override
-  Future<List<Track>> getPlaylistTracks(int playlistId) async =>
-      await database?.getTracksForPlaylist(playlistId) ?? const [];
+  Future<List<Track>> getPlaylistTracks(int playlistId) async => const [];
 
   @override
   Future<List<int>> getPlaylistTrackIds(int playlistId) async {
-    final ids = await database?.getTrackIdsForPlaylist(playlistId);
+    final ids = database?.getTrackIdsForPlaylist(playlistId);
     return ids?.toList() ?? const [];
   }
 
@@ -348,19 +359,21 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) async {
     if (database == null) return;
     try {
-      await database!.addTracksToPlaylist(playlistId, trackIds);
+      database!.addTracksToPlaylist(playlistId, trackIds);
     } catch (_) {
       for (final id in trackIds) {
         try {
-          await database!.addTrackToPlaylist(playlistId, id);
+          database!.addTrackToPlaylist(playlistId, id);
         } catch (_) {}
       }
     }
+    _catalogUpdatedController.add(null);
   }
 
   @override
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) async {
-    await database?.removeTrackFromPlaylist(playlistId, trackId);
+    database?.removeTrackFromPlaylist(playlistId, trackId);
+    _catalogUpdatedController.add(null);
   }
 
   @override
@@ -369,35 +382,32 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     int oldIndex,
     int newIndex,
   ) async {
-    await database?.reorderPlaylistEntries(playlistId, oldIndex, newIndex);
+    database?.reorderPlaylistEntries(playlistId, oldIndex, newIndex);
+    _catalogUpdatedController.add(null);
   }
 
   @override
   Future<bool> toggleLikeTrack(int trackId, [String? filePath]) async {
     if (database == null) return false;
-    await database!.toggleLikeTrack(trackId, filePath);
-    return await database!.isTrackLiked(trackId);
+    database!.toggleLikeTrack(trackId, filePath);
+    _catalogUpdatedController.add(null);
+    return database!.isTrackLiked(trackId);
   }
 
   @override
   Future<bool> isTrackLiked(int trackId) async {
-    return await database?.isTrackLiked(trackId) ?? false;
+    return database?.isTrackLiked(trackId) ?? false;
   }
 
   @override
   Future<void> clearHistory() async {
-    await database?.clearHistory();
+    database?.clearHistory();
+    _catalogUpdatedController.add(null);
   }
 
   @override
   Future<Map<String, dynamic>> search(String query) async {
-    if (database == null) {
-      return {'tracks': <Track>[], 'albums': <Album>[], 'artists': <Artist>[]};
-    }
-    final tracks = await database!.searchTracks(query);
-    final albums = await database!.searchAlbums(query);
-    final artists = await database!.searchArtists(query);
-    return {'tracks': tracks, 'albums': albums, 'artists': artists};
+    return const {'tracks': <Track>[], 'albums': <Album>[], 'artists': <Artist>[]};
   }
 
   @override
@@ -427,7 +437,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     required List<String> rawLines,
   }) async {
     if (database != null) {
-      final cached = await database!.getLyricsTranslation(
+      final cached = database!.getLyricsTranslation(
         keyHash: keyHash,
         source: source.dbValue,
         targetLang: targetLang,
@@ -443,7 +453,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     if (translationResult.isSuccess) {
       final translatedLines = translationResult.translatedLines;
       if (database != null) {
-        await database!.saveLyricsTranslation(
+        database!.saveLyricsTranslation(
           keyHash: keyHash,
           source: source.dbValue,
           targetLang: targetLang,
@@ -460,5 +470,6 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     await _scanSubscription?.cancel();
     await _devicesController.close();
     await _scanProgressController.close();
+    await _catalogUpdatedController.close();
   }
 }

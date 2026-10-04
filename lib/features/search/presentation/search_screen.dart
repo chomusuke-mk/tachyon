@@ -271,11 +271,11 @@ class _SearchScreenState extends State<SearchScreen> {
                                             ClipRRect(
                                               borderRadius:
                                                   BorderRadius.circular(10.0),
-                                              child: const SizedBox(
+                                              child: SizedBox(
                                                 width: 120,
                                                 height: 120,
                                                 child: AlbumArtImage(
-                                                  filePath: '',
+                                                  filePath: album.tracks.firstOrNull?.filePath ?? '',
                                                   fit: BoxFit.cover,
                                                 ),
                                               ),
@@ -291,7 +291,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                               ),
                                             ),
                                             Text(
-                                              album.artistName ?? '',
+                                              album.artist?.name ?? '',
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: TextStyle(

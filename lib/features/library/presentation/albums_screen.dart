@@ -33,8 +33,8 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
           cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
           break;
         case AlbumSortOption.artist:
-          cmp = (a.artistName ?? '').toLowerCase().compareTo(
-            (b.artistName ?? '').toLowerCase(),
+          cmp = (a.artist?.name ?? '').toLowerCase().compareTo(
+            (b.artist?.name ?? '').toLowerCase(),
           );
           break;
         case AlbumSortOption.year:
@@ -122,15 +122,7 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
               itemCount: albums.length,
               itemBuilder: (context, index) {
                 final album = albums[index];
-                // Find a track from this album that has a cached cover image.
-                // Prefer tracks with cached covers, fall back to any track.
-                final albumTracks = library.allTracks.where(
-                  (t) =>
-                      (album.id != null && t.albumId == album.id) ||
-                      t.album == album.name,
-                );
-                final albumTrack = albumTracks.firstOrNull;
-                final coverFilePath = albumTrack?.filePath ?? '';
+                final coverFilePath = album.tracks.firstOrNull?.filePath ?? '';
 
                 return InkWell(
                   borderRadius: BorderRadius.circular(12.0),
@@ -168,7 +160,7 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        album.artistName ?? strings.trUnknownArtist,
+                        album.artist?.name ?? strings.trUnknownArtist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

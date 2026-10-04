@@ -195,7 +195,7 @@ class PlaylistsScreen extends StatelessWidget {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.delete_sweep_rounded, size: 20),
-                      tooltip: 'Clear History',
+                      tooltip: strings.srClearHistory,
                       onPressed: () => playlistsCtrl.clearHistory(),
                     ),
                     const Icon(Icons.chevron_right_rounded),
@@ -219,7 +219,7 @@ class PlaylistsScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
             child: Text(
-              'Your Playlists (${userPlaylists.length})',
+              '${strings.plTitle} (${userPlaylists.length})',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.bold,
@@ -269,7 +269,12 @@ class PlaylistsScreen extends StatelessWidget {
                           children: [
                             const Icon(Icons.edit_rounded, size: 20),
                             const SizedBox(width: 12),
-                            Text(strings.plRename),
+                            Expanded(
+                              child: Text(
+                                strings.plRename,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -283,9 +288,12 @@ class PlaylistsScreen extends StatelessWidget {
                               color: Colors.redAccent,
                             ),
                             const SizedBox(width: 12),
-                            Text(
-                              strings.plDelete,
-                              style: const TextStyle(color: Colors.redAccent),
+                            Expanded(
+                              child: Text(
+                                strings.plDelete,
+                                style: const TextStyle(color: Colors.redAccent),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),

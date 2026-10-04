@@ -65,3 +65,5 @@ app.*.map.json
 .widget_preview/
 /JSON/
 /rust/
+/docs/
+/AGENTS.md

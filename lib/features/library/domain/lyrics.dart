@@ -5,7 +5,8 @@ class Lyrics {
   final String? source;
 
   const Lyrics({
-    this.lyrics,
+    this.id,
+    this.rawLyrics,
     this.source,
   });
 }

@@ -96,8 +96,10 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
                     children: [
                       FilledButton.icon(
                         icon: const Icon(Icons.play_arrow_rounded),
@@ -106,7 +108,6 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                             ? () => playback.playAll(tracks, startIndex: 0)
                             : null,
                       ),
-                      const SizedBox(width: 12),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.shuffle_rounded),
                         label: Text(strings.plShuffleAll),
@@ -163,6 +164,14 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                   final track = tracks[index];
                   final isPlaying = currentTrackFilePath == track.filePath;
 
+                  final artistNames =
+                      track.artists.map((a) => a.name).join(', ');
+                  final albumName = track.album?.name ?? '';
+                  final subtitleParts = [
+                    if (artistNames.isNotEmpty) artistNames,
+                    if (albumName.isNotEmpty) albumName,
+                  ];
+
                   return ListTile(
                     key: ValueKey('${track.id}_$index'),
                     leading: Icon(
@@ -185,7 +194,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       ),
                     ),
                     subtitle: Text(
-                      '${track.artistName} • ${track.albumName}',
+                      subtitleParts.join(' • '),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

@@ -114,7 +114,7 @@ class LyricsService {
     // Force refresh purges previous cache for this track
     if (forceRefresh) {
       _memoryCache.remove(keyHash);
-      await database.clearLyricsSourceEntries(keyHash);
+      database.clearLyricsSourceEntries(keyHash);
       cooldownManager.clearCooldown();
     }
 
@@ -134,7 +134,7 @@ class LyricsService {
       String? rawLyrics = embeddedLyrics;
       if (rawLyrics == null || rawLyrics.trim().isEmpty) {
         try {
-          rawLyrics = await database.getTrackLyricsByFilePath(filePath);
+          rawLyrics = database.getTrackLyricsByFilePath(filePath);
         } catch (_) {}
       }
 
@@ -147,7 +147,7 @@ class LyricsService {
             rawLrc: rawLyrics,
             isSynced: parsed.isSynced,
           );
-          await database.saveLyricsSourceEntry(entry);
+          database.saveLyricsSourceEntry(entry);
           final result = LyricsResult(
             lyrics: parsed,
             source: LyricsSource.embedded,
@@ -176,7 +176,7 @@ class LyricsService {
             rawLrc: externalLrc,
             isSynced: parsed.isSynced,
           );
-          await database.saveLyricsSourceEntry(entry);
+          database.saveLyricsSourceEntry(entry);
           final result = LyricsResult(
             lyrics: parsed,
             source: LyricsSource.file,
@@ -203,7 +203,7 @@ class LyricsService {
     // -------------------------------------------------------------------------
     // SQLite Cache Lookup for Web Sources
     // -------------------------------------------------------------------------
-    final entries = await database.getAllLyricsSourceEntries(keyHash);
+    final entries = database.getAllLyricsSourceEntries(keyHash);
 
     // -------------------------------------------------------------------------
     // Tier 3: Primary Web API (lrclib.net)
@@ -269,7 +269,7 @@ class LyricsService {
                   rawLrc: rawLrc,
                   isSynced: isSynced,
                 );
-                await database.saveLyricsSourceEntry(entry);
+                database.saveLyricsSourceEntry(entry);
                 final result = LyricsResult(
                   lyrics: parsed,
                   source: LyricsSource.lrclib,
@@ -282,14 +282,14 @@ class LyricsService {
                 return result;
               }
             } else if (response.isNotFound) {
-              await database.saveLyricsSourceEntry(
+              database.saveLyricsSourceEntry(
                 LyricsSourceEntry.notFound(
                   keyHash: keyHash,
                   source: LyricsSource.lrclib,
                 ),
               );
             } else if (response.isRateLimited) {
-              await database.saveLyricsSourceEntry(
+              database.saveLyricsSourceEntry(
                 LyricsSourceEntry.temporaryError(
                   keyHash: keyHash,
                   source: LyricsSource.lrclib,
@@ -304,7 +304,7 @@ class LyricsService {
                 cooldownManager.setCooldown(Duration(seconds: retrySeconds));
               }
             } else {
-              await database.saveLyricsSourceEntry(
+              database.saveLyricsSourceEntry(
                 LyricsSourceEntry.temporaryError(
                   keyHash: keyHash,
                   source: LyricsSource.lrclib,
@@ -369,7 +369,7 @@ class LyricsService {
                 rawLrc: ovhLyrics,
                 isSynced: false,
               );
-              await database.saveLyricsSourceEntry(entry);
+              database.saveLyricsSourceEntry(entry);
               final result = LyricsResult(
                 lyrics: parsed,
                 source: LyricsSource.lyricsOvh,
@@ -382,14 +382,14 @@ class LyricsService {
               return result;
             }
           } else if (ovhResponse.isNotFound) {
-            await database.saveLyricsSourceEntry(
+            database.saveLyricsSourceEntry(
               LyricsSourceEntry.notFound(
                 keyHash: keyHash,
                 source: LyricsSource.lyricsOvh,
               ),
             );
           } else {
-            await database.saveLyricsSourceEntry(
+            database.saveLyricsSourceEntry(
               LyricsSourceEntry.temporaryError(
                 keyHash: keyHash,
                 source: LyricsSource.lyricsOvh,
@@ -415,10 +415,12 @@ class LyricsService {
     return resolveLyricsByFilePath(
       filePath: track.filePath,
       title: track.title,
-      artist: track.artist,
-      album: track.album,
+      artist: track.artists.isEmpty
+          ? null
+          : track.artists.map((a) => a.name).join(', '),
+      album: track.album?.name,
       durationMs: track.durationMs,
-      embeddedLyrics: track.lyrics,
+      embeddedLyrics: track.lyrics?.rawLyrics,
       allowRemote: allowRemote,
       forceRefresh: forceRefresh,
       enabledSources: enabledSources,
@@ -660,7 +662,7 @@ class LyricsService {
     required String rawLrc,
     required String source,
   }) async {
-    await database.saveLyrics(keyHash, rawLrc, source);
+    database.saveLyrics(keyHash, rawLrc, source);
     final parsed = LrcParser.parse(rawLrc);
     final lyricsSource = LyricsSource.fromDbString(source);
     final result = LyricsResult(

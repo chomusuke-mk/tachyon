@@ -1,4 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:tachyon/features/library/domain/album.dart';
+import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/library/domain/lyrics.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
 enum Loop {
@@ -51,14 +54,16 @@ class QueueItem {
   });
 
   factory QueueItem.fromTrack(Track track, {String? id}) {
+    final artistStr = track.artists.map((a) => a.name).join(', ');
+    final albumStr = track.album?.name ?? '';
     return QueueItem(
       id: id ?? '${track.filePath}_${DateTime.now().microsecondsSinceEpoch}',
       trackId: track.id,
       filePath: track.filePath,
       title: track.title,
-      artist: track.artist ?? 'Unknown Artist',
-      artists: track.artists,
-      album: track.album ?? 'Unknown Album',
+      artist: artistStr.isNotEmpty ? artistStr : 'Unknown Artist',
+      artists: track.artists.map((a) => a.name).toList(),
+      album: albumStr.isNotEmpty ? albumStr : 'Unknown Album',
       duration: track.duration,
       extras: {
         'year': track.year,
@@ -67,12 +72,10 @@ class QueueItem {
         'bitrate': track.bitrate,
         'sampleRate': track.sampleRate,
         'channels': track.channels,
-        'lyrics': track.lyrics,
+        'lyrics': track.lyrics?.rawLyrics,
         'codec': track.codec,
         'replayGainTrackGain': track.replayGainTrackGain,
         'replayGainTrackPeak': track.replayGainTrackPeak,
-        'replayGainAlbumGain': track.replayGainAlbumGain,
-        'replayGainAlbumPeak': track.replayGainAlbumPeak,
       },
     );
   }
@@ -87,17 +90,23 @@ class QueueItem {
       id: trackId,
       filePath: filePath,
       title: title,
-      artist: artist,
-      artists: artists,
-      album: album,
+      trackNumber: extras['trackNumber'] as int?,
+      discNumber: extras['discNumber'] as int? ?? 1,
+      year: extras['year'] as int?,
       durationMs: duration.inMilliseconds,
+      bitrate: extras['bitrate'] as int?,
+      sampleRate: extras['sampleRate'] as int?,
+      channels: extras['channels'] as int?,
+      codec: extras['codec'] as String?,
       fileSize: 0,
       modifiedAt: 0,
-      lyrics: extras['lyrics'] as String?,
       replayGainTrackGain: replayGainTrackGain,
       replayGainTrackPeak: replayGainTrackPeak,
-      replayGainAlbumGain: replayGainAlbumGain,
-      replayGainAlbumPeak: replayGainAlbumPeak,
+      album: album.isNotEmpty && album != 'Unknown Album' ? Album(name: album) : null,
+      artists: artists.isNotEmpty
+          ? artists.map((a) => Artist(name: a)).toList()
+          : (artist.isNotEmpty && artist != 'Unknown Artist' ? [Artist(name: artist)] : const []),
+      lyrics: extras['lyrics'] != null ? Lyrics(rawLyrics: extras['lyrics'] as String) : null,
     );
   }
 

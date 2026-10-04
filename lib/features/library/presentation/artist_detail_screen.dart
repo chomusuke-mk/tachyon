@@ -24,24 +24,15 @@ class ArtistDetailScreen extends StatelessWidget {
     );
     final playback = context.read<PlaybackController>();
 
-    final artistTracks = library.allTracks
-        .where(
-          (t) =>
-              (artist.id != null && t.artistId == artist.id) ||
-              t.artist == artist.name,
-        )
-        .toList();
-
-    final artistAlbums = library.albums
-        .where(
-          (a) =>
-              (artist.id != null && a.artistId == artist.id) ||
-              a.artistName == artist.name,
-        )
-        .toList();
+    final currentArtist = (artist.id != null
+            ? library.store.getArtistById(artist.id!)
+            : null) ??
+        artist;
+    final artistTracks = currentArtist.tracks;
+    final artistAlbums = currentArtist.albums;
 
     final firstFilePath =
-        artistTracks.isNotEmpty ? artistTracks.first.filePath : '';
+        artistTracks.firstOrNull?.filePath ?? '';
 
     return Scaffold(
       appBar: AppBar(title: Text(artist.name)),
@@ -93,8 +84,10 @@ class ArtistDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
                     children: [
                       FilledButton.icon(
                         icon: const Icon(Icons.play_arrow_rounded),
@@ -104,7 +97,6 @@ class ArtistDetailScreen extends StatelessWidget {
                                   playback.playAll(artistTracks, startIndex: 0)
                             : null,
                       ),
-                      const SizedBox(width: 12),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.shuffle_rounded),
                         label: Text(strings.arShuffleAll),
@@ -135,15 +127,8 @@ class ArtistDetailScreen extends StatelessWidget {
                             const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final album = artistAlbums[index];
-                          final albumTrack = library.allTracks
-                              .where(
-                                (t) =>
-                                    (album.id != null &&
-                                        t.albumId == album.id) ||
-                                    t.album == album.name,
-                              )
-                              .firstOrNull;
-                          final coverFilePath = albumTrack?.filePath ?? '';
+                          final coverFilePath =
+                              album.tracks.firstOrNull?.filePath ?? '';
 
                           return InkWell(
                             borderRadius: BorderRadius.circular(8.0),

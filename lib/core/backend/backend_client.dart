@@ -6,7 +6,9 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:tachyon/core/backend/backend_host.dart';
 import 'package:tachyon/core/backend/backend_protocol.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
+import 'package:tachyon/core/backend/services/metadata_service.dart' show ExtractedTrackData;
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
+import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/library/domain/album.dart';
@@ -29,6 +31,7 @@ abstract class TachyonBackendClient {
   Stream<Duration> get positionStream;
   Stream<List<AudioDevice>> get devicesStream;
   Stream<ScanProgress> get scanProgressStream;
+  Stream<void> get catalogUpdatedStream;
 
   // --- Playback Commands ---
   Future<void> play();
@@ -67,6 +70,7 @@ abstract class TachyonBackendClient {
   Future<void> setInfiniteMix(bool enabled);
 
   // --- Library & Catalog ---
+  Future<CatalogSnapshot> getCatalogSnapshot();
   Future<List<Track>> getTracks({TrackSortOption? sort, bool ascending = true});
   Future<List<Album>> getAlbums();
   Future<List<Artist>> getArtists();
@@ -80,7 +84,7 @@ abstract class TachyonBackendClient {
   Future<void> deleteTracksInFolder(String folderPath);
 
   // --- Metadata & Thumbnails (Worker Isolates) ---
-  Future<Track?> getMetadata(String filePath);
+  Future<ExtractedTrackData?> getMetadata(String filePath);
   Future<String?> getThumbnail(String filePath, {bool isHighQuality = false});
   Future<String?> getArtistCover(String artistName, {bool isHighQuality = false});
   Future<void> clearCoverCache();
@@ -140,6 +144,8 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
       StreamController<List<AudioDevice>>.broadcast();
   final StreamController<ScanProgress> _scanProgressController =
       StreamController<ScanProgress>.broadcast();
+  final StreamController<void> _catalogUpdatedController =
+      StreamController<void>.broadcast();
 
   @override
   Stream<PlaybackState> get playbackStateStream => _playbackStateController.stream;
@@ -152,6 +158,9 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
 
   @override
   Stream<ScanProgress> get scanProgressStream => _scanProgressController.stream;
+
+  @override
+  Stream<void> get catalogUpdatedStream => _catalogUpdatedController.stream;
 
   /// Spawns and connects to the Core Service Isolate.
   Future<void> initialize({
@@ -226,6 +235,10 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
         if (event.payload is ScanProgress) {
           _scanProgressController.add(event.payload as ScanProgress);
         }
+        break;
+
+      case BackendTopics.catalogUpdated:
+        _catalogUpdatedController.add(null);
         break;
     }
   }
@@ -412,6 +425,12 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   // LIBRARY & CATALOG
   // ===========================================================================
   @override
+  Future<CatalogSnapshot> getCatalogSnapshot() async {
+    final result = await _send<dynamic>(BackendMethods.libraryGetCatalogSnapshot);
+    return result as CatalogSnapshot;
+  }
+
+  @override
   Future<List<Track>> getTracks({TrackSortOption? sort, bool ascending = true}) async {
     final result = await _send<List<dynamic>>(
       BackendMethods.libraryGetTracks,
@@ -483,8 +502,8 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   // METADATA & THUMBNAILS (WORKER ISOLATES)
   // ===========================================================================
   @override
-  Future<Track?> getMetadata(String filePath) =>
-      _send<Track?>(BackendMethods.metadataGetMetadata, {'filePath': filePath});
+  Future<ExtractedTrackData?> getMetadata(String filePath) =>
+      _send<ExtractedTrackData?>(BackendMethods.metadataGetMetadata, {'filePath': filePath});
 
   @override
   Future<String?> getThumbnail(String filePath, {bool isHighQuality = false}) =>
@@ -640,6 +659,7 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
     await _positionController.close();
     await _devicesController.close();
     await _scanProgressController.close();
+    await _catalogUpdatedController.close();
     _hostIsolate?.kill(priority: Isolate.immediate);
     _hostIsolate = null;
   }

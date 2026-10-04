@@ -76,6 +76,7 @@ abstract final class BackendMethods {
   static const String playbackSetInfiniteMix = 'playback.setInfiniteMix';
 
   // Library & Catalog queries
+  static const String libraryGetCatalogSnapshot = 'library.getCatalogSnapshot';
   static const String libraryGetTracks = 'library.getTracks';
   static const String libraryGetAlbums = 'library.getAlbums';
   static const String libraryGetArtists = 'library.getArtists';
@@ -121,4 +122,5 @@ abstract final class BackendTopics {
   static const String playbackPosition = 'playback.position';
   static const String playbackDevices = 'playback.devices';
   static const String libraryScanProgress = 'library.scanProgress';
+  static const String catalogUpdated = 'catalog.updated';
 }

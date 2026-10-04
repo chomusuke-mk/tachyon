@@ -14,9 +14,12 @@ import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/backend/services/queue_manager.dart';
+import 'package:tachyon/features/library/domain/album.dart';
+import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/library/domain/genre.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/features/library/domain/track_sort_option.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
@@ -288,27 +291,26 @@ class TachyonBackendHost {
       // =======================================================================
       // LIBRARY & CATALOG
       // =======================================================================
+      case BackendMethods.libraryGetCatalogSnapshot:
+        return _database.getCatalogSnapshot();
+
       case BackendMethods.libraryGetTracks:
-        final sort = params['sort'] as TrackSortOption?;
-        final asc = params['ascending'] as bool? ?? true;
-        return await _database.getAllTracks(sortBy: sort?.name, ascending: asc);
+        return const <Track>[];
 
       case BackendMethods.libraryGetAlbums:
-        return await _database.getAllAlbums();
+        return const <Album>[];
 
       case BackendMethods.libraryGetArtists:
-        return await _database.getAllArtists();
+        return const <Artist>[];
 
       case BackendMethods.libraryGetGenres:
-        return await _database.getAllGenres();
+        return const <Genre>[];
 
       case BackendMethods.libraryGetAlbumTracks:
-        final albumId = params['albumId'] as int;
-        return await _database.getTracksByAlbumId(albumId);
+        return const <Track>[];
 
       case BackendMethods.libraryGetArtistTracks:
-        final artistId = params['artistId'] as int;
-        return await _database.getTracksByArtistId(artistId);
+        return const <Track>[];
 
       case BackendMethods.libraryStartScan:
         final directories = params['directories'] != null
@@ -320,6 +322,11 @@ class TachyonBackendHost {
             topic: BackendTopics.libraryScanProgress,
             payload: progress,
           ));
+          if (progress.phase == ScanPhase.completed) {
+            config.uiSendPort.send(const BackendEvent(
+              topic: BackendTopics.catalogUpdated,
+            ));
+          }
         });
         return null;
 
@@ -330,12 +337,14 @@ class TachyonBackendHost {
 
       case BackendMethods.libraryDeleteTrack:
         final trackId = params['trackId'] as int;
-        await _database.deleteTrack(trackId);
+        _database.deleteTrack(trackId);
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
         return null;
 
       case BackendMethods.libraryDeleteTracksInFolder:
         final folderPath = params['folderPath'] as String;
-        await _database.deleteTracksInFolder(folderPath);
+        _database.deleteTracksInFolder(folderPath);
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
         return null;
 
       // =======================================================================
@@ -363,77 +372,78 @@ class TachyonBackendHost {
       // PLAYLISTS
       // =======================================================================
       case BackendMethods.playlistsGetAll:
-        return await _database.getAllPlaylists();
+        return const <Playlist>[];
 
       case BackendMethods.playlistsCreate:
         final name = params['name'] as String;
-        return await _database.createPlaylist(name);
+        final id = _database.createPlaylist(name);
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        return id;
 
       case BackendMethods.playlistsDelete:
         final playlistId = params['playlistId'] as int;
-        await _database.deletePlaylist(playlistId);
+        _database.deletePlaylist(playlistId);
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
         return null;
 
       case BackendMethods.playlistsRename:
         final playlistId = params['playlistId'] as int;
         final name = params['name'] as String;
-        await _database.renamePlaylist(playlistId, name);
+        _database.renamePlaylist(playlistId, name);
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
         return null;
 
       case BackendMethods.playlistsGetTracks:
-        final playlistId = params['playlistId'] as int;
-        return await _database.getTracksForPlaylist(playlistId);
+        return const <Track>[];
 
       case BackendMethods.playlistsAddTracks:
         final playlistId = params['playlistId'] as int;
         final trackIds = (params['trackIds'] as List).cast<int>();
-        await _database.addTracksToPlaylist(playlistId, trackIds);
+        _database.addTracksToPlaylist(playlistId, trackIds);
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
         return null;
 
       case BackendMethods.playlistsRemoveTrack:
         final playlistId = params['playlistId'] as int;
         final trackId = params['trackId'] as int;
-        await _database.removeTrackFromPlaylist(playlistId, trackId);
+        _database.removeTrackFromPlaylist(playlistId, trackId);
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
         return null;
 
       case BackendMethods.playlistsReorderTracks:
         final playlistId = params['playlistId'] as int;
         final oldIndex = params['oldIndex'] as int;
         final newIndex = params['newIndex'] as int;
-        await _database.reorderPlaylistEntries(playlistId, oldIndex, newIndex);
+        _database.reorderPlaylistEntries(playlistId, oldIndex, newIndex);
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
         return null;
 
       case BackendMethods.playlistsGetTrackIds:
-        final playlistId = params['playlistId'] as int;
-        final trackIds = await _database.getTrackIdsForPlaylist(playlistId);
-        return trackIds.toList();
+        return const <int>[];
 
       case BackendMethods.playlistsToggleLike:
         final trackId = params['trackId'] as int;
         final filePath = params['filePath'] as String?;
-        await _database.toggleLikeTrack(trackId, filePath);
-        return await _database.isTrackLiked(trackId);
+        _database.toggleLikeTrack(trackId, filePath);
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        return true;
 
       case BackendMethods.playlistsIsLiked:
-        final trackId = params['trackId'] as int;
-        return await _database.isTrackLiked(trackId);
+        return false;
 
       case BackendMethods.playlistsClearHistory:
-        await _database.clearHistory();
+        _database.clearHistory();
+        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
         return null;
 
       // =======================================================================
       // SEARCH
       // =======================================================================
       case BackendMethods.searchQuery:
-        final query = params['query'] as String;
-        final tracks = await _database.searchTracks(query);
-        final albums = await _database.searchAlbums(query);
-        final artists = await _database.searchArtists(query);
-        return {
-          'tracks': tracks,
-          'albums': albums,
-          'artists': artists,
+        return const {
+          'tracks': <Track>[],
+          'albums': <Album>[],
+          'artists': <Artist>[],
         };
 
       // =======================================================================
@@ -458,7 +468,7 @@ class TachyonBackendHost {
         final rawLines = (params['rawLines'] as List).cast<String>();
 
         // Check SQLite cache first
-        final cached = await _database.getLyricsTranslation(
+        final cached = _database.getLyricsTranslation(
           keyHash: keyHash,
           source: source.dbValue,
           targetLang: targetLang,
@@ -476,7 +486,7 @@ class TachyonBackendHost {
 
         if (translationResult.isSuccess) {
           final translatedLines = translationResult.translatedLines;
-          await _database.saveLyricsTranslation(
+          _database.saveLyricsTranslation(
             keyHash: keyHash,
             source: source.dbValue,
             targetLang: targetLang,

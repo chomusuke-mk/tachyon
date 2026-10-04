@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 
 import 'album_art_image.dart';
 
@@ -55,6 +57,15 @@ class TrackTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final strings = context.watch<LocaleController>().localeStrings;
+
+    final artistText = track.artists.isNotEmpty
+        ? track.artists.map((a) => a.name).join(', ')
+        : strings.trUnknownArtist;
+    final albumText = track.album?.name;
+    final subtitleText = (albumText != null && albumText.isNotEmpty)
+        ? '$artistText • $albumText'
+        : artistText;
 
     final leadingWidget = isSelectionMode
         ? Checkbox(value: isSelected, onChanged: onSelectChanged)
@@ -106,7 +117,7 @@ class TrackTile extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          '${track.artistName} • ${track.albumName}',
+          subtitleText,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.bodySmall?.copyWith(
@@ -144,89 +155,129 @@ class TrackTile extends StatelessWidget {
                 ),
                 onSelected: onActionSelected,
                 itemBuilder: (context) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: TrackAction.play,
                     child: Row(
                       children: [
-                        Icon(Icons.play_arrow_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('Play'),
+                        const Icon(Icons.play_arrow_rounded, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            strings.trPlay,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: TrackAction.playNext,
                     child: Row(
                       children: [
-                        Icon(Icons.playlist_play_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('Play Next'),
+                        const Icon(Icons.playlist_play_rounded, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            strings.trPlayNext,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: TrackAction.addToQueue,
                     child: Row(
                       children: [
-                        Icon(Icons.queue_music_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('Add to Queue'),
+                        const Icon(Icons.queue_music_rounded, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            strings.trAddQueue,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: TrackAction.addToPlaylist,
                     child: Row(
                       children: [
-                        Icon(Icons.add_to_photos_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('Add to Playlist'),
+                        const Icon(Icons.add_to_photos_rounded, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            strings.trAddPlaylist,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: TrackAction.viewAlbum,
+                    enabled: track.album != null,
                     child: Row(
                       children: [
-                        Icon(Icons.album_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('View Album'),
+                        const Icon(Icons.album_rounded, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            strings.trViewAlbum,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: TrackAction.viewArtist,
+                    enabled: track.artists.isNotEmpty,
                     child: Row(
                       children: [
-                        Icon(Icons.person_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('View Artist'),
+                        const Icon(Icons.person_rounded, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            strings.trViewArtist,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: TrackAction.fileInfo,
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('File Info'),
+                        const Icon(Icons.info_outline_rounded, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            strings.trFileInfo,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: TrackAction.delete,
                     child: Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.delete_outline_rounded,
                           size: 20,
                           color: Colors.redAccent,
                         ),
-                        SizedBox(width: 12),
-                        Text(
-                          'Delete',
-                          style: TextStyle(color: Colors.redAccent),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            strings.trDelete,
+                            style: const TextStyle(color: Colors.redAccent),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),

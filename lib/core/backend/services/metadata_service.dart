@@ -11,10 +11,55 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
-import 'package:tachyon/features/library/domain/track.dart';
 
 /// Track metadata snapshot used to detect unchanged files during incremental scanning.
 typedef TrackFileMeta = ({int modifiedAt, int fileSize});
+
+/// Pure metadata extraction DTO. Workers extract tags into this DTO
+/// and pass it to [AppDatabase.upsertTracks] for atomic persistence.
+class ExtractedTrackData {
+  final String filePath;
+  final String title;
+  final List<String> artistNames;
+  final String? albumArtistName;
+  final String? albumName;
+  final int? trackNumber;
+  final int? discNumber;
+  final int? year;
+  final int durationMs;
+  final int? bitrate;
+  final int? sampleRate;
+  final int? channels;
+  final String? codec;
+  final int fileSize;
+  final int modifiedAt;
+  final double? replayGainTrackGain;
+  final double? replayGainTrackPeak;
+  final List<String> genreNames;
+  final String? embeddedLyrics;
+
+  const ExtractedTrackData({
+    required this.filePath,
+    required this.title,
+    this.artistNames = const [],
+    this.albumArtistName,
+    this.albumName,
+    this.trackNumber,
+    this.discNumber = 1,
+    this.year,
+    required this.durationMs,
+    this.bitrate,
+    this.sampleRate,
+    this.channels,
+    this.codec,
+    required this.fileSize,
+    required this.modifiedAt,
+    this.replayGainTrackGain,
+    this.replayGainTrackPeak,
+    this.genreNames = const [],
+    this.embeddedLyrics,
+  });
+}
 
 /// Discovered audio file entity awaiting metadata extraction.
 class DiscoveredAudioFile {
@@ -60,7 +105,7 @@ class MetadataService {
 
   CancellationToken? _currentScanToken;
 
-  static Future<Track?> _runWorkerInIsolate(
+  static Future<ExtractedTrackData?> _runWorkerInIsolate(
     String filePath,
     String cacheDirPath,
   ) {
@@ -78,7 +123,7 @@ class MetadataService {
 
   /// Extracts metadata for a single [filePath] in a dedicated worker isolate
   /// via [Isolate.run]. Does not write to SQLite (pure extraction).
-  Future<Track?> extractMetadata(String filePath) async {
+  Future<ExtractedTrackData?> extractMetadata(String filePath) async {
     final file = File(filePath);
     if (!file.existsSync() && !await file.exists()) return null;
 
@@ -87,19 +132,12 @@ class MetadataService {
   }
 
   /// Retrieves metadata for a file following a Cache-First strategy:
-  /// 1. Checks SQLite DB first (immediate return, 0 CPU).
-  /// 2. If absent, extracts via a worker isolate using [Isolate.run].
-  /// 3. Persists into SQLite DB on the calling isolate.
-  /// 4. Returns the track.
-  Future<Track?> getMetadata(String filePath) async {
-    final existing = await database.getTrackByFilePath(filePath);
-    if (existing != null) {
-      return existing;
-    }
-
+  /// Extracts via a worker isolate using [Isolate.run], persists into SQLite DB
+  /// using [AppDatabase.upsertTracks], and returns the extracted data.
+  Future<ExtractedTrackData?> getMetadata(String filePath) async {
     final track = await extractMetadata(filePath);
     if (track != null) {
-      await database.insertTrack(track);
+      database.upsertTracks([track]);
     }
     return track;
   }
@@ -134,7 +172,7 @@ class MetadataService {
     );
 
     if (paths != null) {
-      await database.updateTrackCoverStatus(filePath, true);
+      database.updateTrackCoverStatus(filePath, true);
       return isHighQuality ? paths['hq'] : paths['lq'];
     }
 
@@ -290,29 +328,29 @@ class MetadataService {
 
       Map<String, TrackFileMeta> existingMetas = const {};
       try {
-        existingMetas = await database.getExistingTrackMetas();
+        existingMetas = database.getExistingTrackMetas();
       } catch (e) {
         debugPrint('[MetadataService] Failed to load existing track metas: $e');
       }
 
       // 3. Concurrency-bounded extraction with Isolate.run pool
-      final pendingTracks = <Track>[];
+      final pendingTracks = <ExtractedTrackData>[];
       final activeTasks = <Future<void>>{};
       final poolSize = workerCount;
       final cacheDirPath = coverCacheService.cacheDirectory.path;
 
       Future<void> maybeInsertBatch({bool force = false}) async {
         if (pendingTracks.length >= 30 || (force && pendingTracks.isNotEmpty)) {
-          final batch = List<Track>.from(pendingTracks);
+          final batch = List<ExtractedTrackData>.from(pendingTracks);
           pendingTracks.clear();
           sendProgress(
             current.copyWith(phase: ScanPhase.persisting),
             force: true,
           );
           try {
-            await database.batchInsertTracks(batch);
+            database.upsertTracks(batch);
           } catch (e) {
-            debugPrint('[MetadataService] batchInsert error: $e');
+            debugPrint('[MetadataService] upsertTracks error: $e');
           }
           sendProgress(
             current.copyWith(phase: ScanPhase.extracting),
@@ -349,7 +387,7 @@ class MetadataService {
         late final Future<void> task;
         task = () async {
           if (scanToken.isCancelled) return;
-          Track? track;
+          ExtractedTrackData? track;
           try {
             track = await _runWorkerInIsolate(file.path, cacheDirPath);
           } catch (e) {
@@ -410,12 +448,6 @@ class MetadataService {
       // Flush remaining tracks
       await maybeInsertBatch(force: true);
 
-      try {
-        await database.cleanOrphanAlbumsAndArtists();
-      } catch (e) {
-        debugPrint('[MetadataService] Cleanup error: $e');
-      }
-
       sendProgress(
         ScanProgress(
           phase: ScanPhase.completed,
@@ -454,36 +486,27 @@ class MetadataService {
 // SHARED WORKER FUNCTIONS
 // =============================================================================
 
-/// Top-level worker function executed inside [Isolate.run].
-/// Reads audio metadata and embedded pictures in a single pass, caches HQ/LQ
-/// covers directly to disk, and returns the parsed [Track] model.
-/// Helper to construct a fallback [Track] when metadata cannot be read
-/// (e.g. extension not in [CoverCacheService.supportedTagExtensions] of haudiotagger or parsing failed).
-Track _buildFallbackTrack({
+double? _parseReplayGain(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  final str = value.toString().replaceAll(RegExp(r'[^0-9.-]'), '');
+  return double.tryParse(str);
+}
+
+/// Helper to construct a fallback [ExtractedTrackData] when metadata cannot be read.
+ExtractedTrackData _buildFallbackTrackData({
   required String filePath,
   required int size,
   required int modifiedAt,
 }) {
   final extClean = p.extension(filePath).replaceAll('.', '').toUpperCase();
-  return Track(
+  return ExtractedTrackData(
     filePath: filePath,
     title: p.basenameWithoutExtension(filePath),
-    album: null,
-    artist: null,
-    artists: const [],
-    albumArtist: null,
-    trackNumber: null,
-    discNumber: null,
-    year: null,
     durationMs: 0,
-    bitrate: null,
-    sampleRate: null,
-    channels: null,
     codec: extClean.isNotEmpty ? extClean : null,
     fileSize: size,
     modifiedAt: modifiedAt,
-    lyrics: null,
-    genres: const [],
   );
 }
 
@@ -491,11 +514,11 @@ Track _buildFallbackTrack({
 /// In a single pass:
 /// 1. Reads file metadata (or falls back if format unsupported or parsing fails).
 /// 2. If present, generates dual-quality HQ & LQ covers and writes them to disk.
-/// 3. Returns the populated [Track] directly.
+/// 3. Returns the populated [ExtractedTrackData] directly.
 ///
 /// Passes zero raw byte arrays across the isolate boundary.
 @pragma('vm:entry-point')
-Future<Track?> extractAndCacheTrackWorker({
+Future<ExtractedTrackData?> extractAndCacheTrackWorker({
   required String filePath,
   required String cacheDirPath,
 }) async {
@@ -554,18 +577,25 @@ Future<Track?> extractAndCacheTrackWorker({
           ? (properties!.durationMicros!.toInt() / 1000).round()
           : (tag.duration != null ? tag.duration! * 1000 : 0);
 
-      return Track(
+      final artists = <String>[];
+      if (tag.trackArtist != null && tag.trackArtist!.isNotEmpty) {
+        artists.addAll(tag.trackArtist!.split(', ').map((e) => e.trim()).where((e) => e.isNotEmpty));
+      } else if (tag.albumArtist != null && tag.albumArtist!.isNotEmpty) {
+        artists.addAll(tag.albumArtist!.split(', ').map((e) => e.trim()).where((e) => e.isNotEmpty));
+      }
+
+      final genres = <String>[];
+      if (tag.genre != null && tag.genre!.trim().isNotEmpty) {
+        genres.add(tag.genre!.trim());
+      }
+
+      return ExtractedTrackData(
         filePath: filePath,
         title: tag.title ?? p.basenameWithoutExtension(filePath),
-        album: tag.album,
-        artist:
-            tag.trackArtist?.split(', ').first ??
-            tag.albumArtist?.split(', ').first,
-        artists:
-            tag.trackArtist?.split(', ') ??
-            tag.albumArtist?.split(', ') ??
-            const <String>[],
-        albumArtist: tag.albumArtist,
+        albumName: tag.album,
+        artistNames: artists,
+        albumArtistName: tag.albumArtist,
+        genreNames: genres,
         trackNumber: tag.trackNumber,
         discNumber: tag.discNumber,
         year: tag.year,
@@ -576,12 +606,9 @@ Future<Track?> extractAndCacheTrackWorker({
         codec: properties?.codec ?? (ext.replaceAll('.', '').toUpperCase()),
         fileSize: size,
         modifiedAt: modifiedAt,
-        lyrics: tag.lyrics,
-        genres: tag.genre != null ? [tag.genre!] : const <String>[],
-        replayGainTrackGain: Track.parseReplayGain(tag.replayGainTrackGain),
-        replayGainTrackPeak: Track.parseReplayGain(tag.replayGainTrackPeak),
-        replayGainAlbumGain: Track.parseReplayGain(tag.replayGainAlbumGain),
-        replayGainAlbumPeak: Track.parseReplayGain(tag.replayGainAlbumPeak),
+        embeddedLyrics: tag.lyrics,
+        replayGainTrackGain: _parseReplayGain(tag.replayGainTrackGain),
+        replayGainTrackPeak: _parseReplayGain(tag.replayGainTrackPeak),
       );
     }
 
@@ -590,16 +617,9 @@ Future<Track?> extractAndCacheTrackWorker({
           ? (properties.durationMicros!.toInt() / 1000).round()
           : 0;
 
-      return Track(
+      return ExtractedTrackData(
         filePath: filePath,
         title: p.basenameWithoutExtension(filePath),
-        album: null,
-        artist: null,
-        artists: const [],
-        albumArtist: null,
-        trackNumber: null,
-        discNumber: null,
-        year: null,
         durationMs: durationMs,
         bitrate: properties.bitrate,
         sampleRate: properties.sampleRate,
@@ -607,12 +627,10 @@ Future<Track?> extractAndCacheTrackWorker({
         codec: properties.codec,
         fileSize: size,
         modifiedAt: modifiedAt,
-        lyrics: null,
-        genres: const [],
       );
     }
 
-    return _buildFallbackTrack(
+    return _buildFallbackTrackData(
       filePath: filePath,
       size: size,
       modifiedAt: modifiedAt,
@@ -621,7 +639,7 @@ Future<Track?> extractAndCacheTrackWorker({
     debugPrint(
       '[MetadataService] Unexpected error extracting metadata for $filePath: $e. Using fallback metadata.',
     );
-    return _buildFallbackTrack(
+    return _buildFallbackTrackData(
       filePath: filePath,
       size: size,
       modifiedAt: modifiedAt,
@@ -630,9 +648,7 @@ Future<Track?> extractAndCacheTrackWorker({
 }
 
 /// Parses audio tags and metadata for a single file.
-/// Backwards-compatible helper delegating to [extractAndCacheTrackWorker]
-/// when [coverCacheService] is provided.
-Future<Track?> extractTrackMetadata(
+Future<ExtractedTrackData?> extractTrackMetadata(
   String filePath, {
   CoverCacheService? coverCacheService,
   bool awaitCover = false,
@@ -684,18 +700,25 @@ Future<Track?> extractTrackMetadata(
           ? (properties!.durationMicros!.toInt() / 1000).round()
           : (tag.duration != null ? tag.duration! * 1000 : 0);
 
-      return Track(
+      final artists = <String>[];
+      if (tag.trackArtist != null && tag.trackArtist!.isNotEmpty) {
+        artists.addAll(tag.trackArtist!.split(', ').map((e) => e.trim()).where((e) => e.isNotEmpty));
+      } else if (tag.albumArtist != null && tag.albumArtist!.isNotEmpty) {
+        artists.addAll(tag.albumArtist!.split(', ').map((e) => e.trim()).where((e) => e.isNotEmpty));
+      }
+
+      final genres = <String>[];
+      if (tag.genre != null && tag.genre!.trim().isNotEmpty) {
+        genres.add(tag.genre!.trim());
+      }
+
+      return ExtractedTrackData(
         filePath: filePath,
         title: tag.title ?? p.basenameWithoutExtension(filePath),
-        album: tag.album,
-        artist:
-            tag.trackArtist?.split(', ').first ??
-            tag.albumArtist?.split(', ').first,
-        artists:
-            tag.trackArtist?.split(', ') ??
-            tag.albumArtist?.split(', ') ??
-            const <String>[],
-        albumArtist: tag.albumArtist,
+        albumName: tag.album,
+        artistNames: artists,
+        albumArtistName: tag.albumArtist,
+        genreNames: genres,
         trackNumber: tag.trackNumber,
         discNumber: tag.discNumber,
         year: tag.year,
@@ -706,12 +729,9 @@ Future<Track?> extractTrackMetadata(
         codec: properties?.codec ?? (ext.replaceAll('.', '').toUpperCase()),
         fileSize: size,
         modifiedAt: modifiedAt,
-        lyrics: tag.lyrics,
-        genres: tag.genre != null ? [tag.genre!] : const <String>[],
-        replayGainTrackGain: Track.parseReplayGain(tag.replayGainTrackGain),
-        replayGainTrackPeak: Track.parseReplayGain(tag.replayGainTrackPeak),
-        replayGainAlbumGain: Track.parseReplayGain(tag.replayGainAlbumGain),
-        replayGainAlbumPeak: Track.parseReplayGain(tag.replayGainAlbumPeak),
+        embeddedLyrics: tag.lyrics,
+        replayGainTrackGain: _parseReplayGain(tag.replayGainTrackGain),
+        replayGainTrackPeak: _parseReplayGain(tag.replayGainTrackPeak),
       );
     }
 
@@ -720,16 +740,9 @@ Future<Track?> extractTrackMetadata(
           ? (properties.durationMicros!.toInt() / 1000).round()
           : 0;
 
-      return Track(
+      return ExtractedTrackData(
         filePath: filePath,
         title: p.basenameWithoutExtension(filePath),
-        album: null,
-        artist: null,
-        artists: const [],
-        albumArtist: null,
-        trackNumber: null,
-        discNumber: null,
-        year: null,
         durationMs: durationMs,
         bitrate: properties.bitrate,
         sampleRate: properties.sampleRate,
@@ -737,12 +750,10 @@ Future<Track?> extractTrackMetadata(
         codec: properties.codec,
         fileSize: size,
         modifiedAt: modifiedAt,
-        lyrics: null,
-        genres: const [],
       );
     }
 
-    return _buildFallbackTrack(
+    return _buildFallbackTrackData(
       filePath: filePath,
       size: size,
       modifiedAt: modifiedAt,
@@ -751,7 +762,7 @@ Future<Track?> extractTrackMetadata(
     debugPrint(
       '[MetadataService] Unexpected error extracting metadata for $filePath: $e. Using fallback metadata.',
     );
-    return _buildFallbackTrack(
+    return _buildFallbackTrackData(
       filePath: filePath,
       size: size,
       modifiedAt: modifiedAt,

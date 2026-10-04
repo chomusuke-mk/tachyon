@@ -53,7 +53,8 @@ class MiniPlayerBar extends StatelessWidget {
                           final progressBar = LinearProgressIndicator(
                             value: prog,
                             minHeight: isDesktop ? 4.0 : 2.5,
-                            backgroundColor: colorScheme.surfaceContainerHighest,
+                            backgroundColor:
+                                colorScheme.surfaceContainerHighest,
                             valueColor: AlwaysStoppedAnimation<Color>(
                               colorScheme.primary,
                             ),
@@ -69,8 +70,11 @@ class MiniPlayerBar extends StatelessWidget {
                                 if (totalMs <= 0) return;
                                 final width = constraints.maxWidth;
                                 if (width <= 0) return;
-                                final fraction = (details.localPosition.dx / width)
-                                    .clamp(0.0, 1.0);
+                                final fraction =
+                                    (details.localPosition.dx / width).clamp(
+                                      0.0,
+                                      1.0,
+                                    );
                                 final seekTarget = Duration(
                                   milliseconds: (totalMs * fraction).round(),
                                 );
@@ -151,72 +155,106 @@ class MiniPlayerBar extends StatelessWidget {
                             },
                           ),
                           const SizedBox(width: 16),
-                        IconButton(
-                          icon: Icon(
-                            playback.loopMode != Loop.off
-                                ? (playback.loopMode == Loop.one
-                                      ? Icons.repeat_one_rounded
-                                      : Icons.repeat_rounded)
-                                : Icons.repeat_rounded,
+                          IconButton(
+                            icon: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Icon(
+                                  playback.loopMode != Loop.off
+                                      ? (playback.loopMode == Loop.one
+                                            ? Icons.repeat_one_rounded
+                                            : Icons.repeat_rounded)
+                                      : Icons.repeat_rounded,
+                                  size: 24,
+                                ),
+                                if (playback.loopMode == Loop.all)
+                                  Positioned(
+                                    child: Text(
+                                      'A',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            color: playback.loopMode != Loop.off
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                            tooltip: playback.loopMode == Loop.one
+                                ? strings.npRepeatOne
+                                : (playback.loopMode == Loop.all
+                                      ? strings.npRepeatAll
+                                      : strings.npRepeatOff),
+                            onPressed: playback.toggleLoopMode,
                           ),
-                          color: playback.loopMode != Loop.off
-                              ? colorScheme.primary
-                              : colorScheme.onSurfaceVariant,
-                          tooltip: playback.loopMode == Loop.one
-                              ? strings.npRepeatOne
-                              : (playback.loopMode == Loop.all
-                                    ? strings.npRepeatAll
-                                    : strings.npRepeatOff),
-                          onPressed: playback.toggleLoopMode,
+                          IconButton(
+                            icon: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                const Icon(Icons.shuffle_rounded, size: 24),
+                                if (playback.isShuffled)
+                                  Positioned(
+                                    bottom: 0,
+                                    child: Container(
+                                      width: 4,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            color: playback.isShuffled
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                            tooltip: playback.isShuffled
+                                ? strings.npShuffleOn
+                                : strings.npShuffleOff,
+                            onPressed: playback.toggleShuffle,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.skip_previous_rounded),
+                            tooltip: strings.npPrevious,
+                            onPressed: playback.hasPrevious
+                                ? playback.previous
+                                : null,
+                          ),
+                        ],
+
+                        // Play / Pause Button
+                        IconButton.filledTonal(
+                          icon: Icon(
+                            playback.isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            size: 26,
+                          ),
+                          tooltip: playback.isPlaying
+                              ? strings.npPause
+                              : strings.npPlay,
+                          onPressed: playback.playOrPause,
                         ),
+
+                        // Next Button
                         IconButton(
-                          icon: const Icon(Icons.shuffle_rounded),
-                          color: playback.isShuffled
-                              ? colorScheme.primary
-                              : colorScheme.onSurfaceVariant,
-                          tooltip: playback.isShuffled
-                              ? strings.npShuffleOn
-                              : strings.npShuffleOff,
-                          onPressed: playback.toggleShuffle,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.skip_previous_rounded),
-                          tooltip: strings.npPrevious,
-                          onPressed: playback.hasPrevious
-                              ? playback.previous
-                              : null,
+                          icon: const Icon(Icons.skip_next_rounded),
+                          tooltip: strings.npNext,
+                          onPressed: playback.hasNext ? playback.next : null,
                         ),
                       ],
-
-                      // Play / Pause Button
-                      IconButton.filledTonal(
-                        icon: Icon(
-                          playback.isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          size: 26,
-                        ),
-                        tooltip: playback.isPlaying
-                            ? strings.npPause
-                            : strings.npPlay,
-                        onPressed: playback.playOrPause,
-                      ),
-
-                      // Next Button
-                      IconButton(
-                        icon: const Icon(Icons.skip_next_rounded),
-                        tooltip: strings.npNext,
-                        onPressed: playback.hasNext ? playback.next : null,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

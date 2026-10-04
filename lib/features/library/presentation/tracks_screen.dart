@@ -5,8 +5,6 @@ import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
-import 'package:tachyon/features/library/domain/album.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
 import 'album_detail_screen.dart';
@@ -57,10 +55,13 @@ class _TracksScreenState extends State<TracksScreen> {
             child: ListBody(
               children: [
                 _infoRow(strings.trFilePath, track.filePath),
-                if (track.artist != null)
-                  _infoRow(strings.trSortArtist, track.artist!),
-                if (track.album != null)
-                  _infoRow(strings.trSortAlbum, track.album!),
+                if (track.artists.isNotEmpty)
+                  _infoRow(
+                    strings.trSortArtist,
+                    track.artists.map((a) => a.name).join(', '),
+                  ),
+                if (track.album != null && track.album!.name.isNotEmpty)
+                  _infoRow(strings.trSortAlbum, track.album!.name),
                 if (track.codec != null)
                   _infoRow(strings.trCodec, track.codec!.toUpperCase()),
                 if (track.bitrate != null)
@@ -252,7 +253,12 @@ class _TracksScreenState extends State<TracksScreen> {
                           size: 16,
                         ),
                       const SizedBox(width: 8),
-                      Text(strings.trSortTitle),
+                      Expanded(
+                        child: Text(
+                          strings.trSortTitle,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -268,7 +274,12 @@ class _TracksScreenState extends State<TracksScreen> {
                           size: 16,
                         ),
                       const SizedBox(width: 8),
-                      Text(strings.trSortArtist),
+                      Expanded(
+                        child: Text(
+                          strings.trSortArtist,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -284,7 +295,12 @@ class _TracksScreenState extends State<TracksScreen> {
                           size: 16,
                         ),
                       const SizedBox(width: 8),
-                      Text(strings.trSortAlbum),
+                      Expanded(
+                        child: Text(
+                          strings.trSortAlbum,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -300,7 +316,12 @@ class _TracksScreenState extends State<TracksScreen> {
                           size: 16,
                         ),
                       const SizedBox(width: 8),
-                      Text(strings.trSortDuration),
+                      Expanded(
+                        child: Text(
+                          strings.trSortDuration,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -316,7 +337,12 @@ class _TracksScreenState extends State<TracksScreen> {
                           size: 16,
                         ),
                       const SizedBox(width: 8),
-                      Text(strings.trSortDateAdded),
+                      Expanded(
+                        child: Text(
+                          strings.trSortDateAdded,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -410,43 +436,25 @@ class _TracksScreenState extends State<TracksScreen> {
                         _showAddToPlaylistDialog(context, track);
                         break;
                       case TrackAction.viewAlbum:
-                        final album =
-                            library.albums
-                                .where(
-                                  (a) =>
-                                      a.id == track.albumId ||
-                                      a.name == track.album,
-                                )
-                                .firstOrNull ??
-                            Album(
-                              id: track.albumId,
-                              name: track.album ?? 'Unknown Album',
-                              artistName: track.artistName,
-                            );
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => AlbumDetailScreen(album: album),
-                          ),
-                        );
+                        if (track.album != null) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  AlbumDetailScreen(album: track.album!),
+                            ),
+                          );
+                        }
                         break;
                       case TrackAction.viewArtist:
-                        final artist =
-                            library.artists
-                                .where(
-                                  (a) =>
-                                      a.id == track.artistId ||
-                                      a.name == track.artist,
-                                )
-                                .firstOrNull ??
-                            Artist(
-                              id: track.artistId,
-                              name: track.artist ?? 'Unknown Artist',
-                            );
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => ArtistDetailScreen(artist: artist),
-                          ),
-                        );
+                        final artist = track.artists.firstOrNull;
+                        if (artist != null) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  ArtistDetailScreen(artist: artist),
+                            ),
+                          );
+                        }
                         break;
                       case TrackAction.fileInfo:
                         _showFileInfoDialog(context, track);

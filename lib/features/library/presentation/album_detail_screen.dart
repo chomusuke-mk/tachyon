@@ -8,7 +8,6 @@ import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 
-import 'library_controller.dart';
 
 class AlbumDetailScreen extends StatelessWidget {
   final Album album;
@@ -29,28 +28,13 @@ class AlbumDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
-    final library = context.watch<LibraryController>();
     final currentTrackFilePath = context.select<PlaybackController, String?>(
       (c) => c.currentTrack?.filePath,
     );
     final playback = context.read<PlaybackController>();
 
-    final albumTracks =
-        library.allTracks
-            .where(
-              (t) =>
-                  (album.id != null && t.albumId == album.id) ||
-                  t.album == album.name,
-            )
-            .toList()
-          ..sort((a, b) {
-            final discCmp = (a.discNumber ?? 1).compareTo(b.discNumber ?? 1);
-            if (discCmp != 0) return discCmp;
-            return (a.trackNumber ?? 0).compareTo(b.trackNumber ?? 0);
-          });
-
-    final firstFilePath =
-        albumTracks.isNotEmpty ? albumTracks.first.filePath : '';
+    final albumTracks = album.tracks;
+    final firstFilePath = album.tracks.firstOrNull?.filePath ?? '';
 
     return Scaffold(
       appBar: AppBar(title: Text(album.name)),
@@ -82,7 +66,7 @@ class AlbumDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    album.artistName ?? 'Unknown Artist',
+                    album.artist?.name ?? strings.trUnknownArtist,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Theme.of(context).colorScheme.primary,
                     ),
@@ -95,8 +79,10 @@ class AlbumDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
                     children: [
                       FilledButton.icon(
                         icon: const Icon(Icons.play_arrow_rounded),
@@ -105,7 +91,6 @@ class AlbumDetailScreen extends StatelessWidget {
                             ? () => playback.playAll(albumTracks, startIndex: 0)
                             : null,
                       ),
-                      const SizedBox(width: 12),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.shuffle_rounded),
                         label: Text(strings.alShuffleAll),

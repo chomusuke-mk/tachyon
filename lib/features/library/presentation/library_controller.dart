@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/features/library/data/library_store.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
@@ -17,15 +18,29 @@ import 'package:tachyon/features/settings/data/settings_repository.dart';
 export 'package:tachyon/features/library/domain/track_sort_option.dart';
 
 class LibraryController extends ChangeNotifier {
-  final TachyonBackendClient _backend;
-  final SettingsRepository _settingsRepository;
+  final TachyonBackendClient backend;
+  final SettingsRepository settingsRepository;
+  TachyonBackendClient get _backend => backend;
+  SettingsRepository get _settingsRepository => settingsRepository;
+
+  LibraryStore _store;
+  StreamSubscription<void>? _catalogSubscription;
 
   LibraryController({
-    required this._backend,
-    required this._settingsRepository,
-  }){
+    required this.backend,
+    required this.settingsRepository,
+    LibraryStore? store,
+  }) : _store = store ?? LibraryStore() {
     _sortOption = _settingsRepository.getTrackSortOption();
     _sortAscending = _settingsRepository.getTrackSortAscending();
+
+    _catalogSubscription = _backend.catalogUpdatedStream.listen((_) {
+      loadLibrary();
+    });
+
+    if (store != null) {
+      _syncFromStore();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -61,6 +76,8 @@ class LibraryController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Getters
   // ---------------------------------------------------------------------------
+  LibraryStore get store => _store;
+
   List<Track> get tracks =>
       (_selectedGenre != null ||
           _selectedArtist != null ||
@@ -102,19 +119,10 @@ class LibraryController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final results = await Future.wait([
-        _backend.getTracks(sort: _sortOption, ascending: _sortAscending),
-        _backend.getAlbums(),
-        _backend.getArtists(),
-        _backend.getGenres(),
-      ]);
+      final snapshot = await _backend.getCatalogSnapshot();
+      _store = LibraryStore.fromSnapshot(snapshot);
+      _syncFromStore();
 
-      _tracks = results[0] as List<Track>;
-      _albums = results[1] as List<Album>;
-      _artists = results[2] as List<Artist>;
-      _genres = results[3] as List<Genre>;
-
-      _applyFilters();
       if (_currentFolderPath != null) {
         await navigateToFolder(_currentFolderPath!);
       }
@@ -125,6 +133,29 @@ class LibraryController extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void _syncFromStore() {
+    _tracks = _store.sortTracks(
+      _store.allTracks,
+      _sortOption,
+      ascending: _sortAscending,
+    );
+    _albums = _store.allAlbums;
+    _artists = _store.allArtists;
+    _genres = _store.allGenres;
+
+    if (_selectedAlbum != null && _selectedAlbum!.id != null) {
+      _selectedAlbum = _store.getAlbumById(_selectedAlbum!.id!);
+    }
+    if (_selectedArtist != null && _selectedArtist!.id != null) {
+      _selectedArtist = _store.getArtistById(_selectedArtist!.id!);
+    }
+    if (_selectedGenre != null && _selectedGenre!.id != null) {
+      _selectedGenre = _store.getGenreById(_selectedGenre!.id!);
+    }
+
+    _applyFilters();
   }
 
   Future<void> setSortOption(TrackSortOption option, {bool? ascending}) async {
@@ -140,21 +171,13 @@ class LibraryController extends ChangeNotifier {
     _settingsRepository.setTrackSortOption(_sortOption);
     _settingsRepository.setTrackSortAscending(_sortAscending);
 
-    _isLoading = true;
+    _tracks = _store.sortTracks(
+      _store.allTracks,
+      _sortOption,
+      ascending: _sortAscending,
+    );
+    _applyFilters();
     notifyListeners();
-
-    try {
-      _tracks = await _backend.getTracks(
-        sort: _sortOption,
-        ascending: _sortAscending,
-      );
-      _applyFilters();
-    } catch (e) {
-      _errorMessage = 'Failed to sort tracks: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -194,32 +217,23 @@ class LibraryController extends ChangeNotifier {
       return;
     }
 
-    Iterable<Track> result = _tracks;
-
-    if (_selectedAlbum != null) {
-      result = result.where(
-        (t) =>
-            t.albumId == _selectedAlbum!.id || t.album == _selectedAlbum!.name,
-      );
-    }
-
-    if (_selectedArtist != null) {
-      result = result.where(
-        (t) =>
-            t.artistId == _selectedArtist!.id ||
-            t.artist == _selectedArtist!.name,
-      );
-    }
-
-    if (_selectedGenre != null) {
-      final targetGenre = _selectedGenre!.name.toLowerCase();
-      result = result.where(
-        (t) => t.genres.any((g) => g.toLowerCase() == targetGenre),
-      );
-    }
-
-    _filteredTracks = result.toList();
+    _filteredTracks = _store.sortTracks(
+      _store.filterTracks(
+        album: _selectedAlbum,
+        artist: _selectedArtist,
+        genre: _selectedGenre,
+      ),
+      _sortOption,
+      ascending: _sortAscending,
+    );
   }
+
+  // ---------------------------------------------------------------------------
+  // In-Memory Search
+  // ---------------------------------------------------------------------------
+  List<Track> searchTracks(String query) => _store.searchTracks(query);
+  List<Album> searchAlbums(String query) => _store.searchAlbums(query);
+  List<Artist> searchArtists(String query) => _store.searchArtists(query);
 
   // ---------------------------------------------------------------------------
   // Folder Explorer & Breadcrumbs
@@ -259,9 +273,10 @@ class LibraryController extends ChangeNotifier {
       );
       _currentFolderSubdirectories = subDirs;
 
-      // Cross-reference with indexed tracks
-      _currentFolderTracks = _tracks
-          .where((t) => currentDirPaths.contains(t.filePath))
+      // Cross-reference with indexed tracks from store in O(1)
+      _currentFolderTracks = currentDirPaths
+          .map((path) => _store.getTrackByPath(path))
+          .whereType<Track>()
           .toList();
     } catch (e) {
       debugPrint('Error navigating folder $folderPath: $e');
@@ -354,6 +369,8 @@ class LibraryController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _catalogSubscription?.cancel();
+    _catalogSubscription = null;
     cancelScan();
     super.dispose();
   }
