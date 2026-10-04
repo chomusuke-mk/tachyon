@@ -7,7 +7,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/backend/services/lrc_parser.dart';
-import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/features/playback/domain/lyric_line.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
@@ -34,10 +33,10 @@ class LyricsController extends ChangeNotifier {
   final LyricsGenerationTracker _generationTracker = LyricsGenerationTracker();
   LyricsCancellationToken? _currentCancellationToken;
 
-  // Playback & Lyrics state
+  // Playback & Lyrics state (strictly O(1) RAM - single active track)
   ParsedLrc? _lyrics;
   LyricsSource? _currentLyricsSource;
-  String? _currentKeyHash;
+  int? _currentLyricsId;
   bool _isLoading = false;
   String? _errorMessage;
   int _currentIndex = 0;
@@ -90,6 +89,7 @@ class LyricsController extends ChangeNotifier {
   bool get hasLyrics => _lyrics != null && _lyrics!.isNotEmpty;
   LyricsSource? get currentLyricsSource => _currentLyricsSource;
   LyricsSource? get source => _currentLyricsSource;
+  int? get currentLyricsId => _currentLyricsId;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   int get currentIndex => _currentIndex;
@@ -213,8 +213,7 @@ class LyricsController extends ChangeNotifier {
       _safeNotifyListeners();
       // 4. View opened: ensure lyrics are loaded on-demand for active track
       if (playbackController.currentTrack != null) {
-        if (_lyrics == null ||
-            (_currentLyricsSource != null && _currentLyricsSource!.isLocal)) {
+        if (_lyrics == null) {
           ensureLyricsLoaded();
         }
       }
@@ -241,6 +240,9 @@ class LyricsController extends ChangeNotifier {
       _currentTrackFilePath = trackFilePath;
       _resetScrollLock();
       _currentIndex = 0;
+      _lyrics = null;
+      _currentLyricsSource = null;
+      _currentLyricsId = null;
       _translatedLines = const [];
       final savedMode = settingsRepository.getLyricsDisplayMode();
       _isTranslated = savedMode != LyricsDisplayMode.original;
@@ -255,21 +257,13 @@ class LyricsController extends ChangeNotifier {
       _currentCancellationToken = token;
 
       if (_isLyricsViewVisible) {
-        // View is visible: load full 4-tier lyrics immediately
+        // View is visible: load full 4-tier lyrics immediately on-demand
         _loadLyricsForTrack(track, token);
       } else {
-        // View is NOT visible: passive background playback
-        // Clear remote lyrics, resolve local only with fresh token
-        _lyrics = null;
-        _currentLyricsSource = null;
+        // View is NOT visible: 100% demand-driven; do NOT query in the background!
         _isLoading = false;
         _errorMessage = null;
-
-        if (track != null && _enableLocalSources) {
-          _resolveLocalSourcesOnly(track, token);
-        } else {
-          notifyListeners();
-        }
+        notifyListeners();
       }
       return;
     }
@@ -311,45 +305,13 @@ class LyricsController extends ChangeNotifier {
     if (!forceRefresh &&
         _currentTrackFilePath == track.filePath &&
         _lyrics != null &&
-        _lyrics!.isNotEmpty &&
-        _currentLyricsSource != null &&
-        !_currentLyricsSource!.isLocal) {
+        _lyrics!.isNotEmpty) {
       return;
     }
 
     final token = _generationTracker.nextGeneration();
     _currentCancellationToken = token;
     await _loadLyricsForTrack(track, token, forceRefresh: forceRefresh);
-  }
-
-  Future<void> _resolveLocalSourcesOnly(
-    QueueItem track,
-    LyricsCancellationToken token,
-  ) async {
-    try {
-      final LyricsResult? result;
-      result = await backendClient.resolveLyrics(
-        track.toTrack(),
-        allowRemote: false,
-        allowedSources: {LyricsSource.embedded, LyricsSource.file},
-      );
-      if (_isDisposed ||
-          token.isCancelled ||
-          !_generationTracker.isCurrent(_generationTracker.activeToken)) {
-        return;
-      }
-      if (_currentTrackFilePath != track.filePath) return;
-
-      if (result != null) {
-        _lyrics = result.lyrics;
-        _currentLyricsSource = result.source;
-        _currentIndex = 0;
-        if (_lyrics != null && _lyrics!.isSynced && lines.isNotEmpty) {
-          _currentIndex = _lyrics!.activeIndexAt(playbackController.position);
-        }
-        notifyListeners();
-      }
-    } catch (_) {}
   }
 
   Future<void> _loadLyricsForTrack(
@@ -363,6 +325,7 @@ class LyricsController extends ChangeNotifier {
     if (track == null) {
       _lyrics = null;
       _currentLyricsSource = null;
+      _currentLyricsId = null;
       _isLoading = false;
       _errorMessage = null;
       notifyListeners();
@@ -380,9 +343,14 @@ class LyricsController extends ChangeNotifier {
         if (_enableLyricsOvh) LyricsSource.lyricsOvh,
       };
 
-      final LyricsResult? result;
-      result = await backendClient.resolveLyrics(
-        track.toTrack(),
+      // Phase 1: Resolve original lyrics via backend RPC
+      final result = await backendClient.resolveLyrics(
+        trackId: track.trackId ?? 0,
+        filePath: track.filePath,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        durationMs: track.duration.inMilliseconds,
         allowRemote: _isLyricsViewVisible,
         bypassCache: forceRefresh,
         allowedSources: effectiveSources,
@@ -422,9 +390,12 @@ class LyricsController extends ChangeNotifier {
         return;
       }
 
+      // Store resolved original lyrics immediately
       _lyrics = result?.lyrics;
       _currentLyricsSource = result?.source;
-      _currentKeyHash = result?.keyHash;
+      _currentLyricsId = result?.lyricsId;
+      _translatedLines = const [];
+      _translationError = null;
       _isLoading = false;
       _currentIndex = 0;
 
@@ -432,10 +403,15 @@ class LyricsController extends ChangeNotifier {
         _currentIndex = _lyrics!.activeIndexAt(playbackController.position);
       }
 
+      // Render original lyrics immediately (non-blocking)
       notifyListeners();
 
-      if (_isTranslated && _lyrics != null && lines.isNotEmpty) {
-        _loadOrFetchTranslation();
+      // Phase 2: Asynchronously trigger translation without blocking original lyrics
+      if (_isTranslated &&
+          _currentLyricsId != null &&
+          _lyrics != null &&
+          lines.isNotEmpty) {
+        _loadOrFetchTranslation(token: token);
       }
 
       // Center initial line after build
@@ -477,6 +453,7 @@ class LyricsController extends ChangeNotifier {
       }
       _lyrics = null;
       _currentLyricsSource = null;
+      _currentLyricsId = null;
       _isLoading = false;
       _errorMessage = e.toString();
       notifyListeners();
@@ -502,6 +479,7 @@ class LyricsController extends ChangeNotifier {
     final track = playbackController.currentTrack;
     if (track == null) return;
     _translatedLines = const [];
+    _currentLyricsId = null;
     _translationError = null;
     cooldownManager.cancelThresholdCountdown();
     cooldownManager.cancelDeferredRetry();
@@ -524,37 +502,50 @@ class LyricsController extends ChangeNotifier {
   Future<void> translateLyrics({String? targetLanguage}) =>
       _loadOrFetchTranslation(targetLanguage: targetLanguage);
 
-  Future<void> _loadOrFetchTranslation({String? targetLanguage}) async {
-    if (_lyrics == null || lines.isEmpty) return;
-    final targetLang = targetLanguage ?? getEffectiveTargetLanguage();
-    final keyHash = _currentKeyHash;
+  Future<void> _loadOrFetchTranslation({
+    String? targetLanguage,
+    LyricsCancellationToken? token,
+  }) async {
+    if (_isTranslating || _lyrics == null || lines.isEmpty) return;
+    final lyricsId = _currentLyricsId;
+    if (lyricsId == null) return;
 
-    if (keyHash != null && _currentLyricsSource != null) {
-      _isTranslating = true;
-      _translationError = null;
-      notifyListeners();
-      try {
-        final res = await backendClient.translateLyrics(
-          keyHash: keyHash,
-          source: _currentLyricsSource!,
-          targetLang: targetLang,
-          rawLines: lines.map((l) => l.text).toList(),
-        );
-        if (_isDisposed) return;
-        if (res != null) {
-          _translatedLines = res.split('\n');
-          _translationError = null;
-          _isTranslating = false;
-          notifyListeners();
-          return;
-        }
-      } catch (e) {
-        if (_isDisposed) return;
-        _translationError = e.toString();
+    final targetLang = targetLanguage ?? getEffectiveTargetLanguage();
+    final callToken = token ?? _currentCancellationToken;
+
+    _isTranslating = true;
+    _translationError = null;
+    notifyListeners();
+
+    try {
+      final rawLines = lines.map((l) => l.text).toList();
+      final res = await backendClient.translateLyrics(
+        lyricsId: lyricsId,
+        targetLang: targetLang,
+        rawLines: rawLines,
+      );
+
+      if (_isDisposed) return;
+      if (callToken != null && callToken.isCancelled) {
+        return;
       }
-      _isTranslating = false;
-      notifyListeners();
-      return;
+
+      if (res != null) {
+        _translatedLines = res;
+        _translationError = null;
+      }
+    } catch (e) {
+      if (_isDisposed) return;
+      if (callToken != null && callToken.isCancelled) {
+        return;
+      }
+      _translationError = e.toString();
+    } finally {
+      if (!_isDisposed &&
+          (callToken == null || !callToken.isCancelled)) {
+        _isTranslating = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -568,14 +559,14 @@ class LyricsController extends ChangeNotifier {
       case LyricsDisplayMode.translated:
         _isTranslated = true;
         _isInterleaved = false;
-        if (_translatedLines.isEmpty && !_isTranslating && hasLyrics) {
+        if (_translatedLines.isEmpty && !_isTranslating && hasLyrics && _currentLyricsId != null) {
           _loadOrFetchTranslation();
         }
         break;
       case LyricsDisplayMode.interleaved:
         _isTranslated = true;
         _isInterleaved = true;
-        if (_translatedLines.isEmpty && !_isTranslating && hasLyrics) {
+        if (_translatedLines.isEmpty && !_isTranslating && hasLyrics && _currentLyricsId != null) {
           _loadOrFetchTranslation();
         }
         break;
@@ -589,12 +580,12 @@ class LyricsController extends ChangeNotifier {
   Future<void> toggleTranslation() async {
     if (!_isTranslated) {
       setTranslationDisplayMode(LyricsDisplayMode.translated);
-      if (_translatedLines.isEmpty && hasLyrics) {
+      if (_translatedLines.isEmpty && hasLyrics && _currentLyricsId != null) {
         await _loadOrFetchTranslation();
       }
     } else if (!_isInterleaved) {
       setTranslationDisplayMode(LyricsDisplayMode.interleaved);
-      if (_translatedLines.isEmpty && hasLyrics) {
+      if (_translatedLines.isEmpty && hasLyrics && _currentLyricsId != null) {
         await _loadOrFetchTranslation();
       }
     } else {

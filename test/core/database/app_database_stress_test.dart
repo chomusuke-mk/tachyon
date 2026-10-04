@@ -208,11 +208,11 @@ void main() {
             .toList();
         expect(updatedTrackGenres, [genreJazz.id], reason: 'Old genre links must be cleared');
 
-        // Verify lyrics preserved in DB row (checking raw DB query)
-        final lyricsRow = database.db.select('SELECT lyrics FROM tracks WHERE id = ?;', [initialTrackId]);
-        expect(lyricsRow.first['lyrics'], '[00:01.00] Original lyrics', reason: 'COALESCE must preserve existing lyrics when null');
+        // Embedded lyrics mirror the file's tags: a re-scan without the tag removes the row
+        String? embeddedRaw() => database.getLyricsEntry(trackId: initialTrackId, source: 'embedded')?['raw_lrc'] as String?;
+        expect(embeddedRaw(), isNull, reason: 'Re-scan without embedded tag must remove stale embedded lyrics');
 
-        // 3. Update with NEW explicit lyrics overwrites existing lyrics
+        // 3. Update with NEW explicit lyrics stores them in the lyrics table
         final updateLyrics = ExtractedTrackData(
           filePath: filePath,
           title: 'Updated Title',
@@ -226,8 +226,7 @@ void main() {
         );
         database.upsertTracks([updateLyrics]);
 
-        final updatedLyricsRow = database.db.select('SELECT lyrics FROM tracks WHERE id = ?;', [initialTrackId]);
-        expect(updatedLyricsRow.first['lyrics'], '[00:05.00] Overwritten lyrics');
+        expect(embeddedRaw(), '[00:05.00] Overwritten lyrics');
       });
     });
 

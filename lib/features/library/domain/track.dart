@@ -1,7 +1,6 @@
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
-import 'package:tachyon/features/library/domain/lyrics.dart';
 import 'package:tachyon/shared/utils/parse_utils.dart';
 
 class Track {
@@ -22,7 +21,6 @@ class Track {
   final double? replayGainTrackPeak;
 
   final Album? album;
-  final Lyrics? lyrics;
   final List<Artist> artists;
   final List<Genre> genres;
 
@@ -44,7 +42,6 @@ class Track {
     this.replayGainTrackPeak,
 
     this.album,
-    this.lyrics,
     this.genres = const [],
     this.artists = const [],
   });
@@ -71,7 +68,6 @@ class Track {
       'replay_gain_track_gain': replayGainTrackGain,
       'replay_gain_track_peak': replayGainTrackPeak,
 
-      'lyrics_id': lyrics?.id,
       'album_id': album?.id,
       'artist_ids': artists.map((a) => a.id).toList(),
       'genre_ids': genres.map((g) => g.id).toList(),

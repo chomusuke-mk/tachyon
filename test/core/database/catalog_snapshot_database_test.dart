@@ -85,25 +85,19 @@ void main() {
 
         database.upsertTracks(tracks);
 
-        // Also add entries to all lyrics cache tables in SQLite
-        database.saveLyricsSourceEntry(LyricsSourceEntry.found(
-          keyHash: 'hash_song1',
-          source: LyricsSource.embedded,
-          rawLrc: secretLyric1,
-          isSynced: true,
-        ));
-        database.saveLyrics('hash_song1', secretLyric1, LyricsSource.embedded.dbValue);
+        // 1. Verify embedded lyrics were persisted in the relational `lyrics` table
+        final t1Row = database.getCatalogSnapshot().tracks.firstWhere((t) => t.filePath == '/music/song_with_lrc1.mp3');
+        final best = database.getBestLyricsForTrack(t1Row.id);
+        expect(best, isNotNull, reason: 'Embedded lyrics must be stored in the lyrics table');
+        expect(best!['raw_lrc'], secretLyric1);
+        expect(best['source'], LyricsSource.embedded.dbValue);
+
+        // Also add a translation bound to the lyrics row
         database.saveLyricsTranslation(
-          keyHash: 'hash_song1',
-          source: LyricsSource.embedded.dbValue,
-          targetLang: 'es',
+          lyricsId: best['id'] as int,
+          lang: 'es',
           translatedLines: ['[00:01.00] Letra secreta traducida'],
         );
-
-        // 1. Verify DB actually HAS the lyrics in SQLite tracks table
-        final t1Row = database.getCatalogSnapshot().tracks.firstWhere((t) => t.filePath == '/music/song_with_lrc1.mp3');
-        expect(database.getTrackLyrics(t1Row.id), secretLyric1, reason: 'SQLite must hold lyrics in tracks.lyrics');
-        expect(database.getTrackLyricsByFilePath('/music/song_with_lrc1.mp3'), secretLyric1);
 
         // 2. Fetch CatalogSnapshot and thoroughly verify ZERO lyrics
         final snapshot = database.getCatalogSnapshot();

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:tachyon/shared/utils/parse_utils.dart';
 
 /// Exception thrown when a lyrics translation operation fails.
 class LyricsTranslationException implements Exception {
@@ -11,11 +12,7 @@ class LyricsTranslationException implements Exception {
   final int? statusCode;
   final Object? cause;
 
-  const LyricsTranslationException(
-    this.message, {
-    this.statusCode,
-    this.cause,
-  });
+  const LyricsTranslationException(this.message, {this.statusCode, this.cause});
 
   @override
   String toString() =>
@@ -43,8 +40,8 @@ class TranslationResult {
     required this.originalLines,
     required this.targetLanguage,
     required this.errorMessage,
-  })  : translatedLines = const [],
-        isSuccess = false;
+  }) : translatedLines = const [],
+       isSuccess = false;
 
   @override
   bool operator ==(Object other) =>
@@ -59,12 +56,12 @@ class TranslationResult {
 
   @override
   int get hashCode => Object.hash(
-        Object.hashAll(originalLines),
-        Object.hashAll(translatedLines),
-        targetLanguage,
-        isSuccess,
-        errorMessage,
-      );
+    Object.hashAll(originalLines),
+    Object.hashAll(translatedLines),
+    targetLanguage,
+    isSuccess,
+    errorMessage,
+  );
 
   @override
   String toString() =>
@@ -94,8 +91,8 @@ class LyricsTranslationClient {
     http.Client? httpClient,
     this.timeout = const Duration(seconds: 12),
     this.myMemoryBaseUrl = defaultBaseUrl,
-  })  : _httpClient = httpClient ?? http.Client(),
-        _ownsClient = httpClient == null;
+  }) : _httpClient = httpClient ?? http.Client(),
+       _ownsClient = httpClient == null;
 
   /// Chunks [lines] into batches where total character count joined by '\n'
   /// does not exceed [maxBatchChars].
@@ -220,13 +217,15 @@ class LyricsTranslationClient {
     );
 
     try {
-      final response = await _httpClient.get(
-        uri,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': defaultUserAgent,
-        },
-      ).timeout(timeout);
+      final response = await _httpClient
+          .get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': defaultUserAgent,
+            },
+          )
+          .timeout(timeout);
 
       if (response.statusCode != 200) {
         throw LyricsTranslationException(
@@ -247,22 +246,29 @@ class LyricsTranslationClient {
         throw const LyricsTranslationException('Invalid JSON response format');
       }
 
-      final responseStatus = decoded['responseStatus'] as int? ?? 200;
+      final responseStatus =
+          ParserUtils.parseInt(decoded['responseStatus']) ?? 200;
       if (responseStatus != 200) {
-        final details = decoded['responseDetails'] as String? ??
+        final details =
+            decoded['responseDetails'] as String? ??
             'Translation service error $responseStatus';
         throw LyricsTranslationException(details, statusCode: responseStatus);
       }
 
       final responseData = decoded['responseData'] as Map<String, dynamic>?;
-      final rawTranslatedText = responseData?['translatedText'] as String?;
+      final rawTranslatedText = ParserUtils.parseString(
+        responseData?['translatedText'],
+      );
       if (rawTranslatedText == null) {
-        throw const LyricsTranslationException('Missing translatedText in response');
+        throw const LyricsTranslationException(
+          'Missing translatedText in response',
+        );
       }
 
       final unescaped = unescapeHtml(rawTranslatedText);
-      final normalized =
-          unescaped.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+      final normalized = unescaped
+          .replaceAll('\r\n', '\n')
+          .replaceAll('\r', '\n');
       var splitLines = normalized.split('\n');
 
       // Reconcile line count to guarantee 1:1 alignment with input batch

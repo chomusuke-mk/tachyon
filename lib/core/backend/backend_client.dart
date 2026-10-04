@@ -107,17 +107,21 @@ abstract class TachyonBackendClient {
   Future<Map<String, dynamic>> search(String query);
 
   // --- Lyrics ---
-  Future<LyricsResult?> resolveLyrics(
-    Track track, {
-    bool allowRemote = false,
+  Future<LyricsResult?> resolveLyrics({
+    required int trackId,
+    required String filePath,
+    String? title,
+    String? artist,
+    String? album,
+    int? durationMs,
+    bool allowRemote = true,
     bool bypassCache = false,
     Set<LyricsSource>? allowedSources,
     LyricsCancellationToken? cancellationToken,
     void Function(int seconds)? onThresholdCountdown,
   });
-  Future<String?> translateLyrics({
-    required String keyHash,
-    required LyricsSource source,
+  Future<List<String>?> translateLyrics({
+    required int lyricsId,
     required String targetLang,
     required List<String> rawLines,
   });
@@ -623,34 +627,59 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   // LYRICS
   // ===========================================================================
   @override
-  Future<LyricsResult?> resolveLyrics(
-    Track track, {
-    bool allowRemote = false,
+  Future<LyricsResult?> resolveLyrics({
+    required int trackId,
+    required String filePath,
+    String? title,
+    String? artist,
+    String? album,
+    int? durationMs,
+    bool allowRemote = true,
     bool bypassCache = false,
     Set<LyricsSource>? allowedSources,
     LyricsCancellationToken? cancellationToken,
     void Function(int seconds)? onThresholdCountdown,
-  }) =>
-      _send<LyricsResult?>(BackendMethods.lyricsResolve, {
-        'track': track,
-        'allowRemote': allowRemote,
-        'bypassCache': bypassCache,
-        'allowedSources': allowedSources,
-      });
+  }) async {
+    final res = await _send<dynamic>(BackendMethods.lyricsResolve, {
+      'trackId': trackId,
+      'filePath': filePath,
+      'title': title,
+      'artist': artist,
+      'album': album,
+      'durationMs': durationMs,
+      'allowRemote': allowRemote,
+      'bypassCache': bypassCache,
+      'allowedSources': allowedSources?.map((s) => s.dbValue).toList(),
+    });
+    if (res == null) return null;
+    if (res is LyricsResult) return res;
+    if (res is Map) {
+      final map = Map<String, dynamic>.from(res);
+      final retryAfter = map['retryAfterSeconds'] as int?;
+      if (retryAfter != null) {
+        onThresholdCountdown?.call(retryAfter);
+        return null;
+      }
+      return LyricsResult.fromMap(map);
+    }
+    return null;
+  }
 
   @override
-  Future<String?> translateLyrics({
-    required String keyHash,
-    required LyricsSource source,
+  Future<List<String>?> translateLyrics({
+    required int lyricsId,
     required String targetLang,
     required List<String> rawLines,
-  }) =>
-      _send<String?>(BackendMethods.lyricsTranslate, {
-        'keyHash': keyHash,
-        'source': source,
-        'targetLang': targetLang,
-        'rawLines': rawLines,
-      });
+  }) async {
+    final res = await _send<dynamic>(BackendMethods.lyricsTranslate, {
+      'lyricsId': lyricsId,
+      'lang': targetLang,
+      'rawLines': rawLines,
+    });
+    if (res == null) return null;
+    if (res is List) return res.cast<String>();
+    return null;
+  }
 
   @override
   Future<void> dispose() async {

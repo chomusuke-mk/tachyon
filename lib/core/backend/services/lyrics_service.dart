@@ -1,8 +1,6 @@
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -10,692 +8,351 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lrclib_client.dart';
 import 'package:tachyon/core/network/lyrics_ovh_client.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
-import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/features/playback/domain/lyric_line.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
 
 import 'lrc_parser.dart';
 
-/// Structured result container returned by [LyricsService.resolveLyricsByUri].
+/// Phase 1 result returned by [LyricsService.resolveLyrics].
+///
+/// [lyricsId] is the `lyrics.id` row used to request Phase 2 translations.
 @immutable
 class LyricsResult {
+  final int? lyricsId;
   final ParsedLrc lyrics;
   final LyricsSource source;
   final LyricsSourceState state;
   final String? rawLrc;
   final bool isSynced;
-  final String keyHash;
 
   const LyricsResult({
+    this.lyricsId,
     required this.lyrics,
     required this.source,
     required this.state,
     this.rawLrc,
     required this.isSynced,
-    required this.keyHash,
   });
 
   List<LyricLine> get lines => lyrics.lines;
   bool get isEmpty => lyrics.isEmpty;
   bool get isNotEmpty => lyrics.isNotEmpty;
-  ParsedLrc get parsedLrc => lyrics;
+
+  Map<String, dynamic> toMap() => {
+    'lyricsId': lyricsId,
+    'source': source.dbValue,
+    'state': state.dbValue,
+    'rawLrc': rawLrc,
+    'isSynced': isSynced,
+  };
+
+  static LyricsResult fromMap(Map<String, dynamic> map) {
+    final rawLrc = map['rawLrc'] as String?;
+    final parsed = rawLrc != null && rawLrc.trim().isNotEmpty
+        ? LrcParser.parse(rawLrc)
+        : ParsedLrc.empty();
+    return LyricsResult(
+      lyricsId: map['lyricsId'] as int?,
+      lyrics: parsed,
+      source: LyricsSource.fromDbString(map['source'] as String),
+      state: LyricsSourceState.fromDbString(map['state'] as String),
+      rawLrc: rawLrc,
+      isSynced: map['isSynced'] as bool? ?? parsed.isSynced,
+    );
+  }
 
   @override
   String toString() =>
-      'LyricsResult(source: ${source.dbValue}, state: ${state.dbValue}, '
+      'LyricsResult(lyricsId: $lyricsId, source: ${source.dbValue}, state: ${state.dbValue}, '
       'lines: ${lines.length}, isSynced: $isSynced)';
 }
 
-/// Production implementation of [LyricsService] with 4-tier resolution hierarchy:
-/// 1. Embedded tags (USLT, LYRICS in audio file or tracks table)
-/// 2. Contiguous local .lrc file (<track>.lrc or <track>.LRC)
-/// [Visibility Gate: if !allowRemote, stops here without network calls]
-/// 3. Primary API (lrclib.net) with 500ms pacing & 429 threshold handling
-/// 4. Secondary fallback API (lyrics.ovh)
+/// Backend lyrics resolver persisting one row per `(track_id, source)` in `lyrics`.
 ///
-/// Features SQLite per-origin state persistence (`lyrics_source_cache`) and in-memory LRU cache.
+/// Resolution order: `embedded` → `file` → `lrclib` → `lyrics_ovh`.
+/// - `embedded` rows are written exclusively by the folder scan (`AppDatabase.upsertTracks`).
+/// - `file` rows mirror the contiguous `<track>.lrc` / `<track>.LRC` on every request.
+/// - Remote sources are only queried when `allowRemote` is true (LyricsView visible).
+/// - `NOT_FOUND` is persisted to avoid re-querying; transient failures are never persisted
+///   and never overwrite an existing `FOUND` row.
+/// - Updating a row's content purges its translations (see `AppDatabase.saveLyricsEntry`).
 class LyricsService {
   final AppDatabase database;
   final LrclibClient lrclibClient;
   final LyricsOvhClient lyricsOvhClient;
   final LyricsCooldownManager cooldownManager;
-  final int maxMemoryEntries;
-
-  // In-memory LRU cache: keyHash -> LyricsResult
-  final LinkedHashMap<String, LyricsResult> _memoryCache =
-      LinkedHashMap<String, LyricsResult>();
+  final LyricsTranslationClient translationClient;
 
   LyricsService({
     required this.database,
     LrclibClient? lrclibClient,
     LyricsOvhClient? lyricsOvhClient,
     LyricsCooldownManager? cooldownManager,
-    this.maxMemoryEntries = 50,
-  })  : lrclibClient = lrclibClient ?? LrclibClient(),
-        lyricsOvhClient = lyricsOvhClient ?? LyricsOvhClient(),
-        cooldownManager = cooldownManager ?? LyricsCooldownManager();
+    LyricsTranslationClient? translationClient,
+  }) : lrclibClient = lrclibClient ?? LrclibClient(),
+       lyricsOvhClient = lyricsOvhClient ?? LyricsOvhClient(),
+       cooldownManager = cooldownManager ?? LyricsCooldownManager(),
+       translationClient = translationClient ?? LyricsTranslationClient();
 
-  /// Resolves lyrics following the 4-tier hierarchy:
-  /// 1. Embedded tags (USLT, LYRICS)
-  /// 2. Contiguous local .lrc file
-  /// [Visibility Gate: if !allowRemote, returns null without web queries]
-  /// 3. Primary web API (lrclib.net) with 500ms pacing and 429 threshold handling
-  /// 4. Secondary fallback web API (lyrics.ovh)
-  Future<LyricsResult?> resolveLyricsByFilePath({
+  /// Phase 1: resolves the best lyrics for [trackId].
+  ///
+  /// [bypassCache] forces a remote re-search, ignoring persisted remote rows
+  /// (including `NOT_FOUND`). Local rows (embedded/file) still win by priority.
+  /// When lrclib answers HTTP 429 with `Retry-After <= 10s`, [onThresholdCountdown]
+  /// is invoked and `null` is returned so the caller can retry automatically.
+  Future<LyricsResult?> resolveLyrics({
+    required int trackId,
     required String filePath,
     String? title,
     String? artist,
     String? album,
     int? durationMs,
-    String? embeddedLyrics,
     bool allowRemote = true,
-    bool forceRefresh = false,
-    Set<LyricsSource>? enabledSources,
+    bool bypassCache = false,
+    Set<LyricsSource>? allowedSources,
     LyricsCancellationToken? cancellationToken,
-    bool Function()? isCancelled,
     void Function(int seconds)? onThresholdCountdown,
   }) async {
-    bool cancelled() =>
-        (cancellationToken != null && cancellationToken.isCancelled) ||
-        (isCancelled != null && isCancelled());
+    bool cancelled() => cancellationToken?.isCancelled ?? false;
+    if (trackId <= 0 || cancelled()) return null;
 
-    if (cancelled()) return null;
+    final sources = allowedSources ?? LyricsSource.values.toSet();
 
-    final keyHash = computeLyricsKey(
-      filePath: filePath,
-      title: title,
-      artist: artist,
-      durationMs: durationMs,
-    );
-
-    final activeSources = enabledSources ?? LyricsSource.values.toSet();
-
-    // Force refresh purges previous cache for this track
-    if (forceRefresh) {
-      _memoryCache.remove(keyHash);
-      database.clearLyricsSourceEntries(keyHash);
-      cooldownManager.clearCooldown();
+    // Keep the `file` row in sync with the contiguous .lrc on disk.
+    if (sources.contains(LyricsSource.file)) {
+      await _syncFileLyrics(trackId, filePath);
+      if (cancelled()) return null;
     }
 
-    // 0. In-Memory LRU Cache check
-    if (!forceRefresh && _memoryCache.containsKey(keyHash)) {
-      final cached = _memoryCache.remove(keyHash)!;
-      _memoryCache[keyHash] = cached; // refresh LRU order
-      if (activeSources.contains(cached.source)) {
-        return cached;
-      }
+    // Local sources always win by priority, even on a forced re-search.
+    final local = _bestPersisted(trackId, sources.where((s) => s.isLocal));
+    if (local != null) return local;
+
+    if (!bypassCache) {
+      final remote = _bestPersisted(trackId, sources.where((s) => s.isRemote));
+      if (remote != null) return remote;
     }
 
-    // -------------------------------------------------------------------------
-    // Tier 1: Embedded audio metadata tags (USLT, LYRICS)
-    // -------------------------------------------------------------------------
-    if (activeSources.contains(LyricsSource.embedded)) {
-      String? rawLyrics = embeddedLyrics;
-      if (rawLyrics == null || rawLyrics.trim().isEmpty) {
-        try {
-          rawLyrics = database.getTrackLyricsByFilePath(filePath);
-        } catch (_) {}
-      }
+    if (!allowRemote) return null;
+    if (bypassCache) cooldownManager.clearCooldown();
 
-      if (rawLyrics != null && rawLyrics.trim().isNotEmpty) {
-        final parsed = LrcParser.parse(rawLyrics);
-        if (parsed.isNotEmpty) {
-          final entry = LyricsSourceEntry.found(
-            keyHash: keyHash,
-            source: LyricsSource.embedded,
-            rawLrc: rawLyrics,
-            isSynced: parsed.isSynced,
-          );
-          database.saveLyricsSourceEntry(entry);
-          final result = LyricsResult(
-            lyrics: parsed,
-            source: LyricsSource.embedded,
-            state: LyricsSourceState.found,
-            rawLrc: rawLyrics,
-            isSynced: parsed.isSynced,
-            keyHash: keyHash,
-          );
-          _putInMemory(keyHash, result);
-          return result;
-        }
-      }
-    }
+    final cleanTitle = title?.trim() ?? '';
+    final cleanArtist = artist?.trim() ?? '';
+    final canQueryRemote = cleanTitle.isNotEmpty && cleanArtist.isNotEmpty;
 
-    // -------------------------------------------------------------------------
-    // Tier 2: Contiguous local .lrc file in track folder
-    // -------------------------------------------------------------------------
-    if (activeSources.contains(LyricsSource.file)) {
-      final externalLrc = await _checkExternalLrcFile(filePath);
-      if (externalLrc != null && externalLrc.trim().isNotEmpty) {
-        final parsed = LrcParser.parse(externalLrc);
-        if (parsed.isNotEmpty) {
-          final entry = LyricsSourceEntry.found(
-            keyHash: keyHash,
-            source: LyricsSource.file,
-            rawLrc: externalLrc,
-            isSynced: parsed.isSynced,
-          );
-          database.saveLyricsSourceEntry(entry);
-          final result = LyricsResult(
-            lyrics: parsed,
-            source: LyricsSource.file,
-            state: LyricsSourceState.found,
-            rawLrc: externalLrc,
-            isSynced: parsed.isSynced,
-            keyHash: keyHash,
-          );
-          _putInMemory(keyHash, result);
-          return result;
-        }
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // Remote Visibility Gating:
-    // If LyricsView is closed / in background, DO NOT query web APIs!
-    // -------------------------------------------------------------------------
-    if (cancelled()) return null;
-    if (!allowRemote) {
-      return null;
-    }
-
-    // -------------------------------------------------------------------------
-    // SQLite Cache Lookup for Web Sources
-    // -------------------------------------------------------------------------
-    final entries = database.getAllLyricsSourceEntries(keyHash);
-
-    // -------------------------------------------------------------------------
-    // Tier 3: Primary Web API (lrclib.net)
-    // -------------------------------------------------------------------------
-    if (activeSources.contains(LyricsSource.lrclib)) {
-      final lrclibEntry = entries[LyricsSource.lrclib];
-      final canQueryLrclib =
-          lrclibEntry == null || lrclibEntry.state != LyricsSourceState.notFound;
-
-      if (canQueryLrclib) {
-        if (!forceRefresh &&
-            lrclibEntry != null &&
-            lrclibEntry.state == LyricsSourceState.found &&
-            lrclibEntry.rawLrc != null &&
-            lrclibEntry.rawLrc!.trim().isNotEmpty) {
-          final parsed = LrcParser.parse(lrclibEntry.rawLrc!);
-          final result = LyricsResult(
-            lyrics: parsed,
-            source: LyricsSource.lrclib,
-            state: LyricsSourceState.found,
-            rawLrc: lrclibEntry.rawLrc!,
-            isSynced: lrclibEntry.isSynced,
-            keyHash: keyHash,
-          );
-          _putInMemory(keyHash, result);
-          return result;
-        }
-
-        // Check active in-memory cooldown
-        if (cooldownManager.isCooldownActive) {
-          // Cooldown active -> Skip lrclib.net and fall through to Tier 4
-        } else {
-          final cleanTitle = title?.trim();
-          final cleanArtist = artist?.trim();
-
-          if (cleanTitle != null &&
-              cleanTitle.isNotEmpty &&
-              cleanArtist != null &&
-              cleanArtist.isNotEmpty) {
-            final durationSeconds = durationMs != null && durationMs > 0
-                ? (durationMs / 1000).round()
-                : null;
-
-            final response = await lrclibClient.getLyrics(
-              trackName: cleanTitle,
-              artistName: cleanArtist,
-              albumName: album?.trim(),
-              durationSeconds: durationSeconds,
-              cancellationToken: cancellationToken,
-              isCancelled: isCancelled,
-            );
-
-            if (cancelled()) return null;
-
-            if (response.isSuccess) {
-              final rawLrc = response.syncedLyrics ?? response.plainLyrics;
-              if (rawLrc != null && rawLrc.trim().isNotEmpty) {
-                final parsed = LrcParser.parse(rawLrc);
-                final isSynced = response.hasSyncedLyrics;
-                final entry = LyricsSourceEntry.found(
-                  keyHash: keyHash,
-                  source: LyricsSource.lrclib,
-                  rawLrc: rawLrc,
-                  isSynced: isSynced,
-                );
-                database.saveLyricsSourceEntry(entry);
-                final result = LyricsResult(
-                  lyrics: parsed,
-                  source: LyricsSource.lrclib,
-                  state: LyricsSourceState.found,
-                  rawLrc: rawLrc,
-                  isSynced: isSynced,
-                  keyHash: keyHash,
-                );
-                _putInMemory(keyHash, result);
-                return result;
-              }
-            } else if (response.isNotFound) {
-              database.saveLyricsSourceEntry(
-                LyricsSourceEntry.notFound(
-                  keyHash: keyHash,
-                  source: LyricsSource.lrclib,
-                ),
-              );
-            } else if (response.isRateLimited) {
-              database.saveLyricsSourceEntry(
-                LyricsSourceEntry.temporaryError(
-                  keyHash: keyHash,
-                  source: LyricsSource.lrclib,
-                ),
-              );
-
-              final retrySeconds = response.retryAfterSeconds ?? 5;
-              if (retrySeconds <= 10) {
-                onThresholdCountdown?.call(retrySeconds);
-                return null;
-              } else {
-                cooldownManager.setCooldown(Duration(seconds: retrySeconds));
-              }
-            } else {
-              database.saveLyricsSourceEntry(
-                LyricsSourceEntry.temporaryError(
-                  keyHash: keyHash,
-                  source: LyricsSource.lrclib,
-                ),
-              );
-            }
-          }
-        }
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // Tier 4: Secondary Fallback Web API (lyrics.ovh)
-    // -------------------------------------------------------------------------
-    if (activeSources.contains(LyricsSource.lyricsOvh)) {
+    // Tier 3: lrclib.net (synced + plain).
+    if (canQueryRemote &&
+        sources.contains(LyricsSource.lrclib) &&
+        !cooldownManager.isCooldownActive &&
+        _mayQuery(trackId, LyricsSource.lrclib, bypassCache)) {
+      final response = await lrclibClient.getLyrics(
+        trackName: cleanTitle,
+        artistName: cleanArtist,
+        albumName: album?.trim(),
+        durationSeconds: durationMs != null && durationMs > 0
+            ? (durationMs / 1000).round()
+            : null,
+        cancellationToken: cancellationToken,
+      );
       if (cancelled()) return null;
 
-      final ovhEntry = entries[LyricsSource.lyricsOvh];
-      final canQueryOvh =
-          ovhEntry == null || ovhEntry.state != LyricsSourceState.notFound;
-
-      if (canQueryOvh) {
-        if (!forceRefresh &&
-            ovhEntry != null &&
-            ovhEntry.state == LyricsSourceState.found &&
-            ovhEntry.rawLrc != null &&
-            ovhEntry.rawLrc!.trim().isNotEmpty) {
-          final parsed = LrcParser.parse(ovhEntry.rawLrc!);
-          final result = LyricsResult(
-            lyrics: parsed,
-            source: LyricsSource.lyricsOvh,
-            state: LyricsSourceState.found,
-            rawLrc: ovhEntry.rawLrc!,
-            isSynced: false,
-            keyHash: keyHash,
-          );
-          _putInMemory(keyHash, result);
-          return result;
+      final raw = response.syncedLyrics ?? response.plainLyrics;
+      if (response.isSuccess && raw != null && raw.trim().isNotEmpty) {
+        return _storeFound(
+          trackId,
+          LyricsSource.lrclib,
+          raw,
+          response.hasSyncedLyrics,
+        );
+      }
+      if (response.isNotFound) {
+        _storeNotFound(trackId, LyricsSource.lrclib);
+      } else if (response.isRateLimited) {
+        final retrySeconds = response.retryAfterSeconds ?? 5;
+        if (retrySeconds <= 10) {
+          onThresholdCountdown?.call(retrySeconds);
+          return null;
         }
-
-        final cleanTitle = title?.trim();
-        final cleanArtist = artist?.trim();
-
-        if (cleanTitle != null &&
-            cleanTitle.isNotEmpty &&
-            cleanArtist != null &&
-            cleanArtist.isNotEmpty) {
-          final ovhResponse = await lyricsOvhClient.getLyrics(
-            artist: cleanArtist,
-            title: cleanTitle,
-          );
-
-          if (cancelled()) return null;
-
-          if (ovhResponse.isSuccess) {
-            final ovhLyrics = ovhResponse.lyrics;
-            if (ovhLyrics != null && ovhLyrics.trim().isNotEmpty) {
-              final parsed = LrcParser.parse(ovhLyrics);
-              final entry = LyricsSourceEntry.found(
-                keyHash: keyHash,
-                source: LyricsSource.lyricsOvh,
-                rawLrc: ovhLyrics,
-                isSynced: false,
-              );
-              database.saveLyricsSourceEntry(entry);
-              final result = LyricsResult(
-                lyrics: parsed,
-                source: LyricsSource.lyricsOvh,
-                state: LyricsSourceState.found,
-                rawLrc: ovhLyrics,
-                isSynced: false,
-                keyHash: keyHash,
-              );
-              _putInMemory(keyHash, result);
-              return result;
-            }
-          } else if (ovhResponse.isNotFound) {
-            database.saveLyricsSourceEntry(
-              LyricsSourceEntry.notFound(
-                keyHash: keyHash,
-                source: LyricsSource.lyricsOvh,
-              ),
-            );
-          } else {
-            database.saveLyricsSourceEntry(
-              LyricsSourceEntry.temporaryError(
-                keyHash: keyHash,
-                source: LyricsSource.lyricsOvh,
-              ),
-            );
-          }
-        }
+        cooldownManager.setCooldown(Duration(seconds: retrySeconds));
       }
     }
 
+    // Tier 4: lyrics.ovh (plain text fallback).
+    if (canQueryRemote &&
+        sources.contains(LyricsSource.lyricsOvh) &&
+        _mayQuery(trackId, LyricsSource.lyricsOvh, bypassCache)) {
+      final response = await lyricsOvhClient.getLyrics(
+        artist: cleanArtist,
+        title: cleanTitle,
+      );
+      if (cancelled()) return null;
+
+      final raw = response.lyrics;
+      if (response.isSuccess && raw != null && raw.trim().isNotEmpty) {
+        return _storeFound(trackId, LyricsSource.lyricsOvh, raw, false);
+      }
+      if (response.isNotFound) _storeNotFound(trackId, LyricsSource.lyricsOvh);
+    }
+
+    // A failed re-search keeps whatever remote lyrics were already stored.
+    return bypassCache
+        ? _bestPersisted(trackId, sources.where((s) => s.isRemote))
+        : null;
+  }
+
+  /// Phase 2: returns the translation of [lyricsId] into [targetLang], fetching
+  /// and persisting it in `lyrics_translations` on cache miss.
+  Future<List<String>?> translateLyrics({
+    required int lyricsId,
+    required String targetLang,
+    required List<String> rawLines,
+  }) async {
+    if (kDebugMode) {
+      debugPrint('Translating lyrics $lyricsId into $targetLang...');
+      debugPrint('Raw lines: ${rawLines.length}');
+    }
+    if (rawLines.isEmpty) return const [];
+
+    final cached = database.getLyricsTranslation(
+      lyricsId: lyricsId,
+      lang: targetLang,
+    );
+    if (cached != null && cached.isNotEmpty) return cached;
+
+    debugPrint('No cached translation found, requesting from API...');
+    final result = await translationClient.translate(
+      rawLines,
+      targetLanguage: targetLang,
+    );
+    if (kDebugMode) {
+      debugPrint(
+        'Translation result: ${result.isSuccess ? 'success' : 'failure'}',
+      );
+      debugPrint('Error: ${result.errorMessage}');
+    }
+    if (!result.isSuccess) return null;
+
+    database.saveLyricsTranslation(
+      lyricsId: lyricsId,
+      lang: targetLang,
+      translatedLines: result.translatedLines,
+    );
+    return result.translatedLines;
+  }
+
+  LyricsResult? _bestPersisted(int trackId, Iterable<LyricsSource> candidates) {
+    final ordered = candidates.toList()
+      ..sort((a, b) => a.priority.compareTo(b.priority));
+    for (final source in ordered) {
+      final row = database.getLyricsEntry(
+        trackId: trackId,
+        source: source.dbValue,
+      );
+      final raw = row?['raw_lrc'] as String?;
+      if (row == null ||
+          row['state'] != LyricsSourceState.found.dbValue ||
+          raw == null ||
+          raw.trim().isEmpty) {
+        continue;
+      }
+      return LyricsResult(
+        lyricsId: row['id'] as int,
+        lyrics: LrcParser.parse(raw),
+        source: source,
+        state: LyricsSourceState.found,
+        rawLrc: raw,
+        isSynced: (row['is_synced'] as int? ?? 0) == 1,
+      );
+    }
     return null;
   }
 
-  Future<LyricsResult?> resolveLyricsForTrack(
-    Track track, {
-    bool allowRemote = true,
-    bool forceRefresh = false,
-    Set<LyricsSource>? enabledSources,
-    LyricsCancellationToken? cancellationToken,
-    bool Function()? isCancelled,
-    void Function(int seconds)? onThresholdCountdown,
-  }) {
-    return resolveLyricsByFilePath(
-      filePath: track.filePath,
-      title: track.title,
-      artist: track.artists.isEmpty
-          ? null
-          : track.artists.map((a) => a.name).join(', '),
-      album: track.album?.name,
-      durationMs: track.durationMs,
-      embeddedLyrics: track.lyrics?.rawLyrics,
-      allowRemote: allowRemote,
-      forceRefresh: forceRefresh,
-      enabledSources: enabledSources,
-      cancellationToken: cancellationToken,
-      isCancelled: isCancelled,
-      onThresholdCountdown: onThresholdCountdown,
+  bool _mayQuery(int trackId, LyricsSource source, bool bypassCache) {
+    if (bypassCache) return true;
+    final row = database.getLyricsEntry(
+      trackId: trackId,
+      source: source.dbValue,
+    );
+    return row == null || row['state'] != LyricsSourceState.notFound.dbValue;
+  }
+
+  /// Persists a `FOUND` row. Unchanged content keeps the row (and its translations) intact.
+  LyricsResult _storeFound(
+    int trackId,
+    LyricsSource source,
+    String raw,
+    bool isSynced,
+  ) {
+    final existing = database.getLyricsEntry(
+      trackId: trackId,
+      source: source.dbValue,
+    );
+    final unchanged =
+        existing != null &&
+        existing['state'] == LyricsSourceState.found.dbValue &&
+        existing['raw_lrc'] == raw;
+    final lyricsId = unchanged
+        ? existing['id'] as int
+        : database.saveLyricsEntry(
+            trackId: trackId,
+            source: source.dbValue,
+            state: LyricsSourceState.found.dbValue,
+            rawLrc: raw,
+            isSynced: isSynced,
+          );
+    return LyricsResult(
+      lyricsId: lyricsId,
+      lyrics: LrcParser.parse(raw),
+      source: source,
+      state: LyricsSourceState.found,
+      rawLrc: raw,
+      isSynced: isSynced,
     );
   }
 
-  Future<LyricsResult?> resolveLyricsForQueueItem(
-    QueueItem item, {
-    bool allowRemote = true,
-    bool forceRefresh = false,
-    Set<LyricsSource>? enabledSources,
-    LyricsCancellationToken? cancellationToken,
-    bool Function()? isCancelled,
-    void Function(int seconds)? onThresholdCountdown,
-    bool? enableLocal,
-    bool? enableLrclib,
-    bool? enableLyricsOvh,
-  }) {
-    final embedded = item.extras['lyrics'] as String?;
-    Set<LyricsSource>? effectiveSources = enabledSources;
-    if (effectiveSources == null &&
-        (enableLocal != null || enableLrclib != null || enableLyricsOvh != null)) {
-      effectiveSources = <LyricsSource>{
-        if (enableLocal ?? true) ...[LyricsSource.embedded, LyricsSource.file],
-        if (enableLrclib ?? true) LyricsSource.lrclib,
-        if (enableLyricsOvh ?? true) LyricsSource.lyricsOvh,
-      };
-    }
-
-    return resolveLyricsByFilePath(
-      filePath: item.filePath,
-      title: item.title,
-      artist: item.artist,
-      album: item.album,
-      durationMs: item.duration.inMilliseconds,
-      embeddedLyrics: embedded,
-      allowRemote: allowRemote,
-      forceRefresh: forceRefresh,
-      enabledSources: effectiveSources,
-      cancellationToken: cancellationToken,
-      isCancelled: isCancelled,
-      onThresholdCountdown: onThresholdCountdown,
+  /// Persists `NOT_FOUND` unless a `FOUND` row already exists for that source.
+  void _storeNotFound(int trackId, LyricsSource source) {
+    final existing = database.getLyricsEntry(
+      trackId: trackId,
+      source: source.dbValue,
+    );
+    if (existing?['state'] == LyricsSourceState.found.dbValue) return;
+    database.saveLyricsEntry(
+      trackId: trackId,
+      source: source.dbValue,
+      state: LyricsSourceState.notFound.dbValue,
     );
   }
 
-  /// Convenience method accepting either a [QueueItem] or [Track].
-  Future<LyricsResult?> resolveLyrics({
-    dynamic track,
-    QueueItem? queueItem,
-    Track? trackItem,
-    bool allowRemote = true,
-    bool forceRefresh = false,
-    Set<LyricsSource>? enabledSources,
-    LyricsCancellationToken? cancellationToken,
-    bool Function()? isCancelled,
-    void Function(int seconds)? onThresholdCountdown,
-    bool? enableLocal,
-    bool? enableLrclib,
-    bool? enableLyricsOvh,
-  }) {
-    if (queueItem != null) {
-      return resolveLyricsForQueueItem(
-        queueItem,
-        allowRemote: allowRemote,
-        forceRefresh: forceRefresh,
-        enabledSources: enabledSources,
-        cancellationToken: cancellationToken,
-        isCancelled: isCancelled,
-        onThresholdCountdown: onThresholdCountdown,
-        enableLocal: enableLocal,
-        enableLrclib: enableLrclib,
-        enableLyricsOvh: enableLyricsOvh,
-      );
-    }
-    if (trackItem != null) {
-      return resolveLyricsForTrack(
-        trackItem,
-        allowRemote: allowRemote,
-        forceRefresh: forceRefresh,
-        enabledSources: enabledSources,
-        cancellationToken: cancellationToken,
-        isCancelled: isCancelled,
-        onThresholdCountdown: onThresholdCountdown,
-      );
-    }
-    if (track is QueueItem) {
-      return resolveLyricsForQueueItem(
-        track,
-        allowRemote: allowRemote,
-        forceRefresh: forceRefresh,
-        enabledSources: enabledSources,
-        cancellationToken: cancellationToken,
-        isCancelled: isCancelled,
-        onThresholdCountdown: onThresholdCountdown,
-        enableLocal: enableLocal,
-        enableLrclib: enableLrclib,
-        enableLyricsOvh: enableLyricsOvh,
-      );
-    }
-    if (track is Track) {
-      return resolveLyricsForTrack(
-        track,
-        allowRemote: allowRemote,
-        forceRefresh: forceRefresh,
-        enabledSources: enabledSources,
-        cancellationToken: cancellationToken,
-        isCancelled: isCancelled,
-        onThresholdCountdown: onThresholdCountdown,
-      );
-    }
-    return Future.value(null);
-  }
-
-  /// Resolves only local sources (embedded tags and local .lrc files) without remote network calls.
-  Future<LyricsResult?> resolveLocalLyricsOnly(dynamic item) {
-    if (item is QueueItem) {
-      return resolveLyricsForQueueItem(
-        item,
-        allowRemote: false,
-        enabledSources: {LyricsSource.embedded, LyricsSource.file},
-      );
-    }
-    if (item is Track) {
-      return resolveLyricsForTrack(
-        item,
-        allowRemote: false,
-        enabledSources: {LyricsSource.embedded, LyricsSource.file},
-      );
-    }
-    return Future.value(null);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Backward-Compatible Convenience Methods
-  // ---------------------------------------------------------------------------
-
-  Future<ParsedLrc?> getLyricsForTrack(
-    Track track, {
-    bool forceRefresh = false,
-    bool allowRemote = true,
-    Set<LyricsSource>? enabledSources,
-  }) async {
-    final res = await resolveLyricsForTrack(
-      track,
-      forceRefresh: forceRefresh,
-      allowRemote: allowRemote,
-      enabledSources: enabledSources,
+  /// Mirrors `<track>.lrc` / `<track>.LRC` into the `file` row (insert, update or delete).
+  Future<void> _syncFileLyrics(int trackId, String filePath) async {
+    final raw = await _readContiguousLrc(filePath);
+    final existing = database.getLyricsEntry(
+      trackId: trackId,
+      source: LyricsSource.file.dbValue,
     );
-    return res?.lyrics;
+    if (raw == null || raw.trim().isEmpty) {
+      if (existing != null) database.deleteLyrics(existing['id'] as int);
+      return;
+    }
+    _storeFound(trackId, LyricsSource.file, raw, LrcParser.parse(raw).isSynced);
   }
 
-  Future<ParsedLrc?> getLyricsForQueueItem(
-    QueueItem item, {
-    bool forceRefresh = false,
-    bool allowRemote = true,
-    Set<LyricsSource>? enabledSources,
-    LyricsCancellationToken? cancellationToken,
-    bool? enableLocal,
-    bool? enableLrclib,
-    bool? enableLyricsOvh,
-  }) async {
-    final res = await resolveLyricsForQueueItem(
-      item,
-      forceRefresh: forceRefresh,
-      allowRemote: allowRemote,
-      enabledSources: enabledSources,
-      cancellationToken: cancellationToken,
-      enableLocal: enableLocal,
-      enableLrclib: enableLrclib,
-      enableLyricsOvh: enableLyricsOvh,
-    );
-    return res?.lyrics;
-  }
-
-  Future<ParsedLrc?> getLyricsByFilePath({
-    required String filePath,
-    String? title,
-    String? artist,
-    int? durationMs,
-    String? embeddedLyrics,
-    bool forceRefresh = false,
-    bool allowRemote = true,
-    Set<LyricsSource>? enabledSources,
-  }) async {
-    final res = await resolveLyricsByFilePath(
-      filePath: filePath,
-      title: title,
-      artist: artist,
-      durationMs: durationMs,
-      embeddedLyrics: embeddedLyrics,
-      forceRefresh: forceRefresh,
-      allowRemote: allowRemote,
-      enabledSources: enabledSources,
-    );
-    return res?.lyrics;
-  }
-
-  /// Inspects directory of [filePath] for `<track_name>.lrc` or `<track_name>.LRC`
-  Future<String?> _checkExternalLrcFile(String filePath) async {
+  Future<String?> _readContiguousLrc(String filePath) async {
     try {
-      String cleanPath = filePath;
-      if (cleanPath.startsWith('file://')) {
-        cleanPath = Uri.parse(cleanPath).toFilePath();
-      }
-
-      final file = File(cleanPath);
-      if (!await file.exists()) return null;
-
-      final dir = p.dirname(cleanPath);
-      final baseName = p.basenameWithoutExtension(cleanPath);
-
-      final candidates = [
-        File(p.join(dir, '$baseName.lrc')),
-        File(p.join(dir, '$baseName.LRC')),
-      ];
-
-      for (final candidate in candidates) {
+      final dir = p.dirname(filePath);
+      final baseName = p.basenameWithoutExtension(filePath);
+      for (final ext in const ['.lrc', '.LRC']) {
+        final candidate = File(p.join(dir, '$baseName$ext'));
         if (await candidate.exists()) {
-          final bytes = await candidate.readAsBytes();
-          return utf8.decode(bytes, allowMalformed: true);
+          return utf8.decode(
+            await candidate.readAsBytes(),
+            allowMalformed: true,
+          );
         }
       }
     } catch (_) {}
     return null;
-  }
-
-  void _putInMemory(String key, LyricsResult result) {
-    if (_memoryCache.length >= maxMemoryEntries) {
-      _memoryCache.remove(_memoryCache.keys.first); // Evict oldest LRU
-    }
-    _memoryCache[key] = result;
-  }
-
-  Future<void> saveLyrics({
-    required String keyHash,
-    required String rawLrc,
-    required String source,
-  }) async {
-    database.saveLyrics(keyHash, rawLrc, source);
-    final parsed = LrcParser.parse(rawLrc);
-    final lyricsSource = LyricsSource.fromDbString(source);
-    final result = LyricsResult(
-      lyrics: parsed,
-      source: lyricsSource,
-      state: LyricsSourceState.found,
-      rawLrc: rawLrc,
-      isSynced: parsed.isSynced,
-      keyHash: keyHash,
-    );
-    _putInMemory(keyHash, result);
-  }
-
-  void clearMemoryCache() {
-    _memoryCache.clear();
-  }
-
-  /// Computes a canonical SHA-256 hash for lyrics identification.
-  static String computeLyricsKey({
-    required String filePath,
-    String? title,
-    String? artist,
-    int? durationMs,
-  }) {
-    final effectivePath = filePath;
-    if (title != null &&
-        title.trim().isNotEmpty &&
-        artist != null &&
-        artist.trim().isNotEmpty) {
-      final canonical =
-          '${title.trim().toLowerCase()}|${artist.trim().toLowerCase()}|${durationMs ?? 0}';
-      return sha256.convert(utf8.encode(canonical)).toString();
-    }
-    return sha256.convert(utf8.encode(effectivePath)).toString();
   }
 }

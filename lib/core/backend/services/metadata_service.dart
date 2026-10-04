@@ -493,6 +493,7 @@ double? _parseReplayGain(dynamic value) {
   return double.tryParse(str);
 }
 
+/// Reads contiguous `<track_name>.lrc` or `<track_name>.LRC` file if present on disk.
 /// Helper to construct a fallback [ExtractedTrackData] when metadata cannot be read.
 ExtractedTrackData _buildFallbackTrackData({
   required String filePath,

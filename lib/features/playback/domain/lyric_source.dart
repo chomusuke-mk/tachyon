@@ -15,7 +15,7 @@ enum LyricsSource {
 
   const LyricsSource(this.dbValue);
 
-  /// The string identifier persisted in the SQLite database (`lyrics_source_cache.source`).
+  /// The string identifier persisted in the SQLite database (`lyrics.source`).
   final String dbValue;
 
   /// Whether this source is a local offline source (embedded tags or contiguous file).
@@ -32,33 +32,9 @@ enum LyricsSource {
         LyricsSource.lyricsOvh => 4,
       };
 
-  /// Parses a string into a [LyricsSource], supporting legacy and alternative aliases.
-  static LyricsSource fromString(String value) {
-    return switch (value.trim().toLowerCase()) {
-      'embedded' => LyricsSource.embedded,
-      'file' || 'lrc_file' || 'lrc' => LyricsSource.file,
-      'lrclib' || 'lrclib.net' => LyricsSource.lrclib,
-      'lyrics_ovh' || 'lyricsovh' || 'ovh' => LyricsSource.lyricsOvh,
-      _ => throw ArgumentError.value(value, 'value', 'Unknown LyricsSource value'),
-    };
-  }
-
-  /// Parses a database string or identifier into a [LyricsSource].
-  static LyricsSource fromDbString(String value) => fromString(value);
-
-  /// Safe parse that returns [defaultValue] (or `null`) instead of throwing on unknown values.
-  static LyricsSource? tryParse(String? value, {LyricsSource? defaultValue}) {
-    if (value == null) return defaultValue;
-    final parsed = switch (value.trim().toLowerCase()) {
-      'embedded' => LyricsSource.embedded,
-      'file' || 'lrc_file' || 'lrc' => LyricsSource.file,
-      'lrclib' || 'lrclib.net' => LyricsSource.lrclib,
-      'lyrics_ovh' || 'lyricsovh' || 'ovh' => LyricsSource.lyricsOvh,
-      _ => null,
-    };
-    return parsed ?? defaultValue;
-  }
+  /// Parses a value persisted in `lyrics.source`.
+  static LyricsSource fromDbString(String value) => LyricsSource.values.firstWhere(
+        (s) => s.dbValue == value,
+        orElse: () => throw ArgumentError.value(value, 'value', 'Unknown LyricsSource value'),
+      );
 }
-
-/// Backward compatibility typedef alias.
-typedef LyricSource = LyricsSource;

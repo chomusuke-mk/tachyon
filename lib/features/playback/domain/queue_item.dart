@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/lyrics.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
 enum Loop {
@@ -72,7 +71,6 @@ class QueueItem {
         'bitrate': track.bitrate,
         'sampleRate': track.sampleRate,
         'channels': track.channels,
-        'lyrics': track.lyrics?.rawLyrics,
         'codec': track.codec,
         'replayGainTrackGain': track.replayGainTrackGain,
         'replayGainTrackPeak': track.replayGainTrackPeak,
@@ -106,7 +104,6 @@ class QueueItem {
       artists: artists.isNotEmpty
           ? artists.map((a) => Artist(name: a)).toList()
           : (artist.isNotEmpty && artist != 'Unknown Artist' ? [Artist(name: artist)] : const []),
-      lyrics: extras['lyrics'] != null ? Lyrics(rawLyrics: extras['lyrics'] as String) : null,
     );
   }
 

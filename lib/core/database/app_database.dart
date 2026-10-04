@@ -7,21 +7,18 @@ import 'package:tachyon/core/backend/services/metadata_service.dart'
     show ExtractedTrackData, TrackFileMeta;
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/domain/playlist.dart' show PlaylistType;
-import 'package:tachyon/features/playback/domain/lyric_source.dart';
-
 abstract final class AppDatabaseSchema {
   static const List<String> createTables = [
     'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE);',
     'CREATE TABLE IF NOT EXISTS albums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE, year INTEGER, artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL, UNIQUE(name COLLATE NOCASE, artist_id));',
-    'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT UNIQUE NOT NULL, title TEXT NOT NULL, track_number INTEGER, disc_number INTEGER DEFAULT 1, year INTEGER, duration_ms INTEGER NOT NULL, bitrate INTEGER, sample_rate INTEGER, channels INTEGER, codec TEXT, file_size INTEGER NOT NULL, modified_at INTEGER NOT NULL, replay_gain_track_gain REAL, replay_gain_track_peak REAL, album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL, has_cover INTEGER DEFAULT 0, lyrics TEXT);',
+    'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT UNIQUE NOT NULL, title TEXT NOT NULL, track_number INTEGER, disc_number INTEGER DEFAULT 1, year INTEGER, duration_ms INTEGER NOT NULL, bitrate INTEGER, sample_rate INTEGER, channels INTEGER, codec TEXT, file_size INTEGER NOT NULL, modified_at INTEGER NOT NULL, replay_gain_track_gain REAL, replay_gain_track_peak REAL, album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL, has_cover INTEGER DEFAULT 0);',
     'CREATE TABLE IF NOT EXISTS genres (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE);',
     'CREATE TABLE IF NOT EXISTS track_genres (track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, genre_id INTEGER NOT NULL REFERENCES genres(id) ON DELETE CASCADE, PRIMARY KEY(track_id, genre_id));',
     'CREATE TABLE IF NOT EXISTS track_artists (track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE, PRIMARY KEY(track_id, artist_id));',
     'CREATE TABLE IF NOT EXISTS playlists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created_at INTEGER NOT NULL, type INTEGER DEFAULT 0);',
     'CREATE TABLE IF NOT EXISTS playlist_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, position INTEGER NOT NULL, added_at INTEGER NOT NULL, playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE, track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE);',
-    'CREATE TABLE IF NOT EXISTS lyrics_cache (key_hash TEXT PRIMARY KEY, raw_lrc TEXT NOT NULL, source TEXT NOT NULL, updated_at INTEGER NOT NULL);',
-    'CREATE TABLE IF NOT EXISTS lyrics_source_cache (key_hash TEXT NOT NULL, source TEXT NOT NULL, state TEXT NOT NULL, raw_lrc TEXT, is_synced INTEGER DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (key_hash, source));',
-    'CREATE TABLE IF NOT EXISTS lyrics_translations (key_hash TEXT NOT NULL, source TEXT NOT NULL, target_lang TEXT NOT NULL, translated_lines TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (key_hash, source, target_lang));',
+    'CREATE TABLE IF NOT EXISTS lyrics (id INTEGER PRIMARY KEY AUTOINCREMENT, track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, source TEXT NOT NULL, state TEXT NOT NULL DEFAULT \'FOUND\', raw_lrc TEXT, is_synced INTEGER DEFAULT 0, updated_at INTEGER NOT NULL, UNIQUE(track_id, source));',
+    'CREATE TABLE IF NOT EXISTS lyrics_translations (id INTEGER PRIMARY KEY AUTOINCREMENT, lyrics_id INTEGER NOT NULL REFERENCES lyrics(id) ON DELETE CASCADE, lang TEXT NOT NULL, translated_lines TEXT NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(lyrics_id, lang));',
   ];
 
   static const List<String> indexes = [
@@ -37,6 +34,8 @@ abstract final class AppDatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_track_artists_artist_id ON track_artists(artist_id);',
     'CREATE INDEX IF NOT EXISTS idx_playlist_entries_playlist_pos ON playlist_entries(playlist_id, position);',
     'CREATE INDEX IF NOT EXISTS idx_playlist_entries_track_id ON playlist_entries(track_id);',
+    'CREATE INDEX IF NOT EXISTS idx_lyrics_track_source ON lyrics(track_id, source);',
+    'CREATE INDEX IF NOT EXISTS idx_lyrics_translations_lookup ON lyrics_translations(lyrics_id, lang);',
   ];
 }
 
@@ -84,7 +83,7 @@ class AppDatabase {
 
   void _executeSchema(Database db) {
     for (final sql in AppDatabaseSchema.createTables) { db.execute(sql); }
-    for (final c in ['replay_gain_track_gain REAL', 'replay_gain_track_peak REAL', 'lyrics TEXT']) {
+    for (final c in ['replay_gain_track_gain REAL', 'replay_gain_track_peak REAL']) {
       try { db.execute('ALTER TABLE tracks ADD COLUMN $c;'); } catch (_) {}
     }
     for (final sql in AppDatabaseSchema.indexes) { db.execute(sql); }
@@ -157,8 +156,10 @@ class AppDatabase {
       final stmtInsertGenre = db.prepare('INSERT OR IGNORE INTO genres (name) VALUES (?);'); stmts.add(stmtInsertGenre);
       final stmtSelectGenre = db.prepare('SELECT id FROM genres WHERE name = ? COLLATE NOCASE LIMIT 1;'); stmts.add(stmtSelectGenre);
 
-      final stmtUpsertTrack = db.prepare('INSERT INTO tracks (file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, album_id, lyrics) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET title = excluded.title, track_number = excluded.track_number, disc_number = excluded.disc_number, year = excluded.year, duration_ms = excluded.duration_ms, bitrate = excluded.bitrate, sample_rate = excluded.sample_rate, channels = excluded.channels, codec = excluded.codec, file_size = excluded.file_size, modified_at = excluded.modified_at, replay_gain_track_gain = excluded.replay_gain_track_gain, replay_gain_track_peak = excluded.replay_gain_track_peak, album_id = excluded.album_id, lyrics = COALESCE(excluded.lyrics, tracks.lyrics) RETURNING id;');
+      final stmtUpsertTrack = db.prepare('INSERT INTO tracks (file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, album_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET title = excluded.title, track_number = excluded.track_number, disc_number = excluded.disc_number, year = excluded.year, duration_ms = excluded.duration_ms, bitrate = excluded.bitrate, sample_rate = excluded.sample_rate, channels = excluded.channels, codec = excluded.codec, file_size = excluded.file_size, modified_at = excluded.modified_at, replay_gain_track_gain = excluded.replay_gain_track_gain, replay_gain_track_peak = excluded.replay_gain_track_peak, album_id = excluded.album_id RETURNING id;');
       stmts.add(stmtUpsertTrack);
+      final stmtDeleteEmbeddedLyrics = db.prepare("DELETE FROM lyrics WHERE track_id = ? AND source = 'embedded';"); stmts.add(stmtDeleteEmbeddedLyrics);
+      final stmtInsertEmbeddedLyrics = db.prepare("INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, updated_at) VALUES (?, 'embedded', 'FOUND', ?, ?, ?);"); stmts.add(stmtInsertEmbeddedLyrics);
 
       final stmtDeleteTrackArtists = db.prepare('DELETE FROM track_artists WHERE track_id = ?;'); stmts.add(stmtDeleteTrackArtists);
       final stmtInsertTrackArtist = db.prepare('INSERT OR IGNORE INTO track_artists (track_id, artist_id) VALUES (?, ?);'); stmts.add(stmtInsertTrackArtist);
@@ -235,9 +236,15 @@ class AppDatabase {
         final trackRes = stmtUpsertTrack.select([
           t.filePath, t.title, t.trackNumber, t.discNumber ?? 1, t.year, t.durationMs,
           t.bitrate, t.sampleRate, t.channels, t.codec, t.fileSize, t.modifiedAt,
-          t.replayGainTrackGain, t.replayGainTrackPeak, resolvedAlbumId, t.embeddedLyrics,
+          t.replayGainTrackGain, t.replayGainTrackPeak, resolvedAlbumId,
         ]);
         final trackId = trackRes.first['id'] as int;
+
+        stmtDeleteEmbeddedLyrics.execute([trackId]);
+        if (t.embeddedLyrics != null && t.embeddedLyrics!.trim().isNotEmpty) {
+          final isSynced = RegExp(r'\[\d{1,}:\d{2}\.\d{2,3}\]').hasMatch(t.embeddedLyrics!);
+          stmtInsertEmbeddedLyrics.execute([trackId, t.embeddedLyrics, isSynced ? 1 : 0, DateTime.now().millisecondsSinceEpoch]);
+        }
 
         stmtDeleteTrackArtists.execute([trackId]);
         for (final aId in resolvedArtistIds) { stmtInsertTrackArtist.execute([trackId, aId]); }
@@ -277,16 +284,6 @@ class AppDatabase {
   void deleteTracksInFolder(String folderPath) {
     final prefix = folderPath.endsWith('/') ? folderPath : '$folderPath/';
     db.execute("DELETE FROM tracks WHERE file_path LIKE ? ESCAPE '\\';", ['${prefix.replaceAll('%', r'\%').replaceAll('_', r'\_')}%']);
-  }
-
-  String? getTrackLyricsByFilePath(String filePath) {
-    final rows = db.select('SELECT lyrics FROM tracks WHERE file_path = ? LIMIT 1;', [filePath]);
-    return rows.isEmpty ? null : rows.first['lyrics'] as String?;
-  }
-
-  String? getTrackLyrics(int trackId) {
-    final rows = db.select('SELECT lyrics FROM tracks WHERE id = ? LIMIT 1;', [trackId]);
-    return rows.isEmpty ? null : rows.first['lyrics'] as String?;
   }
 
   int createPlaylist(String name) {
@@ -381,80 +378,60 @@ class AppDatabase {
     return db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? AND track_id = ? LIMIT 1;', [likedSongsPlaylistId, trackId]).isNotEmpty;
   }
 
-  void saveLyricsSourceEntry(LyricsSourceEntry entry) {
-    final ts = entry.updatedAt > 0 ? entry.updatedAt : DateTime.now().millisecondsSinceEpoch;
-    db.execute('INSERT INTO lyrics_source_cache (key_hash, source, state, raw_lrc, is_synced, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(key_hash, source) DO UPDATE SET state = excluded.state, raw_lrc = excluded.raw_lrc, is_synced = excluded.is_synced, updated_at = excluded.updated_at;', [entry.keyHash, entry.source.dbValue, entry.state.dbValue, entry.rawLrc, entry.isSynced ? 1 : 0, ts]);
-    if (entry.state == LyricsSourceState.found && entry.rawLrc != null) {
-      db.execute('INSERT INTO lyrics_cache (key_hash, raw_lrc, source, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(key_hash) DO UPDATE SET raw_lrc = excluded.raw_lrc, source = excluded.source, updated_at = excluded.updated_at;', [entry.keyHash, entry.rawLrc, entry.source.dbValue, ts]);
-    }
+  Map<String, dynamic>? getBestLyricsForTrack(int trackId) {
+    final rows = db.select('''
+      SELECT id, track_id, source, state, raw_lrc, is_synced, updated_at
+      FROM lyrics
+      WHERE track_id = ? AND state = 'FOUND' AND raw_lrc IS NOT NULL
+      ORDER BY CASE source
+        WHEN 'embedded' THEN 1
+        WHEN 'file' THEN 2
+        WHEN 'lrclib' THEN 3
+        WHEN 'lyrics_ovh' THEN 4
+        ELSE 5 END ASC
+      LIMIT 1;
+    ''', [trackId]);
+    return rows.isEmpty ? null : rows.first;
   }
 
-  void saveLyricsSourceEntries(List<LyricsSourceEntry> entries) {
-    if (entries.isEmpty) return;
-    db.execute('BEGIN TRANSACTION;');
-    try {
-      for (final e in entries) { saveLyricsSourceEntry(e); }
-      db.execute('COMMIT;');
-    } catch (_) {
-      db.execute('ROLLBACK;');
-      rethrow;
-    }
+  int saveLyricsEntry({
+    required int trackId,
+    required String source,
+    required String state,
+    String? rawLrc,
+    bool isSynced = false,
+    int? updatedAt,
+  }) {
+    final ts = updatedAt ?? DateTime.now().millisecondsSinceEpoch;
+    final res = db.select('''
+      INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(track_id, source) DO UPDATE SET
+        state = excluded.state,
+        raw_lrc = excluded.raw_lrc,
+        is_synced = excluded.is_synced,
+        updated_at = excluded.updated_at
+      RETURNING id;
+    ''', [trackId, source, state, rawLrc, isSynced ? 1 : 0, ts]);
+    final lyricsId = res.first['id'] as int;
+    db.execute('DELETE FROM lyrics_translations WHERE lyrics_id = ?;', [lyricsId]);
+    return lyricsId;
   }
 
-  LyricsSourceEntry? getLyricsSourceEntry(String keyHash, LyricsSource source) {
-    final rows = db.select('SELECT key_hash, source, state, raw_lrc, is_synced, updated_at FROM lyrics_source_cache WHERE key_hash = ? AND source = ? LIMIT 1;', [keyHash, source.dbValue]);
-    return rows.isEmpty ? null : LyricsSourceEntry.fromDbMap(rows.first);
+  Map<String, dynamic>? getLyricsEntry({required int trackId, required String source}) {
+    final rows = db.select(
+      'SELECT id, track_id, source, state, raw_lrc, is_synced, updated_at FROM lyrics WHERE track_id = ? AND source = ? LIMIT 1;',
+      [trackId, source],
+    );
+    return rows.isEmpty ? null : rows.first;
   }
 
-  Map<LyricsSource, LyricsSourceEntry> getAllLyricsSourceEntries(String keyHash) {
-    final rows = db.select('SELECT key_hash, source, state, raw_lrc, is_synced, updated_at FROM lyrics_source_cache WHERE key_hash = ?;', [keyHash]);
-    final map = <LyricsSource, LyricsSourceEntry>{};
-    for (final r in rows) {
-      final entry = LyricsSourceEntry.fromDbMap(r);
-      map[entry.source] = entry;
-    }
-    return map;
+  void deleteLyrics(int lyricsId) {
+    db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]);
   }
 
-  int clearLyricsSourceEntries(String keyHash) {
-    db.execute('DELETE FROM lyrics_cache WHERE key_hash = ?;', [keyHash]);
-    db.execute('DELETE FROM lyrics_translations WHERE key_hash = ?;', [keyHash]);
-    db.execute('DELETE FROM lyrics_source_cache WHERE key_hash = ?;', [keyHash]);
-    return db.updatedRows;
-  }
-
-  int deleteLyricsSourceEntry(String keyHash, LyricsSource source) {
-    db.execute('DELETE FROM lyrics_source_cache WHERE key_hash = ? AND source = ?;', [keyHash, source.dbValue]);
-    return db.updatedRows;
-  }
-
-  void saveLyrics(String keyHash, String rawLrc, String source) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    db.execute('INSERT INTO lyrics_cache (key_hash, raw_lrc, source, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(key_hash) DO UPDATE SET raw_lrc = excluded.raw_lrc, source = excluded.source, updated_at = excluded.updated_at;', [keyHash, rawLrc, source, now]);
-    final parsed = LyricsSource.tryParse(source) ?? LyricsSource.embedded;
-    final isSynced = RegExp(r'\[\d{1,}:\d{2}\.\d{2,3}\]').hasMatch(rawLrc);
-    db.execute('INSERT INTO lyrics_source_cache (key_hash, source, state, raw_lrc, is_synced, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(key_hash, source) DO UPDATE SET state = excluded.state, raw_lrc = excluded.raw_lrc, is_synced = excluded.is_synced, updated_at = excluded.updated_at;', [keyHash, parsed.dbValue, LyricsSourceState.found.dbValue, rawLrc, isSynced ? 1 : 0, now]);
-  }
-
-  String? getLyrics(String keyHash) {
-    final rows = db.select('SELECT raw_lrc FROM lyrics_cache WHERE key_hash = ? LIMIT 1;', [keyHash]);
-    if (rows.isNotEmpty) return rows.first['raw_lrc'] as String?;
-    final sourceRows = db.select('SELECT key_hash, source, state, raw_lrc, is_synced, updated_at FROM lyrics_source_cache WHERE key_hash = ? AND state = ? AND raw_lrc IS NOT NULL;', [keyHash, LyricsSourceState.found.dbValue]);
-    if (sourceRows.isEmpty) return null;
-    LyricsSourceEntry? best;
-    for (final r in sourceRows) {
-      final entry = LyricsSourceEntry.fromDbMap(r);
-      if (best == null || entry.source.priority < best.source.priority) best = entry;
-    }
-    return best?.rawLrc;
-  }
-
-  void saveLyricsTranslation({required String keyHash, required String source, required String targetLang, required List<String> translatedLines}) {
-    db.execute('INSERT INTO lyrics_translations (key_hash, source, target_lang, translated_lines, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(key_hash, source, target_lang) DO UPDATE SET translated_lines = excluded.translated_lines, updated_at = excluded.updated_at;', [keyHash, source, targetLang, jsonEncode(translatedLines), DateTime.now().millisecondsSinceEpoch]);
-  }
-
-  List<String>? getLyricsTranslation({required String keyHash, required String source, required String targetLang}) {
-    final rows = db.select('SELECT translated_lines FROM lyrics_translations WHERE key_hash = ? AND source = ? AND target_lang = ? LIMIT 1;', [keyHash, source, targetLang]);
+  List<String>? getLyricsTranslation({required int lyricsId, required String lang}) {
+    final rows = db.select('SELECT translated_lines FROM lyrics_translations WHERE lyrics_id = ? AND lang = ? LIMIT 1;', [lyricsId, lang]);
     if (rows.isEmpty) return null;
     try {
       return (jsonDecode(rows.first['translated_lines'] as String) as List<dynamic>).map((e) => e.toString()).toList();
@@ -463,9 +440,14 @@ class AppDatabase {
     }
   }
 
-  int clearLyricsTranslations(String keyHash) {
-    db.execute('DELETE FROM lyrics_translations WHERE key_hash = ?;', [keyHash]);
-    return db.updatedRows;
+  void saveLyricsTranslation({required int lyricsId, required String lang, required List<String> translatedLines}) {
+    db.execute('''
+      INSERT INTO lyrics_translations (lyrics_id, lang, translated_lines, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(lyrics_id, lang) DO UPDATE SET
+        translated_lines = excluded.translated_lines,
+        updated_at = excluded.updated_at;
+    ''', [lyricsId, lang, jsonEncode(translatedLines), DateTime.now().millisecondsSinceEpoch]);
   }
 
   Future<void> close() async {

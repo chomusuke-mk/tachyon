@@ -7,7 +7,6 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 
 import 'package:tachyon/core/backend/backend_protocol.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
@@ -450,52 +449,31 @@ class TachyonBackendHost {
       // LYRICS
       // =======================================================================
       case BackendMethods.lyricsResolve:
-        final track = params['track'] as Track;
-        final allowRemote = params['allowRemote'] as bool? ?? false;
-        final bypassCache = params['bypassCache'] as bool? ?? false;
-        final allowedSources = params['allowedSources'] as Set<LyricsSource>?;
-        return await _lyricsService.resolveLyricsForTrack(
-          track,
-          allowRemote: allowRemote,
-          forceRefresh: bypassCache,
-          enabledSources: allowedSources,
+        final allowedSourcesList = params['allowedSources'] as List?;
+        int? retryAfterSeconds;
+        final result = await _lyricsService.resolveLyrics(
+          trackId: params['trackId'] as int,
+          filePath: params['filePath'] as String,
+          title: params['title'] as String?,
+          artist: params['artist'] as String?,
+          album: params['album'] as String?,
+          durationMs: params['durationMs'] as int?,
+          allowRemote: params['allowRemote'] as bool? ?? true,
+          bypassCache: params['bypassCache'] as bool? ?? false,
+          allowedSources: allowedSourcesList?.map((s) => LyricsSource.fromDbString(s as String)).toSet(),
+          onThresholdCountdown: (seconds) => retryAfterSeconds = seconds,
         );
+        if (result == null && retryAfterSeconds != null) {
+          return {'retryAfterSeconds': retryAfterSeconds};
+        }
+        return result?.toMap();
 
       case BackendMethods.lyricsTranslate:
-        final keyHash = params['keyHash'] as String;
-        final source = params['source'] as LyricsSource;
-        final targetLang = params['targetLang'] as String;
-        final rawLines = (params['rawLines'] as List).cast<String>();
-
-        // Check SQLite cache first
-        final cached = _database.getLyricsTranslation(
-          keyHash: keyHash,
-          source: source.dbValue,
-          targetLang: targetLang,
+        return await _lyricsService.translateLyrics(
+          lyricsId: params['lyricsId'] as int,
+          targetLang: params['lang'] as String,
+          rawLines: (params['rawLines'] as List).cast<String>(),
         );
-        if (cached != null && cached.isNotEmpty) {
-          return cached.join('\n');
-        }
-
-        // Cache miss: call translation client
-        final client = LyricsTranslationClient();
-        final translationResult = await client.translate(
-          rawLines,
-          targetLanguage: targetLang,
-        );
-
-        if (translationResult.isSuccess) {
-          final translatedLines = translationResult.translatedLines;
-          _database.saveLyricsTranslation(
-            keyHash: keyHash,
-            source: source.dbValue,
-            targetLang: targetLang,
-            translatedLines: translatedLines,
-          );
-          return translatedLines.join('\n');
-        }
-
-        return null;
 
       default:
         throw UnimplementedError('Backend method not recognized: $method');

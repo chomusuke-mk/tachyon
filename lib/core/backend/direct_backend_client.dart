@@ -5,7 +5,6 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:tachyon/core/backend/backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
-import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
@@ -34,7 +33,6 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   final MetadataService? metadataService;
   final CoverCacheService? coverCacheService;
   final LyricsService? lyricsService;
-  final LyricsTranslationClient _translationClient;
 
   final StreamController<List<AudioDevice>> _devicesController =
       StreamController<List<AudioDevice>>.broadcast();
@@ -50,8 +48,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     this.metadataService,
     this.coverCacheService,
     this.lyricsService,
-    LyricsTranslationClient? translationClient,
-  }) : _translationClient = translationClient ?? LyricsTranslationClient();
+  });
 
   @override
   Stream<PlaybackState> get playbackStateStream {
@@ -411,58 +408,45 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   }
 
   @override
-  Future<LyricsResult?> resolveLyrics(
-    Track track, {
-    bool allowRemote = false,
+  Future<LyricsResult?> resolveLyrics({
+    required int trackId,
+    required String filePath,
+    String? title,
+    String? artist,
+    String? album,
+    int? durationMs,
+    bool allowRemote = true,
     bool bypassCache = false,
     Set<LyricsSource>? allowedSources,
     LyricsCancellationToken? cancellationToken,
     void Function(int seconds)? onThresholdCountdown,
   }) async {
-    return await lyricsService?.resolveLyricsForTrack(
-      track,
+    return await lyricsService?.resolveLyrics(
+      trackId: trackId,
+      filePath: filePath,
+      title: title,
+      artist: artist,
+      album: album,
+      durationMs: durationMs,
       allowRemote: allowRemote,
-      forceRefresh: bypassCache,
-      enabledSources: allowedSources,
+      bypassCache: bypassCache,
+      allowedSources: allowedSources,
       cancellationToken: cancellationToken,
       onThresholdCountdown: onThresholdCountdown,
     );
   }
 
   @override
-  Future<String?> translateLyrics({
-    required String keyHash,
-    required LyricsSource source,
+  Future<List<String>?> translateLyrics({
+    required int lyricsId,
     required String targetLang,
     required List<String> rawLines,
   }) async {
-    if (database != null) {
-      final cached = database!.getLyricsTranslation(
-        keyHash: keyHash,
-        source: source.dbValue,
-        targetLang: targetLang,
-      );
-      if (cached != null && cached.isNotEmpty) return cached.join('\n');
-    }
-
-    final translationResult = await _translationClient.translate(
-      rawLines,
-      targetLanguage: targetLang,
+    return await lyricsService?.translateLyrics(
+      lyricsId: lyricsId,
+      targetLang: targetLang,
+      rawLines: rawLines,
     );
-
-    if (translationResult.isSuccess) {
-      final translatedLines = translationResult.translatedLines;
-      if (database != null) {
-        database!.saveLyricsTranslation(
-          keyHash: keyHash,
-          source: source.dbValue,
-          targetLang: targetLang,
-          translatedLines: translatedLines,
-        );
-      }
-      return translatedLines.join('\n');
-    }
-    return null;
   }
 
   @override
