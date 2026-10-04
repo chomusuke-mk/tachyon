@@ -489,6 +489,7 @@ class TachyonBackendHost {
     _metadataService.cancelScan();
     _hostReceivePort.close();
     await _audioEngine.dispose();
+    _queueManager.dispose();
     await _database.close();
   }
 }

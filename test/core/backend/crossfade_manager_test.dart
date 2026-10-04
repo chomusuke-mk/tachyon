@@ -52,6 +52,10 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
     _playingController.add(false);
   }
 
+  void emitCompleted() {
+    _completedController.add(true);
+  }
+
   @override
   Future<void> seek(Duration position) async {
     currentPosition = position;

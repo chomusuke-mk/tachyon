@@ -27,6 +27,15 @@ class QueueManager {
   final LibraryTrackProvider? libraryTrackProvider;
   final math.Random _random;
 
+  final StreamController<QueueItem?> _nextTrackController =
+      StreamController<QueueItem?>.broadcast(sync: true);
+  QueueItem? _lastEmittedNextTrack;
+
+  /// Reactive stream broadcasting the candidate next track for auto-crossfade.
+  ///
+  /// Emits synchronously whenever the next track changes or becomes null.
+  Stream<QueueItem?> get nextTrackStream => _nextTrackController.stream;
+
   QueueManager({this.libraryTrackProvider, math.Random? random})
     : _random = random ?? math.Random();
 
@@ -67,8 +76,57 @@ class QueueManager {
       _loopMode == Loop.one ||
       _currentIndex < _activeQueue.length - 1;
 
+  /// Whether there is a subsequent track available that is different from the current track.
+  bool get hasNextDifferent => peekNext(distinct: true) != null;
+
   /// Whether there is a prior track available.
   bool get hasPrevious => _loopMode == Loop.all || _currentIndex > 0;
+
+  /// Peeks the candidate next track without modifying queue state.
+  ///
+  /// When [distinct] is true (default for crossfade calculations):
+  /// - Returns `null` if [loopMode] is [Loop.one].
+  /// - Returns `null` if the candidate track shares the same [QueueItem.filePath]
+  ///   as the currently playing track (e.g. single-track queue in [Loop.all]
+  ///   or adjacent duplicate tracks).
+  QueueItem? peekNext({bool distinct = true}) {
+    if (_activeQueue.isEmpty || _currentIndex < 0 || _currentIndex >= _activeQueue.length) {
+      return null;
+    }
+    if (_loopMode == Loop.one) {
+      return distinct ? null : currentTrack;
+    }
+
+    QueueItem? candidate;
+    if (_currentIndex < _activeQueue.length - 1) {
+      candidate = _activeQueue[_currentIndex + 1];
+    } else if (_loopMode == Loop.all) {
+      candidate = _activeQueue.first;
+    }
+
+    if (candidate == null) return null;
+
+    if (distinct && currentTrack != null && candidate.filePath == currentTrack!.filePath) {
+      return null;
+    }
+
+    return candidate;
+  }
+
+  void _notifyNextTrack() {
+    if (_nextTrackController.isClosed) return;
+    final currentNext = peekNext(distinct: true);
+    if (_lastEmittedNextTrack?.id != currentNext?.id ||
+        _lastEmittedNextTrack?.filePath != currentNext?.filePath) {
+      _lastEmittedNextTrack = currentNext;
+      _nextTrackController.add(currentNext);
+    }
+  }
+
+  /// Disposes the queue manager resources and closes reactive streams.
+  void dispose() {
+    _nextTrackController.close();
+  }
 
   // --------------------------------------------------------------------------
   // Queue Initialization & Reset
@@ -89,6 +147,7 @@ class QueueManager {
       _currentIndex = -1;
       _isShuffled = false;
       _mixOffset = null;
+      _notifyNextTrack();
       return;
     }
 
@@ -113,6 +172,7 @@ class QueueManager {
       _activeQueue = [current, ...remaining];
       _currentIndex = 0;
     }
+    _notifyNextTrack();
   }
 
   /// Finds the first element in [remaining] with a different filePath than [current]
@@ -193,6 +253,7 @@ class QueueManager {
       }
       _isShuffled = false;
     }
+    _notifyNextTrack();
   }
 
   // --------------------------------------------------------------------------
@@ -201,18 +262,23 @@ class QueueManager {
 
   /// Sets repeat mode ([Loop.off], [Loop.one], [Loop.all]).
   void setLoopMode(Loop loop) {
+    if (_loopMode == loop) return;
     _loopMode = loop;
+    _notifyNextTrack();
   }
 
   /// Cycles repeat mode in order: off -> all -> one -> off.
   Loop cycleLoopMode() {
     _loopMode = _loopMode.next();
+    _notifyNextTrack();
     return _loopMode;
   }
 
   /// Enables or disables Infinite Library Mix.
   void setInfiniteMix(bool enabled) {
+    if (_infiniteMixEnabled == enabled) return;
     _infiniteMixEnabled = enabled;
+    _notifyNextTrack();
   }
 
   // --------------------------------------------------------------------------
@@ -248,6 +314,7 @@ class QueueManager {
     if (_mixOffset != null && insertIdx <= _mixOffset!) {
       _mixOffset = _mixOffset! + 1;
     }
+    _notifyNextTrack();
   }
 
   /// Appends tracks to the end of the queue.
@@ -270,6 +337,7 @@ class QueueManager {
       _activeQueue.addAll(items);
       _originalQueue.addAll(items);
     }
+    _notifyNextTrack();
   }
 
   /// Removes the track at [index] from the active queue and original queue.
@@ -305,6 +373,7 @@ class QueueManager {
 
     if (_activeQueue.isEmpty) {
       _currentIndex = -1;
+      _notifyNextTrack();
       return removedItem;
     }
 
@@ -316,6 +385,7 @@ class QueueManager {
       }
     }
 
+    _notifyNextTrack();
     return removedItem;
   }
 
@@ -348,12 +418,14 @@ class QueueManager {
       final origItem = _originalQueue.removeAt(from);
       _originalQueue.insert(to, origItem);
     }
+    _notifyNextTrack();
   }
 
   /// Jumps directly to the specified [index] in the active queue.
   QueueItem? jumpTo(int index) {
     if (index >= 0 && index < _activeQueue.length) {
       _currentIndex = index;
+      _notifyNextTrack();
       return currentTrack;
     }
     return null;
@@ -366,6 +438,7 @@ class QueueManager {
     _currentIndex = -1;
     _isShuffled = false;
     _mixOffset = null;
+    _notifyNextTrack();
   }
 
   // --------------------------------------------------------------------------
@@ -390,6 +463,7 @@ class QueueManager {
 
     if (_currentIndex < _activeQueue.length - 1) {
       _currentIndex++;
+      _notifyNextTrack();
       return currentTrack;
     }
 
@@ -413,6 +487,7 @@ class QueueManager {
           _activeQueue.addAll(mixTracks);
           _originalQueue.addAll(mixTracks);
           _currentIndex++;
+          _notifyNextTrack();
           return currentTrack;
         }
       }
@@ -420,15 +495,18 @@ class QueueManager {
 
     if (_loopMode == Loop.all) {
       _currentIndex = 0;
+      _notifyNextTrack();
       return currentTrack;
     }
 
     if (_loopMode == Loop.one && isManual) {
       _currentIndex = 0;
+      _notifyNextTrack();
       return currentTrack;
     }
 
     // Loop.off reached end
+    _notifyNextTrack();
     return null;
   }
 
@@ -446,15 +524,18 @@ class QueueManager {
 
     if (_currentIndex > 0) {
       _currentIndex--;
+      _notifyNextTrack();
       return currentTrack;
     }
 
     // At index 0
     if (_loopMode == Loop.all) {
       _currentIndex = _activeQueue.length - 1;
+      _notifyNextTrack();
       return currentTrack;
     }
 
+    _notifyNextTrack();
     return currentTrack;
   }
 }

@@ -228,5 +228,259 @@ void main() {
       // Moves to index 1
       expect(service.queueManager.currentIndex, equals(1));
     });
+
+    test('Auto-crossfade in flight + user switches to Loop.one cancels crossfade and repeats track on completion', () async {
+      await service.open(testItems, index: 0, play: true);
+      await service.setCrossfadeConfig(
+        const CrossfadeConfig(
+          enabled: true,
+          duration: Duration(milliseconds: 500),
+          manualDuration: Duration(milliseconds: 200),
+          curve: CrossfadeCurve.linear,
+        ),
+      );
+
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      activeMock.totalDuration = const Duration(seconds: 180);
+
+      // Trigger auto-crossfade
+      await activeMock.seek(const Duration(seconds: 179, milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(service.isCrossfading, isTrue, reason: 'Auto-crossfade should be active');
+      expect(service.standbyPlayer.isPlaying, isTrue);
+
+      // User sets Loop.one mid-crossfade
+      await service.setLoopMode(Loop.one);
+
+      // Verification: Crossfade cancelled immediately, standby stopped, active player restored
+      expect(service.isCrossfading, isFalse, reason: 'Crossfade must be cancelled on Loop.one');
+      expect(service.standbyPlayer.isPlaying, isFalse, reason: 'Standby player must be stopped');
+      expect((service.standbyPlayer as MockAudioPlayerAdapter).currentVolume, equals(0.0));
+      expect(service.activePlayer.isPlaying, isTrue, reason: 'Active player must keep playing');
+      expect((service.activePlayer as MockAudioPlayerAdapter).currentVolume, equals(100.0));
+      expect(service.queueManager.currentIndex, equals(0));
+
+      // Active track completes naturally
+      activeMock.emitCompleted();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      // Track repeats itself at index 0
+      expect(service.queueManager.currentIndex, equals(0), reason: 'Track must repeat at index 0');
+      expect(activeMock.seekHistory, contains(Duration.zero));
+    });
+
+    test('Auto-crossfade in flight + user toggles shuffle cancels crossfade and restores volume', () async {
+      await service.open(testItems, index: 0, play: true);
+      await service.setCrossfadeConfig(
+        const CrossfadeConfig(
+          enabled: true,
+          duration: Duration(milliseconds: 500),
+          manualDuration: Duration(milliseconds: 200),
+          curve: CrossfadeCurve.linear,
+        ),
+      );
+
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      activeMock.totalDuration = const Duration(seconds: 180);
+
+      // Trigger auto-crossfade
+      await activeMock.seek(const Duration(seconds: 179, milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(service.isCrossfading, isTrue, reason: 'Auto-crossfade should be active');
+
+      // User toggles shuffle mid-crossfade
+      await service.toggleShuffle();
+
+      // Verification: Crossfade cancelled, standby stopped, active player restored
+      expect(service.isCrossfading, isFalse, reason: 'Crossfade must be cancelled on toggleShuffle');
+      expect(service.standbyPlayer.isPlaying, isFalse);
+      expect((service.standbyPlayer as MockAudioPlayerAdapter).currentVolume, equals(0.0));
+      expect(service.activePlayer.isPlaying, isTrue);
+    });
+  });
+
+  group('QueueManager peekNext & hasNextDifferent Tests', () {
+    late QueueManager qm;
+    final itemA = QueueItem(id: '1', filePath: '/a.mp3', title: 'A', artist: 'A', album: 'A', duration: const Duration(seconds: 100));
+    final itemB = QueueItem(id: '2', filePath: '/b.mp3', title: 'B', artist: 'B', album: 'B', duration: const Duration(seconds: 100));
+    final itemADup = QueueItem(id: '3', filePath: '/a.mp3', title: 'A Duplicate', artist: 'A', album: 'A', duration: const Duration(seconds: 100));
+
+    setUp(() {
+      qm = QueueManager();
+    });
+
+    test('Standard queue returns next track and hasNextDifferent is true', () {
+      qm.setQueue([itemA, itemB], startIndex: 0);
+
+      expect(qm.hasNextDifferent, isTrue);
+      expect(qm.peekNext(distinct: true), equals(itemB));
+    });
+
+    test('End of queue in Loop.off returns null and hasNextDifferent is false', () {
+      qm.setQueue([itemA, itemB], startIndex: 1);
+      qm.setLoopMode(Loop.off);
+
+      expect(qm.hasNextDifferent, isFalse);
+      expect(qm.peekNext(distinct: true), isNull);
+    });
+
+    test('End of queue in Loop.all returns first track if different', () {
+      qm.setQueue([itemA, itemB], startIndex: 1);
+      qm.setLoopMode(Loop.all);
+
+      expect(qm.hasNextDifferent, isTrue);
+      expect(qm.peekNext(distinct: true), equals(itemA));
+    });
+
+    test('Loop.one always returns null for peekNext(distinct: true)', () {
+      qm.setQueue([itemA, itemB], startIndex: 0);
+      qm.setLoopMode(Loop.one);
+
+      expect(qm.hasNextDifferent, isFalse);
+      expect(qm.peekNext(distinct: true), isNull);
+      expect(qm.peekNext(distinct: false), equals(itemA));
+    });
+
+    test('Single-track queue in Loop.all returns null because next is not distinct', () {
+      qm.setQueue([itemA], startIndex: 0);
+      qm.setLoopMode(Loop.all);
+
+      expect(qm.hasNextDifferent, isFalse);
+      expect(qm.peekNext(distinct: true), isNull);
+    });
+
+    test('Adjacent identical tracks return null for peekNext(distinct: true)', () {
+      qm.setQueue([itemA, itemADup], startIndex: 0);
+
+      expect(qm.hasNextDifferent, isFalse);
+      expect(qm.peekNext(distinct: true), isNull);
+    });
+  });
+
+  group('Reactive Crossfade & Queue Mutation Tests', () {
+    late AudioEngineService service;
+    late MockAudioPlayerAdapter playerA;
+    late MockAudioPlayerAdapter playerB;
+    late QueueManager queueManager;
+    late CrossfadeManager crossfadeManager;
+
+    final List<QueueItem> testItems = List.generate(
+      6,
+      (i) => QueueItem(
+        id: '${i + 1}',
+        filePath: '/music/track_${i + 1}.mp3',
+        title: 'Track ${i + 1}',
+        artist: 'Artist ${i + 1}',
+        album: 'Album 1',
+        duration: const Duration(seconds: 180),
+      ),
+    );
+
+    setUp(() {
+      playerA = MockAudioPlayerAdapter();
+      playerB = MockAudioPlayerAdapter();
+      queueManager = QueueManager();
+      crossfadeManager = CrossfadeManager(
+        tickerInterval: const Duration(milliseconds: 10),
+      );
+
+      service = AudioEngineService(
+        playerA: playerA,
+        playerB: playerB,
+        queueManager: queueManager,
+        crossfadeManager: crossfadeManager,
+        tickerInterval: const Duration(milliseconds: 10),
+      );
+    });
+
+    tearDown(() async {
+      await service.dispose();
+    });
+
+    Future<void> triggerCrossfade(AudioEngineService svc, MockAudioPlayerAdapter activeMock) async {
+      await svc.open(testItems, index: 0, play: true);
+      await svc.setCrossfadeConfig(
+        const CrossfadeConfig(
+          enabled: true,
+          duration: Duration(milliseconds: 500),
+          manualDuration: Duration(milliseconds: 200),
+          curve: CrossfadeCurve.linear,
+        ),
+      );
+      activeMock.totalDuration = const Duration(seconds: 180);
+      await activeMock.seek(const Duration(seconds: 179, milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(svc.isCrossfading, isTrue, reason: 'Crossfade must be active');
+    }
+
+    test('Reordering distant tracks mid-crossfade PRESERVES crossfade without interruption', () async {
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      await triggerCrossfade(service, activeMock);
+
+      // Reorder tracks at index 4 and 5 (distant from active 0 and candidate 1)
+      await service.reorder(4, 5);
+
+      // Crossfade remains active because next candidate track did not change
+      expect(service.isCrossfading, isTrue, reason: 'Distant reorder must NOT cancel crossfade');
+      expect(service.standbyPlayer.isPlaying, isTrue);
+    });
+
+    test('Reordering candidate next track mid-crossfade CANCELS crossfade immediately', () async {
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      await triggerCrossfade(service, activeMock);
+
+      // Move track at index 1 (the one being faded into) to the end (index 5)
+      await service.reorder(1, 5);
+
+      // Crossfade must be cancelled because candidate next track changed
+      expect(service.isCrossfading, isFalse, reason: 'Moving next track must cancel crossfade');
+      expect(service.standbyPlayer.isPlaying, isFalse);
+      expect((service.standbyPlayer as MockAudioPlayerAdapter).currentVolume, equals(0.0));
+    });
+
+    test('Inserting a track next mid-crossfade CANCELS crossfade', () async {
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      await triggerCrossfade(service, activeMock);
+
+      final newItem = QueueItem(
+        id: 'new_99',
+        filePath: '/music/new_99.mp3',
+        title: 'New Track',
+        artist: 'New Artist',
+        album: 'Album 1',
+        duration: const Duration(seconds: 180),
+      );
+
+      // Insert new item right after current playing track
+      await service.insertNext(newItem);
+
+      // Crossfade must be cancelled because candidate next track changed to new item
+      expect(service.isCrossfading, isFalse, reason: 'insertNext must cancel crossfade to previous track');
+      expect(service.standbyPlayer.isPlaying, isFalse);
+    });
+
+    test('Removing distant track mid-crossfade PRESERVES crossfade', () async {
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      await triggerCrossfade(service, activeMock);
+
+      // Remove distant track at index 4
+      await service.remove(4);
+
+      expect(service.isCrossfading, isTrue, reason: 'Removing distant track must NOT cancel crossfade');
+      expect(service.standbyPlayer.isPlaying, isTrue);
+    });
+
+    test('Removing candidate next track mid-crossfade CANCELS crossfade', () async {
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      await triggerCrossfade(service, activeMock);
+
+      // Remove candidate next track at index 1
+      await service.remove(1);
+
+      expect(service.isCrossfading, isFalse, reason: 'Removing next track must cancel crossfade');
+      expect(service.standbyPlayer.isPlaying, isFalse);
+    });
   });
 }
