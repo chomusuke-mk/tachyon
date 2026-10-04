@@ -10,6 +10,8 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
   bool isPlayingState = false;
   bool isStopped = false;
   bool isPaused = false;
+  bool isCompletedFlag = false;
+  double currentRate = 1.0;
   Duration currentPosition = Duration.zero;
   Duration totalDuration = const Duration(minutes: 3);
 
@@ -72,7 +74,9 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
   }
 
   @override
-  Future<void> setRate(double rate) async {}
+  Future<void> setRate(double rate) async {
+    currentRate = rate;
+  }
 
   @override
   Future<void> setPitch(double pitch) async {}
@@ -111,13 +115,13 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
   bool get isBuffering => false;
 
   @override
-  bool get isCompleted => isStopped;
+  bool get isCompleted => isCompletedFlag || isStopped;
 
   @override
   double get volume => currentVolume;
 
   @override
-  double get rate => 1.0;
+  double get rate => currentRate;
 
   @override
   double get pitch => 1.0;
@@ -337,6 +341,95 @@ void main() {
       expect(manager.isPaused, isFalse);
       expect(playerOut.isPlaying, isTrue);
       expect(playerIn.isPlaying, isTrue);
+    });
+
+    test('Crossfade with playbackRate = 2.0 advances at double rate and finishes early', () async {
+      bool endCalled = false;
+
+      await manager.cross(
+        playerOut: playerOut,
+        playerIn: playerIn,
+        targetDuration: const Duration(milliseconds: 200),
+        curve: CrossfadeCurve.linear,
+        masterVolume: 100.0,
+        playbackRate: 2.0,
+        onCrossEnd: () => endCalled = true,
+      );
+
+      expect(manager.isActive, isTrue);
+      expect(manager.playbackRate, equals(2.0));
+
+      // With 2x speed, 200ms target finishes in ~100ms wall-clock time.
+      // Wait 135ms (enough for 200ms media at 2x rate plus tick margin, but far less than 200ms)
+      await Future.delayed(const Duration(milliseconds: 135));
+
+      expect(manager.isActive, isFalse);
+      expect(endCalled, isTrue);
+      expect(playerOut.currentVolume, equals(0.0));
+      expect(playerIn.currentVolume, equals(100.0));
+    });
+
+    test('Dynamic setPlaybackRate updates active crossfade rate', () async {
+      await manager.cross(
+        playerOut: playerOut,
+        playerIn: playerIn,
+        targetDuration: const Duration(milliseconds: 500),
+        curve: CrossfadeCurve.linear,
+        masterVolume: 100.0,
+        playbackRate: 1.0,
+      );
+
+      expect(manager.playbackRate, equals(1.0));
+
+      manager.setPlaybackRate(2.0);
+      expect(manager.playbackRate, equals(2.0));
+
+      manager.cancel();
+    });
+
+    test('Crossfade completes immediately when playerOut reaches EOF / isCompleted', () async {
+      bool endCalled = false;
+
+      await manager.cross(
+        playerOut: playerOut,
+        playerIn: playerIn,
+        targetDuration: const Duration(seconds: 5),
+        curve: CrossfadeCurve.linear,
+        masterVolume: 100.0,
+        onCrossEnd: () => endCalled = true,
+      );
+
+      expect(manager.isActive, isTrue);
+      expect(endCalled, isFalse);
+
+      // Trigger EOF on outgoing player
+      playerOut.isCompletedFlag = true;
+
+      // Wait 1-2 ticks
+      await Future.delayed(const Duration(milliseconds: 60));
+
+      expect(manager.isActive, isFalse);
+      expect(endCalled, isTrue);
+      expect(playerOut.currentVolume, equals(0.0));
+      expect(playerIn.currentVolume, equals(100.0));
+    });
+
+    test('Position advances track media progress faster than wall-clock time', () async {
+      playerOut.currentPosition = const Duration(seconds: 10);
+
+      await manager.cross(
+        playerOut: playerOut,
+        playerIn: playerIn,
+        targetDuration: const Duration(seconds: 1),
+        curve: CrossfadeCurve.linear,
+        masterVolume: 100.0,
+      );
+
+      // Player position jumped 500ms forward
+      playerOut.currentPosition = const Duration(seconds: 10, milliseconds: 500);
+
+      expect(manager.progress, greaterThanOrEqualTo(0.5));
+      manager.cancel();
     });
   });
 }

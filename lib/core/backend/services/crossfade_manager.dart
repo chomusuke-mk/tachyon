@@ -27,6 +27,8 @@ class CrossfadeManager {
   CrossfadeCurve _curve = CrossfadeCurve.equalPower;
   double _masterVolume = 100.0;
   Duration _effectiveDuration = Duration.zero;
+  double _playbackRate = 1.0;
+  Duration? _startPositionOut;
 
   DateTime? _lastTickTime;
   Duration _accumulatedTime = Duration.zero;
@@ -45,11 +47,25 @@ class CrossfadeManager {
   /// The effective duration of the active crossfade.
   Duration get effectiveDuration => _effectiveDuration;
 
+  /// The active playback rate used to scale the crossfade media time.
+  double get playbackRate => _playbackRate;
+
   /// Current progress in range [0.0, 1.0].
   double get progress {
     if (!_isActive || _effectiveDuration.inMilliseconds <= 0) return 0.0;
-    return (_accumulatedTime.inMilliseconds / _effectiveDuration.inMilliseconds)
+    final pTime = (_accumulatedTime.inMilliseconds / _effectiveDuration.inMilliseconds)
         .clamp(0.0, 1.0);
+    var pPos = 0.0;
+    final out = _playerOut;
+    if (out != null && _startPositionOut != null) {
+      final currentPos = out.position;
+      if (currentPos >= _startPositionOut!) {
+        pPos = ((currentPos - _startPositionOut!).inMilliseconds /
+                _effectiveDuration.inMilliseconds)
+            .clamp(0.0, 1.0);
+      }
+    }
+    return math.max(pTime, pPos);
   }
 
   /// Begins a crossfade transition from [playerOut] to [playerIn].
@@ -66,6 +82,7 @@ class CrossfadeManager {
     required Duration targetDuration,
     required CrossfadeCurve curve,
     required double masterVolume,
+    double playbackRate = 1.0,
     void Function()? onCrossEnd,
   }) async {
     // 1. Cancel previous operation atomically
@@ -77,6 +94,8 @@ class CrossfadeManager {
     _curve = curve;
     _masterVolume = masterVolume;
     _effectiveDuration = targetDuration;
+    _playbackRate = playbackRate > 0 ? playbackRate : 1.0;
+    _startPositionOut = playerOut.position;
     _onCrossEnd = onCrossEnd;
     _accumulatedTime = Duration.zero;
     _isPaused = false;
@@ -136,12 +155,21 @@ class CrossfadeManager {
     _playerIn?.setVolume(vIn);
   }
 
+  /// Updates the playback rate during an active crossfade without volume discontinuities.
+  void setPlaybackRate(double rate) {
+    if (rate > 0) {
+      _playbackRate = rate;
+    }
+  }
+
   /// Pauses the active crossfade ticker and players.
   Future<void> pause() async {
     if (!_isActive || _isPaused) return;
 
     if (_lastTickTime != null) {
-      _accumulatedTime += DateTime.now().difference(_lastTickTime!);
+      final elapsed = DateTime.now().difference(_lastTickTime!);
+      final elapsedMediaMicros = (elapsed.inMicroseconds * _playbackRate).round();
+      _accumulatedTime += Duration(microseconds: elapsedMediaMicros);
       _lastTickTime = null;
     }
     _timer?.cancel();
@@ -186,6 +214,8 @@ class CrossfadeManager {
     _isPaused = false;
     _lastTickTime = null;
     _accumulatedTime = Duration.zero;
+    _playbackRate = 1.0;
+    _startPositionOut = null;
 
     _playerOut = null;
     _playerIn = null;
@@ -206,15 +236,35 @@ class CrossfadeManager {
       return;
     }
 
+    final out = _playerOut;
+    if (out != null &&
+        (out.isCompleted ||
+            (out.duration > Duration.zero && out.position >= out.duration))) {
+      _complete(opId);
+      return;
+    }
+
     final now = DateTime.now();
     final elapsed = now.difference(_lastTickTime!);
     _lastTickTime = now;
-    _accumulatedTime += elapsed;
+    final elapsedMediaMicros = (elapsed.inMicroseconds * _playbackRate).round();
+    _accumulatedTime += Duration(microseconds: elapsedMediaMicros);
 
     final totalMs = _effectiveDuration.inMilliseconds;
-    final p = totalMs > 0
+    final pTime = totalMs > 0
         ? (_accumulatedTime.inMilliseconds / totalMs).clamp(0.0, 1.0)
         : 1.0;
+
+    var pPos = 0.0;
+    if (out != null && _startPositionOut != null && totalMs > 0) {
+      final currentPos = out.position;
+      if (currentPos >= _startPositionOut!) {
+        pPos = ((currentPos - _startPositionOut!).inMilliseconds / totalMs)
+            .clamp(0.0, 1.0);
+      }
+    }
+
+    final p = math.max(pTime, pPos);
 
     final vOut = _calculateFadeOut(p, _masterVolume);
     final vIn = _calculateFadeIn(p, _masterVolume);
@@ -240,6 +290,9 @@ class CrossfadeManager {
     _timer?.cancel();
     _timer = null;
     _lastTickTime = null;
+    _accumulatedTime = Duration.zero;
+    _playbackRate = 1.0;
+    _startPositionOut = null;
 
     final out = _playerOut;
     final inP = _playerIn;
@@ -289,6 +342,8 @@ class CrossfadeManager {
     _playerIn = null;
     _isActive = false;
     _isPaused = false;
+    _playbackRate = 1.0;
+    _startPositionOut = null;
     callback?.call();
   }
 

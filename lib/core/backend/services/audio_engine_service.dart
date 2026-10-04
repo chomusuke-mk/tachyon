@@ -364,6 +364,9 @@ class AudioEngineService {
 
   Future<void> setRate(double rate) async {
     _playbackRate = rate.clamp(AppDefaults.playbackRateMin, AppDefaults.playbackRateMax);
+    if (_crossfadeManager.isActive) {
+      _crossfadeManager.setPlaybackRate(_playbackRate);
+    }
     await Future.wait([
       _playerA.setRate(_playbackRate),
       _playerB.setRate(_playbackRate),
@@ -566,6 +569,7 @@ class AudioEngineService {
       targetDuration: duration,
       curve: _crossfadeConfig.curve,
       masterVolume: _masterVolume,
+      playbackRate: _playbackRate,
       onCrossEnd: () => _onCrossEnd(transition),
     );
     _emitState();
@@ -792,6 +796,7 @@ class AudioEngineService {
       targetDuration: duration,
       curve: _crossfadeConfig.curve,
       masterVolume: _masterVolume,
+      playbackRate: _playbackRate,
       onCrossEnd: () => _onCrossEnd(transition),
     );
   }

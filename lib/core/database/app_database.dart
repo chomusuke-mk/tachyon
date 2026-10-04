@@ -80,7 +80,7 @@ class AppDatabase {
     _db!.execute('PRAGMA foreign_keys = ON;');
     _db!.execute('PRAGMA journal_mode = WAL;');
     _db!.execute('PRAGMA synchronous = NORMAL;');
-    _db!.execute('PRAGMA cache_size = -64000;');
+    _db!.execute('PRAGMA cache_size = -500;');
     _executeSchema(_db!);
   }
 
