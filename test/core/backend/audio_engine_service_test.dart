@@ -289,15 +289,113 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 20));
 
       expect(service.isCrossfading, isTrue, reason: 'Auto-crossfade should be active');
+      final candidateBefore = queueManager.peekNext();
 
       // User toggles shuffle mid-crossfade
       await service.toggleShuffle();
 
-      // Verification: Crossfade cancelled, standby stopped, active player restored
-      expect(service.isCrossfading, isFalse, reason: 'Crossfade must be cancelled on toggleShuffle');
+      final candidateChanged =
+          !QueueManager.isSameItem(candidateBefore, queueManager.peekNext());
+      if (candidateChanged) {
+        // Verification: Crossfade cancelled, standby stopped, active player restored
+        expect(service.isCrossfading, isFalse, reason: 'Crossfade must be cancelled when the next track changes');
+        expect(service.standbyPlayer.isPlaying, isFalse);
+        expect((service.standbyPlayer as MockAudioPlayerAdapter).currentVolume, equals(0.0));
+      } else {
+        expect(service.isCrossfading, isTrue, reason: 'Same next track: crossfade must continue');
+      }
+      expect(service.activePlayer.isPlaying, isTrue);
+    });
+
+    test('Loop.one repeats indefinitely (not just once)', () async {
+      await service.open(testItems, index: 0, play: true);
+      await service.setLoopMode(Loop.one);
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+
+      for (var i = 0; i < 3; i++) {
+        activeMock.currentPosition = activeMock.totalDuration;
+        activeMock.emitCompleted();
+        await Future.delayed(const Duration(milliseconds: 10));
+        // Real players emit `completed: false` after restarting.
+        activeMock.emitCompleted(false);
+        await Future.delayed(const Duration(milliseconds: 5));
+      }
+
+      expect(queueManager.currentIndex, equals(0));
+      expect(
+        activeMock.seekHistory.where((p) => p == Duration.zero).length,
+        greaterThanOrEqualTo(4), // open + 3 restarts
+      );
+    });
+
+    test('Concurrent (non-awaited) next() calls are serialized', () async {
+      await service.open(testItems, index: 0, play: true);
+      await service.setCrossfadeConfig(
+        const CrossfadeConfig(
+          enabled: true,
+          duration: Duration(milliseconds: 300),
+          manualDuration: Duration(milliseconds: 200),
+        ),
+      );
+
+      // Fired without awaiting, like rapid UI requests through the isolate port.
+      await Future.wait([service.next(), service.next(), service.next()]);
+
+      expect(queueManager.currentIndex, equals(3));
+      await Future.delayed(const Duration(milliseconds: 250));
+      expect(service.activePlayer.isPlaying, isTrue);
       expect(service.standbyPlayer.isPlaying, isFalse);
       expect((service.standbyPlayer as MockAudioPlayerAdapter).currentVolume, equals(0.0));
-      expect(service.activePlayer.isPlaying, isTrue);
+    });
+
+    test('Position ticks during auto-crossfade preparation start only ONE crossfade', () async {
+      await service.open(testItems, index: 0, play: true);
+      await service.setCrossfadeConfig(
+        const CrossfadeConfig(enabled: true, duration: Duration(milliseconds: 500)),
+      );
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      final standbyMock = service.standbyPlayer as MockAudioPlayerAdapter;
+
+      await activeMock.seek(const Duration(seconds: 179, milliseconds: 600));
+      await activeMock.seek(const Duration(seconds: 179, milliseconds: 650));
+      await activeMock.seek(const Duration(seconds: 179, milliseconds: 700));
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(service.isCrossfading, isTrue);
+      expect(standbyMock.openCount, equals(1), reason: 'Standby must be opened once');
+    });
+
+    test('Previous at index 0 (Loop.off) restarts instead of crossfading into itself', () async {
+      await service.open(testItems, index: 0, play: true);
+      await service.setCrossfadeConfig(
+        const CrossfadeConfig(enabled: true, manualDuration: Duration(milliseconds: 300)),
+      );
+      final activeBefore = service.activePlayer;
+
+      await service.previous();
+
+      expect(service.isCrossfading, isFalse);
+      expect(identical(service.activePlayer, activeBefore), isTrue);
+      expect(queueManager.currentIndex, equals(0));
+    });
+
+    test('Pressing next during auto-crossfade commits the running fade', () async {
+      await service.open(testItems, index: 0, play: true);
+      await service.setCrossfadeConfig(
+        const CrossfadeConfig(enabled: true, duration: Duration(milliseconds: 500)),
+      );
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      final incoming = service.standbyPlayer as MockAudioPlayerAdapter;
+      await activeMock.seek(const Duration(seconds: 179, milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(service.isCrossfading, isTrue);
+
+      await service.next();
+
+      expect(queueManager.currentIndex, equals(1));
+      expect(identical(service.activePlayer, incoming), isTrue);
+      expect(service.isCrossfading, isTrue, reason: 'Fade continues, not restarted');
+      expect(incoming.openCount, equals(1));
     });
   });
 

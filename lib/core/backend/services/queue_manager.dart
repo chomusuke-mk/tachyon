@@ -1,12 +1,18 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 
 typedef LibraryTrackProvider = Future<List<Track>> Function(int count);
 
 /// High-performance Queue Manager for Tachyon Music Player.
+///
+/// The queue is the **single source of truth** for navigation policy:
+/// which item is current, which item comes next, how repeat modes behave and
+/// when "previous" restarts the current track. The audio engine never
+/// recomputes indices; it only asks the queue and executes the result.
 ///
 /// Implements:
 /// - Fisher-Yates shuffle pinning the currently playing track at index 0.
@@ -16,7 +22,13 @@ typedef LibraryTrackProvider = Future<List<Track>> Function(int count);
 /// - Queue operations: [insertNext], [append], [remove], [reorder], [jumpTo], [clear].
 /// - Infinite Library Mix: automatic appending of randomized library tracks
 ///   when the queue reaches the end and [Loop.off] is set.
+/// - [nextTrackStream]: synchronous notifications whenever the upcoming
+///   candidate changes, so the engine can invalidate tentative transitions.
 class QueueManager {
+  /// Playback position after which [previous] restarts the current track
+  /// instead of moving to the prior one.
+  static const Duration restartThreshold = Duration(seconds: 3);
+
   List<QueueItem> _activeQueue = [];
   List<QueueItem> _originalQueue = [];
   int _currentIndex = -1;
@@ -26,6 +38,13 @@ class QueueManager {
   int? _mixOffset;
   final LibraryTrackProvider? libraryTrackProvider;
   final math.Random _random;
+
+  /// Monotonic mutation counter. Used to detect concurrent mutations across
+  /// asynchronous gaps (e.g. while the infinite mix provider is fetching).
+  int _version = 0;
+
+  /// Cached read-only view of [_activeQueue], invalidated on every mutation.
+  List<QueueItem>? _activeView;
 
   final StreamController<QueueItem?> _nextTrackController =
       StreamController<QueueItem?>.broadcast(sync: true);
@@ -39,15 +58,32 @@ class QueueManager {
   QueueManager({this.libraryTrackProvider, math.Random? random})
     : _random = random ?? math.Random();
 
+  /// Whether [a] and [b] refer to the same queue entry.
+  static bool isSameItem(QueueItem? a, QueueItem? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    return a.id == b.id && a.filePath == b.filePath;
+  }
+
   // --------------------------------------------------------------------------
   // Getters
   // --------------------------------------------------------------------------
 
   /// Read-only snapshot of the active playback queue.
-  List<QueueItem> get activeQueue => List.unmodifiable(_activeQueue);
+  ///
+  /// The returned list is cached until the next mutation, so repeated reads
+  /// are O(1) and return the identical instance.
+  List<QueueItem> get activeQueue =>
+      _activeView ??= List<QueueItem>.unmodifiable(_activeQueue);
 
   /// Read-only snapshot of the original un-shuffled playlist sequence.
   List<QueueItem> get originalQueue => List.unmodifiable(_originalQueue);
+
+  /// Number of items in the active queue.
+  int get length => _activeQueue.length;
+
+  /// Whether the active queue has no items.
+  bool get isEmpty => _activeQueue.isEmpty;
 
   /// Current zero-based index into [activeQueue], or -1 if the queue is empty.
   int get currentIndex => _currentIndex;
@@ -82,6 +118,30 @@ class QueueManager {
   /// Whether there is a prior track available.
   bool get hasPrevious => _loopMode == Loop.all || _currentIndex > 0;
 
+  /// Index of the candidate next track, or null if there is none.
+  int? _peekNextIndex({required bool distinct}) {
+    if (_activeQueue.isEmpty || _currentIndex < 0 || _currentIndex >= _activeQueue.length) {
+      return null;
+    }
+    if (_loopMode == Loop.one) {
+      return distinct ? null : _currentIndex;
+    }
+
+    int? candidateIdx;
+    if (_currentIndex < _activeQueue.length - 1) {
+      candidateIdx = _currentIndex + 1;
+    } else if (_loopMode == Loop.all) {
+      candidateIdx = 0;
+    }
+    if (candidateIdx == null) return null;
+
+    if (distinct &&
+        _activeQueue[candidateIdx].filePath == _activeQueue[_currentIndex].filePath) {
+      return null;
+    }
+    return candidateIdx;
+  }
+
   /// Peeks the candidate next track without modifying queue state.
   ///
   /// When [distinct] is true (default for crossfade calculations):
@@ -90,37 +150,55 @@ class QueueManager {
   ///   as the currently playing track (e.g. single-track queue in [Loop.all]
   ///   or adjacent duplicate tracks).
   QueueItem? peekNext({bool distinct = true}) {
-    if (_activeQueue.isEmpty || _currentIndex < 0 || _currentIndex >= _activeQueue.length) {
-      return null;
-    }
-    if (_loopMode == Loop.one) {
-      return distinct ? null : currentTrack;
-    }
+    final idx = _peekNextIndex(distinct: distinct);
+    return idx == null ? null : _activeQueue[idx];
+  }
 
-    QueueItem? candidate;
-    if (_currentIndex < _activeQueue.length - 1) {
-      candidate = _activeQueue[_currentIndex + 1];
-    } else if (_loopMode == Loop.all) {
-      candidate = _activeQueue.first;
-    }
-
-    if (candidate == null) return null;
-
-    if (distinct && currentTrack != null && candidate.filePath == currentTrack!.filePath) {
-      return null;
-    }
-
-    return candidate;
+  /// Atomically advances to [expected] if, and only if, it is still the
+  /// candidate returned by [peekNext].
+  ///
+  /// Used by the audio engine to commit a tentative (automatic) crossfade.
+  /// Returns the new current track, or `null` if the queue no longer agrees
+  /// with the transition (in which case nothing is modified).
+  QueueItem? commitNext(QueueItem expected) {
+    final idx = _peekNextIndex(distinct: true);
+    if (idx == null || !isSameItem(_activeQueue[idx], expected)) return null;
+    _currentIndex = idx;
+    _touch();
+    _notifyNextTrack();
+    return currentTrack;
   }
 
   void _notifyNextTrack() {
     if (_nextTrackController.isClosed) return;
     final currentNext = peekNext(distinct: true);
-    if (_lastEmittedNextTrack?.id != currentNext?.id ||
-        _lastEmittedNextTrack?.filePath != currentNext?.filePath) {
+    if (!isSameItem(_lastEmittedNextTrack, currentNext)) {
       _lastEmittedNextTrack = currentNext;
       _nextTrackController.add(currentNext);
     }
+  }
+
+  /// Marks the queue as mutated (invalidates cached views).
+  void _touch() {
+    _version++;
+    _activeView = null;
+  }
+
+  /// While not shuffled, the original order must mirror the active order
+  /// exactly. Keeping this invariant avoids index drift between both lists
+  /// (e.g. after appending before infinite-mix tracks).
+  void _syncOriginalIfUnshuffled() {
+    if (!_isShuffled) {
+      _originalQueue = List<QueueItem>.from(_activeQueue);
+    }
+  }
+
+  int _indexInOriginal(QueueItem item) {
+    final byIdentity = _originalQueue.indexWhere((it) => identical(it, item));
+    if (byIdentity != -1) return byIdentity;
+    final byId = _originalQueue.indexWhere((it) => it.id == item.id);
+    if (byId != -1) return byId;
+    return _originalQueue.indexWhere((it) => it.filePath == item.filePath);
   }
 
   /// Disposes the queue manager resources and closes reactive streams.
@@ -141,6 +219,7 @@ class QueueManager {
     int startIndex = 0,
     bool shuffle = false,
   }) {
+    _touch();
     if (items.isEmpty) {
       _activeQueue = [];
       _originalQueue = [];
@@ -218,14 +297,15 @@ class QueueManager {
   /// - The current track pointer is resolved to its original position.
   void setShuffle(bool enabled) {
     if (_isShuffled == enabled) return;
-    if (_activeQueue.isEmpty) {
+    final current = currentTrack;
+    if (current == null) {
       _isShuffled = enabled;
       return;
     }
+    _touch();
 
     if (enabled) {
       // Shuffling: pin current track at index 0, shuffle remaining
-      final current = _activeQueue[_currentIndex];
       final remaining = List<QueueItem>.from(_activeQueue)
         ..removeAt(_currentIndex);
 
@@ -239,11 +319,7 @@ class QueueManager {
       _isShuffled = true;
     } else {
       // Un-shuffling: restore original order, preserving current track pointer
-      final current = _activeQueue[_currentIndex];
-      int origIdx = _originalQueue.indexWhere((item) => item.id == current.id);
-      if (origIdx == -1) {
-        origIdx = _originalQueue.indexWhere((item) => item.filePath == current.filePath);
-      }
+      final origIdx = _indexInOriginal(current);
 
       _activeQueue = List<QueueItem>.from(_originalQueue);
       if (origIdx != -1) {
@@ -289,10 +365,13 @@ class QueueManager {
   ///
   /// Updates both [_activeQueue] and [_originalQueue] (inserted after current).
   void insertNext(QueueItem item) {
+    _touch();
     if (_activeQueue.isEmpty) {
       _activeQueue = [item];
       _originalQueue = [item];
       _currentIndex = 0;
+      _mixOffset = null;
+      _notifyNextTrack();
       return;
     }
 
@@ -300,15 +379,14 @@ class QueueManager {
     _activeQueue.insert(insertIdx, item);
 
     if (_isShuffled) {
-      final current = _activeQueue[_currentIndex];
-      final origIdx = _originalQueue.indexWhere((it) => it.id == current.id);
+      final origIdx = _indexInOriginal(_activeQueue[_currentIndex]);
       if (origIdx != -1) {
         _originalQueue.insert(origIdx + 1, item);
       } else {
         _originalQueue.add(item);
       }
     } else {
-      _originalQueue.insert(insertIdx, item);
+      _syncOriginalIfUnshuffled();
     }
 
     if (_mixOffset != null && insertIdx <= _mixOffset!) {
@@ -327,15 +405,23 @@ class QueueManager {
       setQueue(items);
       return;
     }
+    _touch();
 
     final currentMixOffset = _mixOffset;
     if (currentMixOffset != null) {
       _activeQueue.insertAll(currentMixOffset, items);
       _mixOffset = currentMixOffset + items.length;
-      _originalQueue.addAll(items);
+      if (_currentIndex >= currentMixOffset) {
+        _currentIndex += items.length;
+      }
     } else {
       _activeQueue.addAll(items);
+    }
+
+    if (_isShuffled) {
       _originalQueue.addAll(items);
+    } else {
+      _syncOriginalIfUnshuffled();
     }
     _notifyNextTrack();
   }
@@ -343,30 +429,28 @@ class QueueManager {
   /// Removes the track at [index] from the active queue and original queue.
   ///
   /// Adjusts [_currentIndex] appropriately if the deleted track was before or
-  /// was the currently playing track.
+  /// was the currently playing track. When the current track is removed, the
+  /// following item becomes current (or the new last item if it was the last).
   QueueItem? remove(int index) {
     if (index < 0 || index >= _activeQueue.length) return null;
+    _touch();
 
     final removedItem = _activeQueue.removeAt(index);
-    if (!_isShuffled) {
-      if (index < _originalQueue.length) {
-        _originalQueue.removeAt(index);
-      }
-    } else {
-      int origIdx = _originalQueue.indexWhere((it) => it.id == removedItem.id);
-      if (origIdx == -1) {
-        origIdx = _originalQueue.indexWhere((it) => it.filePath == removedItem.filePath);
-      }
+    if (_isShuffled) {
+      final origIdx = _indexInOriginal(removedItem);
       if (origIdx != -1) {
         _originalQueue.removeAt(origIdx);
       }
+    } else {
+      _syncOriginalIfUnshuffled();
     }
 
     final currentMixOffset = _mixOffset;
     if (currentMixOffset != null) {
       if (index < currentMixOffset) {
         _mixOffset = currentMixOffset - 1;
-      } else if (_activeQueue.length <= currentMixOffset) {
+      }
+      if (_mixOffset! >= _activeQueue.length) {
         _mixOffset = null;
       }
     }
@@ -401,6 +485,7 @@ class QueueManager {
       return;
     }
     if (from == to) return;
+    _touch();
 
     final item = _activeQueue.removeAt(from);
     _activeQueue.insert(to, item);
@@ -414,10 +499,7 @@ class QueueManager {
       _currentIndex++;
     }
 
-    if (!_isShuffled) {
-      final origItem = _originalQueue.removeAt(from);
-      _originalQueue.insert(to, origItem);
-    }
+    _syncOriginalIfUnshuffled();
     _notifyNextTrack();
   }
 
@@ -425,6 +507,7 @@ class QueueManager {
   QueueItem? jumpTo(int index) {
     if (index >= 0 && index < _activeQueue.length) {
       _currentIndex = index;
+      _touch();
       _notifyNextTrack();
       return currentTrack;
     }
@@ -433,8 +516,9 @@ class QueueManager {
 
   /// Clears the entire queue.
   void clear() {
-    _activeQueue.clear();
-    _originalQueue.clear();
+    _touch();
+    _activeQueue = [];
+    _originalQueue = [];
     _currentIndex = -1;
     _isShuffled = false;
     _mixOffset = null;
@@ -449,7 +533,8 @@ class QueueManager {
   ///
   /// Handles:
   /// - Automatic vs manual skip behavior.
-  /// - [Loop.one]: auto-advance repeats the same track without crossfade.
+  /// - [Loop.one]: auto-advance returns the **same** current item (the caller
+  ///   must restart it); a manual skip moves forward as usual.
   /// - Infinite Library Mix: fetches tracks when the queue completes.
   /// - [Loop.all]: loops back to index 0.
   /// - [Loop.off]: returns null when reaching the end.
@@ -463,6 +548,7 @@ class QueueManager {
 
     if (_currentIndex < _activeQueue.length - 1) {
       _currentIndex++;
+      _touch();
       _notifyNextTrack();
       return currentTrack;
     }
@@ -470,7 +556,21 @@ class QueueManager {
     // At end of queue: check Infinite Library Mix
     final provider = libraryTrackProvider;
     if (_loopMode == Loop.off && _infiniteMixEnabled && provider != null) {
-      final rawTracks = await provider(25);
+      final versionBeforeFetch = _version;
+      List<Track> rawTracks;
+      try {
+        rawTracks = await provider(25);
+      } catch (e) {
+        debugPrint('[QueueManager] Infinite mix provider failed: $e');
+        rawTracks = const [];
+      }
+
+      // The queue may have been mutated while awaiting the provider. Never
+      // apply a stale decision: re-evaluate against the current state.
+      if (versionBeforeFetch != _version) {
+        return next(isManual: isManual);
+      }
+
       if (rawTracks.isNotEmpty) {
         final existingFilePaths = _activeQueue.map((it) => it.filePath).toSet();
         var mixTracks = rawTracks
@@ -483,9 +583,14 @@ class QueueManager {
         }
 
         if (mixTracks.isNotEmpty) {
+          _touch();
           _mixOffset ??= _activeQueue.length;
           _activeQueue.addAll(mixTracks);
-          _originalQueue.addAll(mixTracks);
+          if (_isShuffled) {
+            _originalQueue.addAll(mixTracks);
+          } else {
+            _syncOriginalIfUnshuffled();
+          }
           _currentIndex++;
           _notifyNextTrack();
           return currentTrack;
@@ -495,47 +600,51 @@ class QueueManager {
 
     if (_loopMode == Loop.all) {
       _currentIndex = 0;
+      _touch();
       _notifyNextTrack();
       return currentTrack;
     }
 
     if (_loopMode == Loop.one && isManual) {
       _currentIndex = 0;
+      _touch();
       _notifyNextTrack();
       return currentTrack;
     }
 
     // Loop.off reached end
-    _notifyNextTrack();
     return null;
   }
 
-  /// Moves to the previous track or restarts the current track.
+  /// Moves to the previous track.
   ///
-  /// If playback progress exceeds 3 seconds, returns currentTrack to prompt
-  /// the player engine to seek to beginning.
+  /// Returns the new current track after moving, or `null` when the caller
+  /// should **restart the current track** instead:
+  /// - playback progress exceeds [restartThreshold], or
+  /// - there is no prior track ([Loop.off] at index 0).
   QueueItem? previous({Duration position = Duration.zero}) {
     if (_activeQueue.isEmpty) return null;
 
-    // Standard player convention: restart track if > 3 seconds in
-    if (position.inSeconds > 3) {
-      return currentTrack;
+    // Standard player convention: restart track if past the threshold
+    if (position > restartThreshold) {
+      return null;
     }
 
     if (_currentIndex > 0) {
       _currentIndex--;
+      _touch();
       _notifyNextTrack();
       return currentTrack;
     }
 
     // At index 0
-    if (_loopMode == Loop.all) {
+    if (_loopMode == Loop.all && _activeQueue.length > 1) {
       _currentIndex = _activeQueue.length - 1;
+      _touch();
       _notifyNextTrack();
       return currentTrack;
     }
 
-    _notifyNextTrack();
-    return currentTrack;
+    return null;
   }
 }

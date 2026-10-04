@@ -197,7 +197,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
 
   @override
   Future<void> setInfiniteMix(bool enabled) async =>
-      audioEngine?.queueManager.setInfiniteMix(enabled);
+      await audioEngine?.setInfiniteMix(enabled);
 
   @override
   Future<CatalogSnapshot> getCatalogSnapshot() async {

@@ -97,7 +97,7 @@ class CrossfadeManager {
       await playerOut.setVolume(initialVOut);
       await playerIn.setVolume(initialVIn);
       await playerIn.seek(Duration.zero);
-      if (!playerIn.isPlaying) {
+      if (_operationId == opId && !_isPaused && !playerIn.isPlaying) {
         await playerIn.play();
       }
     } catch (e) {
@@ -106,6 +106,15 @@ class CrossfadeManager {
 
     if (_operationId != opId) {
       // Operation was superseded during async setup
+      return;
+    }
+
+    if (_isPaused) {
+      // Paused during setup: keep both players silent/paused; resume() will
+      // start the ticker.
+      try {
+        await playerIn.pause();
+      } catch (_) {}
       return;
     }
 
@@ -218,7 +227,14 @@ class CrossfadeManager {
     }
   }
 
-  Future<void> _complete(int opId) async {
+  /// Finalizes the transition atomically.
+  ///
+  /// The final player commands are *issued* synchronously and in order
+  /// (each player processes its commands FIFO), and [_onCrossEnd] is invoked
+  /// in the same synchronous turn. This removes the "completing" window in
+  /// which a concurrent `pause()`, `cancel()` or `cross()` could observe a
+  /// half-finished transition (e.g. `isActive == true` with null players).
+  void _complete(int opId) {
     if (_operationId != opId) return;
 
     _timer?.cancel();
@@ -227,34 +243,23 @@ class CrossfadeManager {
 
     final out = _playerOut;
     final inP = _playerIn;
-    final vol = _masterVolume;
     final callback = _onCrossEnd;
 
     _playerOut = null;
     _playerIn = null;
     _onCrossEnd = null;
+    _isActive = false;
+    _isPaused = false;
 
-    try {
-      if (out != null) {
-        await out.setVolume(0.0);
-        await out.stop();
-      }
-    } catch (_) {}
-
-    try {
-      if (inP != null) {
-        await inP.setVolume(vol);
-      }
-    } catch (_) {}
-
-    if (_operationId == opId) {
-      _isActive = false;
-      _isPaused = false;
-      callback?.call();
-    } else {
-      _isActive = false;
-      _isPaused = false;
+    if (out != null) {
+      unawaited(out.setVolume(0.0).catchError((_) {}));
+      unawaited(out.stop().catchError((_) {}));
     }
+    if (inP != null) {
+      unawaited(inP.setVolume(_masterVolume).catchError((_) {}));
+    }
+
+    callback?.call();
   }
 
   Future<void> _executeDirectCut(
@@ -269,18 +274,22 @@ class CrossfadeManager {
       await playerOut.stop();
       await playerIn.setVolume(masterVolume);
       await playerIn.seek(Duration.zero);
-      if (!playerIn.isPlaying) {
+      if (_operationId == opId && !playerIn.isPlaying) {
         await playerIn.play();
       }
     } catch (_) {}
 
-    if (_operationId == opId) {
-      _isActive = false;
-      _onCrossEnd?.call();
-      _onCrossEnd = null;
-    } else {
-      _isActive = false;
-    }
+    // Only the operation that still owns the manager may touch its state;
+    // a newer cross() may already be running.
+    if (_operationId != opId) return;
+
+    final callback = _onCrossEnd;
+    _onCrossEnd = null;
+    _playerOut = null;
+    _playerIn = null;
+    _isActive = false;
+    _isPaused = false;
+    callback?.call();
   }
 
   double _calculateFadeOut(double p, double masterVolume) {

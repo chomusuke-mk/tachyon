@@ -284,7 +284,7 @@ class TachyonBackendHost {
 
       case BackendMethods.playbackSetInfiniteMix:
         final enabled = params['enabled'] as bool;
-        _audioEngine.queueManager.setInfiniteMix(enabled);
+        await _audioEngine.setInfiniteMix(enabled);
         return null;
 
       // =======================================================================

@@ -15,6 +15,7 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
 
   final List<Duration> seekHistory = [];
   final List<double> volumeHistory = [];
+  int openCount = 0;
 
   final StreamController<Duration> _posController = StreamController.broadcast();
   final StreamController<Duration> _durController = StreamController.broadcast();
@@ -24,6 +25,7 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
 
   @override
   Future<void> open(String filePath, {bool play = true}) async {
+    openCount++;
     isPlayingState = play;
     isStopped = false;
     isPaused = false;
@@ -52,8 +54,8 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
     _playingController.add(false);
   }
 
-  void emitCompleted() {
-    _completedController.add(true);
+  void emitCompleted([bool completed = true]) {
+    _completedController.add(completed);
   }
 
   @override
