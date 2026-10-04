@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/backend/backend_client.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/constants/languages.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
@@ -396,10 +397,15 @@ class SettingsScreen extends StatelessWidget {
                     description: '${settings.crossfadeDuration}s',
                     type: ControllerType.slider,
                     child: Slider(
-                      value: settings.crossfadeDuration.toDouble(),
-                      min: 2.0,
-                      max: 30.0,
-                      divisions: 28,
+                      value: settings.crossfadeDuration.toDouble().clamp(
+                        AppDefaults.crossfadeMinDuration.toDouble(),
+                        AppDefaults.crossfadeMaxDuration.toDouble(),
+                      ),
+                      min: AppDefaults.crossfadeMinDuration.toDouble(),
+                      max: AppDefaults.crossfadeMaxDuration.toDouble(),
+                      divisions:
+                          AppDefaults.crossfadeMaxDuration -
+                          AppDefaults.crossfadeMinDuration,
                       label: '${settings.crossfadeDuration}s',
                       onChanged: settings.crossfadeEnabled
                           ? (val) => settings.setCrossfadeDuration(val.round())

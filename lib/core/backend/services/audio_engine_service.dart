@@ -10,33 +10,36 @@ import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
 
 import 'audio_player_adapter.dart';
+import 'crossfade_manager.dart';
 import 'queue_manager.dart';
 
+/// Clean, robust audio engine service orchestrating playback, queue, and seamless crossfading.
+///
+/// Architecture:
+/// - Maintains dual audio players (_playerA, _playerB) with clean role semantics:
+///   `_activePlayer`: The primary player reflecting current track position to the UI.
+///   `_standbyPlayer`: The secondary player used for crossfade preparation and transitions.
+/// - Crossfade is treated as a pure audio transition effect:
+///   Canceling a crossfade simply stops the effect, silences/stops `_standbyPlayer`,
+///   and restores `_activePlayer` to master volume.
 class AudioEngineService {
   final AudioPlayerAdapter _playerA;
   final AudioPlayerAdapter _playerB;
   late AudioPlayerAdapter _activePlayer;
-  late AudioPlayerAdapter _backgroundPlayer;
+  late AudioPlayerAdapter _standbyPlayer;
 
   final QueueManager _queueManager;
+  final CrossfadeManager _crossfadeManager;
   final Duration tickerInterval;
 
   final BehaviorSubject<PlaybackState> _stateSubject;
   final StreamController<Duration> _positionStreamController =
       StreamController<Duration>.broadcast();
   final List<StreamSubscription> _activeSubscriptions = [];
+  StreamSubscription<bool>? _completedSubscription;
+  int? _lastHandledTrackIndex;
 
-  // Crossfade state
   CrossfadeConfig _crossfadeConfig = const CrossfadeConfig();
-  bool _isCrossfading = false;
-  bool _isManualCrossfade = false;
-  int _crossfadeGeneration = 0;
-  Timer? _fadeTimer;
-  DateTime? _fadeTickStartTime;
-  Duration _accumulatedFadeDuration = Duration.zero;
-  Duration _effectiveCrossfadeDuration = Duration.zero;
-
-  // Effects and audio properties
   double _masterVolume = AppDefaults.volumeDefault;
   double _playbackRate = AppDefaults.playbackRateDefault;
   double _playbackPitch = AppDefaults.playbackPitchDefault;
@@ -48,86 +51,407 @@ class AudioEngineService {
     AudioPlayerAdapter? playerA,
     AudioPlayerAdapter? playerB,
     QueueManager? queueManager,
+    CrossfadeManager? crossfadeManager,
     this.tickerInterval = const Duration(milliseconds: 25),
     math.Random? random,
-  }) : _playerA = playerA ?? AudioPlayerAdapter(),
-       _playerB = playerB ?? AudioPlayerAdapter(),
-       _queueManager = queueManager ?? QueueManager(random: random),
-       _stateSubject = BehaviorSubject<PlaybackState>(
-         const PlaybackState.initial(),
-       ) {
+  })  : _playerA = playerA ?? AudioPlayerAdapter(),
+        _playerB = playerB ?? AudioPlayerAdapter(),
+        _queueManager = queueManager ?? QueueManager(random: random),
+        _crossfadeManager = crossfadeManager ??
+            CrossfadeManager(tickerInterval: tickerInterval),
+        _stateSubject = BehaviorSubject<PlaybackState>(
+          const PlaybackState.initial(),
+        ) {
     _activePlayer = _playerA;
-    _backgroundPlayer = _playerB;
+    _standbyPlayer = _playerB;
     _bindActivePlayerStreams();
   }
 
+  // --------------------------------------------------------------------------
+  // Public Accessors
+  // --------------------------------------------------------------------------
+
   AudioPlayerAdapter get activePlayer => _activePlayer;
-  AudioPlayerAdapter get standbyPlayer => _backgroundPlayer;
+  AudioPlayerAdapter get standbyPlayer => _standbyPlayer;
   QueueManager get queueManager => _queueManager;
-  bool get isCrossfading => _isCrossfading;
+  bool get isCrossfading => _crossfadeManager.isActive;
   CrossfadeConfig get crossfadeConfig => _crossfadeConfig;
   Equalizer get equalizer => _equalizer;
   AudioDevice? get currentDevice => _currentDevice;
-
   bool get isPlaying => _activePlayer.isPlaying;
 
   Stream<PlaybackState> get stateStream => _stateSubject;
   Stream<Duration> get positionStream => _positionStreamController.stream;
-
   PlaybackState get currentState => _stateSubject.value;
   PlaybackState get state => _stateSubject.value;
+
+  // --------------------------------------------------------------------------
+  // Core Playback Operations
+  // --------------------------------------------------------------------------
+
+  Future<void> open(
+    List<QueueItem> playables, {
+    int index = 0,
+    bool play = true,
+    bool shuffle = false,
+  }) async {
+    await _cancelCrossfade();
+    _lastHandledTrackIndex = null;
+    try {
+      await _standbyPlayer.setVolume(0.0);
+      await _standbyPlayer.stop();
+    } catch (_) {}
+
+    if (playables.isEmpty) {
+      _queueManager.clear();
+      try {
+        await _activePlayer.stop();
+      } catch (_) {}
+      _emitState();
+      return;
+    }
+
+    _queueManager.setQueue(playables, startIndex: index, shuffle: shuffle);
+    final targetTrack = _queueManager.currentTrack;
+    if (targetTrack == null) {
+      _emitState();
+      return;
+    }
+
+    await _configurePlayerProperties(_activePlayer);
+    await _activePlayer.setVolume(_masterVolume);
+    await _activePlayer.open(targetTrack.filePath, play: play);
+    await _activePlayer.seek(Duration.zero);
+
+    _emitState();
+  }
+
+  Future<void> play() async {
+    if (_queueManager.activeQueue.isEmpty) return;
+    if (_crossfadeManager.isActive) {
+      await _crossfadeManager.resume();
+    } else {
+      await _activePlayer.play();
+    }
+    _emitState();
+  }
+
+  Future<void> pause() async {
+    if (_crossfadeManager.isActive) {
+      await _crossfadeManager.pause();
+    } else {
+      await _activePlayer.pause();
+    }
+    _emitState();
+  }
+
+  Future<void> stop() async {
+    await _cancelCrossfade();
+    _lastHandledTrackIndex = null;
+    try {
+      await _standbyPlayer.setVolume(0.0);
+      await _standbyPlayer.stop();
+    } catch (_) {}
+    try {
+      await _activePlayer.stop();
+    } catch (_) {}
+    _emitState();
+  }
+
+  Future<void> seek(Duration position) async {
+    if (_queueManager.activeQueue.isEmpty) return;
+
+    final wasPlaying = _activePlayer.isPlaying || currentState.playing;
+
+    await _cancelCrossfade();
+    _lastHandledTrackIndex = null;
+    _bindActivePlayerStreams();
+
+    await _activePlayer.seek(position);
+    if (wasPlaying && !_activePlayer.isPlaying) {
+      await _activePlayer.play();
+    }
+    _emitState();
+  }
+
+  Future<void> next() async {
+    if (_queueManager.activeQueue.isEmpty) return;
+    _lastHandledTrackIndex = null;
+
+    if (_queueManager.loopMode == Loop.one) {
+      await _activePlayer.seek(Duration.zero);
+      await _activePlayer.play();
+      _emitState();
+      return;
+    }
+
+    final nextItem = await _queueManager.next(isManual: true);
+    if (nextItem != null) {
+      await _executeManualTransition(nextItem);
+    } else {
+      await stop();
+      _stateSubject.add(currentState.copyWith(completed: true, playing: false));
+    }
+  }
+
+  Future<void> previous() async {
+    if (_queueManager.activeQueue.isEmpty) return;
+    _lastHandledTrackIndex = null;
+
+    // Standard behavior: if current track has played > 3 seconds, restart it
+    if (_activePlayer.position > const Duration(seconds: 3)) {
+      await _cancelCrossfade();
+      _bindActivePlayerStreams();
+      await _activePlayer.seek(Duration.zero);
+      _emitState();
+      return;
+    }
+
+    final prevItem = _queueManager.previous(position: _activePlayer.position);
+    if (prevItem != null) {
+      await _executeManualTransition(prevItem);
+    } else {
+      await _activePlayer.seek(Duration.zero);
+      _emitState();
+    }
+  }
+
+  Future<void> skipToIndex(int index) async {
+    if (index < 0 || index >= _queueManager.activeQueue.length) return;
+    _lastHandledTrackIndex = null;
+
+    final targetItem = _queueManager.jumpTo(index);
+    if (targetItem != null) {
+      await _executeManualTransition(targetItem);
+    }
+  }
 
   Future<void> clearQueue() async {
     await open([]);
   }
 
-  Future<void> setCrossfadeDuration(Duration duration) async {
-    _crossfadeConfig = _crossfadeConfig.copyWith(duration: duration);
+  // --------------------------------------------------------------------------
+  // Clean Crossfade Cancellation & Transitions
+  // --------------------------------------------------------------------------
+
+  Future<void> _cancelCrossfade() async {
+    if (!_crossfadeManager.isActive) return;
+    _crossfadeManager.cancel();
+
+    try {
+      await _standbyPlayer.setVolume(0.0);
+      await _standbyPlayer.stop();
+    } catch (_) {}
+
+    try {
+      await _activePlayer.setVolume(_masterVolume);
+    } catch (_) {}
+  }
+
+  Future<void> _executeManualTransition(QueueItem targetTrack) async {
+    final manualDuration = _crossfadeConfig.manualDuration;
+    final canCrossfade = _crossfadeConfig.enabled &&
+        manualDuration > Duration.zero &&
+        _activePlayer.isPlaying;
+
+    _completedSubscription?.cancel();
+    _completedSubscription = null;
+
+    if (!canCrossfade) {
+      await _cancelCrossfade();
+      await _activePlayer.open(targetTrack.filePath, play: true);
+      await _activePlayer.seek(Duration.zero);
+      _bindActivePlayerStreams();
+      _emitState();
+      return;
+    }
+
+    // Cancel prior transition cleanly
+    await _cancelCrossfade();
+
+    // 1. Prepare standby player with new track
+    await _configurePlayerProperties(_standbyPlayer);
+    await _standbyPlayer.open(targetTrack.filePath, play: true);
+    await _standbyPlayer.seek(Duration.zero);
+
+    // 2. Immediate role swap: UI and streams instantly follow incoming track
+    final outgoingPlayer = _activePlayer;
+    _activePlayer = _standbyPlayer;
+    _standbyPlayer = outgoingPlayer;
+
+    _bindActivePlayerStreams();
+    _emitState();
+
+    // 3. Launch crossfade
+    final effectiveDuration = _clampCrossfadeDuration(
+      outgoingDuration: outgoingPlayer.duration,
+      outgoingRemaining: outgoingPlayer.duration - outgoingPlayer.position,
+      targetDuration: manualDuration,
+      incomingDuration: _activePlayer.duration,
+    );
+
+    await _crossfadeManager.cross(
+      playerOut: outgoingPlayer,
+      playerIn: _activePlayer,
+      targetDuration: effectiveDuration,
+      curve: _crossfadeConfig.curve,
+      masterVolume: _masterVolume,
+      onCrossEnd: () {
+        _emitState();
+      },
+    );
+  }
+
+  void _checkCrossfadeTrigger(Duration currentPosition, Duration totalDuration) {
+    if (_crossfadeManager.isActive) return;
+    if (!_crossfadeConfig.enabled || _crossfadeConfig.duration == Duration.zero) return;
+    if (totalDuration <= Duration.zero) return;
+
+    final remaining = totalDuration - currentPosition;
+    if (remaining <= Duration.zero) return;
+
+    final nextTrack = _getNextTrackForAutoCrossfade();
+    if (nextTrack == null) return;
+
+    final effectiveDuration = _clampCrossfadeDuration(
+      outgoingDuration: totalDuration,
+      outgoingRemaining: remaining,
+      targetDuration: _crossfadeConfig.duration,
+      incomingDuration: nextTrack.duration,
+    );
+
+    if (effectiveDuration <= Duration.zero) return;
+
+    if (remaining <= effectiveDuration) {
+      _startAutoCrossfade(effectiveDuration, nextTrack);
+    }
+  }
+
+  Future<void> _startAutoCrossfade(Duration effectiveDuration, QueueItem nextTrack) async {
+    _completedSubscription?.cancel();
+    _completedSubscription = null;
+
+    // 1. Preload standby player with next track at zero volume
+    await _configurePlayerProperties(_standbyPlayer);
+    await _standbyPlayer.setVolume(0.0);
+    await _standbyPlayer.open(nextTrack.filePath, play: true);
+    await _standbyPlayer.seek(Duration.zero);
+
+    final outgoingPlayer = _activePlayer;
+    final incomingPlayer = _standbyPlayer;
+
+    // 2. Delegate crossfade transition to CrossfadeManager
+    await _crossfadeManager.cross(
+      playerOut: outgoingPlayer,
+      playerIn: incomingPlayer,
+      targetDuration: effectiveDuration,
+      curve: _crossfadeConfig.curve,
+      masterVolume: _masterVolume,
+      onCrossEnd: () {
+        _handleAutoCrossfadeEnd(incomingPlayer, outgoingPlayer);
+      },
+    );
+  }
+
+  void _handleAutoCrossfadeEnd(
+    AudioPlayerAdapter incomingPlayer,
+    AudioPlayerAdapter outgoingPlayer,
+  ) {
+    // Verify player assignment has not been superseded
+    if (_standbyPlayer != incomingPlayer) return;
+
+    // Advance queue index
+    _advanceQueueIndex();
+
+    // Swap roles: incoming becomes active, outgoing becomes standby
+    _activePlayer = incomingPlayer;
+    _standbyPlayer = outgoingPlayer;
+
+    _bindActivePlayerStreams();
     _emitState();
   }
 
-  Future<void> setCrossfadeCurve(CrossfadeCurve curve) async {
-    _crossfadeConfig = _crossfadeConfig.copyWith(curve: curve);
-    _emitState();
+  Duration _clampCrossfadeDuration({
+    required Duration outgoingDuration,
+    required Duration outgoingRemaining,
+    required Duration targetDuration,
+    required Duration incomingDuration,
+  }) {
+    var dur = targetDuration;
+    if (outgoingRemaining > Duration.zero && outgoingRemaining < dur) {
+      dur = outgoingRemaining;
+    }
+    if (outgoingDuration > Duration.zero) {
+      final halfOutgoing = Duration(milliseconds: outgoingDuration.inMilliseconds ~/ 2);
+      if (halfOutgoing > Duration.zero && dur > halfOutgoing) {
+        dur = halfOutgoing;
+      }
+    }
+    if (incomingDuration > Duration.zero) {
+      final halfIncoming = Duration(milliseconds: incomingDuration.inMilliseconds ~/ 2);
+      if (halfIncoming > Duration.zero && dur > halfIncoming) {
+        dur = halfIncoming;
+      }
+    }
+    return dur;
   }
 
-  Future<void> setShuffle(bool enabled) async {
-    if (_queueManager.isShuffled != enabled) {
-      await toggleShuffle();
+  QueueItem? _getNextTrackForAutoCrossfade() {
+    if (_queueManager.activeQueue.isEmpty) return null;
+    if (_queueManager.loopMode == Loop.one) return null;
+
+    if (_queueManager.currentIndex < _queueManager.activeQueue.length - 1) {
+      return _queueManager.activeQueue[_queueManager.currentIndex + 1];
+    }
+    if (_queueManager.loopMode == Loop.all) {
+      return _queueManager.activeQueue[0];
+    }
+    return null;
+  }
+
+  void _advanceQueueIndex() {
+    if (_queueManager.loopMode == Loop.one) return;
+
+    if (_queueManager.currentIndex < _queueManager.activeQueue.length - 1) {
+      _queueManager.jumpTo(_queueManager.currentIndex + 1);
+    } else if (_queueManager.loopMode == Loop.all) {
+      _queueManager.jumpTo(0);
+    }
+  }
+
+  Future<void> _handleTrackCompleted() async {
+    final currentIdx = _queueManager.currentIndex;
+    if (currentIdx == _lastHandledTrackIndex) return;
+    _lastHandledTrackIndex = currentIdx;
+
+    if (_queueManager.loopMode == Loop.one) {
+      await _activePlayer.seek(Duration.zero);
+      await _activePlayer.play();
+      _emitState();
+    } else {
+      final nextItem = await _queueManager.next(isManual: false);
+      if (nextItem != null) {
+        await _activePlayer.open(nextItem.filePath, play: true);
+        await _activePlayer.seek(Duration.zero);
+        _emitState();
+      } else {
+        await _activePlayer.stop();
+        _stateSubject.add(currentState.copyWith(completed: true, playing: false));
+      }
     }
   }
 
   // --------------------------------------------------------------------------
-  // Stream Management
+  // Stream & State Management
   // --------------------------------------------------------------------------
-
-  void _emitState() {
-    final newState = currentState.copyWith(
-      index: _queueManager.currentIndex >= 0 ? _queueManager.currentIndex : 0,
-      playables: _queueManager.activeQueue,
-      mixOffset: _queueManager.mixOffset,
-      playing: _activePlayer.isPlaying,
-      buffering: _activePlayer.isBuffering,
-      completed: _activePlayer.isCompleted,
-      position: _activePlayer.position,
-      duration: _activePlayer.duration,
-      volume: _masterVolume,
-      rate: _playbackRate,
-      pitch: _playbackPitch,
-      shuffle: _queueManager.isShuffled,
-      loop: _queueManager.loopMode,
-      crossfadeConfig: _crossfadeConfig,
-      crossfadeDuration: _crossfadeConfig.duration,
-      skipSilence: _skipSilence,
-    );
-    _stateSubject.add(newState);
-  }
 
   void _bindActivePlayerStreams() {
     for (final sub in _activeSubscriptions) {
       sub.cancel();
     }
     _activeSubscriptions.clear();
+    _completedSubscription?.cancel();
+    _completedSubscription = null;
 
     _activeSubscriptions.add(
       _activePlayer.positionStream.listen((pos) {
@@ -155,538 +479,80 @@ class AudioEngineService {
       }),
     );
 
-    _activeSubscriptions.add(
-      _activePlayer.completedStream.listen((completed) {
-        if (completed) {
-          if (_isCrossfading && !_isManualCrossfade) {
-            _completeCrossfade(_crossfadeGeneration);
-          } else if (!_isCrossfading) {
-            _handleTrackCompleted();
-          }
-        }
-      }),
+    // Dedicated completed subscription. Disconnected during any crossfade transition.
+    _completedSubscription = _activePlayer.completedStream.listen((completed) {
+      if (completed && !_crossfadeManager.isActive) {
+        _handleTrackCompleted();
+      }
+    });
+  }
+
+  void _emitState() {
+    final newState = currentState.copyWith(
+      index: _queueManager.currentIndex >= 0 ? _queueManager.currentIndex : 0,
+      playables: _queueManager.activeQueue,
+      mixOffset: _queueManager.mixOffset,
+      playing: _activePlayer.isPlaying,
+      buffering: _activePlayer.isBuffering,
+      completed: _activePlayer.isCompleted,
+      position: _activePlayer.position,
+      duration: _activePlayer.duration,
+      volume: _masterVolume,
+      rate: _playbackRate,
+      pitch: _playbackPitch,
+      shuffle: _queueManager.isShuffled,
+      loop: _queueManager.loopMode,
+      crossfadeConfig: _crossfadeConfig,
+      crossfadeDuration: _crossfadeConfig.duration,
+      skipSilence: _skipSilence,
     );
+    _stateSubject.add(newState);
   }
 
-  // --------------------------------------------------------------------------
-  // Core Playback Operations
-  // --------------------------------------------------------------------------
-
-  Future<void> open(
-    List<QueueItem> playables, {
-    int index = 0,
-    bool play = true,
-    bool shuffle = false,
-  }) async {
-    await _abortActiveCrossfade();
-
-    if (playables.isEmpty) {
-      _queueManager.clear();
-      await _activePlayer.stop();
-      await _backgroundPlayer.stop();
-      _emitState();
-      return;
-    }
-
-    _queueManager.setQueue(playables, startIndex: index, shuffle: shuffle);
-
-    final targetTrack = _queueManager.currentTrack;
-    if (targetTrack == null) {
-      _emitState();
-      return;
-    }
-
-    await _activePlayer.setVolume(_masterVolume);
-    await _activePlayer.setRate(_playbackRate);
-    await _activePlayer.setPitch(_playbackPitch);
-    await _activePlayer.setEqualizer(_equalizer);
-    await _activePlayer.open(targetTrack.filePath, play: play);
-
-    _emitState();
-  }
-
-  Future<void> play() async {
-    if (_queueManager.activeQueue.isEmpty) return;
-    if (_isCrossfading) {
-      await _activePlayer.play();
-      await _backgroundPlayer.play();
-      if (_fadeTimer == null || !_fadeTimer!.isActive) {
-        _fadeTickStartTime = DateTime.now();
-        _fadeTimer?.cancel();
-        _fadeTimer = Timer.periodic(tickerInterval, (_) {
-          _onCrossfadeTick(_crossfadeGeneration);
-        });
-      }
-    } else {
-      await _activePlayer.play();
-    }
-    _emitState();
-  }
-
-  Future<void> pause() async {
-    if (_isCrossfading) {
-      if (_fadeTickStartTime != null) {
-        _accumulatedFadeDuration += DateTime.now().difference(
-          _fadeTickStartTime!,
-        );
-        _fadeTickStartTime = null;
-      }
-      _fadeTimer?.cancel();
-      _fadeTimer = null;
-      await _activePlayer.pause();
-      await _backgroundPlayer.pause();
-    } else {
-      await _activePlayer.pause();
-    }
-    _emitState();
-  }
-
-  Future<void> stop() async {
-    await _abortActiveCrossfade();
+  Future<void> _configurePlayerProperties(AudioPlayerAdapter player) async {
     try {
-      await _activePlayer.stop();
-    } catch (_) {}
-    try {
-      await _backgroundPlayer.stop();
-    } catch (_) {}
-    _emitState();
-  }
-
-  Future<void> seek(Duration position) async {
-    if (_queueManager.activeQueue.isEmpty) return;
-
-    if (_isCrossfading) {
-      await _abortActiveCrossfade();
-    }
-
-    await _activePlayer.seek(position);
-    if (!_activePlayer.isPlaying && currentState.playing) {
-      await _activePlayer.play();
-    }
-    _emitState();
-  }
-
-  Future<void> next() async {
-    if (_queueManager.activeQueue.isEmpty) return;
-
-    // Next during active auto-crossfade fast-forwards immediately
-    if (_isCrossfading && !_isManualCrossfade) {
-      await _fastForwardCrossfade();
-      return;
-    }
-
-    if (_queueManager.loopMode == Loop.one) {
-      await _activePlayer.seek(Duration.zero);
-      await _activePlayer.play();
-      _emitState();
-      return;
-    }
-
-    final nextItem = await _queueManager.next(isManual: true);
-    if (nextItem != null) {
-      await _performManualCrossfade(nextItem);
-    } else {
-      // Loop.off at end of queue
-      await stop();
-      _stateSubject.add(currentState.copyWith(completed: true, playing: false));
-    }
-  }
-
-  Future<void> previous() async {
-    if (_queueManager.activeQueue.isEmpty) return;
-
-    if (_isCrossfading && !_isManualCrossfade) {
-      await _abortActiveCrossfade();
-    }
-
-    // Standard behavior: if current track played > 3 seconds, restart it
-    if (_activePlayer.position > const Duration(seconds: 3)) {
-      await _activePlayer.seek(Duration.zero);
-      _emitState();
-      return;
-    }
-
-    final prevItem = _queueManager.previous(position: _activePlayer.position);
-    if (prevItem != null) {
-      await _performManualCrossfade(prevItem);
-    } else {
-      await _activePlayer.seek(Duration.zero);
-      _emitState();
-    }
-  }
-
-  Future<void> skipToIndex(int index) async {
-    if (index < 0 || index >= _queueManager.activeQueue.length) return;
-
-    if (_isCrossfading && !_isManualCrossfade) {
-      await _abortActiveCrossfade();
-    }
-
-    final item = _queueManager.jumpTo(index);
-    if (item != null) {
-      await _performManualCrossfade(item);
-    }
-  }
-
-  Future<void> _performManualCrossfade(QueueItem targetTrack) async {
-    final manualDuration = _crossfadeConfig.manualDuration;
-    if (!_crossfadeConfig.enabled ||
-        manualDuration == Duration.zero ||
-        !_activePlayer.isPlaying) {
-      await _abortActiveCrossfade();
-      await _activePlayer.open(targetTrack.filePath, play: true);
-      _emitState();
-      return;
-    }
-
-    final generation = ++_crossfadeGeneration;
-    _fadeTimer?.cancel();
-    _fadeTimer = null;
-
-    // 1. Terminate any previous background standby fade
-    try {
-      await _backgroundPlayer.setVolume(0.0);
-      await _backgroundPlayer.stop();
-    } catch (_) {}
-
-    // 2. Open new track on standby player at full volume
-    try {
-      await _backgroundPlayer.setVolume(_masterVolume);
-      await _backgroundPlayer.setRate(_playbackRate);
-      await _backgroundPlayer.setPitch(_playbackPitch);
-      await _backgroundPlayer.setEqualizer(_equalizer);
+      await player.setRate(_playbackRate);
+      await player.setPitch(_playbackPitch);
+      await player.setEqualizer(_equalizer);
+      await player.setSkipSilence(_skipSilence);
       if (_currentDevice != null) {
-        await _backgroundPlayer.setDevice(_currentDevice!);
+        await player.setDevice(_currentDevice!);
       }
     } catch (_) {}
-    await _backgroundPlayer.open(targetTrack.filePath, play: true);
-
-    if (_crossfadeGeneration != generation) {
-      try {
-        await _backgroundPlayer.setVolume(0.0);
-        await _backgroundPlayer.stop();
-      } catch (_) {}
-      return;
-    }
-
-    // 3. Swap roles immediately so active player is the incoming new track
-    final outgoingPlayer = _activePlayer;
-    _activePlayer = _backgroundPlayer;
-    _backgroundPlayer = outgoingPlayer;
-
-    // Active streams now immediately reflect the new track at 0:00
-    _bindActivePlayerStreams();
-    _emitState();
-
-    // 4. Outgoing player fades out over manualDuration
-    _isCrossfading = true;
-    _isManualCrossfade = true;
-    _accumulatedFadeDuration = Duration.zero;
-    _fadeTickStartTime = DateTime.now();
-    _effectiveCrossfadeDuration = manualDuration;
-
-    _fadeTimer = Timer.periodic(tickerInterval, (_) {
-      _onCrossfadeTick(generation);
-    });
   }
 
   // --------------------------------------------------------------------------
-  // Crossfade Orchestration Engine
-  // --------------------------------------------------------------------------
-
-  Future<void> setCrossfadeConfig(CrossfadeConfig config) async {
-    _crossfadeConfig = config;
-    _emitState();
-  }
-
-  void _checkCrossfadeTrigger(
-    Duration currentPosition,
-    Duration totalDuration,
-  ) {
-    if (_isCrossfading) return;
-    if (!_crossfadeConfig.enabled ||
-        _crossfadeConfig.duration == Duration.zero) {
-      return;
-    }
-    if (totalDuration <= Duration.zero) return;
-
-    final nextTrack = _getNextTrackForCrossfade();
-    if (nextTrack == null) return;
-
-    // Symmetric clamping: clamped by outgoing track duration / 2 AND incoming track duration / 2
-    var effectiveCrossfade = _crossfadeConfig.effectiveDuration(totalDuration);
-    if (nextTrack.duration > Duration.zero) {
-      final nextEffective = _crossfadeConfig.effectiveDuration(
-        nextTrack.duration,
-      );
-      if (nextEffective < effectiveCrossfade) {
-        effectiveCrossfade = nextEffective;
-      }
-    }
-    if (effectiveCrossfade <= Duration.zero) return;
-
-    final remaining = totalDuration - currentPosition;
-    if (remaining <= Duration.zero) return;
-
-    if (effectiveCrossfade > remaining) {
-      effectiveCrossfade = remaining;
-    }
-    if (effectiveCrossfade <= Duration.zero) return;
-
-    if (remaining <= effectiveCrossfade) {
-      _startCrossfade(effectiveCrossfade, nextTrack);
-    }
-  }
-
-  QueueItem? _getNextTrackForCrossfade() {
-    if (_queueManager.activeQueue.isEmpty) return null;
-
-    if (_queueManager.loopMode == Loop.one) {
-      return null;
-    }
-    if (_queueManager.currentIndex < _queueManager.activeQueue.length - 1) {
-      return _queueManager.activeQueue[_queueManager.currentIndex + 1];
-    }
-    if (_queueManager.loopMode == Loop.all) {
-      return _queueManager.activeQueue[0];
-    }
-    return null; // End of queue with Loop.off -> do not crossfade
-  }
-
-  Future<void> _startCrossfade(
-    Duration effectiveDuration,
-    QueueItem nextTrack,
-  ) async {
-    final generation = ++_crossfadeGeneration;
-    _isCrossfading = true;
-    _isManualCrossfade = false;
-    _accumulatedFadeDuration = Duration.zero;
-    _fadeTickStartTime = DateTime.now();
-    _effectiveCrossfadeDuration = effectiveDuration;
-
-    // Prime standby player
-    await _backgroundPlayer.setVolume(0.0);
-    await _backgroundPlayer.setRate(_playbackRate);
-    await _backgroundPlayer.setPitch(_playbackPitch);
-    await _backgroundPlayer.setEqualizer(_equalizer);
-    if (_currentDevice != null) {
-      await _backgroundPlayer.setDevice(_currentDevice!);
-    }
-    await _backgroundPlayer.open(nextTrack.filePath, play: true);
-
-    if (_crossfadeGeneration != generation) {
-      await _backgroundPlayer.setVolume(0.0);
-      await _backgroundPlayer.stop();
-      return;
-    }
-
-    _fadeTimer?.cancel();
-    _fadeTimer = Timer.periodic(tickerInterval, (_) {
-      _onCrossfadeTick(generation);
-    });
-  }
-
-  void _onCrossfadeTick(int generation) {
-    if (!_isCrossfading || _fadeTickStartTime == null || _crossfadeGeneration != generation) {
-      return;
-    }
-
-    final now = DateTime.now();
-    final tickElapsed = now.difference(_fadeTickStartTime!);
-    _fadeTickStartTime = now;
-    _accumulatedFadeDuration += tickElapsed;
-
-    final totalMs = _effectiveCrossfadeDuration.inMilliseconds;
-    final progress = totalMs > 0
-        ? (_accumulatedFadeDuration.inMilliseconds / totalMs).clamp(0.0, 1.0)
-        : 1.0;
-
-    if (_isManualCrossfade) {
-      // Manual crossfade: _activePlayer is playing new track at full volume
-      // _standbyPlayer is fading out outgoing track from _masterVolume to 0.0
-      final vOut = _crossfadeConfig.calculateFadeOutVolume(progress, _masterVolume);
-      _backgroundPlayer.setVolume(vOut);
-
-      if (progress >= 1.0) {
-        _fadeTimer?.cancel();
-        _fadeTimer = null;
-        _backgroundPlayer.setVolume(0.0);
-        _backgroundPlayer.stop();
-        _isCrossfading = false;
-        _isManualCrossfade = false;
-      }
-    } else {
-      // Auto crossfade: _activePlayer is fading out, _standbyPlayer is fading in
-      final vOut = _crossfadeConfig.calculateFadeOutVolume(
-        progress,
-        _masterVolume,
-      );
-      final vIn = _crossfadeConfig.calculateFadeInVolume(progress, _masterVolume);
-
-      _activePlayer.setVolume(vOut);
-      _backgroundPlayer.setVolume(vIn);
-
-      if (progress >= 1.0) {
-        _completeCrossfade(generation);
-      }
-    }
-  }
-
-  Future<void> _completeCrossfade([int? generation]) async {
-    if (generation != null && _crossfadeGeneration != generation) return;
-
-    _fadeTimer?.cancel();
-    _fadeTimer = null;
-    _fadeTickStartTime = null;
-    _accumulatedFadeDuration = Duration.zero;
-
-    // Terminate outgoing player
-    try {
-      await _activePlayer.setVolume(0.0);
-      await _activePlayer.stop();
-    } catch (_) {}
-
-    // Ensure incoming player receives exact master volume
-    try {
-      await _backgroundPlayer.setVolume(_masterVolume);
-    } catch (_) {}
-
-    // Only auto-crossfade advances queue index at completion
-    if (!_isManualCrossfade) {
-      _advanceQueueIndex();
-    }
-
-    // Role Swap: Standby becomes Active, Active becomes Standby
-    final temp = _activePlayer;
-    _activePlayer = _backgroundPlayer;
-    _backgroundPlayer = temp;
-
-    _isCrossfading = false;
-    _isManualCrossfade = false;
-    _bindActivePlayerStreams();
-    _emitState();
-  }
-
-  Future<void> _fastForwardCrossfade() async {
-    ++_crossfadeGeneration;
-    _fadeTimer?.cancel();
-    _fadeTimer = null;
-    _fadeTickStartTime = null;
-    _accumulatedFadeDuration = Duration.zero;
-
-    try {
-      await _activePlayer.setVolume(0.0);
-      await _activePlayer.stop();
-    } catch (_) {}
-    try {
-      await _backgroundPlayer.setVolume(_masterVolume);
-    } catch (_) {}
-
-    if (!_isManualCrossfade) {
-      _advanceQueueIndex();
-    }
-
-    final temp = _activePlayer;
-    _activePlayer = _backgroundPlayer;
-    _backgroundPlayer = temp;
-
-    _isCrossfading = false;
-    _isManualCrossfade = false;
-    _bindActivePlayerStreams();
-    _emitState();
-  }
-
-  Future<void> _abortActiveCrossfade() async {
-    if (!_isCrossfading) return;
-
-    ++_crossfadeGeneration;
-    _fadeTimer?.cancel();
-    _fadeTimer = null;
-    _fadeTickStartTime = null;
-    _accumulatedFadeDuration = Duration.zero;
-    _isCrossfading = false;
-    _isManualCrossfade = false;
-
-    // Reset outgoing player back to full master volume
-    try {
-      await _activePlayer.setVolume(_masterVolume);
-    } catch (_) {}
-    // Stop and silence preloaded standby player
-    try {
-      await _backgroundPlayer.setVolume(0.0);
-      await _backgroundPlayer.stop();
-    } catch (_) {}
-  }
-
-  void _advanceQueueIndex() {
-    if (_queueManager.loopMode == Loop.one) {
-      // Index remains unchanged
-    } else if (_queueManager.currentIndex <
-        _queueManager.activeQueue.length - 1) {
-      _queueManager.jumpTo(_queueManager.currentIndex + 1);
-    } else if (_queueManager.loopMode == Loop.all) {
-      _queueManager.jumpTo(0);
-    }
-  }
-
-  Future<void> _handleTrackCompleted() async {
-    if (_queueManager.loopMode == Loop.one) {
-      await _activePlayer.seek(Duration.zero);
-      await _activePlayer.play();
-      _emitState();
-    } else {
-      final nextItem = await _queueManager.next(isManual: false);
-      if (nextItem != null) {
-        await _activePlayer.open(nextItem.filePath, play: true);
-        _emitState();
-      } else {
-        await _activePlayer.stop();
-        _stateSubject.add(
-          currentState.copyWith(completed: true, playing: false),
-        );
-      }
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // Audio Effects & MPV Controls
+  // Audio Configuration Controls
   // --------------------------------------------------------------------------
 
   Future<void> setVolume(double volume) async {
-    _masterVolume = volume.clamp(
-      AppDefaults.volumeMin,
-      AppDefaults.volumeBoostMax,
-    );
-    if (!_isCrossfading) {
+    _masterVolume = volume.clamp(AppDefaults.volumeMin, AppDefaults.volumeBoostMax);
+    if (_crossfadeManager.isActive) {
+      _crossfadeManager.setMasterVolume(_masterVolume);
+    } else {
       await _activePlayer.setVolume(_masterVolume);
     }
     _emitState();
   }
 
   Future<void> setRate(double rate) async {
-    _playbackRate = rate.clamp(
-      AppDefaults.playbackRateMin,
-      AppDefaults.playbackRateMax,
-    );
+    _playbackRate = rate.clamp(AppDefaults.playbackRateMin, AppDefaults.playbackRateMax);
     await _activePlayer.setRate(_playbackRate);
-    await _backgroundPlayer.setRate(_playbackRate);
+    await _standbyPlayer.setRate(_playbackRate);
     _emitState();
   }
 
   Future<void> setPitch(double pitch) async {
-    _playbackPitch = pitch.clamp(
-      AppDefaults.playbackPitchMin,
-      AppDefaults.playbackPitchMax,
-    );
+    _playbackPitch = pitch.clamp(AppDefaults.playbackPitchMin, AppDefaults.playbackPitchMax);
     await _activePlayer.setPitch(_playbackPitch);
-    await _backgroundPlayer.setPitch(_playbackPitch);
+    await _standbyPlayer.setPitch(_playbackPitch);
     _emitState();
   }
 
   Future<void> setSkipSilence(bool enabled) async {
     _skipSilence = enabled;
     await _activePlayer.setSkipSilence(enabled);
-    await _backgroundPlayer.setSkipSilence(enabled);
+    await _standbyPlayer.setSkipSilence(enabled);
     _emitState();
   }
 
@@ -705,13 +571,29 @@ class AudioEngineService {
 
   Future<List<AudioDevice>> getAudioDevices() => _activePlayer.getAudioDevices();
 
+  Future<void> setCrossfadeDuration(Duration duration) async {
+    _crossfadeConfig = _crossfadeConfig.copyWith(duration: duration);
+    _emitState();
+  }
+
+  Future<void> setCrossfadeCurve(CrossfadeCurve curve) async {
+    _crossfadeConfig = _crossfadeConfig.copyWith(curve: curve);
+    _emitState();
+  }
+
+  Future<void> setCrossfadeConfig(CrossfadeConfig config) async {
+    _crossfadeConfig = config;
+    _emitState();
+  }
+
   // --------------------------------------------------------------------------
   // Queue Management Delegation
   // --------------------------------------------------------------------------
 
-  Future<void> setLoopMode(Loop loop) async {
-    _queueManager.setLoopMode(loop);
-    _emitState();
+  Future<void> setShuffle(bool enabled) async {
+    if (_queueManager.isShuffled != enabled) {
+      await toggleShuffle();
+    }
   }
 
   Future<void> toggleShuffle() async {
@@ -719,10 +601,13 @@ class AudioEngineService {
     _emitState();
   }
 
+  Future<void> setLoopMode(Loop loop) async {
+    _queueManager.setLoopMode(loop);
+    _emitState();
+  }
+
   Future<void> insertNext(QueueItem playable) async {
-    if (_isCrossfading) {
-      await _abortActiveCrossfade();
-    }
+    await _cancelCrossfade();
     if (_queueManager.activeQueue.isEmpty) {
       await open([playable]);
       return;
@@ -743,9 +628,7 @@ class AudioEngineService {
   Future<void> remove(int index) async {
     if (index < 0 || index >= _queueManager.activeQueue.length) return;
 
-    if (_isCrossfading) {
-      await _abortActiveCrossfade();
-    }
+    await _cancelCrossfade();
 
     final wasCurrent = index == _queueManager.currentIndex;
     _queueManager.remove(index);
@@ -754,25 +637,31 @@ class AudioEngineService {
       await stop();
     } else if (wasCurrent && _queueManager.currentTrack != null) {
       await _activePlayer.open(_queueManager.currentTrack!.filePath, play: true);
+      await _activePlayer.seek(Duration.zero);
     }
     _emitState();
   }
 
   Future<void> reorder(int from, int to) async {
-    if (_isCrossfading) {
-      await _abortActiveCrossfade();
-    }
+    await _cancelCrossfade();
     _queueManager.reorder(from, to);
     _emitState();
   }
 
+  // --------------------------------------------------------------------------
+  // Cleanup
+  // --------------------------------------------------------------------------
+
   Future<void> dispose() async {
-    await _abortActiveCrossfade();
+    await _cancelCrossfade();
+    _completedSubscription?.cancel();
+    _completedSubscription = null;
     for (final sub in _activeSubscriptions) {
       await sub.cancel();
     }
+    _activeSubscriptions.clear();
     await _activePlayer.dispose();
-    await _backgroundPlayer.dispose();
+    await _standbyPlayer.dispose();
     await _positionStreamController.close();
     await _stateSubject.close();
   }
