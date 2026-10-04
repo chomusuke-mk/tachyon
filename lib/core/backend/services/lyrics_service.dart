@@ -25,6 +25,7 @@ class LyricsResult {
   final LyricsSourceState state;
   final String? rawLrc;
   final bool isSynced;
+  final String? lang;
 
   const LyricsResult({
     this.lyricsId,
@@ -33,6 +34,7 @@ class LyricsResult {
     required this.state,
     this.rawLrc,
     required this.isSynced,
+    this.lang,
   });
 
   List<LyricLine> get lines => lyrics.lines;
@@ -45,6 +47,7 @@ class LyricsResult {
     'state': state.dbValue,
     'rawLrc': rawLrc,
     'isSynced': isSynced,
+    'lang': lang,
   };
 
   static LyricsResult fromMap(Map<String, dynamic> map) {
@@ -59,6 +62,7 @@ class LyricsResult {
       state: LyricsSourceState.fromDbString(map['state'] as String),
       rawLrc: rawLrc,
       isSynced: map['isSynced'] as bool? ?? parsed.isSynced,
+      lang: map['lang'] as String?,
     );
   }
 
@@ -206,13 +210,28 @@ class LyricsService {
   Future<List<String>?> translateLyrics({
     required int lyricsId,
     required String targetLang,
+    String? sourceLang,
     required List<String> rawLines,
   }) async {
     if (kDebugMode) {
-      debugPrint('Translating lyrics $lyricsId into $targetLang...');
+      debugPrint('Translating lyrics $lyricsId from ${sourceLang ?? 'auto'} into $targetLang...');
       debugPrint('Raw lines: ${rawLines.length}');
     }
     if (rawLines.isEmpty) return const [];
+
+    final storedLang = database.getLyricsLang(lyricsId);
+    final isExplicitSame = sourceLang != null &&
+        sourceLang != 'auto' &&
+        sourceLang != 'autodetect' &&
+        sourceLang == targetLang;
+
+    // If lyrics are already known to be in targetLang, or if source and target match:
+    if (storedLang == targetLang || isExplicitSame) {
+      if (storedLang != targetLang) {
+        database.updateLyricsLang(lyricsId, targetLang);
+      }
+      return rawLines;
+    }
 
     final cached = database.getLyricsTranslation(
       lyricsId: lyricsId,
@@ -224,14 +243,33 @@ class LyricsService {
     final result = await translationClient.translate(
       rawLines,
       targetLanguage: targetLang,
+      sourceLanguage: sourceLang,
     );
     if (kDebugMode) {
       debugPrint(
-        'Translation result: ${result.isSuccess ? 'success' : 'failure'}',
+        'Translation result: ${result.isSuccess ? 'success' : 'failure'} (sameLanguage: ${result.isSameLanguage})',
       );
-      debugPrint('Error: ${result.errorMessage}');
+      if (!result.isSuccess && result.errorMessage != null) {
+        debugPrint('Error: ${result.errorMessage}');
+      }
     }
-    if (!result.isSuccess) return null;
+    if (!result.isSuccess) {
+      if (result.isRateLimited) {
+        throw LyricsTranslationException(
+          'Rate limit exceeded (Too many requests)',
+          statusCode: 429,
+        );
+      }
+      return null;
+    }
+
+    if (result.isSameLanguage) {
+      database.updateLyricsLang(lyricsId, targetLang);
+    } else if (sourceLang != null &&
+        sourceLang != 'auto' &&
+        sourceLang != 'autodetect') {
+      database.updateLyricsLang(lyricsId, sourceLang);
+    }
 
     database.saveLyricsTranslation(
       lyricsId: lyricsId,
@@ -263,6 +301,7 @@ class LyricsService {
         state: LyricsSourceState.found,
         rawLrc: raw,
         isSynced: (row['is_synced'] as int? ?? 0) == 1,
+        lang: row['lang'] as String?,
       );
     }
     return null;
@@ -282,8 +321,9 @@ class LyricsService {
     int trackId,
     LyricsSource source,
     String raw,
-    bool isSynced,
-  ) {
+    bool isSynced, {
+    String? lang,
+  }) {
     final existing = database.getLyricsEntry(
       trackId: trackId,
       source: source.dbValue,
@@ -300,6 +340,7 @@ class LyricsService {
             state: LyricsSourceState.found.dbValue,
             rawLrc: raw,
             isSynced: isSynced,
+            lang: lang,
           );
     return LyricsResult(
       lyricsId: lyricsId,
@@ -308,6 +349,7 @@ class LyricsService {
       state: LyricsSourceState.found,
       rawLrc: raw,
       isSynced: isSynced,
+      lang: unchanged ? existing['lang'] as String? : lang,
     );
   }
 

@@ -85,6 +85,14 @@ class LyricsView extends StatelessWidget {
                 ),
                 if (lyricsController.isThresholdWaiting)
                   const LyricsThresholdBanner(),
+                if (lyricsController.isTranslated &&
+                    lyricsController.translationError != null)
+                  _buildTranslationErrorBanner(
+                    context,
+                    lyricsController,
+                    strings,
+                    colorScheme,
+                  ),
               ],
             ),
           ),
@@ -422,6 +430,51 @@ class LyricsView extends StatelessWidget {
       tooltip: strings.npLyricsResearch,
       color: colorScheme.onSurfaceVariant,
       onPressed: controller.isLoading ? null : () => controller.forceReSearch(),
+    );
+  }
+
+  Widget _buildTranslationErrorBanner(
+    BuildContext context,
+    LyricsController controller,
+    AppStringKey strings,
+    ColorScheme colorScheme,
+  ) {
+    final isRateLimit = controller.translationError == 'rate_limit';
+    final message = isRateLimit
+        ? strings.npLyricsRateLimitError
+        : strings.npLyricsTranslateError;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.error.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isRateLimit ? Icons.timer_outlined : Icons.error_outline_rounded,
+            size: 16,
+            color: colorScheme.onErrorContainer,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onErrorContainer,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

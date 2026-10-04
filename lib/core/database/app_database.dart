@@ -20,7 +20,7 @@ abstract final class AppDatabaseSchema {
     'CREATE TABLE IF NOT EXISTS track_artists (track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE, PRIMARY KEY(track_id, artist_id));',
     'CREATE TABLE IF NOT EXISTS playlists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created_at INTEGER NOT NULL, type INTEGER DEFAULT 0);',
     'CREATE TABLE IF NOT EXISTS playlist_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, position INTEGER NOT NULL, added_at INTEGER NOT NULL, playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE, track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE);',
-    'CREATE TABLE IF NOT EXISTS lyrics (id INTEGER PRIMARY KEY AUTOINCREMENT, track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, source TEXT NOT NULL, state TEXT NOT NULL DEFAULT \'FOUND\', raw_lrc TEXT, is_synced INTEGER DEFAULT 0, updated_at INTEGER NOT NULL, UNIQUE(track_id, source));',
+    'CREATE TABLE IF NOT EXISTS lyrics (id INTEGER PRIMARY KEY AUTOINCREMENT, track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, source TEXT NOT NULL, state TEXT NOT NULL DEFAULT \'FOUND\', raw_lrc TEXT, is_synced INTEGER DEFAULT 0, lang TEXT, updated_at INTEGER NOT NULL, UNIQUE(track_id, source));',
     'CREATE TABLE IF NOT EXISTS lyrics_translations (id INTEGER PRIMARY KEY AUTOINCREMENT, lyrics_id INTEGER NOT NULL REFERENCES lyrics(id) ON DELETE CASCADE, lang TEXT NOT NULL, translated_lines TEXT NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(lyrics_id, lang));',
   ];
 
@@ -89,6 +89,7 @@ class AppDatabase {
     for (final c in ['replay_gain_track_gain REAL', 'replay_gain_track_peak REAL']) {
       try { db.execute('ALTER TABLE tracks ADD COLUMN $c;'); } catch (_) {}
     }
+    try { db.execute('ALTER TABLE lyrics ADD COLUMN lang TEXT;'); } catch (_) {}
     for (final sql in AppDatabaseSchema.indexes) { db.execute(sql); }
     final now = DateTime.now().millisecondsSinceEpoch;
     db.execute('INSERT OR IGNORE INTO playlists (id, name, created_at, type) VALUES (?, ?, ?, ?);', [likedSongsPlaylistId, 'Liked Songs', now, PlaylistType.liked.value]);
@@ -403,35 +404,40 @@ class AppDatabase {
     required String state,
     String? rawLrc,
     bool isSynced = false,
+    String? lang,
     int? updatedAt,
   }) {
     final ts = updatedAt ?? DateTime.now().millisecondsSinceEpoch;
     final res = db.select('''
-      INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, lang, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(track_id, source) DO UPDATE SET
         state = excluded.state,
         raw_lrc = excluded.raw_lrc,
         is_synced = excluded.is_synced,
+        lang = COALESCE(excluded.lang, lyrics.lang),
         updated_at = excluded.updated_at
       RETURNING id;
-    ''', [trackId, source, state, rawLrc, isSynced ? 1 : 0, ts]);
+    ''', [trackId, source, state, rawLrc, isSynced ? 1 : 0, lang, ts]);
     final lyricsId = res.first['id'] as int;
     db.execute('DELETE FROM lyrics_translations WHERE lyrics_id = ?;', [lyricsId]);
     return lyricsId;
   }
 
   Map<String, dynamic>? getLyricsEntry({required int trackId, required String source}) {
-    final rows = db.select(
-      'SELECT id, track_id, source, state, raw_lrc, is_synced, updated_at FROM lyrics WHERE track_id = ? AND source = ? LIMIT 1;',
-      [trackId, source],
-    );
+    final rows = db.select('SELECT id, track_id, source, state, raw_lrc, is_synced, lang, updated_at FROM lyrics WHERE track_id = ? AND source = ? LIMIT 1;', [trackId, source]);
     return rows.isEmpty ? null : rows.first;
   }
 
-  void deleteLyrics(int lyricsId) {
-    db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]);
+  void updateLyricsLang(int lyricsId, String lang) =>
+      db.execute('UPDATE lyrics SET lang = ? WHERE id = ?;', [lang, lyricsId]);
+
+  String? getLyricsLang(int lyricsId) {
+    final rows = db.select('SELECT lang FROM lyrics WHERE id = ? LIMIT 1;', [lyricsId]);
+    return rows.isEmpty ? null : rows.first['lang'] as String?;
   }
+
+  void deleteLyrics(int lyricsId) => db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]);
 
   List<String>? getLyricsTranslation({required int lyricsId, required String lang}) {
     final rows = db.select('SELECT translated_lines FROM lyrics_translations WHERE lyrics_id = ? AND lang = ? LIMIT 1;', [lyricsId, lang]);

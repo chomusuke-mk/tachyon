@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:tachyon/shared/utils/parse_utils.dart';
 
 /// Exception thrown when a lyrics translation operation fails.
@@ -13,6 +14,8 @@ class LyricsTranslationException implements Exception {
   final Object? cause;
 
   const LyricsTranslationException(this.message, {this.statusCode, this.cause});
+
+  bool get isRateLimited => statusCode == 429;
 
   @override
   String toString() =>
@@ -25,23 +28,34 @@ class TranslationResult {
   final List<String> originalLines;
   final List<String> translatedLines;
   final String targetLanguage;
+  final String? sourceLanguage;
   final bool isSuccess;
+  final bool isSameLanguage;
+  final int? statusCode;
   final String? errorMessage;
 
   const TranslationResult({
     required this.originalLines,
     required this.translatedLines,
     required this.targetLanguage,
+    this.sourceLanguage,
     this.isSuccess = true,
+    this.isSameLanguage = false,
+    this.statusCode,
     this.errorMessage,
   });
 
   const TranslationResult.failure({
     required this.originalLines,
     required this.targetLanguage,
+    this.sourceLanguage,
     required this.errorMessage,
+    this.statusCode,
   }) : translatedLines = const [],
-       isSuccess = false;
+       isSuccess = false,
+       isSameLanguage = false;
+
+  bool get isRateLimited => statusCode == 429;
 
   @override
   bool operator ==(Object other) =>
@@ -51,7 +65,10 @@ class TranslationResult {
           listEquals(originalLines, other.originalLines) &&
           listEquals(translatedLines, other.translatedLines) &&
           targetLanguage == other.targetLanguage &&
+          sourceLanguage == other.sourceLanguage &&
           isSuccess == other.isSuccess &&
+          isSameLanguage == other.isSameLanguage &&
+          statusCode == other.statusCode &&
           errorMessage == other.errorMessage;
 
   @override
@@ -59,13 +76,16 @@ class TranslationResult {
     Object.hashAll(originalLines),
     Object.hashAll(translatedLines),
     targetLanguage,
+    sourceLanguage,
     isSuccess,
+    isSameLanguage,
+    statusCode,
     errorMessage,
   );
 
   @override
   String toString() =>
-      'TranslationResult(isSuccess: $isSuccess, lines: ${translatedLines.length}/${originalLines.length}, error: $errorMessage)';
+      'TranslationResult(isSuccess: $isSuccess, isSameLanguage: $isSameLanguage, status: $statusCode, lines: ${translatedLines.length}/${originalLines.length}, error: $errorMessage)';
 }
 
 /// Free public lyrics translation client requiring zero credentials.
@@ -89,10 +109,19 @@ class LyricsTranslationClient {
 
   LyricsTranslationClient({
     http.Client? httpClient,
-    this.timeout = const Duration(seconds: 12),
+    this.timeout = const Duration(seconds: 5),
     this.myMemoryBaseUrl = defaultBaseUrl,
-  }) : _httpClient = httpClient ?? http.Client(),
+  }) : _httpClient = httpClient ?? _defaultClient(timeout: const Duration(seconds: 5)),
        _ownsClient = httpClient == null;
+
+  static http.Client _defaultClient({required Duration timeout}) {
+    try {
+      final io = HttpClient()..connectionTimeout = timeout;
+      return IOClient(io);
+    } catch (_) {
+      return http.Client();
+    }
+  }
 
   /// Chunks [lines] into batches where total character count joined by '\n'
   /// does not exceed [maxBatchChars].
@@ -136,160 +165,259 @@ class LyricsTranslationClient {
   Future<List<String>> translateLines(
     List<String> lines, {
     required String targetLanguage,
+    String? sourceLanguage,
   }) async {
-    if (lines.isEmpty) return const [];
-
-    // Normalize any line breaks inside individual line strings
-    final cleanLines = lines
-        .map((l) => l.replaceAll('\r\n', '\n').replaceAll('\r', '\n'))
-        .toList();
-
-    // If all lines are empty or whitespace, return immediately
-    if (cleanLines.every((l) => l.trim().isEmpty)) {
-      return List<String>.from(cleanLines);
+    final res = await translate(
+      lines,
+      targetLanguage: targetLanguage,
+      sourceLanguage: sourceLanguage,
+    );
+    if (!res.isSuccess) {
+      throw LyricsTranslationException(
+        res.errorMessage ?? 'Translation failed',
+        statusCode: res.statusCode,
+      );
     }
-
-    final batches = chunkLines(cleanLines, maxBatchChars: 400);
-    final allTranslated = <String>[];
-
-    for (final batch in batches) {
-      final translatedBatch = await _translateBatch(batch, targetLanguage);
-      allTranslated.addAll(translatedBatch);
-    }
-
-    return allTranslated;
+    return res.translatedLines;
   }
 
   /// Safe translation method that catches exceptions and returns [TranslationResult].
   Future<TranslationResult> translate(
     List<String> lines, {
     required String targetLanguage,
+    String? sourceLanguage,
   }) async {
     if (lines.isEmpty) {
       return TranslationResult.failure(
         originalLines: lines,
         targetLanguage: targetLanguage,
+        sourceLanguage: sourceLanguage,
         errorMessage: 'No lines provided for translation',
       );
     }
 
-    try {
-      final translated = await translateLines(
-        lines,
-        targetLanguage: targetLanguage,
-      );
+    final cleanLines = lines
+        .map((l) => l.replaceAll('\r\n', '\n').replaceAll('\r', '\n'))
+        .toList();
+
+    if (cleanLines.every((l) => l.trim().isEmpty)) {
       return TranslationResult(
         originalLines: lines,
-        translatedLines: translated,
+        translatedLines: List<String>.from(cleanLines),
         targetLanguage: targetLanguage,
+        sourceLanguage: sourceLanguage,
+        isSuccess: true,
+      );
+    }
+
+    final src = (sourceLanguage == null ||
+            sourceLanguage == 'auto' ||
+            sourceLanguage == 'autodetect')
+        ? 'autodetect'
+        : sourceLanguage;
+
+    if (src != 'autodetect' && src == targetLanguage) {
+      return TranslationResult(
+        originalLines: lines,
+        translatedLines: List<String>.from(cleanLines),
+        targetLanguage: targetLanguage,
+        sourceLanguage: sourceLanguage,
+        isSameLanguage: true,
+        isSuccess: true,
+      );
+    }
+
+    try {
+      final batches = chunkLines(cleanLines, maxBatchChars: 400);
+      final allTranslated = <String>[];
+
+      for (var i = 0; i < batches.length; i++) {
+        if (i > 0) {
+          // Pacing delay between batches to avoid burst rate limiting
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+        final batch = batches[i];
+        final res = await _translateBatch(
+          batch,
+          targetLanguage,
+          sourceLanguage: sourceLanguage,
+        );
+        if (res.isSameLanguage) {
+          // Early exit: The service indicated that the source and target are the same language.
+          // There is no need to make further requests for subsequent batches.
+          return TranslationResult(
+            originalLines: lines,
+            translatedLines: List<String>.from(cleanLines),
+            targetLanguage: targetLanguage,
+            sourceLanguage: sourceLanguage,
+            isSameLanguage: true,
+            isSuccess: true,
+          );
+        }
+        allTranslated.addAll(res.lines);
+      }
+
+      return TranslationResult(
+        originalLines: lines,
+        translatedLines: allTranslated,
+        targetLanguage: targetLanguage,
+        sourceLanguage: sourceLanguage,
+        isSameLanguage: false,
         isSuccess: true,
       );
     } on LyricsTranslationException catch (e) {
       return TranslationResult.failure(
         originalLines: lines,
         targetLanguage: targetLanguage,
+        sourceLanguage: sourceLanguage,
+        statusCode: e.statusCode,
         errorMessage: e.message,
       );
     } catch (e) {
       return TranslationResult.failure(
         originalLines: lines,
         targetLanguage: targetLanguage,
+        sourceLanguage: sourceLanguage,
         errorMessage: 'Unexpected translation error: $e',
       );
     }
   }
 
-  Future<List<String>> _translateBatch(
+  Future<({List<String> lines, bool isSameLanguage})> _translateBatch(
     List<String> batch,
-    String targetLanguage,
-  ) async {
+    String targetLanguage, {
+    String? sourceLanguage,
+  }) async {
     // If batch contains only empty or whitespace lines, preserve them directly
     if (batch.every((line) => line.trim().isEmpty)) {
-      return List<String>.from(batch);
+      return (lines: List<String>.from(batch), isSameLanguage: false);
+    }
+
+    final src = (sourceLanguage == null ||
+            sourceLanguage == 'auto' ||
+            sourceLanguage == 'autodetect')
+        ? 'autodetect'
+        : sourceLanguage;
+
+    if (src != 'autodetect' && src == targetLanguage) {
+      return (lines: List<String>.from(batch), isSameLanguage: true);
     }
 
     final batchText = batch.join('\n');
     final uri = Uri.parse(myMemoryBaseUrl).replace(
       queryParameters: {
         'q': batchText,
-        'langpair': 'autodetect|$targetLanguage',
+        'langpair': '$src|$targetLanguage',
       },
     );
 
     try {
-      final response = await _httpClient
-          .get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': defaultUserAgent,
-            },
-          )
-          .timeout(timeout);
-
-      if (response.statusCode != 200) {
-        throw LyricsTranslationException(
-          'Translation HTTP error: ${response.statusCode}',
-          statusCode: response.statusCode,
-        );
-      }
-
-      String bodyString;
-      try {
-        bodyString = utf8.decode(response.bodyBytes);
-      } catch (_) {
-        bodyString = response.body;
-      }
-
-      final decoded = jsonDecode(bodyString);
-      if (decoded is! Map<String, dynamic>) {
-        throw const LyricsTranslationException('Invalid JSON response format');
-      }
-
-      final responseStatus =
-          ParserUtils.parseInt(decoded['responseStatus']) ?? 200;
-      if (responseStatus != 200) {
-        final details =
-            decoded['responseDetails'] as String? ??
-            'Translation service error $responseStatus';
-        throw LyricsTranslationException(details, statusCode: responseStatus);
-      }
-
-      final responseData = decoded['responseData'] as Map<String, dynamic>?;
-      final rawTranslatedText = ParserUtils.parseString(
-        responseData?['translatedText'],
-      );
-      if (rawTranslatedText == null) {
-        throw const LyricsTranslationException(
-          'Missing translatedText in response',
-        );
-      }
-
-      final unescaped = unescapeHtml(rawTranslatedText);
-      final normalized = unescaped
-          .replaceAll('\r\n', '\n')
-          .replaceAll('\r', '\n');
-      var splitLines = normalized.split('\n');
-
-      // Reconcile line count to guarantee 1:1 alignment with input batch
-      if (splitLines.length != batch.length) {
-        final reconciled = <String>[];
-        var splitIndex = 0;
-        for (int i = 0; i < batch.length; i++) {
-          if (batch[i].trim().isEmpty) {
-            // Keep original blank/whitespace line
-            reconciled.add(batch[i]);
-          } else if (splitIndex < splitLines.length) {
-            reconciled.add(splitLines[splitIndex]);
-            splitIndex++;
-          } else {
-            reconciled.add(batch[i]); // Fallback to original line
-          }
+      for (var attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) {
+          await Future.delayed(const Duration(milliseconds: 1500));
         }
-        splitLines = reconciled;
+
+        final response = await _httpClient
+            .get(
+              uri,
+              headers: {
+                'Accept': 'application/json',
+                'User-Agent': defaultUserAgent,
+              },
+            )
+            .timeout(timeout);
+
+        if (response.statusCode == 429) {
+          if (attempt == 0) continue;
+          throw const LyricsTranslationException(
+            'Rate limit exceeded (Too many requests)',
+            statusCode: 429,
+          );
+        }
+
+        String bodyString;
+        try {
+          bodyString = utf8.decode(response.bodyBytes);
+        } catch (_) {
+          bodyString = response.body;
+        }
+
+        if (bodyString.toUpperCase().contains('PLEASE SELECT TWO DISTINCT LANGUAGES')) {
+          return (lines: List<String>.from(batch), isSameLanguage: true);
+        }
+
+        if (response.statusCode != 200) {
+          throw LyricsTranslationException(
+            'Translation HTTP error: ${response.statusCode}',
+            statusCode: response.statusCode,
+          );
+        }
+
+        final decoded = jsonDecode(bodyString);
+        if (decoded is! Map<String, dynamic>) {
+          throw const LyricsTranslationException('Invalid JSON response format');
+        }
+
+        final responseStatus =
+            ParserUtils.parseInt(decoded['responseStatus']) ?? 200;
+        if (responseStatus == 429) {
+          if (attempt == 0) continue;
+          throw const LyricsTranslationException(
+            'Rate limit exceeded (Too many requests)',
+            statusCode: 429,
+          );
+        }
+        if (responseStatus != 200) {
+          final details =
+              decoded['responseDetails'] as String? ??
+              'Translation service error $responseStatus';
+          if (details.toUpperCase().contains('PLEASE SELECT TWO DISTINCT LANGUAGES')) {
+            return (lines: List<String>.from(batch), isSameLanguage: true);
+          }
+          throw LyricsTranslationException(details, statusCode: responseStatus);
+        }
+
+        final responseData = decoded['responseData'] as Map<String, dynamic>?;
+        final rawTranslatedText = ParserUtils.parseString(
+          responseData?['translatedText'],
+        );
+        if (rawTranslatedText == null) {
+          throw const LyricsTranslationException(
+            'Missing translatedText in response',
+          );
+        }
+
+        final unescaped = unescapeHtml(rawTranslatedText);
+        final normalized = unescaped
+            .replaceAll('\r\n', '\n')
+            .replaceAll('\r', '\n');
+        var splitLines = normalized.split('\n');
+
+        // Reconcile line count to guarantee 1:1 alignment with input batch
+        if (splitLines.length != batch.length) {
+          final reconciled = <String>[];
+          var splitIndex = 0;
+          for (int i = 0; i < batch.length; i++) {
+            if (batch[i].trim().isEmpty) {
+              // Keep original blank/whitespace line
+              reconciled.add(batch[i]);
+            } else if (splitIndex < splitLines.length) {
+              reconciled.add(splitLines[splitIndex]);
+              splitIndex++;
+            } else {
+              reconciled.add(batch[i]); // Fallback to original line
+            }
+          }
+          splitLines = reconciled;
+        }
+
+        return (lines: splitLines, isSameLanguage: false);
       }
 
-      return splitLines;
+      throw const LyricsTranslationException(
+        'Rate limit exceeded (Too many requests)',
+        statusCode: 429,
+      );
     } on TimeoutException {
       throw const LyricsTranslationException(
         'Translation request timed out',

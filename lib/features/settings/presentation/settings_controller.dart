@@ -42,6 +42,7 @@ class SettingsController extends ChangeNotifier {
   ThemeMode get themeMode => _settings.themeMode;
   String get appLanguage => _settings.appLanguage;
   String get lyricsTranslationTargetLang => _settings.lyricsTranslationTargetLang;
+  String get lyricsTranslationSourceLang => _settings.lyricsTranslationSourceLang;
   String? get audioOutputDeviceId => _settings.audioOutputDeviceId;
   bool get equalizerEnabled => _settings.equalizerEnabled;
   String get equalizerPreset => _settings.equalizerPreset;
@@ -269,6 +270,12 @@ class SettingsController extends ChangeNotifier {
   Future<void> setLyricsTranslationTargetLang(String languageCode) async {
     _settings = _settings.copyWith(lyricsTranslationTargetLang: languageCode);
     await _repository.setLyricsTranslationTargetLang(languageCode);
+    notifyListeners();
+  }
+
+  Future<void> setLyricsTranslationSourceLang(String languageCode) async {
+    _settings = _settings.copyWith(lyricsTranslationSourceLang: languageCode);
+    await _repository.setLyricsTranslationSourceLang(languageCode);
     notifyListeners();
   }
 

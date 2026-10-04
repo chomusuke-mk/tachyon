@@ -51,6 +51,8 @@ class SettingsRepository {
   static const _keyPlaybackShowQueue = 's_playback_show_queue';
   static const _keyLyricsTranslationTargetLang =
       's_lyrics_translation_target_lang';
+  static const _keyLyricsTranslationSourceLang =
+      's_lyrics_translation_source_lang';
   static const _keyAudioOutputDeviceId = 's_audio_output_device_id';
   static const _keyEqualizerPreset = 's_equalizer_preset';
 
@@ -88,6 +90,8 @@ class SettingsRepository {
       appLanguage: _prefs.getString(_keyLanguage) ?? 'defaultOption',
       lyricsTranslationTargetLang:
           _prefs.getString(_keyLyricsTranslationTargetLang) ?? 'defaultOption',
+      lyricsTranslationSourceLang:
+          _prefs.getString(_keyLyricsTranslationSourceLang) ?? 'auto',
       trackSortOption: TrackSortOption.fromString(
         _prefs.getString(_keyTrackSortBy),
       ),
@@ -129,6 +133,10 @@ class SettingsRepository {
       _prefs.setString(
         _keyLyricsTranslationTargetLang,
         settings.lyricsTranslationTargetLang,
+      ),
+      _prefs.setString(
+        _keyLyricsTranslationSourceLang,
+        settings.lyricsTranslationSourceLang,
       ),
       _prefs.setString(_keyTrackSortBy, settings.trackSortOption.name),
       _prefs.setBool(_keyTrackSortAscending, settings.trackSortAscending),
@@ -206,6 +214,12 @@ class SettingsRepository {
 
   Future<void> setLyricsTranslationTargetLang(String lang) =>
       _prefs.setString(_keyLyricsTranslationTargetLang, lang);
+
+  String getLyricsTranslationSourceLang() =>
+      _prefs.getString(_keyLyricsTranslationSourceLang) ?? 'auto';
+
+  Future<void> setLyricsTranslationSourceLang(String lang) =>
+      _prefs.setString(_keyLyricsTranslationSourceLang, lang);
 
   String? getAudioOutputDeviceId() => _prefs.getString(_keyAudioOutputDeviceId);
 

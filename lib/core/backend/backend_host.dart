@@ -13,6 +13,7 @@ import 'package:tachyon/core/backend/services/cover_cache_service.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/backend/services/queue_manager.dart';
+import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
@@ -471,11 +472,20 @@ class TachyonBackendHost {
         return result?.toMap();
 
       case BackendMethods.lyricsTranslate:
-        return await _lyricsService.translateLyrics(
-          lyricsId: params['lyricsId'] as int,
-          targetLang: params['lang'] as String,
-          rawLines: (params['rawLines'] as List).cast<String>(),
-        );
+        try {
+          return await _lyricsService.translateLyrics(
+            lyricsId: params['lyricsId'] as int,
+            targetLang: params['lang'] as String,
+            sourceLang: params['sourceLang'] as String?,
+            rawLines: (params['rawLines'] as List).cast<String>(),
+          );
+        } on LyricsTranslationException catch (e) {
+          return {
+            'error': e.isRateLimited ? 'rate_limit' : 'translation_error',
+            'message': e.message,
+            'statusCode': e.statusCode,
+          };
+        }
 
       default:
         throw UnimplementedError('Backend method not recognized: $method');

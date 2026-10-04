@@ -31,6 +31,7 @@ class AppSettings {
   final ThemeMode themeMode; // ThemeMode.dark (default)
   final String appLanguage; // 'defaultOption', 'en', 'es'
   final String lyricsTranslationTargetLang; // 'defaultOption', 'es', 'en', etc.
+  final String lyricsTranslationSourceLang; // 'auto', 'en', 'es', etc.
 
   // Library Sorting
   final TrackSortOption trackSortOption;
@@ -68,6 +69,7 @@ class AppSettings {
     this.themeMode = ThemeMode.dark,
     this.appLanguage = 'defaultOption',
     this.lyricsTranslationTargetLang = 'defaultOption',
+    this.lyricsTranslationSourceLang = 'auto',
     this.trackSortOption = TrackSortOption.title,
     this.trackSortAscending = true,
     this.lyricsDisplayMode = LyricsDisplayMode.original,
@@ -113,6 +115,7 @@ class AppSettings {
           themeMode == other.themeMode &&
           appLanguage == other.appLanguage &&
           lyricsTranslationTargetLang == other.lyricsTranslationTargetLang &&
+          lyricsTranslationSourceLang == other.lyricsTranslationSourceLang &&
           trackSortOption == other.trackSortOption &&
           trackSortAscending == other.trackSortAscending &&
           lyricsDisplayMode == other.lyricsDisplayMode &&
@@ -142,6 +145,7 @@ class AppSettings {
     ThemeMode? themeMode,
     String? appLanguage,
     String? lyricsTranslationTargetLang,
+    String? lyricsTranslationSourceLang,
     TrackSortOption? trackSortOption,
     bool? trackSortAscending,
     LyricsDisplayMode? lyricsDisplayMode,
@@ -173,6 +177,8 @@ class AppSettings {
       appLanguage: appLanguage ?? this.appLanguage,
       lyricsTranslationTargetLang:
           lyricsTranslationTargetLang ?? this.lyricsTranslationTargetLang,
+      lyricsTranslationSourceLang:
+          lyricsTranslationSourceLang ?? this.lyricsTranslationSourceLang,
       trackSortOption: trackSortOption ?? this.trackSortOption,
       trackSortAscending: trackSortAscending ?? this.trackSortAscending,
       lyricsDisplayMode: lyricsDisplayMode ?? this.lyricsDisplayMode,
@@ -205,6 +211,7 @@ class AppSettings {
     themeMode,
     appLanguage,
     lyricsTranslationTargetLang,
+    lyricsTranslationSourceLang,
     trackSortOption,
     trackSortAscending,
     lyricsDisplayMode,

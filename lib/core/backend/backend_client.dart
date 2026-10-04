@@ -8,6 +8,7 @@ import 'package:tachyon/core/backend/backend_protocol.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart' show ExtractedTrackData;
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
+import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
@@ -123,6 +124,7 @@ abstract class TachyonBackendClient {
   Future<List<String>?> translateLyrics({
     required int lyricsId,
     required String targetLang,
+    String? sourceLang,
     required List<String> rawLines,
   });
 
@@ -669,15 +671,25 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   Future<List<String>?> translateLyrics({
     required int lyricsId,
     required String targetLang,
+    String? sourceLang,
     required List<String> rawLines,
   }) async {
     final res = await _send<dynamic>(BackendMethods.lyricsTranslate, {
       'lyricsId': lyricsId,
       'lang': targetLang,
+      'sourceLang': ?sourceLang,
       'rawLines': rawLines,
     });
     if (res == null) return null;
     if (res is List) return res.cast<String>();
+    if (res is Map) {
+      if (res['error'] == 'rate_limit') {
+        throw LyricsTranslationException(
+          res['message'] as String? ?? 'Rate limit exceeded (Too many requests)',
+          statusCode: res['statusCode'] as int? ?? 429,
+        );
+      }
+    }
     return null;
   }
 

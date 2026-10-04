@@ -37,6 +37,7 @@ class LyricsController extends ChangeNotifier {
   ParsedLrc? _lyrics;
   LyricsSource? _currentLyricsSource;
   int? _currentLyricsId;
+  String? _currentLyricsLang;
   bool _isLoading = false;
   String? _errorMessage;
   int _currentIndex = 0;
@@ -90,6 +91,7 @@ class LyricsController extends ChangeNotifier {
   LyricsSource? get currentLyricsSource => _currentLyricsSource;
   LyricsSource? get source => _currentLyricsSource;
   int? get currentLyricsId => _currentLyricsId;
+  String? get currentLyricsLang => _currentLyricsLang;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   int get currentIndex => _currentIndex;
@@ -208,6 +210,7 @@ class LyricsController extends ChangeNotifier {
       if (_isLoading) {
         _isLoading = false;
       }
+      _isTranslating = false;
       _safeNotifyListeners();
     } else {
       _safeNotifyListeners();
@@ -224,6 +227,7 @@ class LyricsController extends ChangeNotifier {
     _currentCancellationToken?.cancel();
     _currentCancellationToken = null;
     _generationTracker.cancelCurrent();
+    _isTranslating = false;
   }
 
   // ---------------------------------------------------------------------------
@@ -243,11 +247,13 @@ class LyricsController extends ChangeNotifier {
       _lyrics = null;
       _currentLyricsSource = null;
       _currentLyricsId = null;
+      _currentLyricsLang = null;
       _translatedLines = const [];
       final savedMode = settingsRepository.getLyricsDisplayMode();
       _isTranslated = savedMode != LyricsDisplayMode.original;
       _isInterleaved = savedMode == LyricsDisplayMode.interleaved;
       _translationError = null;
+      _isTranslating = false;
 
       // Cancel any active threshold waiting for prior track
       cooldownManager.cancelThresholdCountdown();
@@ -394,6 +400,7 @@ class LyricsController extends ChangeNotifier {
       _lyrics = result?.lyrics;
       _currentLyricsSource = result?.source;
       _currentLyricsId = result?.lyricsId;
+      _currentLyricsLang = result?.lang;
       _translatedLines = const [];
       _translationError = null;
       _isLoading = false;
@@ -454,6 +461,7 @@ class LyricsController extends ChangeNotifier {
       _lyrics = null;
       _currentLyricsSource = null;
       _currentLyricsId = null;
+      _currentLyricsLang = null;
       _isLoading = false;
       _errorMessage = e.toString();
       notifyListeners();
@@ -480,6 +488,7 @@ class LyricsController extends ChangeNotifier {
     if (track == null) return;
     _translatedLines = const [];
     _currentLyricsId = null;
+    _currentLyricsLang = null;
     _translationError = null;
     cooldownManager.cancelThresholdCountdown();
     cooldownManager.cancelDeferredRetry();
@@ -499,19 +508,50 @@ class LyricsController extends ChangeNotifier {
     return ui.PlatformDispatcher.instance.locale.languageCode;
   }
 
-  Future<void> translateLyrics({String? targetLanguage}) =>
-      _loadOrFetchTranslation(targetLanguage: targetLanguage);
+  String getEffectiveSourceLanguage() {
+    return settingsRepository.getLyricsTranslationSourceLang();
+  }
+
+  Future<void> translateLyrics({
+    String? targetLanguage,
+    String? sourceLanguage,
+    bool force = false,
+  }) =>
+      _loadOrFetchTranslation(
+        targetLanguage: targetLanguage,
+        sourceLanguage: sourceLanguage,
+        force: force,
+      );
 
   Future<void> _loadOrFetchTranslation({
     String? targetLanguage,
+    String? sourceLanguage,
     LyricsCancellationToken? token,
+    bool force = false,
   }) async {
-    if (_isTranslating || _lyrics == null || lines.isEmpty) return;
+    if (_lyrics == null || lines.isEmpty) return;
+    if (_isTranslating && !force) return;
+    if (_isTranslating && force) {
+      _cancelInFlight();
+    }
     final lyricsId = _currentLyricsId;
     if (lyricsId == null) return;
 
     final targetLang = targetLanguage ?? getEffectiveTargetLanguage();
-    final callToken = token ?? _currentCancellationToken;
+    final sourceLang = sourceLanguage ?? getEffectiveSourceLanguage();
+    final callToken = token ?? _currentCancellationToken ?? _generationTracker.nextGeneration();
+    _currentCancellationToken = callToken;
+
+    // Short-circuit if lyrics are already in target language
+    final isSameLanguage = (_currentLyricsLang != null && _currentLyricsLang == targetLang) ||
+        (sourceLang != 'auto' && sourceLang != 'autodetect' && sourceLang == targetLang);
+
+    if (isSameLanguage && !force) {
+      _translatedLines = lines.map((l) => l.text).toList();
+      _translationError = null;
+      _safeNotifyListeners();
+      return;
+    }
 
     _isTranslating = true;
     _translationError = null;
@@ -522,27 +562,44 @@ class LyricsController extends ChangeNotifier {
       final res = await backendClient.translateLyrics(
         lyricsId: lyricsId,
         targetLang: targetLang,
+        sourceLang: sourceLang,
         rawLines: rawLines,
-      );
+      ).timeout(const Duration(seconds: 8));
 
       if (_isDisposed) return;
-      if (callToken != null && callToken.isCancelled) {
+      if (callToken.isCancelled) {
         return;
       }
 
       if (res != null) {
         _translatedLines = res;
         _translationError = null;
+        if (res.length == rawLines.length &&
+            List.generate(res.length, (i) => res[i] == rawLines[i]).every((b) => b)) {
+          _currentLyricsLang = targetLang;
+        }
+      } else {
+        _translationError = 'Failed to translate lyrics';
       }
     } catch (e) {
       if (_isDisposed) return;
-      if (callToken != null && callToken.isCancelled) {
+      if (callToken.isCancelled) {
         return;
       }
-      _translationError = e.toString();
+      final err = e.toString();
+      if (e is TimeoutException ||
+          err.contains('TimeoutException') ||
+          err.contains('timed out')) {
+        _translationError = 'timeout';
+      } else if (err.contains('429') ||
+          err.toLowerCase().contains('rate limit') ||
+          err.toLowerCase().contains('too many requests')) {
+        _translationError = 'rate_limit';
+      } else {
+        _translationError = err;
+      }
     } finally {
-      if (!_isDisposed &&
-          (callToken == null || !callToken.isCancelled)) {
+      if (!_isDisposed) {
         _isTranslating = false;
         notifyListeners();
       }

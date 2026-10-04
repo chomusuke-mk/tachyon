@@ -78,6 +78,18 @@ class AppStringKey {
       _cadenasLocalizadas['np_lyrics_sources_close'] ?? '';
   String get npLyricsSourcesCloseBtn =>
       _cadenasLocalizadas['np_lyrics_sources_close_btn'] ?? '';
+  String get npLyricsTabSources =>
+      _cadenasLocalizadas['np_lyrics_tab_sources'] ?? '';
+  String get npLyricsTabTranslation =>
+      _cadenasLocalizadas['np_lyrics_tab_translation'] ?? '';
+  String get npLyricsSourceLang =>
+      _cadenasLocalizadas['np_lyrics_source_lang'] ?? '';
+  String get npLyricsTargetLang =>
+      _cadenasLocalizadas['np_lyrics_target_lang'] ?? '';
+  String get npLyricsLangAuto =>
+      _cadenasLocalizadas['np_lyrics_lang_auto'] ?? '';
+  String get npLyricsRateLimitError =>
+      _cadenasLocalizadas['np_lyrics_rate_limit_error'] ?? '';
   String get npLyricsThresholdWaiting =>
       _cadenasLocalizadas['np_lyrics_threshold_waiting'] ?? '';
   String get npLyricsBannerDismiss =>
@@ -512,6 +524,9 @@ class AppStringKey {
     'np_lyrics_source_ovh', 'np_lyrics_source_ovh_desc',
     'np_lyrics_sources_research', 'np_lyrics_sources_research_btn',
     'np_lyrics_sources_close', 'np_lyrics_sources_close_btn',
+    'np_lyrics_tab_sources', 'np_lyrics_tab_translation',
+    'np_lyrics_source_lang', 'np_lyrics_target_lang',
+    'np_lyrics_lang_auto', 'np_lyrics_rate_limit_error',
     'np_lyrics_threshold_waiting', 'np_lyrics_banner_dismiss',
     'np_lyrics_source_embedded', 'np_lyrics_source_file', 'np_lyrics_source_none',
     'np_lyrics_loading', 'np_lyrics_error', 'np_lyrics_translate_error',

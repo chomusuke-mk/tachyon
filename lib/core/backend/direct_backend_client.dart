@@ -440,11 +440,13 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   Future<List<String>?> translateLyrics({
     required int lyricsId,
     required String targetLang,
+    String? sourceLang,
     required List<String> rawLines,
   }) async {
     return await lyricsService?.translateLyrics(
       lyricsId: lyricsId,
       targetLang: targetLang,
+      sourceLang: sourceLang,
       rawLines: rawLines,
     );
   }

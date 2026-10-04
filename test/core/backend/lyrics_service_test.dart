@@ -42,14 +42,31 @@ class FakeOvh extends LyricsOvhClient {
 
 class FakeTranslator extends LyricsTranslationClient {
   int calls = 0;
+  TranslationResult Function(
+    List<String> lines, {
+    String? sourceLanguage,
+    required String targetLanguage,
+  })? customTranslate;
 
   @override
-  Future<TranslationResult> translate(List<String> lines, {required String targetLanguage}) async {
+  Future<TranslationResult> translate(
+    List<String> lines, {
+    String? sourceLanguage,
+    required String targetLanguage,
+  }) async {
     calls++;
+    if (customTranslate != null) {
+      return customTranslate!(
+        lines,
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
+      );
+    }
     return TranslationResult(
       originalLines: lines,
       translatedLines: lines.map((l) => '[$targetLanguage] $l').toList(),
       targetLanguage: targetLanguage,
+      sourceLanguage: sourceLanguage,
     );
   }
 }
@@ -270,6 +287,81 @@ void main() {
       expect(translationCount(), 0);
     });
 
+    test('same language detected via API updates DB lang and returns original lines without throwing', () async {
+      final id = scan(embedded: '[00:01.00] Canción en español');
+      final lyrics = await resolve(id, allowRemote: false);
+
+      translator.customTranslate = (lines, {sourceLanguage, required targetLanguage}) {
+        return TranslationResult(
+          originalLines: lines,
+          translatedLines: lines,
+          targetLanguage: targetLanguage,
+          sourceLanguage: sourceLanguage,
+          isSameLanguage: true,
+        );
+      };
+
+      final res = await service.translateLyrics(
+        lyricsId: lyrics!.lyricsId!,
+        targetLang: 'es',
+        rawLines: ['Canción en español'],
+      );
+
+      expect(res, ['Canción en español']);
+      expect(db.getLyricsLang(lyrics.lyricsId!), 'es');
+
+      // Next translation request into 'es' should short-circuit and NOT call the API
+      final callsBefore = translator.calls;
+      final res2 = await service.translateLyrics(
+        lyricsId: lyrics.lyricsId!,
+        targetLang: 'es',
+        rawLines: ['Canción en español'],
+      );
+      expect(res2, ['Canción en español']);
+      expect(translator.calls, callsBefore, reason: 'Must not call translator when lyrics.lang == targetLang');
+    });
+
+    test('explicit identical source and target language returns original lines without API call', () async {
+      final id = scan(embedded: '[00:01.00] Hello world');
+      final lyrics = await resolve(id, allowRemote: false);
+
+      final callsBefore = translator.calls;
+      final res = await service.translateLyrics(
+        lyricsId: lyrics!.lyricsId!,
+        targetLang: 'en',
+        sourceLang: 'en',
+        rawLines: ['Hello world'],
+      );
+
+      expect(res, ['Hello world']);
+      expect(translator.calls, callsBefore);
+      expect(db.getLyricsLang(lyrics.lyricsId!), 'en');
+    });
+
+    test('HTTP 429 rate limit throws LyricsTranslationException', () async {
+      final id = scan(embedded: '[00:01.00] Too many requests test');
+      final lyrics = await resolve(id, allowRemote: false);
+
+      translator.customTranslate = (lines, {sourceLanguage, required targetLanguage}) {
+        return TranslationResult.failure(
+          originalLines: lines,
+          targetLanguage: targetLanguage,
+          sourceLanguage: sourceLanguage,
+          statusCode: 429,
+          errorMessage: 'Rate limit exceeded (Too many requests)',
+        );
+      };
+
+      expect(
+        () => service.translateLyrics(
+          lyricsId: lyrics!.lyricsId!,
+          targetLang: 'de',
+          rawLines: ['Too many requests test'],
+        ),
+        throwsA(isA<LyricsTranslationException>().having((e) => e.statusCode, 'statusCode', 429)),
+      );
+    });
+
     test('LyricsResult survives the RPC map round-trip', () {
       final original = LyricsResult.fromMap(const {
         'lyricsId': 7,
@@ -277,11 +369,13 @@ void main() {
         'state': 'FOUND',
         'rawLrc': '[00:01.00] a\n[00:02.00] b',
         'isSynced': true,
+        'lang': 'ja',
       });
       final copy = LyricsResult.fromMap(original.toMap());
       expect(copy.lyricsId, 7);
       expect(copy.source, LyricsSource.lrclib);
       expect(copy.lines.length, 2);
+      expect(copy.lang, 'ja');
     });
   });
 }
