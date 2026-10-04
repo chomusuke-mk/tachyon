@@ -5,8 +5,11 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'package:tachyon/core/backend/services/metadata_service.dart'
     show ExtractedTrackData, TrackFileMeta;
+import 'package:tachyon/features/library/domain/album.dart';
+import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/domain/playlist.dart' show PlaylistType;
+import 'package:tachyon/features/library/domain/track.dart';
 abstract final class AppDatabaseSchema {
   static const List<String> createTables = [
     'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE);',
@@ -448,6 +451,32 @@ class AppDatabase {
         translated_lines = excluded.translated_lines,
         updated_at = excluded.updated_at;
     ''', [lyricsId, lang, jsonEncode(translatedLines), DateTime.now().millisecondsSinceEpoch]);
+  }
+
+  List<Track> getRandomTracks(int limit) {
+    final rows = db.select(
+      "SELECT t.id, t.file_path, t.title, t.track_number, t.disc_number, t.year, "
+      "t.duration_ms, t.bitrate, t.sample_rate, t.channels, t.codec, t.file_size, "
+      "t.modified_at, t.replay_gain_track_gain, t.replay_gain_track_peak, al.name AS album_name, "
+      "(SELECT GROUP_CONCAT(ar.name, ';;;') FROM track_artists ta JOIN artists ar ON ta.artist_id = ar.id WHERE ta.track_id = t.id) AS artist_names "
+      "FROM tracks t LEFT JOIN albums al ON t.album_id = al.id ORDER BY RANDOM() LIMIT ?;",
+      [limit],
+    );
+    return rows.map((r) {
+      final al = r['album_name'] as String?;
+      final art = r['artist_names'] as String?;
+      return Track(
+        id: r['id'] as int?, filePath: r['file_path'] as String, title: r['title'] as String,
+        trackNumber: r['track_number'] as int?, discNumber: r['disc_number'] as int?, year: r['year'] as int?,
+        durationMs: r['duration_ms'] as int, bitrate: r['bitrate'] as int?, sampleRate: r['sample_rate'] as int?,
+        channels: r['channels'] as int?, codec: r['codec'] as String?, fileSize: r['file_size'] as int,
+        modifiedAt: r['modified_at'] as int,
+        replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
+        replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
+        album: al != null ? Album(name: al) : null,
+        artists: (art != null && art.isNotEmpty) ? art.split(';;;').map((n) => Artist(name: n.trim())).toList() : const [],
+      );
+    }).toList();
   }
 
   Future<void> close() async {

@@ -235,26 +235,28 @@ class AudioEngineService {
 
   Future<void> previous() => _serialize(() async {
         if (_queueManager.isEmpty) return;
+        final wasPlaying = _activePlayer.isPlaying || currentState.playing;
 
         // Restart-vs-previous is the queue's policy; it returns null when the
         // current track must be restarted.
         final target = _queueManager.previous(position: _activePlayer.position);
         if (target == null) {
-          await _restartCurrent(play: false);
+          await _restartCurrent(play: wasPlaying);
         } else {
-          await _playTarget(target, play: true, crossfade: true);
+          await _playTarget(target, play: wasPlaying, crossfade: true);
         }
       });
 
-  Future<void> skipToIndex(int index) => _serialize(() async {
+  Future<void> skipToIndex(int index, {bool? play}) => _serialize(() async {
         if (index < 0 || index >= _queueManager.length) return;
+        final shouldPlay = play ?? (_activePlayer.isPlaying || currentState.playing || true);
         final before = _queueManager.currentTrack;
         final target = _queueManager.jumpTo(index);
         if (target == null) return;
         if (identical(target, before)) {
-          await _restartCurrent(play: true);
+          await _restartCurrent(play: shouldPlay);
         } else {
-          await _playTarget(target, play: true, crossfade: true);
+          await _playTarget(target, play: shouldPlay, crossfade: true);
         }
       });
 
@@ -688,28 +690,31 @@ class AudioEngineService {
   }
 
   void _onCrossEnd(_Transition transition) {
-    if (_disposed || !identical(_transition, transition)) return;
-    _transition = null;
+    if (_disposed) return;
+    _schedule(() async {
+      if (_disposed || !identical(_transition, transition)) return;
+      _transition = null;
 
-    if (transition.kind == _TransitionKind.auto) {
-      if (_queueManager.commitNext(transition.target) == null) {
-        // The queue no longer expects this track (should have been aborted by
-        // the candidate stream). Drop it and let the queue decide.
-        unawaited(_silence(transition.incoming));
-        _scheduleCompletion(verifyPosition: false);
-        _emitState();
-        return;
+      if (transition.kind == _TransitionKind.auto) {
+        if (_queueManager.commitNext(transition.target) == null) {
+          // The queue no longer expects this track (should have been aborted by
+          // the candidate stream). Drop it and let the queue decide.
+          unawaited(_silence(transition.incoming));
+          _scheduleCompletion(verifyPosition: false);
+          _emitState();
+          return;
+        }
+        _activePlayer = transition.incoming;
+        _standbyPlayer = transition.outgoing;
+        _bumpSession();
+        _bindActivePlayer();
       }
-      _activePlayer = transition.incoming;
-      _standbyPlayer = transition.outgoing;
-      _bumpSession();
-      _bindActivePlayer();
-    }
 
-    if (_activePlayer.isCompleted) {
-      _scheduleCompletion(verifyPosition: false);
-    }
-    _emitState();
+      if (_activePlayer.isCompleted) {
+        _scheduleCompletion(verifyPosition: false);
+      }
+      _emitState();
+    });
   }
 
   ({QueueItem next, Duration duration})? _planAutoCrossfade(Duration position) {
@@ -927,7 +932,12 @@ class AudioEngineService {
     _playerSubscriptions.add(
       player.playingStream.listen((playing) {
         if (!isCurrent()) return;
-        _stateSubject.add(currentState.copyWith(playing: playing));
+        _stateSubject.add(
+          currentState.copyWith(
+            playing: playing,
+            completed: playing ? false : currentState.completed,
+          ),
+        );
       }),
     );
 
@@ -940,7 +950,13 @@ class AudioEngineService {
 
     _playerSubscriptions.add(
       player.completedStream.listen((completed) {
-        if (!completed || !isCurrent()) return;
+        if (!isCurrent()) return;
+        if (!completed) {
+          if (currentState.completed) {
+            _stateSubject.add(currentState.copyWith(completed: false));
+          }
+          return;
+        }
         // During an auto crossfade the outgoing track is expected to end; the
         // crossfade completion commits the transition instead.
         if (_transition?.kind == _TransitionKind.auto) return;
@@ -974,7 +990,7 @@ class AudioEngineService {
         mixOffset: _queueManager.mixOffset,
         playing: active.isPlaying,
         buffering: active.isBuffering,
-        completed: _queueEnded || active.isCompleted,
+        completed: _queueEnded || (!active.isPlaying && active.isCompleted),
         position: active.position,
         duration: active.duration,
         rate: _playbackRate,

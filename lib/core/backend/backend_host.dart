@@ -82,7 +82,9 @@ class TachyonBackendHost {
     );
 
     // 4. Initialize playback engine
-    _queueManager = QueueManager();
+    _queueManager = QueueManager(
+      libraryTrackProvider: (count) async => _database.getRandomTracks(count),
+    );
     _audioEngine = AudioEngineService(queueManager: _queueManager);
 
     // 5. Initialize lyrics service

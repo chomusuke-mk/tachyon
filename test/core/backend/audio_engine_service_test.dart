@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/core/backend/services/crossfade_manager.dart';
 import 'package:tachyon/core/backend/services/queue_manager.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
@@ -579,6 +580,67 @@ void main() {
 
       expect(service.isCrossfading, isFalse, reason: 'Removing next track must cancel crossfade');
       expect(service.standbyPlayer.isPlaying, isFalse);
+    });
+
+    test('Infinite Library Mix appends tracks and continues playback at end of queue', () async {
+      final mockMixTracks = [
+        const Track(
+          id: 101,
+          filePath: '/music/mix_1.mp3',
+          title: 'Mix Track 1',
+          durationMs: 180000,
+          fileSize: 1024,
+          modifiedAt: 1000,
+        ),
+        const Track(
+          id: 102,
+          filePath: '/music/mix_2.mp3',
+          title: 'Mix Track 2',
+          durationMs: 200000,
+          fileSize: 2048,
+          modifiedAt: 2000,
+        ),
+      ];
+
+      final infiniteQueueManager = QueueManager(
+        libraryTrackProvider: (count) async => mockMixTracks,
+      );
+      final infiniteService = AudioEngineService(
+        playerA: MockAudioPlayerAdapter(),
+        playerB: MockAudioPlayerAdapter(),
+        queueManager: infiniteQueueManager,
+        crossfadeManager: CrossfadeManager(
+          tickerInterval: const Duration(milliseconds: 10),
+        ),
+        tickerInterval: const Duration(milliseconds: 10),
+      );
+
+      try {
+        await infiniteService.open(testItems.take(2).toList(), index: 1, play: true);
+        await infiniteService.setLoopMode(Loop.off);
+        await infiniteService.setInfiniteMix(true);
+
+        expect(infiniteService.queueManager.currentIndex, equals(1));
+        expect(infiniteService.queueManager.length, equals(2));
+        expect(infiniteService.currentState.mixOffset, isNull);
+
+        // When current track at end of queue completes, infinite mix fetches new tracks
+        final activeMock = infiniteService.activePlayer as MockAudioPlayerAdapter;
+        activeMock.currentPosition = const Duration(seconds: 180);
+        activeMock.emitCompleted();
+
+        // Allow microtasks and serialized queue lane to process
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(infiniteService.queueManager.currentIndex, equals(2));
+        expect(infiniteService.queueManager.length, equals(4));
+        expect(infiniteService.queueManager.currentTrack?.filePath, equals('/music/mix_1.mp3'));
+        expect(infiniteService.currentState.mixOffset, equals(2));
+        expect(infiniteService.activePlayer.isPlaying, isTrue);
+        expect(infiniteService.currentState.completed, isFalse);
+      } finally {
+        await infiniteService.dispose();
+      }
     });
   });
 }
