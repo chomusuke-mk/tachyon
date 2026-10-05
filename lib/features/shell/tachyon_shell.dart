@@ -9,7 +9,6 @@ import 'package:tachyon/features/library/presentation/genres_screen.dart';
 import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_screen.dart';
-import 'package:tachyon/features/search/presentation/search_screen.dart';
 import 'package:tachyon/features/settings/presentation/settings_screen.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 
@@ -22,7 +21,6 @@ enum ShellDestination {
   playlists,
   genres,
   folders,
-  search,
   settings,
 }
 
@@ -45,7 +43,6 @@ class _TachyonShellState extends State<TachyonShell> {
     PlaylistsScreen(key: PageStorageKey('playlists_screen')),
     GenresScreen(key: PageStorageKey('genres_screen')),
     FoldersScreen(key: PageStorageKey('folders_screen')),
-    SearchScreen(key: PageStorageKey('search_screen')),
     SettingsScreen(key: PageStorageKey('settings_screen')),
   ];
 
@@ -86,7 +83,7 @@ class _TachyonShellState extends State<TachyonShell> {
 
     // Desktop Layout (>= 720dp)
     if (isDesktop) {
-      final desktopSelectedIndex = _currentIndex <= 6 ? _currentIndex : null;
+      final desktopSelectedIndex = _currentIndex <= 5 ? _currentIndex : null;
       return Scaffold(
         body: Row(
           children: [
@@ -118,15 +115,15 @@ class _TachyonShellState extends State<TachyonShell> {
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: IconButton(
                         icon: Icon(
-                          _currentIndex == 7
+                          _currentIndex == 6
                               ? Icons.settings_rounded
                               : Icons.settings_outlined,
-                          color: _currentIndex == 7
+                          color: _currentIndex == 6
                               ? colorScheme.primary
                               : colorScheme.onSurfaceVariant,
                         ),
                         tooltip: strings.sTitle,
-                        onPressed: () => _onDestinationSelected(7),
+                        onPressed: () => _onDestinationSelected(6),
                       ),
                     ),
                   ),
@@ -161,11 +158,6 @@ class _TachyonShellState extends State<TachyonShell> {
                     icon: const Icon(Icons.folder_outlined),
                     selectedIcon: const Icon(Icons.folder_rounded),
                     label: Text(strings.fTitle),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.search_outlined),
-                    selectedIcon: const Icon(Icons.search_rounded),
-                    label: Text(strings.srTitle),
                   ),
                 ],
               ),
@@ -262,19 +254,9 @@ class _TachyonShellState extends State<TachyonShell> {
                   ],
                 ),
               ),
-              PopupMenuItem(
-                value: 6,
-                child: Row(
-                  children: [
-                    const Icon(Icons.search_outlined, size: 20),
-                    const SizedBox(width: 12),
-                    Text(strings.srTitle),
-                  ],
-                ),
-              ),
               const PopupMenuDivider(),
               PopupMenuItem(
-                value: 7,
+                value: 6,
                 child: Row(
                   children: [
                     const Icon(Icons.settings_rounded, size: 20),

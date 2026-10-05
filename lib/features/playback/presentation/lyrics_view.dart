@@ -130,12 +130,12 @@ class _LyricsViewState extends State<LyricsView> {
           Positioned(
             bottom: 16,
             right: 16,
-            child: FloatingActionButton.extended(
+            child: FloatingActionButton.small(
               backgroundColor: colorScheme.primaryContainer,
               foregroundColor: colorScheme.onPrimaryContainer,
-              icon: const Icon(Icons.sync_rounded, size: 20),
-              label: Text(strings.npLyricsResumeSync),
+              tooltip: strings.npLyricsResumeSync,
               onPressed: () => lyricsController.resumeAutoScroll(),
+              child: const Icon(Icons.sync_rounded, size: 20),
             ),
           ),
       ],
@@ -220,16 +220,14 @@ class _LyricsViewState extends State<LyricsView> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16.0),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+          filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
           child: Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 10.0,
               vertical: 2.0,
             ),
             decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.65,
-              ),
+              color: const Color.fromARGB(10, 0, 0, 0),
               borderRadius: BorderRadius.circular(16.0),
               border: Border.all(
                 color: colorScheme.outlineVariant.withValues(alpha: 0.25),
@@ -267,16 +265,12 @@ class _LyricsViewState extends State<LyricsView> {
       return const SizedBox.shrink();
     }
 
-    final (
-      badgeLabel,
-      serverName,
-      fullTooltip,
-    ) = switch (controller.currentLyricsSource) {
-      LyricsSource.embedded => ('E', 'Tags', strings.npLyricsSourceEmbedded),
-      LyricsSource.file => ('L', '.lrc', strings.npLyricsSourceFile),
-      LyricsSource.lrclib => ('1', 'lrclib.net', strings.npLyricsSourceLrclib),
-      LyricsSource.lyricsOvh => ('2', 'lyrics.ovh', strings.npLyricsSourceOvh),
-      null => ('-', '', strings.npLyricsSourceNone),
+    final (serverName, fullTooltip) = switch (controller.currentLyricsSource) {
+      LyricsSource.embedded => ('Tags', strings.npLyricsSourceEmbedded),
+      LyricsSource.file => ('.lrc', strings.npLyricsSourceFile),
+      LyricsSource.lrclib => ('lrclib.net', strings.npLyricsSourceLrclib),
+      LyricsSource.lyricsOvh => ('lyrics.ovh', strings.npLyricsSourceOvh),
+      null => ('', strings.npLyricsSourceNone),
     };
 
     final isSynced = controller.isSynced;
@@ -297,28 +291,6 @@ class _LyricsViewState extends State<LyricsView> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 5.0,
-                vertical: 1.5,
-              ),
-              decoration: BoxDecoration(
-                color: isSynced
-                    ? colorScheme.primaryContainer
-                    : colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(4.0),
-              ),
-              child: Text(
-                badgeLabel,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: isSynced
-                      ? colorScheme.onPrimaryContainer
-                      : colorScheme.onSecondaryContainer,
-                ),
-              ),
-            ),
             const SizedBox(width: 6),
             Text(
               serverName,
@@ -350,12 +322,12 @@ class _LyricsViewState extends State<LyricsView> {
   ) {
     if (controller.isTranslating) {
       return Padding(
-        padding: const EdgeInsets.all(8.0),
+        padding: const EdgeInsets.all(0),
         child: SizedBox(
-          width: 18,
-          height: 18,
+          width: 15,
+          height: 15,
           child: CircularProgressIndicator(
-            strokeWidth: 2.0,
+            strokeWidth: 1.9,
             color: colorScheme.primary,
           ),
         ),
@@ -373,6 +345,14 @@ class _LyricsViewState extends State<LyricsView> {
 
     return PopupMenuButton<LyricsDisplayMode>(
       tooltip: tooltip,
+      // make the button smaller and more compact
+      splashRadius: 20,
+      // make the icon smaller
+      style: ButtonStyle(
+        padding: WidgetStateProperty.all<EdgeInsets>(EdgeInsets.all(6.0)),
+        minimumSize: WidgetStateProperty.all<Size>(Size.zero),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
       icon: Icon(
         Icons.translate_rounded,
         size: 20,
@@ -444,6 +424,7 @@ class _LyricsViewState extends State<LyricsView> {
       tooltip: strings.npLyricsSources,
       color: colorScheme.onSurfaceVariant,
       onPressed: () => LyricsSourcesDialog.show(context),
+      visualDensity: VisualDensity.compact,
     );
   }
 
@@ -457,6 +438,7 @@ class _LyricsViewState extends State<LyricsView> {
       tooltip: strings.npLyricsResearch,
       color: colorScheme.onSurfaceVariant,
       onPressed: controller.isLoading ? null : () => controller.forceReSearch(),
+      visualDensity: VisualDensity.compact,
     );
   }
 
@@ -477,9 +459,7 @@ class _LyricsViewState extends State<LyricsView> {
       decoration: BoxDecoration(
         color: colorScheme.errorContainer.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.error.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: colorScheme.error.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -548,15 +528,20 @@ class _LyricLineItemState extends State<_LyricLineItem> {
   @override
   void didUpdateWidget(covariant _LyricLineItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive && (!oldWidget.isActive || oldWidget.line != widget.line)) {
+    if (widget.isActive &&
+        (!oldWidget.isActive || oldWidget.line != widget.line)) {
       _checkEnsureVisible();
     }
   }
 
   void _checkEnsureVisible() {
-    if (widget.isActive && widget.isSynced && !widget.lyricsController.isUserScrollLocked) {
+    if (widget.isActive &&
+        widget.isSynced &&
+        !widget.lyricsController.isUserScrollLocked) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && widget.isActive && !widget.lyricsController.isUserScrollLocked) {
+        if (mounted &&
+            widget.isActive &&
+            !widget.lyricsController.isUserScrollLocked) {
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,

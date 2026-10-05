@@ -333,5 +333,6 @@
   "sel_deselect_all": "Deseleccionar todo",
   // --- common_: Etiquetas comunes de interfaz -----------------------------
   "common_view_as_cards": "Vista de tarjetas",
-  "common_view_as_list": "Vista de lista"
+  "common_view_as_list": "Vista de lista",
+  "common_back": "Atrás"
 }

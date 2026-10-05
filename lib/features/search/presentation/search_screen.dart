@@ -11,7 +11,12 @@ import 'package:tachyon/features/playback/presentation/playback_controller.dart'
 import 'tachyon_search_controller.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  final SearchFilterCategory initialCategory;
+
+  const SearchScreen({
+    super.key,
+    this.initialCategory = SearchFilterCategory.all,
+  });
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -19,6 +24,18 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _textController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<TachyonSearchController>().setCategory(
+          widget.initialCategory,
+        );
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -42,9 +59,14 @@ class _SearchScreenState extends State<SearchScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: strings.commonBack,
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         title: TextField(
           controller: _textController,
-          autofocus: false,
+          autofocus: true,
           decoration: InputDecoration(
             hintText: strings.srHint,
             border: InputBorder.none,

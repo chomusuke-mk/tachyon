@@ -8,6 +8,8 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/search/presentation/search_screen.dart';
+import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
 
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
@@ -234,6 +236,19 @@ class _TracksScreenState extends State<TracksScreen> {
               onPressed: _toggleSelectionMode,
             ),
           ] else ...[
+            IconButton(
+              icon: const Icon(Icons.search_rounded),
+              tooltip: strings.srTitle,
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SearchScreen(
+                      initialCategory: SearchFilterCategory.tracks,
+                    ),
+                  ),
+                );
+              },
+            ),
             IconButton(
               icon: Icon(
                 _isCardView

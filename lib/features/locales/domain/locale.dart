@@ -474,6 +474,8 @@ class AppStringKey {
       _cadenasLocalizadas['common_view_as_cards'] ?? '';
   String get commonViewAsList =>
       _cadenasLocalizadas['common_view_as_list'] ?? '';
+  String get commonBack =>
+      _cadenasLocalizadas['common_back'] ?? '';
 
   // ---------------------------------------------------------------------------
   // Parametric Formatters
@@ -665,7 +667,7 @@ class AppStringKey {
     'sel_selected_count', 'sel_select', 'sel_cancel', 'sel_select_all',
     'sel_deselect_all',
     // common_
-    'common_view_as_cards', 'common_view_as_list',
+    'common_view_as_cards', 'common_view_as_list', 'common_back',
   ];
 
   List<String> get allKeys => List.unmodifiable(_allAppStrings);

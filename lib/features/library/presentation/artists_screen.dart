@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/shared/widgets/artist_card.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/search/presentation/search_screen.dart';
+import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
 
 import 'artist_detail_screen.dart';
 import 'library_controller.dart';
@@ -47,6 +49,19 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
       appBar: AppBar(
         title: Text(strings.arTitle),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search_rounded),
+            tooltip: strings.srTitle,
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SearchScreen(
+                    initialCategory: SearchFilterCategory.artists,
+                  ),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: Icon(
               _isCardView
