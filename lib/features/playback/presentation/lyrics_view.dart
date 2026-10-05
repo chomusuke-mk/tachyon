@@ -23,11 +23,38 @@ import 'widgets/lyrics_threshold_banner.dart';
 ///   sources configuration dialog trigger, and manual re-search button.
 /// - Multi-mode translation display: Original, Translated, and Interleaved.
 /// - Manual scroll lock with 5-second auto-resume and localized sync button.
-class LyricsView extends StatelessWidget {
+class LyricsView extends StatefulWidget {
   final String filePath;
   final ValueChanged<Duration>? onSeek;
 
   const LyricsView({super.key, required this.filePath, this.onSeek});
+
+  @override
+  State<LyricsView> createState() => _LyricsViewState();
+}
+
+class _LyricsViewState extends State<LyricsView> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<LyricsController>().onLyricsViewMounted();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant LyricsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filePath != widget.filePath) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.read<LyricsController>().onLyricsViewMounted();
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,8 +125,8 @@ class LyricsView extends StatelessWidget {
           ),
         ),
 
-        // 3. Floating "Sync" Pill displayed when user has manually scrolled
-        if (lyricsController.isUserScrollLocked)
+        // 3. Floating "Sync" Pill displayed when user has manually scrolled synced lyrics
+        if (lyricsController.isSynced && lyricsController.isUserScrollLocked)
           Positioned(
             bottom: 16,
             right: 16,
@@ -173,7 +200,7 @@ class LyricsView extends StatelessWidget {
                 isInterleaved: isInterleaved,
                 colorScheme: colorScheme,
                 lyricsController: lyricsController,
-                onSeek: onSeek,
+                onSeek: widget.onSeek,
               );
             },
           );
@@ -513,21 +540,31 @@ class _LyricLineItem extends StatefulWidget {
 
 class _LyricLineItemState extends State<_LyricLineItem> {
   @override
+  void initState() {
+    super.initState();
+    _checkEnsureVisible();
+  }
+
+  @override
   void didUpdateWidget(covariant _LyricLineItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive && !oldWidget.isActive && widget.isSynced) {
-      if (!widget.lyricsController.isUserScrollLocked) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            Scrollable.ensureVisible(
-              context,
-              alignment: 0.5,
-              duration: const Duration(milliseconds: 320),
-              curve: Curves.easeOutCubic,
-            );
-          }
-        });
-      }
+    if (widget.isActive && (!oldWidget.isActive || oldWidget.line != widget.line)) {
+      _checkEnsureVisible();
+    }
+  }
+
+  void _checkEnsureVisible() {
+    if (widget.isActive && widget.isSynced && !widget.lyricsController.isUserScrollLocked) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.isActive && !widget.lyricsController.isUserScrollLocked) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
     }
   }
 

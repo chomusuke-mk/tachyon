@@ -74,6 +74,8 @@ class AppStringKey {
       _cadenasLocalizadas['np_lyrics_sources_research'] ?? '';
   String get npLyricsSourcesResearchBtn =>
       _cadenasLocalizadas['np_lyrics_sources_research_btn'] ?? '';
+  String get npLyricsRetranslateBtn =>
+      _cadenasLocalizadas['np_lyrics_retranslate_btn'] ?? '';
   String get npLyricsSourcesClose =>
       _cadenasLocalizadas['np_lyrics_sources_close'] ?? '';
   String get npLyricsSourcesCloseBtn =>
@@ -523,6 +525,7 @@ class AppStringKey {
     'np_lyrics_source_lrclib', 'np_lyrics_source_lrclib_desc',
     'np_lyrics_source_ovh', 'np_lyrics_source_ovh_desc',
     'np_lyrics_sources_research', 'np_lyrics_sources_research_btn',
+    'np_lyrics_retranslate_btn',
     'np_lyrics_sources_close', 'np_lyrics_sources_close_btn',
     'np_lyrics_tab_sources', 'np_lyrics_tab_translation',
     'np_lyrics_source_lang', 'np_lyrics_target_lang',

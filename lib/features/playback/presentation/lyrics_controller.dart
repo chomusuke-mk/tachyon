@@ -57,8 +57,6 @@ class LyricsController extends ChangeNotifier {
 
   // Manual scroll lock state
   bool _isUserScrollLocked = false;
-  Timer? _userScrollLockTimer;
-  static const Duration scrollLockDuration = Duration(seconds: 5);
 
   // User calibration offset in ms (+/-)
   int _userOffsetMs = 0;
@@ -197,6 +195,7 @@ class LyricsController extends ChangeNotifier {
     _isLyricsViewVisible = visible;
 
     if (!visible) {
+      _resetScrollLock();
       // 1. Cancel in-flight cancellation token
       _cancelInFlight();
 
@@ -213,13 +212,53 @@ class LyricsController extends ChangeNotifier {
       _isTranslating = false;
       _safeNotifyListeners();
     } else {
+      _resetScrollLock();
       _safeNotifyListeners();
       // 4. View opened: ensure lyrics are loaded on-demand for active track
       if (playbackController.currentTrack != null) {
         if (_lyrics == null) {
           ensureLyricsLoaded();
+        } else {
+          // Re-evaluate active line for current playback position and center immediately
+          if (_lyrics!.isSynced && lines.isNotEmpty) {
+            final effectivePos = playbackController.position +
+                Duration(milliseconds: _userOffsetMs);
+            final resolvedIndex = _lyrics!.activeIndexAt(effectivePos);
+            if (resolvedIndex >= 0) {
+              _currentIndex = resolvedIndex;
+            }
+          }
+          _safeNotifyListeners();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_isDisposed && !_isUserScrollLocked && _isLyricsViewVisible) {
+              _scrollToIndex(_currentIndex, animated: false);
+            }
+          });
         }
       }
+    }
+  }
+
+  /// Called when [LyricsView] mounts in the widget tree (e.g. player opened/unminimized).
+  void onLyricsViewMounted() {
+    if (_isDisposed) return;
+    _isLyricsViewVisible = true;
+    _resetScrollLock();
+    if (_lyrics != null && _lyrics!.isSynced && lines.isNotEmpty) {
+      final effectivePos =
+          playbackController.position + Duration(milliseconds: _userOffsetMs);
+      final resolvedIndex = _lyrics!.activeIndexAt(effectivePos);
+      if (resolvedIndex >= 0) {
+        _currentIndex = resolvedIndex;
+      }
+      notifyListeners();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_isDisposed && !_isUserScrollLocked && _isLyricsViewVisible) {
+          _scrollToIndex(_currentIndex, animated: false);
+        }
+      });
+    } else if (playbackController.currentTrack != null && _lyrics == null) {
+      ensureLyricsLoaded();
     }
   }
 
@@ -249,6 +288,9 @@ class LyricsController extends ChangeNotifier {
       _currentLyricsId = null;
       _currentLyricsLang = null;
       _translatedLines = const [];
+      if (scrollController.hasClients) {
+        scrollController.jumpTo(0.0);
+      }
       final savedMode = settingsRepository.getLyricsDisplayMode();
       _isTranslated = savedMode != LyricsDisplayMode.original;
       _isInterleaved = savedMode == LyricsDisplayMode.interleaved;
@@ -290,12 +332,30 @@ class LyricsController extends ChangeNotifier {
       final newIndex = _lyrics!.activeIndexAt(effectivePos);
 
       if (newIndex != _currentIndex && newIndex >= 0) {
+        final wasLargeJump = (_currentIndex - newIndex).abs() > 3;
         _currentIndex = newIndex;
         notifyListeners();
 
-        // Perform animated auto-scroll if user has not engaged manual scroll lock
+        // Perform jump to neighborhood if a large skip occurred or if current viewport
+        // is far from active index, and user is not scroll-locked
         if (!_isUserScrollLocked && _isLyricsViewVisible) {
-          _scrollToIndex(_currentIndex, animated: true);
+          bool needsJump = wasLargeJump;
+          if (!needsJump && scrollController.hasClients) {
+            final double estimatedLineHeight = _isInterleaved ? 64.0 : 42.0;
+            final targetOffset = _currentIndex * estimatedLineHeight;
+            final currentOffset = scrollController.offset;
+            final viewportHeight =
+                scrollController.position.hasViewportDimension
+                    ? scrollController.position.viewportDimension
+                    : 600.0;
+            if ((currentOffset - targetOffset).abs() > (viewportHeight * 0.5)) {
+              needsJump = true;
+            }
+          }
+
+          if (needsJump) {
+            _scrollToIndex(_currentIndex, animated: false);
+          }
         }
       }
     }
@@ -689,15 +749,14 @@ class LyricsController extends ChangeNotifier {
     if (!scrollController.hasClients) return;
     if (lines.isEmpty || index < 0 || index >= lines.length) return;
 
-    const double estimatedLineHeight = 56.0;
-    // With symmetric half-height viewport padding on top and bottom,
-    // (index * estimatedLineHeight) accurately targets the vertical center.
+    final double estimatedLineHeight = _isInterleaved ? 64.0 : 42.0;
     final targetOffset = index * estimatedLineHeight;
 
-    final clampedOffset = targetOffset.clamp(
-      0.0,
-      scrollController.position.maxScrollExtent,
-    );
+    // Do NOT clamp to scrollController.position.maxScrollExtent,
+    // because in a lazy ListView.builder, maxScrollExtent only reflects
+    // already-laid-out items and expands as layout advances!
+    final double maxPossibleScroll = lines.length * estimatedLineHeight;
+    final clampedOffset = targetOffset.clamp(0.0, maxPossibleScroll);
 
     if (animated) {
       scrollController.animateTo(
@@ -711,21 +770,14 @@ class LyricsController extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // User Manual Scroll Lock (5-Second Timer Protocol)
+  // User Manual Scroll Lock Protocol
   // ---------------------------------------------------------------------------
   void onUserScroll() {
+    if (!isSynced) return;
     if (!_isUserScrollLocked) {
       _isUserScrollLocked = true;
       notifyListeners();
     }
-
-    _userScrollLockTimer?.cancel();
-    _userScrollLockTimer = Timer(scrollLockDuration, () {
-      if (_isDisposed) return;
-      _isUserScrollLocked = false;
-      notifyListeners();
-      _scrollToIndex(_currentIndex, animated: true);
-    });
   }
 
   void resumeAutoScroll() {
@@ -734,8 +786,6 @@ class LyricsController extends ChangeNotifier {
   }
 
   void _resetScrollLock() {
-    _userScrollLockTimer?.cancel();
-    _userScrollLockTimer = null;
     if (_isUserScrollLocked) {
       _isUserScrollLocked = false;
       notifyListeners();
@@ -768,7 +818,6 @@ class LyricsController extends ChangeNotifier {
     cooldownManager.cancelDeferredRetry();
     playbackController.removeListener(_onPlaybackUpdated);
     playbackController.positionListenable.removeListener(_onPositionUpdated);
-    _userScrollLockTimer?.cancel();
     scrollController.dispose();
     super.dispose();
   }

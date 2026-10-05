@@ -462,8 +462,8 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
               Navigator.of(context).pop();
               await lyricsController.translateLyrics(force: true);
             },
-            icon: const Icon(Icons.refresh_rounded, size: 18),
-            label: Text(strings.npLyricsSourcesResearchBtn),
+            icon: const Icon(Icons.translate_rounded, size: 18),
+            label: Text(strings.npLyricsRetranslateBtn),
           ),
       ],
     );
