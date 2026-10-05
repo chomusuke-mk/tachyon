@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/artist_card.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 
@@ -19,6 +19,7 @@ class ArtistsScreen extends StatefulWidget {
 class _ArtistsScreenState extends State<ArtistsScreen> {
   ArtistSortOption _sortOption = ArtistSortOption.name;
   bool _ascending = true;
+  bool _isCardView = true;
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +47,21 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
       appBar: AppBar(
         title: Text(strings.arTitle),
         actions: [
+          IconButton(
+            icon: Icon(
+              _isCardView
+                  ? Icons.view_list_rounded
+                  : Icons.grid_view_rounded,
+            ),
+            tooltip: _isCardView
+                ? strings.commonViewAsList
+                : strings.commonViewAsCards,
+            onPressed: () {
+              setState(() {
+                _isCardView = !_isCardView;
+              });
+            },
+          ),
           PopupMenuButton<ArtistSortOption>(
             icon: const Icon(Icons.sort_rounded),
             tooltip: strings.arSort,
@@ -102,83 +118,47 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                 ],
               ),
             )
-          : GridView.builder(
-              padding: const EdgeInsets.all(16.0),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 180,
-                childAspectRatio: 0.8,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-              ),
-              itemCount: artists.length,
-              itemBuilder: (context, index) {
-                final artist = artists[index];
-                final coverFilePath = artist.tracks.firstOrNull?.filePath ?? '';
-
-                return InkWell(
-                  borderRadius: BorderRadius.circular(12.0),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => ArtistDetailScreen(artist: artist),
-                      ),
+          : _isCardView
+              ? GridView.builder(
+                  padding: const EdgeInsets.all(16.0),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 180,
+                    childAspectRatio: 0.8,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                  ),
+                  itemCount: artists.length,
+                  itemBuilder: (context, index) {
+                    final artist = artists[index];
+                    return ArtistCard(
+                      artist: artist,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => ArtistDetailScreen(artist: artist),
+                          ),
+                        );
+                      },
                     );
                   },
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircleAvatar(
-                        radius: 54,
-                        backgroundColor: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        child: coverFilePath.isNotEmpty
-                            ? ClipOval(
-                                child: SizedBox(
-                                  width: 108,
-                                  height: 108,
-                                  child: AlbumArtImage(
-                                    filePath: coverFilePath,
-                                    artistName: artist.name,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              )
-                            : Icon(
-                                Icons.person_rounded,
-                                size: 48,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        artist.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${strings.arAlbumsCountFormatted(artist.albumCount)} • ${strings.arTracksCountFormatted(artist.trackCount)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                )
+              : ListView.builder(
+                  itemExtent: 72.0,
+                  itemCount: artists.length,
+                  itemBuilder: (context, index) {
+                    final artist = artists[index];
+                    return ArtistListTile(
+                      artist: artist,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => ArtistDetailScreen(artist: artist),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
     );
   }
 }

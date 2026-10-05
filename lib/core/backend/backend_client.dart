@@ -17,6 +17,7 @@ import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
+import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/domain/track_sort_option.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
@@ -86,8 +87,8 @@ abstract class TachyonBackendClient {
 
   // --- Metadata & Thumbnails (Worker Isolates) ---
   Future<ExtractedTrackData?> getMetadata(String filePath);
-  Future<String?> getThumbnail(String filePath, {bool isHighQuality = false});
-  Future<String?> getArtistCover(String artistName, {bool isHighQuality = false});
+  Future<String?> getThumbnail(String filePath, {ThumbnailQuality quality = ThumbnailQuality.low});
+  Future<String?> getArtistCover(String artistName, {ThumbnailQuality quality = ThumbnailQuality.low});
   Future<void> clearCoverCache();
 
   // --- Playlists ---
@@ -512,17 +513,23 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
       _send<ExtractedTrackData?>(BackendMethods.metadataGetMetadata, {'filePath': filePath});
 
   @override
-  Future<String?> getThumbnail(String filePath, {bool isHighQuality = false}) =>
+  Future<String?> getThumbnail(
+    String filePath, {
+    ThumbnailQuality quality = ThumbnailQuality.low,
+  }) =>
       _send<String?>(BackendMethods.metadataGetThumbnail, {
         'filePath': filePath,
-        'isHighQuality': isHighQuality,
+        'quality': quality.name,
       });
 
   @override
-  Future<String?> getArtistCover(String artistName, {bool isHighQuality = false}) =>
+  Future<String?> getArtistCover(
+    String artistName, {
+    ThumbnailQuality quality = ThumbnailQuality.low,
+  }) =>
       _send<String?>(BackendMethods.metadataGetArtistCover, {
         'artistName': artistName,
-        'isHighQuality': isHighQuality,
+        'quality': quality.name,
       });
 
   @override

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/album_card.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 
@@ -19,6 +19,7 @@ class AlbumsScreen extends StatefulWidget {
 class _AlbumsScreenState extends State<AlbumsScreen> {
   AlbumSortOption _sortOption = AlbumSortOption.title;
   bool _ascending = true;
+  bool _isCardView = true;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +52,21 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
       appBar: AppBar(
         title: Text(strings.alTitle),
         actions: [
+          IconButton(
+            icon: Icon(
+              _isCardView
+                  ? Icons.view_list_rounded
+                  : Icons.grid_view_rounded,
+            ),
+            tooltip: _isCardView
+                ? strings.commonViewAsList
+                : strings.commonViewAsCards,
+            onPressed: () {
+              setState(() {
+                _isCardView = !_isCardView;
+              });
+            },
+          ),
           PopupMenuButton<AlbumSortOption>(
             icon: const Icon(Icons.sort_rounded),
             tooltip: strings.alSort,
@@ -111,76 +127,47 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                 ],
               ),
             )
-          : GridView.builder(
-              padding: const EdgeInsets.all(16.0),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 220,
-                childAspectRatio: 0.72,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-              ),
-              itemCount: albums.length,
-              itemBuilder: (context, index) {
-                final album = albums[index];
-                final coverFilePath = album.tracks.firstOrNull?.filePath ?? '';
-
-                return InkWell(
-                  borderRadius: BorderRadius.circular(12.0),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => AlbumDetailScreen(album: album),
-                      ),
+          : _isCardView
+              ? GridView.builder(
+                  padding: const EdgeInsets.all(16.0),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 220,
+                    childAspectRatio: 0.72,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                  ),
+                  itemCount: albums.length,
+                  itemBuilder: (context, index) {
+                    final album = albums[index];
+                    return AlbumCard(
+                      album: album,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => AlbumDetailScreen(album: album),
+                          ),
+                        );
+                      },
                     );
                   },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12.0),
-                          child: AspectRatio(
-                            aspectRatio: 1.0,
-                            child: AlbumArtImage(
-                              filePath: coverFilePath,
-                              fit: BoxFit.cover,
-                            ),
+                )
+              : ListView.builder(
+                  itemExtent: 72.0,
+                  itemCount: albums.length,
+                  itemBuilder: (context, index) {
+                    final album = albums[index];
+                    return AlbumListTile(
+                      album: album,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => AlbumDetailScreen(album: album),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        album.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        album.artist?.name ?? strings.trUnknownArtist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        strings.alTracksCountFormatted(album.trackCount),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                        );
+                      },
+                    );
+                  },
+                ),
     );
   }
 }

@@ -87,23 +87,21 @@ class CoverCacheService {
     return sha256.convert(bytes).toString();
   }
 
+  File _resolveFile(String hash, ThumbnailQuality quality) {
+    final suffix = switch (quality) {
+      ThumbnailQuality.low => 'lq',
+      ThumbnailQuality.medium => 'mq',
+      ThumbnailQuality.high => 'hq',
+    };
+    return File(p.join(_coversDir.path, '${hash}_$suffix.jpg'));
+  }
+
   File getCoverFile(
     String filePath, {
     ThumbnailQuality quality = ThumbnailQuality.low,
   }) {
     final hash = computeHash(filePath);
-    final lqFile = File(p.join(_coversDir.path, '${hash}_lq.webp'));
-    final hqFile = File(p.join(_coversDir.path, '${hash}_hq.webp'));
-
-    if (quality == ThumbnailQuality.low) {
-      if (lqFile.existsSync() && lqFile.lengthSync() > 0) return lqFile;
-      if (hqFile.existsSync() && hqFile.lengthSync() > 0) return hqFile;
-      return lqFile;
-    } else {
-      if (hqFile.existsSync() && hqFile.lengthSync() > 0) return hqFile;
-      if (lqFile.existsSync() && lqFile.lengthSync() > 0) return lqFile;
-      return hqFile;
-    }
+    return _resolveFile(hash, quality);
   }
 
   File getArtistCoverFile(
@@ -111,18 +109,7 @@ class CoverCacheService {
     ThumbnailQuality quality = ThumbnailQuality.low,
   }) {
     final hash = computeHash('artist:${artistName.trim().toLowerCase()}');
-    final lqFile = File(p.join(_coversDir.path, '${hash}_lq.webp'));
-    final hqFile = File(p.join(_coversDir.path, '${hash}_hq.webp'));
-
-    if (quality == ThumbnailQuality.low) {
-      if (lqFile.existsSync() && lqFile.lengthSync() > 0) return lqFile;
-      if (hqFile.existsSync() && hqFile.lengthSync() > 0) return hqFile;
-      return lqFile;
-    } else {
-      if (hqFile.existsSync() && hqFile.lengthSync() > 0) return hqFile;
-      if (lqFile.existsSync() && lqFile.lengthSync() > 0) return lqFile;
-      return hqFile;
-    }
+    return _resolveFile(hash, quality);
   }
 
   bool hasCachedCover(
@@ -151,14 +138,16 @@ class CoverCacheService {
     Tag? tag,
   }) async {
     final hash = computeHash(filePath);
-    final lqFile = File(p.join(_coversDir.path, '${hash}_lq.webp'));
-    final hqFile = File(p.join(_coversDir.path, '${hash}_hq.webp'));
+    final lqFile = File(p.join(_coversDir.path, '${hash}_lq.jpg'));
+    final mqFile = File(p.join(_coversDir.path, '${hash}_mq.jpg'));
+    final hqFile = File(p.join(_coversDir.path, '${hash}_hq.jpg'));
 
     // 1. Return immediately if already cached
     if (!force) {
       final hasLq = await lqFile.exists() && await lqFile.length() > 0;
+      final hasMq = await mqFile.exists() && await mqFile.length() > 0;
       final hasHq = await hqFile.exists() && await hqFile.length() > 0;
-      if (hasLq && hasHq) {
+      if (hasLq && hasMq && hasHq) {
         return hqFile;
       }
     }
@@ -235,20 +224,21 @@ class CoverCacheService {
       }
     }
 
-    // 5. Write dual quality track/album cover
+    // 5. Write triple quality track/album cover
     if (coverBytes != null && coverBytes.isNotEmpty) {
-      await _writeDualQualityImages(coverBytes, hqFile, lqFile);
+      await _writeTripleQualityImages(coverBytes, hqFile, mqFile, lqFile);
     }
 
-    // 6. Write dual quality artist image if available
+    // 6. Write triple quality artist image if available
     if (artistBytes != null &&
         artistBytes.isNotEmpty &&
         artistName != null &&
         artistName.trim().isNotEmpty) {
       final aHash = computeHash('artist:${artistName.trim().toLowerCase()}');
-      final aLqFile = File(p.join(_coversDir.path, '${aHash}_lq.webp'));
-      final aHqFile = File(p.join(_coversDir.path, '${aHash}_hq.webp'));
-      await _writeDualQualityImages(artistBytes, aHqFile, aLqFile);
+      final aLqFile = File(p.join(_coversDir.path, '${aHash}_lq.jpg'));
+      final aMqFile = File(p.join(_coversDir.path, '${aHash}_mq.jpg'));
+      final aHqFile = File(p.join(_coversDir.path, '${aHash}_hq.jpg'));
+      await _writeTripleQualityImages(artistBytes, aHqFile, aMqFile, aLqFile);
     }
 
     if (await hqFile.exists() && await hqFile.length() > 0) {
@@ -257,29 +247,44 @@ class CoverCacheService {
     return null;
   }
 
-  static Future<void> _writeDualQualityImages(
+  @visibleForTesting
+  static Future<void> writeTripleQualityImages(
     Uint8List rawBytes,
     File hqFile,
+    File mqFile,
+    File lqFile,
+  ) =>
+      _writeTripleQualityImages(rawBytes, hqFile, mqFile, lqFile);
+
+  static Future<void> _writeTripleQualityImages(
+    Uint8List rawBytes,
+    File hqFile,
+    File mqFile,
     File lqFile,
   ) async {
     try {
       final decoded = img.decodeImage(rawBytes);
       if (decoded != null) {
-        // Take min(width, height) and center-crop square to prevent any vertical or horizontal stretching
+        // Take min(width, height) and center-crop square to prevent distortion
         final minDim = math.min(decoded.width, decoded.height);
         final cropX = (decoded.width - minDim) ~/ 2;
         final cropY = (decoded.height - minDim) ~/ 2;
 
-        final squareImage = img.copyCrop(
-          decoded,
-          x: cropX,
-          y: cropY,
-          width: minDim,
-          height: minDim,
-        );
+        final squareImage = (cropX == 0 &&
+                cropY == 0 &&
+                decoded.width == minDim &&
+                decoded.height == minDim)
+            ? decoded
+            : img.copyCrop(
+                decoded,
+                x: cropX,
+                y: cropY,
+                width: minDim,
+                height: minDim,
+              );
 
-        // 1. High Quality: maximum highQualitySize x highQualitySize square
-        img.Image hqImage;
+        // 1. High Quality: 800x800 square
+        final img.Image hqImage;
         if (minDim > AppDefaults.highQualityResolution) {
           hqImage = img.copyResize(
             squareImage,
@@ -290,43 +295,62 @@ class CoverCacheService {
         } else {
           hqImage = squareImage;
         }
-        final hqBytes = img.encodeWebP(
-          hqImage,
-          lossless: false,
-          quality: 85,
-          singleFrame: true,
-          method: 0,
-        );
-        await hqFile.writeAsBytes(hqBytes);
 
-        // 2. Low Quality: lowQualitySize x lowQualitySize square
-        img.Image lqImage;
-        if (minDim == AppDefaults.lowQualityResolution) {
-          lqImage = squareImage;
+        // 2. Cascade downsample to Medium Quality: 250x250 square (from hqImage for massive CPU saving)
+        final img.Image mqImage;
+        if (hqImage.width > AppDefaults.mediumQualityResolution) {
+          mqImage = img.copyResize(
+            hqImage,
+            width: AppDefaults.mediumQualityResolution,
+            height: AppDefaults.mediumQualityResolution,
+            interpolation: img.Interpolation.linear,
+          );
         } else {
+          mqImage = hqImage;
+        }
+
+        // 3. Cascade downsample to Low Quality: 50x50 square (from mqImage)
+        final img.Image lqImage;
+        if (mqImage.width > AppDefaults.lowQualityResolution) {
           lqImage = img.copyResize(
-            squareImage,
+            mqImage,
             width: AppDefaults.lowQualityResolution,
             height: AppDefaults.lowQualityResolution,
             interpolation: img.Interpolation.linear,
           );
+        } else {
+          lqImage = mqImage;
         }
-        final lqBytes = img.encodeWebP(
-          lqImage,
-          lossless: false,
-          quality: 50,
-          singleFrame: true,
-          method: 0,
-        );
-        await lqFile.writeAsBytes(lqBytes);
+
+        // Highly optimized JPEG encoding with quality levels tuned for size & speed
+        final hqBytes = img.encodeJpg(hqImage, quality: 82);
+        final mqBytes = img.encodeJpg(mqImage, quality: 78);
+        final lqBytes = img.encodeJpg(lqImage, quality: 72);
+
+        if (!hqFile.parent.existsSync()) {
+          hqFile.parent.createSync(recursive: true);
+        }
+
+        await Future.wait([
+          hqFile.writeAsBytes(hqBytes),
+          mqFile.writeAsBytes(mqBytes),
+          lqFile.writeAsBytes(lqBytes),
+        ]);
       } else {
-        await hqFile.writeAsBytes(rawBytes);
-        await lqFile.writeAsBytes(rawBytes);
+        if (!hqFile.parent.existsSync()) {
+          hqFile.parent.createSync(recursive: true);
+        }
+        await Future.wait([
+          hqFile.writeAsBytes(rawBytes),
+          mqFile.writeAsBytes(rawBytes),
+          lqFile.writeAsBytes(rawBytes),
+        ]);
       }
     } catch (e) {
-      debugPrint('[CoverCache] Error generating dual quality images: $e');
+      debugPrint('[CoverCache] Error generating triple quality images: $e');
       try {
         if (!await lqFile.exists()) await lqFile.writeAsBytes(rawBytes);
+        if (!await mqFile.exists()) await mqFile.writeAsBytes(rawBytes);
         if (!await hqFile.exists()) await hqFile.writeAsBytes(rawBytes);
       } catch (_) {}
     }

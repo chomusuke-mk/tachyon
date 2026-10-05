@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
@@ -8,6 +6,7 @@ import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/domain/queue_item.dart';
 
@@ -97,10 +96,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   }
 
   void _toggleLyrics() {
-    final isNarrow = MediaQuery.sizeOf(context).width < 588;
     setState(() {
       _showLyrics = !_showLyrics;
-      if (_showLyrics && isNarrow && _showQueue) {
+      if (_showLyrics && _showQueue) {
         _showQueue = false;
       }
     });
@@ -113,11 +111,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   }
 
   void _toggleQueue() {
-    final isNarrow = MediaQuery.sizeOf(context).width < 588;
     bool shouldHideLyrics = false;
     setState(() {
       _showQueue = !_showQueue;
-      if (_showQueue && isNarrow && _showLyrics) {
+      if (_showQueue && _showLyrics) {
         _showLyrics = false;
         shouldHideLyrics = true;
       }
@@ -199,7 +196,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           ),
           IconButton(
             icon: Icon(
-              _showLyrics ? Icons.music_note_rounded : Icons.lyrics_rounded,
+              Icons.lyrics_rounded,
               color: _showLyrics ? colorScheme.primary : colorScheme.onSurface,
             ),
             tooltip: strings.npLyrics,
@@ -229,8 +226,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         children: [
           // 1. Ambient Blurred Backdrop
           Positioned.fill(
-            child: RepaintBoundary(
-              child: _buildAmbientBackdrop(currentTrack.filePath, colorScheme),
+            child: AmbientBackdrop(
+              filePath: currentTrack.filePath,
+              artistName: currentTrack.artist,
             ),
           ),
 
@@ -245,16 +243,16 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       ? Row(
                           key: const ValueKey('queue_and_player'),
                           children: [
-                            Expanded(child: QueueView()),
                             Expanded(
                               child: _buildPlayer(
                                 currentTrack,
                                 context,
                                 preferVertical: true,
                                 hideQueue: true,
-                                hideLyrics: false,
+                                hideLyrics: true,
                               ),
                             ),
+                            Expanded(child: QueueView()),
                           ],
                         )
                       : currentWidth >= 588 && _showLyrics
@@ -262,19 +260,19 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                           key: const ValueKey('lyrics_and_player'),
                           children: [
                             Expanded(
-                              child: LyricsView(
-                                key: const ValueKey('lyrics_view'),
-                                filePath: currentTrack.filePath,
-                                onSeek: playback.seek,
-                              ),
-                            ),
-                            Expanded(
                               child: _buildPlayer(
                                 currentTrack,
                                 context,
                                 preferVertical: true,
                                 hideQueue: false,
                                 hideLyrics: true,
+                              ),
+                            ),
+                            Expanded(
+                              child: LyricsView(
+                                key: const ValueKey('lyrics_view'),
+                                filePath: currentTrack.filePath,
+                                onSeek: playback.seek,
                               ),
                             ),
                           ],
@@ -312,7 +310,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final playlists = context.watch<PlaylistsController?>();
-    final isCurrentTrackLiked = currentTrack.trackId != null &&
+    final isCurrentTrackLiked =
+        currentTrack.trackId != null &&
         (playlists?.isTrackLiked(currentTrack.trackId!) ?? false);
 
     final Widget playerControls = Padding(
@@ -578,6 +577,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             children: [
               Flexible(
                 fit: FlexFit.loose,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [playerTitle, playerControls],
+                ),
+              ),
+              Flexible(
+                fit: FlexFit.loose,
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   child: !hideQueue && _showQueue
@@ -593,14 +600,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                           context,
                           key: const ValueKey('cover_art_view'),
                         ),
-                ),
-              ),
-              Flexible(
-                fit: FlexFit.loose,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [playerTitle, playerControls],
                 ),
               ),
             ],
@@ -706,38 +705,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   //    ],
   //  ),
   //),
-  Widget _buildAmbientBackdrop(String filePath, ColorScheme colorScheme) {
-    return RepaintBoundary(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (filePath.isNotEmpty)
-            ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 32.0, sigmaY: 32.0),
-              child: AlbumArtImage(
-                filePath: filePath,
-                fit: BoxFit.cover,
-                cacheWidth: 128,
-                cacheHeight: 128,
-              ),
-            ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  colorScheme.surface.withValues(alpha: 0.65),
-                  colorScheme.surface.withValues(alpha: 0.82),
-                  colorScheme.surface.withValues(alpha: 0.95),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildHeroCoverArt(String filePath, BuildContext context, {Key? key}) {
     return RepaintBoundary(
@@ -854,8 +821,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                     ListTile(
                       leading: const Icon(Icons.settings_suggest_rounded),
                       title: Text(strings.npAudioDeviceDefault),
-                      trailing: (currentDeviceId == null || currentDeviceId.isEmpty)
-                          ? Icon(Icons.check_rounded, color: colorScheme.primary)
+                      trailing:
+                          (currentDeviceId == null || currentDeviceId.isEmpty)
+                          ? Icon(
+                              Icons.check_rounded,
+                              color: colorScheme.primary,
+                            )
                           : null,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -874,8 +845,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                     ),
                     const Divider(),
                     ...devices.map((device) {
-                      final isSelected = currentDeviceId == device.id ||
-                          ((currentDeviceId == null || currentDeviceId.isEmpty) &&
+                      final isSelected =
+                          currentDeviceId == device.id ||
+                          ((currentDeviceId == null ||
+                                  currentDeviceId.isEmpty) &&
                               device.isDefault);
                       return ListTile(
                         leading: Icon(
@@ -885,7 +858,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                         ),
                         title: Text(device.name),
                         trailing: isSelected
-                            ? Icon(Icons.check_rounded, color: colorScheme.primary)
+                            ? Icon(
+                                Icons.check_rounded,
+                                color: colorScheme.primary,
+                              )
                             : null,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),

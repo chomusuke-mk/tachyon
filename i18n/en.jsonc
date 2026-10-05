@@ -330,5 +330,8 @@
   "sel_select": "Select",
   "sel_cancel": "Cancel",
   "sel_select_all": "Select all",
-  "sel_deselect_all": "Deselect all"
+  "sel_deselect_all": "Deselect all",
+  // --- common_: Common UI Labels -------------------------------------------
+  "common_view_as_cards": "Cards view",
+  "common_view_as_list": "List view"
 }

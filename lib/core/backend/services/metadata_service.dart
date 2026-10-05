@@ -150,15 +150,12 @@ class MetadataService {
   /// 4. Returns string path (never raw bytes across isolate boundary).
   Future<String?> getThumbnail(
     String filePath, {
-    bool isHighQuality = false,
+    ThumbnailQuality quality = ThumbnailQuality.low,
   }) async {
-    final quality = isHighQuality
-        ? ThumbnailQuality.high
-        : ThumbnailQuality.low;
-
     // 1. Return immediately if cached image file exists on disk
     if (coverCacheService.hasCachedCover(filePath, quality: quality)) {
-      final file = coverCacheService.getCoverFile(filePath, quality: quality);
+      final file =
+          coverCacheService.getCoverFile(filePath, quality: quality);
       return file.path;
     }
 
@@ -173,7 +170,11 @@ class MetadataService {
 
     if (paths != null) {
       database.updateTrackCoverStatus(filePath, true);
-      return isHighQuality ? paths['hq'] : paths['lq'];
+      return switch (quality) {
+        ThumbnailQuality.high => paths['hq'],
+        ThumbnailQuality.medium => paths['mq'] ?? paths['hq'],
+        ThumbnailQuality.low => paths['lq'],
+      };
     }
 
     return null;
@@ -182,12 +183,12 @@ class MetadataService {
   /// Returns cached artist cover file path if available.
   Future<String?> getArtistCover(
     String artistName, {
-    bool isHighQuality = false,
+    ThumbnailQuality quality = ThumbnailQuality.low,
   }) async {
-    final quality = isHighQuality
-        ? ThumbnailQuality.high
-        : ThumbnailQuality.low;
-    if (coverCacheService.hasCachedArtistCover(artistName, quality: quality)) {
+    if (coverCacheService.hasCachedArtistCover(
+      artistName,
+      quality: quality,
+    )) {
       final file = coverCacheService.getArtistCoverFile(
         artistName,
         quality: quality,
@@ -785,11 +786,15 @@ Future<Map<String, String>?> extractAndSaveThumbnailWorker({
   final coverCache = CoverCacheService(cacheDirectory: Directory(cacheDirPath));
   final hqFile = await coverCache.saveCacheCover(filePath);
   if (hqFile != null && hqFile.existsSync() && hqFile.lengthSync() > 0) {
+    final mqFile = coverCache.getCoverFile(
+      filePath,
+      quality: ThumbnailQuality.medium,
+    );
     final lqFile = coverCache.getCoverFile(
       filePath,
       quality: ThumbnailQuality.low,
     );
-    return {'hq': hqFile.path, 'lq': lqFile.path};
+    return {'hq': hqFile.path, 'mq': mqFile.path, 'lq': lqFile.path};
   }
   return null;
 }

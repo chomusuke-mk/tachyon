@@ -15,6 +15,7 @@ class AlbumArtImage extends StatelessWidget {
   final int? cacheHeight;
   final BoxFit fit;
   final BorderRadius? borderRadius;
+  final Widget? fallback;
 
   static final Set<String> _existingCovers = <String>{};
   static final Set<String> _missingCovers = <String>{};
@@ -38,6 +39,7 @@ class AlbumArtImage extends StatelessWidget {
     this.cacheHeight,
     this.fit = BoxFit.cover,
     this.borderRadius,
+    this.fallback,
   });
 
   @override
@@ -58,7 +60,7 @@ class AlbumArtImage extends StatelessWidget {
 
     final colorScheme = Theme.of(context).colorScheme;
 
-    final fallback = Container(
+    final defaultFallback = Container(
       width: width,
       height: height,
       color: colorScheme.surfaceContainerHighest,
@@ -74,39 +76,40 @@ class AlbumArtImage extends StatelessWidget {
         ),
       ),
     );
+    final effectiveFallback = fallback ?? defaultFallback;
 
     if (filePath.isEmpty &&
         (artistName == null || artistName!.trim().isEmpty)) {
       if (borderRadius != null) {
-        return ClipRRect(borderRadius: borderRadius!, child: fallback);
+        return ClipRRect(borderRadius: borderRadius!, child: effectiveFallback);
       }
-      return fallback;
+      return effectiveFallback;
     }
 
     final String lookupKey = '${quality.name}:$filePath:${artistName ?? ''}';
 
     if (_missingCovers.contains(lookupKey)) {
       if (borderRadius != null) {
-        return ClipRRect(borderRadius: borderRadius!, child: fallback);
+        return ClipRRect(borderRadius: borderRadius!, child: effectiveFallback);
       }
-      return fallback;
+      return effectiveFallback;
     }
 
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
-    final int defaultBound = quality == ThumbnailQuality.high ? 1000 : 100;
+    final int defaultBound = switch (quality) {
+      ThumbnailQuality.high => 800,
+      ThumbnailQuality.medium => 250,
+      ThumbnailQuality.low => 50,
+    };
     final int targetCacheWidth =
         cacheWidth ??
         (width != null
-            ? (quality == ThumbnailQuality.high
-                  ? (width! * dpr).round().clamp(100, 1000)
-                  : 100)
+            ? (width! * dpr).round().clamp(50, 800)
             : defaultBound);
     final int targetCacheHeight =
         cacheHeight ??
         (height != null
-            ? (quality == ThumbnailQuality.high
-                  ? (height! * dpr).round().clamp(100, 1000)
-                  : 100)
+            ? (height! * dpr).round().clamp(50, 800)
             : defaultBound);
 
     Widget buildImage(File file) {
@@ -122,9 +125,9 @@ class AlbumArtImage extends StatelessWidget {
           if (wasSynchronouslyLoaded || frame != null) {
             return child;
           }
-          return fallback;
+          return effectiveFallback;
         },
-        errorBuilder: (context, error, stackTrace) => fallback,
+        errorBuilder: (context, error, stackTrace) => effectiveFallback,
       );
     }
 
@@ -146,12 +149,12 @@ class AlbumArtImage extends StatelessWidget {
               filePath.isEmpty) {
             path = await backendClient.getArtistCover(
               artistName!,
-              isHighQuality: quality == ThumbnailQuality.high,
+              quality: quality,
             );
           } else if (filePath.isNotEmpty) {
             path = await backendClient.getThumbnail(
               filePath,
-              isHighQuality: quality == ThumbnailQuality.high,
+              quality: quality,
             );
           }
           if (path != null) {
@@ -176,10 +179,10 @@ class AlbumArtImage extends StatelessWidget {
           if (file != null) {
             return buildImage(file);
           } else {
-            return fallback;
+            return effectiveFallback;
           }
         }
-        return fallback;
+        return effectiveFallback;
       },
     );
 

@@ -330,5 +330,8 @@
   "sel_select": "Seleccionar",
   "sel_cancel": "Cancelar",
   "sel_select_all": "Seleccionar todo",
-  "sel_deselect_all": "Deseleccionar todo"
+  "sel_deselect_all": "Deseleccionar todo",
+  // --- common_: Etiquetas comunes de interfaz -----------------------------
+  "common_view_as_cards": "Vista de tarjetas",
+  "common_view_as_list": "Vista de lista"
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/album_card.dart';
+import 'package:tachyon/shared/widgets/artist_card.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
@@ -252,8 +253,9 @@ class _SearchScreenState extends State<SearchScreen> {
                                       const SizedBox(width: 12),
                                   itemBuilder: (context, index) {
                                     final album = matchedAlbums[index];
-                                    return InkWell(
-                                      borderRadius: BorderRadius.circular(10.0),
+                                    return AlbumCard(
+                                      album: album,
+                                      width: 120,
                                       onTap: () {
                                         Navigator.of(context).push(
                                           MaterialPageRoute<void>(
@@ -262,47 +264,6 @@ class _SearchScreenState extends State<SearchScreen> {
                                           ),
                                         );
                                       },
-                                      child: SizedBox(
-                                        width: 120,
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(10.0),
-                                              child: SizedBox(
-                                                width: 120,
-                                                height: 120,
-                                                child: AlbumArtImage(
-                                                  filePath: album.tracks.firstOrNull?.filePath ?? '',
-                                                  fit: BoxFit.cover,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(height: 6),
-                                            Text(
-                                              album.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                            Text(
-                                              album.artist?.name ?? '',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: colorScheme
-                                                    .onSurfaceVariant,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
                                     );
                                   },
                                 ),
@@ -343,8 +304,11 @@ class _SearchScreenState extends State<SearchScreen> {
                                       const SizedBox(width: 16),
                                   itemBuilder: (context, index) {
                                     final artist = matchedArtists[index];
-                                    return InkWell(
-                                      borderRadius: BorderRadius.circular(10.0),
+                                    return ArtistCard(
+                                      artist: artist,
+                                      radius: 36,
+                                      width: 90,
+                                      showSubtitle: false,
                                       onTap: () {
                                         Navigator.of(context).push(
                                           MaterialPageRoute<void>(
@@ -354,37 +318,6 @@ class _SearchScreenState extends State<SearchScreen> {
                                           ),
                                         );
                                       },
-                                      child: SizedBox(
-                                        width: 90,
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            CircleAvatar(
-                                              radius: 36,
-                                              backgroundColor: colorScheme
-                                                  .surfaceContainerHighest,
-                                              child: Icon(
-                                                Icons.person_rounded,
-                                                size: 36,
-                                                color: colorScheme
-                                                    .onSurfaceVariant,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 6),
-                                            Text(
-                                              artist.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              textAlign: TextAlign.center,
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
                                     );
                                   },
                                 ),

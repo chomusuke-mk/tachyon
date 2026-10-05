@@ -468,6 +468,14 @@ class AppStringKey {
   String get selDeselectAll => _cadenasLocalizadas['sel_deselect_all'] ?? '';
 
   // ---------------------------------------------------------------------------
+  // common_: Common UI Labels
+  // ---------------------------------------------------------------------------
+  String get commonViewAsCards =>
+      _cadenasLocalizadas['common_view_as_cards'] ?? '';
+  String get commonViewAsList =>
+      _cadenasLocalizadas['common_view_as_list'] ?? '';
+
+  // ---------------------------------------------------------------------------
   // Parametric Formatters
   // ---------------------------------------------------------------------------
   String trCountFormatted(int count) =>
@@ -656,6 +664,8 @@ class AppStringKey {
     // sel_
     'sel_selected_count', 'sel_select', 'sel_cancel', 'sel_select_all',
     'sel_deselect_all',
+    // common_
+    'common_view_as_cards', 'common_view_as_list',
   ];
 
   List<String> get allKeys => List.unmodifiable(_allAppStrings);

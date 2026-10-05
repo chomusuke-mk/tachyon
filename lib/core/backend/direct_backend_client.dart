@@ -273,18 +273,17 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<String?> getThumbnail(
     String filePath, {
-    bool isHighQuality = false,
+    ThumbnailQuality quality = ThumbnailQuality.low,
   }) async {
     if (metadataService != null) {
       return await metadataService!.getThumbnail(
         filePath,
-        isHighQuality: isHighQuality,
+        quality: quality,
       );
     }
     if (coverCacheService != null) {
-      final q = isHighQuality ? ThumbnailQuality.high : ThumbnailQuality.low;
-      if (coverCacheService!.hasCachedCover(filePath, quality: q)) {
-        return coverCacheService!.getCoverFile(filePath, quality: q).path;
+      if (coverCacheService!.hasCachedCover(filePath, quality: quality)) {
+        return coverCacheService!.getCoverFile(filePath, quality: quality).path;
       }
     }
     return null;
@@ -293,19 +292,18 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<String?> getArtistCover(
     String artistName, {
-    bool isHighQuality = false,
+    ThumbnailQuality quality = ThumbnailQuality.low,
   }) async {
     if (metadataService != null) {
       return await metadataService!.getArtistCover(
         artistName,
-        isHighQuality: isHighQuality,
+        quality: quality,
       );
     }
     if (coverCacheService != null) {
-      final q = isHighQuality ? ThumbnailQuality.high : ThumbnailQuality.low;
-      if (coverCacheService!.hasCachedArtistCover(artistName, quality: q)) {
+      if (coverCacheService!.hasCachedArtistCover(artistName, quality: quality)) {
         return coverCacheService!
-            .getArtistCoverFile(artistName, quality: q)
+            .getArtistCoverFile(artistName, quality: quality)
             .path;
       }
     }

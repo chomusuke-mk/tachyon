@@ -358,13 +358,19 @@ class TachyonBackendHost {
 
       case BackendMethods.metadataGetThumbnail:
         final filePath = params['filePath'] as String;
-        final isHighQuality = params['isHighQuality'] as bool? ?? false;
-        return await _metadataService.getThumbnail(filePath, isHighQuality: isHighQuality);
+        final qualityStr = params['quality'] as String?;
+        final quality = qualityStr != null
+            ? ThumbnailQuality.values.byName(qualityStr)
+            : ThumbnailQuality.low;
+        return await _metadataService.getThumbnail(filePath, quality: quality);
 
       case BackendMethods.metadataGetArtistCover:
         final artistName = params['artistName'] as String;
-        final isHighQuality = params['isHighQuality'] as bool? ?? false;
-        return await _metadataService.getArtistCover(artistName, isHighQuality: isHighQuality);
+        final qualityStr = params['quality'] as String?;
+        final quality = qualityStr != null
+            ? ThumbnailQuality.values.byName(qualityStr)
+            : ThumbnailQuality.low;
+        return await _metadataService.getArtistCover(artistName, quality: quality);
 
       case BackendMethods.metadataClearCoverCache:
         await _metadataService.clearCoverCache();

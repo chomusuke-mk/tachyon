@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
@@ -37,12 +38,28 @@ class AlbumDetailScreen extends StatelessWidget {
     final firstFilePath = album.tracks.firstOrNull?.filePath ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: Text(album.name)),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: Text(album.name),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: AmbientBackdrop(filePath: firstFilePath),
+          ),
+          CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
               child: Column(
                 children: [
                   ClipRRect(
@@ -120,6 +137,8 @@ class AlbumDetailScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ],
+  ),
+);
   }
 }
