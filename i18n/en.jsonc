@@ -334,5 +334,6 @@
   // --- common_: Common UI Labels -------------------------------------------
   "common_view_as_cards": "Cards view",
   "common_view_as_list": "List view",
-  "common_back": "Back"
+  "common_back": "Back",
+  "common_minimize": "Minimize"
 }

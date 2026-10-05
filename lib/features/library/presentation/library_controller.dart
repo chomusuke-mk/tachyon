@@ -240,7 +240,7 @@ class LibraryController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   Future<void> navigateToFolder(String folderPath) async {
     final dir = Directory(folderPath);
-    if (!await dir.exists()) return;
+    if (!dir.existsSync()) return;
 
     _currentFolderPath = folderPath;
     _folderBreadcrumbs = p.split(folderPath);

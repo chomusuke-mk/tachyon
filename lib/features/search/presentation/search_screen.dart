@@ -30,9 +30,11 @@ class _SearchScreenState extends State<SearchScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<TachyonSearchController>().setCategory(
-          widget.initialCategory,
-        );
+        final ctrl = context.read<TachyonSearchController>();
+        if (_textController.text.isEmpty) {
+          ctrl.clear();
+        }
+        ctrl.setCategory(widget.initialCategory);
       }
     });
   }
@@ -73,7 +75,7 @@ class _SearchScreenState extends State<SearchScreen> {
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
             prefixIcon: const Icon(Icons.search_rounded),
-            suffixIcon: _textController.text.isNotEmpty
+            suffixIcon: searchCtrl.query.isNotEmpty
                 ? IconButton(
                     icon: const Icon(Icons.clear_rounded),
                     onPressed: () {
@@ -83,7 +85,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   )
                 : null,
           ),
+          textInputAction: TextInputAction.search,
           onChanged: (query) => searchCtrl.onQueryChanged(query),
+          onSubmitted: (query) =>
+              searchCtrl.onQueryChanged(query, debounce: false),
         ),
       ),
       body: Column(
@@ -264,7 +269,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ),
                               ),
                               SizedBox(
-                                height: 170,
+                                height: 200,
                                 child: ListView.separated(
                                   scrollDirection: Axis.horizontal,
                                   padding: const EdgeInsets.symmetric(
@@ -315,7 +320,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ),
                               ),
                               SizedBox(
-                                height: 130,
+                                height: 140,
                                 child: ListView.separated(
                                   scrollDirection: Axis.horizontal,
                                   padding: const EdgeInsets.symmetric(

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:tachyon/core/backend/backend.dart';
+import 'package:tachyon/features/library/data/library_store.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
@@ -9,9 +9,25 @@ import 'package:tachyon/features/library/domain/track.dart';
 enum SearchFilterCategory { all, tracks, albums, artists }
 
 class TachyonSearchController extends ChangeNotifier {
-  final TachyonBackendClient _backend;
+  final LibraryStore Function()? storeSupplier;
+  final LibraryStore? store;
 
-  TachyonSearchController({required this._backend});
+  TachyonSearchController({
+    this.store,
+    this.storeSupplier,
+  });
+
+  LibraryStore get _currentStore {
+    final supplier = storeSupplier;
+    if (supplier != null) {
+      return supplier();
+    }
+    final directStore = store;
+    if (directStore != null) {
+      return directStore;
+    }
+    return LibraryStore();
+  }
 
   // ---------------------------------------------------------------------------
   // State Fields
@@ -38,15 +54,26 @@ class TachyonSearchController extends ChangeNotifier {
 
   bool get isSearching => _isSearching;
   bool get isEmptyQuery => _query.trim().isEmpty;
-  bool get hasResults =>
-      _matchedTracks.isNotEmpty ||
-      _matchedAlbums.isNotEmpty ||
-      _matchedArtists.isNotEmpty;
+
+  bool get hasResults {
+    switch (_category) {
+      case SearchFilterCategory.all:
+        return _matchedTracks.isNotEmpty ||
+            _matchedAlbums.isNotEmpty ||
+            _matchedArtists.isNotEmpty;
+      case SearchFilterCategory.tracks:
+        return _matchedTracks.isNotEmpty;
+      case SearchFilterCategory.albums:
+        return _matchedAlbums.isNotEmpty;
+      case SearchFilterCategory.artists:
+        return _matchedArtists.isNotEmpty;
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Operations
   // ---------------------------------------------------------------------------
-  void onQueryChanged(String newQuery) {
+  void onQueryChanged(String newQuery, {bool debounce = true}) {
     _query = newQuery;
 
     if (newQuery.trim().isEmpty) {
@@ -59,27 +86,25 @@ class TachyonSearchController extends ChangeNotifier {
       return;
     }
 
-    _isSearching = true;
-    notifyListeners();
-
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+    if (debounce) {
+      _isSearching = true;
+      notifyListeners();
+      _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+        _performSearch(newQuery.trim());
+      });
+    } else {
       _performSearch(newQuery.trim());
-    });
+    }
   }
 
-  Future<void> _performSearch(String cleanQuery) async {
-    try {
-      final results = await _backend.search(cleanQuery);
-      _matchedTracks = (results['tracks'] as List? ?? []).cast<Track>();
-      _matchedAlbums = (results['albums'] as List? ?? []).cast<Album>();
-      _matchedArtists = (results['artists'] as List? ?? []).cast<Artist>();
-    } catch (e) {
-      debugPrint('Search query failed: $e');
-    } finally {
-      _isSearching = false;
-      notifyListeners();
-    }
+  void _performSearch(String cleanQuery) {
+    final store = _currentStore;
+    _matchedTracks = store.searchTracks(cleanQuery);
+    _matchedAlbums = store.searchAlbums(cleanQuery);
+    _matchedArtists = store.searchArtists(cleanQuery);
+    _isSearching = false;
+    notifyListeners();
   }
 
   void setCategory(SearchFilterCategory category) {

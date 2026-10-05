@@ -400,10 +400,6 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     _catalogUpdatedController.add(null);
   }
 
-  @override
-  Future<Map<String, dynamic>> search(String query) async {
-    return const {'tracks': <Track>[], 'albums': <Album>[], 'artists': <Artist>[]};
-  }
 
   @override
   Future<LyricsResult?> resolveLyrics({

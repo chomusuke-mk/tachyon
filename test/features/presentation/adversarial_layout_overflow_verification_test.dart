@@ -477,7 +477,7 @@ void main() {
         backend: backend,
         settingsRepository: settingsRepository,
       );
-      final searchCtrl = TachyonSearchController(backend: backend);
+      final searchCtrl = TachyonSearchController(store: store);
 
       FlutterErrorDetails? caughtOverflowError;
       final originalOnError = FlutterError.onError;

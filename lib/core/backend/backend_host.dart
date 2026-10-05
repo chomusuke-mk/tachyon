@@ -444,15 +444,6 @@ class TachyonBackendHost {
         config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
         return null;
 
-      // =======================================================================
-      // SEARCH
-      // =======================================================================
-      case BackendMethods.searchQuery:
-        return const {
-          'tracks': <Track>[],
-          'albums': <Album>[],
-          'artists': <Artist>[],
-        };
 
       // =======================================================================
       // LYRICS

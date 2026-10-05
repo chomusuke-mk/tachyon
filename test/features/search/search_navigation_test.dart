@@ -110,7 +110,9 @@ void main() {
     playlistsController = PlaylistsController(
       backend: backend,
     );
-    searchController = TachyonSearchController(backend: backend);
+    searchController = TachyonSearchController(
+      storeSupplier: () => libraryController.store,
+    );
   });
 
   tearDownAll(() async {

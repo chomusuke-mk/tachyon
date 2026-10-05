@@ -70,7 +70,7 @@ Future<void> main() async {
   )..loadPlaylists();
 
   final searchController = TachyonSearchController(
-    backend: backendClient,
+    storeSupplier: () => libraryController.store,
   );
 
   final playbackController = PlaybackController(

@@ -108,8 +108,6 @@ abstract final class BackendMethods {
   static const String playlistsIsLiked = 'playlists.isLiked';
   static const String playlistsClearHistory = 'playlists.clearHistory';
 
-  // Search
-  static const String searchQuery = 'search.query';
 
   // Lyrics
   static const String lyricsResolve = 'lyrics.resolve';

@@ -105,8 +105,6 @@ abstract class TachyonBackendClient {
   Future<bool> isTrackLiked(int trackId);
   Future<void> clearHistory();
 
-  // --- Search ---
-  Future<Map<String, dynamic>> search(String query);
 
   // --- Lyrics ---
   Future<LyricsResult?> resolveLyrics({
@@ -625,12 +623,6 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   @override
   Future<void> clearHistory() => _send(BackendMethods.playlistsClearHistory);
 
-  // ===========================================================================
-  // SEARCH
-  // ===========================================================================
-  @override
-  Future<Map<String, dynamic>> search(String query) =>
-      _send<Map<String, dynamic>>(BackendMethods.searchQuery, {'query': query});
 
   // ===========================================================================
   // LYRICS

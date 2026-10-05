@@ -167,6 +167,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
+            tooltip: strings.commonMinimize,
             onPressed: () => Navigator.of(context).pop(),
           ),
         ),
@@ -184,7 +185,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         children: [
           IconButton(
             icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32),
-            tooltip: 'Minimize',
+            tooltip: strings.commonMinimize,
             onPressed: () => Navigator.of(context).pop(),
           ),
           const Spacer(),
