@@ -64,9 +64,20 @@ class QueueView extends StatefulWidget {
 }
 
 class _QueueViewState extends State<QueueView> {
+  static const double _itemExtent = 72.0;
+
   ScrollController? _internalController;
   ScrollController get _effectiveController =>
-      widget.scrollController ?? (_internalController ??= ScrollController());
+      widget.scrollController ?? (_internalController ??= _createInternalController());
+
+  ScrollController _createInternalController() {
+    final playback = context.read<PlaybackController>();
+    final index = playback.currentIndex;
+    final initialOffset = (index > 0 && index < playback.queue.length)
+        ? (index * _itemExtent - 200.0).clamp(0.0, double.infinity)
+        : 0.0;
+    return ScrollController(initialScrollOffset: initialOffset);
+  }
 
   @override
   void initState() {
@@ -83,9 +94,8 @@ class _QueueViewState extends State<QueueView> {
     final index = playback.currentIndex;
     if (index <= 0 || index >= playback.queue.length) return;
 
-    const itemHeight = 72.0;
     final viewportHeight = _effectiveController.position.viewportDimension;
-    final targetOffset = ((index * itemHeight) - (viewportHeight / 2) + (itemHeight / 2))
+    final targetOffset = ((index * _itemExtent) - (viewportHeight / 2) + (_itemExtent / 2))
         .clamp(0.0, _effectiveController.position.maxScrollExtent);
 
     if (animated) {
@@ -193,6 +203,7 @@ class _QueueViewState extends State<QueueView> {
               : ReorderableListView.builder(
                   scrollController: _effectiveController,
                   buildDefaultDragHandles: false,
+                  itemExtent: _itemExtent,
                   scrollCacheExtent: const ScrollCacheExtent.pixels(720.0),
                   itemCount: queue.length,
                   onReorderItem: (from, to) {
