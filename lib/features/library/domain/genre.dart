@@ -3,6 +3,7 @@ import 'track.dart';
 class Genre {
   /// The genre's unique identifier. This is typically assigned by the database or API.
   final int? id;
+
   /// The name of the genre.
   final String name;
 

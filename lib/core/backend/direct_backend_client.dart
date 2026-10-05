@@ -20,7 +20,6 @@ import 'package:tachyon/features/library/domain/track_sort_option.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart'
     show CrossfadeCurve;
 
@@ -124,37 +123,72 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
       await audioEngine?.getAudioDevices() ?? const [];
 
   @override
-  Future<void> playTrack(Track track, {bool play = true}) async {
-    await audioEngine?.open([QueueItem.fromTrack(track)], play: play);
+  Future<void> playTrack(int trackId, {bool play = true}) async {
+    final track = database?.getTrackById(trackId);
+    if (track != null) {
+      final entry = PlaylistEntry.forQueue(id: 0, position: 0, track: track);
+      await audioEngine?.open([entry], play: play);
+    }
   }
 
   @override
   Future<void> playQueue(
-    List<Track> tracks, {
+    List<int> trackIds, {
     int startIndex = 0,
     bool play = true,
+    bool shuffle = false,
   }) async {
-    final queueItems = tracks.map((t) => QueueItem.fromTrack(t)).toList();
-    await audioEngine?.open(queueItems, index: startIndex, play: play);
+    final tracks = database?.getTracksByIds(trackIds) ?? const <Track>[];
+    final entries = [
+      for (int i = 0; i < tracks.length; i++)
+        PlaylistEntry.forQueue(id: i, position: i, track: tracks[i]),
+    ];
+    await audioEngine?.open(
+      entries,
+      index: startIndex,
+      play: play,
+      shuffle: shuffle,
+    );
   }
 
   @override
   Future<void> open(
-    List<QueueItem> items, {
+    List<int> trackIds, {
     int index = 0,
     bool play = true,
     bool shuffle = false,
   }) async {
-    await audioEngine?.open(items, index: index, play: play, shuffle: shuffle);
+    final tracks = database?.getTracksByIds(trackIds) ?? const <Track>[];
+    final entries = [
+      for (int i = 0; i < tracks.length; i++)
+        PlaylistEntry.forQueue(id: i, position: i, track: tracks[i]),
+    ];
+    await audioEngine?.open(
+      entries,
+      index: index,
+      play: play,
+      shuffle: shuffle,
+    );
   }
 
   @override
-  Future<void> insertNext(QueueItem item) async =>
-      await audioEngine?.insertNext(item);
+  Future<void> insertNext(int trackId) async {
+    final track = database?.getTrackById(trackId);
+    if (track != null) {
+      final entry = PlaylistEntry.forQueue(id: 0, position: 0, track: track);
+      await audioEngine?.insertNext(entry);
+    }
+  }
 
   @override
-  Future<void> append(List<QueueItem> items) async =>
-      await audioEngine?.append(items);
+  Future<void> append(List<int> trackIds) async {
+    final tracks = database?.getTracksByIds(trackIds) ?? const <Track>[];
+    final entries = [
+      for (int i = 0; i < tracks.length; i++)
+        PlaylistEntry.forQueue(id: i, position: i, track: tracks[i]),
+    ];
+    await audioEngine?.append(entries);
+  }
 
   @override
   Future<void> skipToIndex(int index) async =>
@@ -208,8 +242,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   Future<List<Track>> getTracks({
     TrackSortOption? sort,
     bool ascending = true,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<List<Album>> getAlbums() async => const [];
@@ -276,10 +309,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     ThumbnailQuality quality = ThumbnailQuality.low,
   }) async {
     if (metadataService != null) {
-      return await metadataService!.getThumbnail(
-        filePath,
-        quality: quality,
-      );
+      return await metadataService!.getThumbnail(filePath, quality: quality);
     }
     if (coverCacheService != null) {
       if (coverCacheService!.hasCachedCover(filePath, quality: quality)) {
@@ -301,7 +331,10 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
       );
     }
     if (coverCacheService != null) {
-      if (coverCacheService!.hasCachedArtistCover(artistName, quality: quality)) {
+      if (coverCacheService!.hasCachedArtistCover(
+        artistName,
+        quality: quality,
+      )) {
         return coverCacheService!
             .getArtistCoverFile(artistName, quality: quality)
             .path;
@@ -399,7 +432,6 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     database?.clearHistory();
     _catalogUpdatedController.add(null);
   }
-
 
   @override
   Future<LyricsResult?> resolveLyrics({

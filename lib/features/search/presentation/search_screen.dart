@@ -7,6 +7,7 @@ import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 
 import 'tachyon_search_controller.dart';
 
@@ -49,8 +50,8 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final searchCtrl = context.watch<TachyonSearchController>();
-    final currentTrackFilePath = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.filePath,
+    final currentTrack = context.select<PlaybackController, Track?>(
+      (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
     final colorScheme = Theme.of(context).colorScheme;
@@ -232,8 +233,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ),
                               ),
                               ...matchedTracks.map((track) {
-                                final isPlaying =
-                                    currentTrackFilePath == track.filePath;
+                                final isPlaying = currentTrack == track;
                                 return TrackTile(
                                   key: ValueKey('search_${track.filePath}'),
                                   track: track,

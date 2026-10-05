@@ -3,8 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
 
 void main() {
   group('Milestone 1 Adversarial & Stress Verification', () {
@@ -279,7 +279,7 @@ void main() {
       expect(snapshot.tracks, isEmpty);
     });
 
-    test('Domain purity: Track and QueueItem do not contain lyrics properties', () {
+    test('Domain purity: Track and PlaylistEntry do not contain lyrics properties', () {
       final track = Track(
         id: 1,
         filePath: '/path/song.mp3',
@@ -289,14 +289,18 @@ void main() {
         modifiedAt: 123456789,
       );
 
-      final queueItem = QueueItem.fromTrack(track);
+      final entry = PlaylistEntry.forQueue(id: 0, track: track);
 
-      // Ensure QueueItem extras does not contain 'lyrics'
-      expect(queueItem.extras.containsKey('lyrics'), isFalse);
+      // Ensure PlaylistEntry and Track do not contain lyrics
+      final dynamic dynamicTrack = track;
+      expect(() => dynamicTrack.lyrics, throwsNoSuchMethodError);
 
-      final trackRoundTrip = queueItem.toTrack();
-      expect(trackRoundTrip.id, 1);
-      expect(trackRoundTrip.title, 'Title');
+      final dynamic dynamicItem = entry;
+      expect(() => dynamicItem.lyrics, throwsNoSuchMethodError);
+      expect(() => dynamicItem.extras, throwsNoSuchMethodError);
+
+      expect(entry.track?.id, 1);
+      expect(entry.track?.title, 'Title');
     });
 
     test('upsertTracks auto-detects synced embedded lyrics and ignores empty lyrics', () {

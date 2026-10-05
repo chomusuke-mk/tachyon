@@ -5,7 +5,9 @@ import 'dart:io';
 /// before execution or while waiting in the pacing queue.
 class LyricsCancelledException implements Exception {
   final String message;
-  const LyricsCancelledException([this.message = 'Lyrics request was cancelled']);
+  const LyricsCancelledException([
+    this.message = 'Lyrics request was cancelled',
+  ]);
 
   @override
   String toString() => 'LyricsCancelledException: $message';
@@ -51,7 +53,8 @@ class LyricsGenerationTracker {
   LyricsCancellationToken? _activeCancellationToken;
 
   int get activeToken => _activeToken;
-  LyricsCancellationToken? get activeCancellationToken => _activeCancellationToken;
+  LyricsCancellationToken? get activeCancellationToken =>
+      _activeCancellationToken;
 
   /// Advances generation counter, cancels previous token, and returns fresh token.
   LyricsCancellationToken nextGeneration() {
@@ -64,7 +67,8 @@ class LyricsGenerationTracker {
 
   /// Checks if given [token] matches current generation and has not been cancelled.
   bool isCurrent(int token) =>
-      token == _activeToken && !(_activeCancellationToken?.isCancelled ?? false);
+      token == _activeToken &&
+      !(_activeCancellationToken?.isCancelled ?? false);
 
   /// Cancels active token without advancing generation counter.
   void cancelCurrent() {
@@ -116,77 +120,94 @@ class LyricsRateLimiter {
       throw StateError('LyricsRateLimiter is disposed');
     }
     if (cancellationToken != null && cancellationToken.isCancelled) {
-      return Future.error(const LyricsCancelledException('Cancelled before entering queue'));
+      return Future.error(
+        const LyricsCancelledException('Cancelled before entering queue'),
+      );
     }
 
     final completer = Completer<T>();
 
-    _queueChain = _queueChain.then((_) async {
-      if (_isDisposed) {
-        if (!completer.isCompleted) {
-          completer.completeError(StateError('LyricsRateLimiter disposed during queue wait'));
-        }
-        return;
-      }
-      if (cancellationToken != null && cancellationToken.isCancelled) {
-        if (!completer.isCompleted) {
-          completer.completeError(const LyricsCancelledException('Cancelled while waiting in queue'));
-        }
-        return;
-      }
+    _queueChain = _queueChain
+        .then((_) async {
+          if (_isDisposed) {
+            if (!completer.isCompleted) {
+              completer.completeError(
+                StateError('LyricsRateLimiter disposed during queue wait'),
+              );
+            }
+            return;
+          }
+          if (cancellationToken != null && cancellationToken.isCancelled) {
+            if (!completer.isCompleted) {
+              completer.completeError(
+                const LyricsCancelledException(
+                  'Cancelled while waiting in queue',
+                ),
+              );
+            }
+            return;
+          }
 
-      final currentTime = now;
-      if (_lastDispatchedTime != null && minInterval > Duration.zero) {
-        final elapsed = currentTime.difference(_lastDispatchedTime!);
-        if (elapsed < minInterval) {
-          final waitDuration = minInterval - elapsed;
-          if (waitDuration > Duration.zero) {
-            if (cancellationToken != null) {
-              final delayCompleter = Completer<void>();
-              final timer = Timer(waitDuration, () {
-                if (!delayCompleter.isCompleted) delayCompleter.complete();
-              });
-              cancellationToken.onCancelled(() {
-                timer.cancel();
-                if (!delayCompleter.isCompleted) delayCompleter.complete();
-              });
-              await delayCompleter.future;
-            } else {
-              await Future.delayed(waitDuration);
-            }
-            if (_isDisposed) {
-              if (!completer.isCompleted) {
-                completer.completeError(StateError('LyricsRateLimiter disposed during delay'));
+          final currentTime = now;
+          if (_lastDispatchedTime != null && minInterval > Duration.zero) {
+            final elapsed = currentTime.difference(_lastDispatchedTime!);
+            if (elapsed < minInterval) {
+              final waitDuration = minInterval - elapsed;
+              if (waitDuration > Duration.zero) {
+                if (cancellationToken != null) {
+                  final delayCompleter = Completer<void>();
+                  final timer = Timer(waitDuration, () {
+                    if (!delayCompleter.isCompleted) delayCompleter.complete();
+                  });
+                  cancellationToken.onCancelled(() {
+                    timer.cancel();
+                    if (!delayCompleter.isCompleted) delayCompleter.complete();
+                  });
+                  await delayCompleter.future;
+                } else {
+                  await Future.delayed(waitDuration);
+                }
+                if (_isDisposed) {
+                  if (!completer.isCompleted) {
+                    completer.completeError(
+                      StateError('LyricsRateLimiter disposed during delay'),
+                    );
+                  }
+                  return;
+                }
+                if (cancellationToken != null &&
+                    cancellationToken.isCancelled) {
+                  if (!completer.isCompleted) {
+                    completer.completeError(
+                      const LyricsCancelledException(
+                        'Cancelled during pacing wait',
+                      ),
+                    );
+                  }
+                  return;
+                }
               }
-              return;
-            }
-            if (cancellationToken != null && cancellationToken.isCancelled) {
-              if (!completer.isCompleted) {
-                completer.completeError(const LyricsCancelledException('Cancelled during pacing wait'));
-              }
-              return;
             }
           }
-        }
-      }
 
-      final dispatchTime = now;
-      _lastDispatchedTime = dispatchTime;
-      requestTimestamps.add(dispatchTime);
+          final dispatchTime = now;
+          _lastDispatchedTime = dispatchTime;
+          requestTimestamps.add(dispatchTime);
 
-      try {
-        final result = await action();
-        if (!completer.isCompleted) {
-          completer.complete(result);
-        }
-      } catch (e, st) {
-        if (!completer.isCompleted) {
-          completer.completeError(e, st);
-        }
-      }
-    }).catchError((_) {
-      // Absorb errors in queue pipeline to prevent subsequent items from stalling
-    });
+          try {
+            final result = await action();
+            if (!completer.isCompleted) {
+              completer.complete(result);
+            }
+          } catch (e, st) {
+            if (!completer.isCompleted) {
+              completer.completeError(e, st);
+            }
+          }
+        })
+        .catchError((_) {
+          // Absorb errors in queue pipeline to prevent subsequent items from stalling
+        });
 
     return completer.future;
   }
@@ -276,9 +297,8 @@ class LyricsCooldownManager {
   final StreamController<int?> _thresholdStreamController =
       StreamController<int?>.broadcast();
 
-  LyricsCooldownManager({
-    DateTime Function()? nowProvider,
-  }) : nowProvider = nowProvider ?? DateTime.now;
+  LyricsCooldownManager({DateTime Function()? nowProvider})
+    : nowProvider = nowProvider ?? DateTime.now;
 
   DateTime get now => nowProvider();
 
@@ -427,14 +447,16 @@ class LyricsCooldownManager {
       if (remainingMs <= 0) {
         onRetry();
       } else {
-        _deferredRetryTimer =
-            Timer(Duration(milliseconds: remainingMs), () async {
-              if (_deferredCallback != null) {
-                final cb = _deferredCallback!;
-                cancelDeferredRetry();
-                await cb();
-              }
-            });
+        _deferredRetryTimer = Timer(
+          Duration(milliseconds: remainingMs),
+          () async {
+            if (_deferredCallback != null) {
+              final cb = _deferredCallback!;
+              cancelDeferredRetry();
+              await cb();
+            }
+          },
+        );
       }
     }
   }

@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
+import 'package:tachyon/features/settings/data/settings_repository.dart'
+    show CrossfadeCurve;
 
 import 'audio_player_adapter.dart';
 
@@ -34,9 +35,7 @@ class CrossfadeManager {
   Duration _accumulatedTime = Duration.zero;
   void Function()? _onCrossEnd;
 
-  CrossfadeManager({
-    this.tickerInterval = const Duration(milliseconds: 25),
-  });
+  CrossfadeManager({this.tickerInterval = const Duration(milliseconds: 25)});
 
   /// Whether a crossfade operation is currently active.
   bool get isActive => _isActive;
@@ -53,16 +52,18 @@ class CrossfadeManager {
   /// Current progress in range [0.0, 1.0].
   double get progress {
     if (!_isActive || _effectiveDuration.inMilliseconds <= 0) return 0.0;
-    final pTime = (_accumulatedTime.inMilliseconds / _effectiveDuration.inMilliseconds)
-        .clamp(0.0, 1.0);
+    final pTime =
+        (_accumulatedTime.inMilliseconds / _effectiveDuration.inMilliseconds)
+            .clamp(0.0, 1.0);
     var pPos = 0.0;
     final out = _playerOut;
     if (out != null && _startPositionOut != null) {
       final currentPos = out.position;
       if (currentPos >= _startPositionOut!) {
-        pPos = ((currentPos - _startPositionOut!).inMilliseconds /
-                _effectiveDuration.inMilliseconds)
-            .clamp(0.0, 1.0);
+        pPos =
+            ((currentPos - _startPositionOut!).inMilliseconds /
+                    _effectiveDuration.inMilliseconds)
+                .clamp(0.0, 1.0);
       }
     }
     return math.max(pTime, pPos);
@@ -168,7 +169,8 @@ class CrossfadeManager {
 
     if (_lastTickTime != null) {
       final elapsed = DateTime.now().difference(_lastTickTime!);
-      final elapsedMediaMicros = (elapsed.inMicroseconds * _playbackRate).round();
+      final elapsedMediaMicros = (elapsed.inMicroseconds * _playbackRate)
+          .round();
       _accumulatedTime += Duration(microseconds: elapsedMediaMicros);
       _lastTickTime = null;
     }
@@ -232,7 +234,10 @@ class CrossfadeManager {
   // --------------------------------------------------------------------------
 
   void _onTick(int opId) {
-    if (!_isActive || _isPaused || _operationId != opId || _lastTickTime == null) {
+    if (!_isActive ||
+        _isPaused ||
+        _operationId != opId ||
+        _lastTickTime == null) {
       return;
     }
 

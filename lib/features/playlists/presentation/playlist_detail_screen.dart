@@ -47,8 +47,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final playlists = context.watch<PlaylistsController>();
-    final currentTrackFilePath = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.filePath,
+    final currentTrack = context.select<PlaybackController, Track?>(
+      (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
 
@@ -162,7 +162,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                 },
                 itemBuilder: (context, index) {
                   final track = tracks[index];
-                  final isPlaying = currentTrackFilePath == track.filePath;
+                  final isPlaying = currentTrack == track;
 
                   final artistNames =
                       track.artists.map((a) => a.name).join(', ');

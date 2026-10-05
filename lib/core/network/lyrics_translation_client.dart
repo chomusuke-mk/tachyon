@@ -111,7 +111,8 @@ class LyricsTranslationClient {
     http.Client? httpClient,
     this.timeout = const Duration(seconds: 5),
     this.myMemoryBaseUrl = defaultBaseUrl,
-  }) : _httpClient = httpClient ?? _defaultClient(timeout: const Duration(seconds: 5)),
+  }) : _httpClient =
+           httpClient ?? _defaultClient(timeout: const Duration(seconds: 5)),
        _ownsClient = httpClient == null;
 
   static http.Client _defaultClient({required Duration timeout}) {
@@ -210,7 +211,8 @@ class LyricsTranslationClient {
       );
     }
 
-    final src = (sourceLanguage == null ||
+    final src =
+        (sourceLanguage == null ||
             sourceLanguage == 'auto' ||
             sourceLanguage == 'autodetect')
         ? 'autodetect'
@@ -293,7 +295,8 @@ class LyricsTranslationClient {
       return (lines: List<String>.from(batch), isSameLanguage: false);
     }
 
-    final src = (sourceLanguage == null ||
+    final src =
+        (sourceLanguage == null ||
             sourceLanguage == 'auto' ||
             sourceLanguage == 'autodetect')
         ? 'autodetect'
@@ -305,10 +308,7 @@ class LyricsTranslationClient {
 
     final batchText = batch.join('\n');
     final uri = Uri.parse(myMemoryBaseUrl).replace(
-      queryParameters: {
-        'q': batchText,
-        'langpair': '$src|$targetLanguage',
-      },
+      queryParameters: {'q': batchText, 'langpair': '$src|$targetLanguage'},
     );
 
     try {
@@ -342,7 +342,9 @@ class LyricsTranslationClient {
           bodyString = response.body;
         }
 
-        if (bodyString.toUpperCase().contains('PLEASE SELECT TWO DISTINCT LANGUAGES')) {
+        if (bodyString.toUpperCase().contains(
+          'PLEASE SELECT TWO DISTINCT LANGUAGES',
+        )) {
           return (lines: List<String>.from(batch), isSameLanguage: true);
         }
 
@@ -355,7 +357,9 @@ class LyricsTranslationClient {
 
         final decoded = jsonDecode(bodyString);
         if (decoded is! Map<String, dynamic>) {
-          throw const LyricsTranslationException('Invalid JSON response format');
+          throw const LyricsTranslationException(
+            'Invalid JSON response format',
+          );
         }
 
         final responseStatus =
@@ -371,7 +375,9 @@ class LyricsTranslationClient {
           final details =
               decoded['responseDetails'] as String? ??
               'Translation service error $responseStatus';
-          if (details.toUpperCase().contains('PLEASE SELECT TWO DISTINCT LANGUAGES')) {
+          if (details.toUpperCase().contains(
+            'PLEASE SELECT TWO DISTINCT LANGUAGES',
+          )) {
             return (lines: List<String>.from(batch), isSameLanguage: true);
           }
           throw LyricsTranslationException(details, statusCode: responseStatus);

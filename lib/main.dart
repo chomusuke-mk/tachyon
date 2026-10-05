@@ -76,6 +76,7 @@ Future<void> main() async {
   final playbackController = PlaybackController(
     backend: backendClient,
     settingsRepository: settingsRepository,
+    libraryStoreSupplier: () => libraryController.store,
   );
 
   final lyricsController = LyricsController(

@@ -6,6 +6,7 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
+import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/shared/utils/file_picker_service.dart';
 
 import 'library_controller.dart';
@@ -17,8 +18,8 @@ class FoldersScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrackFilePath = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.filePath,
+    final currentTrack = context.select<PlaybackController, Track?>(
+      (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
     final settings = context.watch<SettingsController>();
@@ -164,8 +165,7 @@ class FoldersScreen extends StatelessWidget {
                         );
                       }),
                       ...library.currentFolderTracks.map((track) {
-                        final isPlaying =
-                            currentTrackFilePath == track.filePath;
+                        final isPlaying = currentTrack == track;
                         return TrackTile(
                           key: ValueKey(track.filePath),
                           track: track,

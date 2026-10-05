@@ -6,8 +6,10 @@ import 'track.dart';
 class Album {
   /// The album's unique identifier.
   final int? id;
+
   /// The name of the album.
   final String name;
+
   /// The year the album was released. This is optional and may not be available for all albums.
   final int? year;
 

@@ -8,6 +8,7 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 
 import 'album_detail_screen.dart';
 import 'library_controller.dart';
@@ -21,8 +22,8 @@ class ArtistDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrackFilePath = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.filePath,
+    final currentTrack = context.select<PlaybackController, Track?>(
+      (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
 
@@ -181,7 +182,7 @@ class ArtistDetailScreen extends StatelessWidget {
           SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final track = artistTracks[index];
-              final isPlaying = currentTrackFilePath == track.filePath;
+              final isPlaying = currentTrack == track;
 
               return TrackTile(
                 key: ValueKey(track.filePath),

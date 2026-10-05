@@ -5,7 +5,7 @@ import 'package:miniaudio_player/miniaudio_player.dart' show Equalizer;
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 

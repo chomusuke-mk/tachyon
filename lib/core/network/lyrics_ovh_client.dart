@@ -22,23 +22,21 @@ class LyricsOvhResponse {
 
   /// Factory for a successful lyrics match.
   const LyricsOvhResponse.success(this.lyrics)
-      : statusCode = 200,
-        error = null,
-        _isTemporary = false;
+    : statusCode = 200,
+      error = null,
+      _isTemporary = false;
 
   /// Factory for a confirmed not-found result (404 or empty content).
   const LyricsOvhResponse.notFound({String? error})
-      : lyrics = null,
-        statusCode = 404,
-        error = error ?? 'No lyrics found',
-        _isTemporary = false;
+    : lyrics = null,
+      statusCode = 404,
+      error = error ?? 'No lyrics found',
+      _isTemporary = false;
 
   /// Factory for temporary network, server, or rate-limit errors.
-  const LyricsOvhResponse.temporaryError({
-    required this.statusCode,
-    this.error,
-  })  : lyrics = null,
-        _isTemporary = true;
+  const LyricsOvhResponse.temporaryError({required this.statusCode, this.error})
+    : lyrics = null,
+      _isTemporary = true;
 
   /// Whether lyrics were successfully retrieved with non-empty content.
   bool get isSuccess =>
@@ -91,7 +89,7 @@ class LyricsOvhResponse {
 class LyricsOvhClient {
   static const String defaultBaseUrl = 'https://api.lyrics.ovh/v1';
   static const String defaultUserAgent =
-      'Tachyon/1.0.0 (https://github.com/tachyon-player/tachyon)';
+      'Tachyon/1.0.0 (https://github.com/chomusuke-mk/tachyon)';
 
   final http.Client _httpClient;
   final bool _ownsClient;
@@ -102,9 +100,9 @@ class LyricsOvhClient {
     http.Client? httpClient,
     this.timeout = const Duration(seconds: 10),
     String baseUrl = defaultBaseUrl,
-  })  : _httpClient = httpClient ?? http.Client(),
-        _ownsClient = httpClient == null,
-        baseUrl = baseUrl.replaceAll(RegExp(r'/+$'), '');
+  }) : _httpClient = httpClient ?? http.Client(),
+       _ownsClient = httpClient == null,
+       baseUrl = baseUrl.replaceAll(RegExp(r'/+$'), '');
 
   /// Fetches structured lyrics response from lyrics.ovh for [artist] and [title].
   Future<LyricsOvhResponse> getLyrics({
@@ -126,13 +124,15 @@ class LyricsOvhClient {
     final uri = Uri.parse(url);
 
     try {
-      final response = await _httpClient.get(
-        uri,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': defaultUserAgent,
-        },
-      ).timeout(timeout);
+      final response = await _httpClient
+          .get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': defaultUserAgent,
+            },
+          )
+          .timeout(timeout);
 
       if (response.statusCode == 200) {
         try {

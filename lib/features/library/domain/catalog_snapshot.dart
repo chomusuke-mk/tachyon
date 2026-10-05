@@ -56,20 +56,14 @@ class RawArtistDto {
   final int id;
   final String name;
 
-  const RawArtistDto({
-    required this.id,
-    required this.name,
-  });
+  const RawArtistDto({required this.id, required this.name});
 }
 
 class RawGenreDto {
   final int id;
   final String name;
 
-  const RawGenreDto({
-    required this.id,
-    required this.name,
-  });
+  const RawGenreDto({required this.id, required this.name});
 }
 
 class RawPlaylistDto {
@@ -106,20 +100,14 @@ class TrackArtistPair {
   final int trackId;
   final int artistId;
 
-  const TrackArtistPair({
-    required this.trackId,
-    required this.artistId,
-  });
+  const TrackArtistPair({required this.trackId, required this.artistId});
 }
 
 class TrackGenrePair {
   final int trackId;
   final int genreId;
 
-  const TrackGenrePair({
-    required this.trackId,
-    required this.genreId,
-  });
+  const TrackGenrePair({required this.trackId, required this.genreId});
 }
 
 /// In-memory catalog snapshot exported in a single read transaction.
@@ -147,12 +135,12 @@ class CatalogSnapshot {
   });
 
   const CatalogSnapshot.empty()
-      : tracks = const [],
-        albums = const [],
-        artists = const [],
-        genres = const [],
-        playlists = const [],
-        playlistEntries = const [],
-        trackArtists = const [],
-        trackGenres = const [];
+    : tracks = const [],
+      albums = const [],
+      artists = const [],
+      genres = const [],
+      playlists = const [],
+      playlistEntries = const [],
+      trackArtists = const [],
+      trackGenres = const [];
 }

@@ -526,11 +526,7 @@ class LibraryStore {
     return copy;
   }
 
-  List<Track> filterTracks({
-    Album? album,
-    Artist? artist,
-    Genre? genre,
-  }) {
+  List<Track> filterTracks({Album? album, Artist? artist, Genre? genre}) {
     if (album == null && artist == null && genre == null) {
       return List.unmodifiable(_allTracks);
     }
@@ -547,13 +543,19 @@ class LibraryStore {
     }
 
     return candidates.where((track) {
-      if (album != null && !identical(track.album, album) && track.album?.id != album.id) {
+      if (album != null &&
+          !identical(track.album, album) &&
+          track.album?.id != album.id) {
         return false;
       }
-      if (artist != null && !track.artists.any((a) => identical(a, artist) || a.id == artist.id)) {
+      if (artist != null &&
+          !track.artists.any(
+            (a) => identical(a, artist) || a.id == artist.id,
+          )) {
         return false;
       }
-      if (genre != null && !track.genres.any((g) => identical(g, genre) || g.id == genre.id)) {
+      if (genre != null &&
+          !track.genres.any((g) => identical(g, genre) || g.id == genre.id)) {
         return false;
       }
       return true;
@@ -565,7 +567,9 @@ class LibraryStore {
     if (q.isEmpty) return const [];
     return _allTracks.where((t) {
       if (t.title.toLowerCase().contains(q)) return true;
-      if (t.album != null && t.album!.name.toLowerCase().contains(q)) return true;
+      if (t.album != null && t.album!.name.toLowerCase().contains(q)) {
+        return true;
+      }
       if (t.artists.any((a) => a.name.toLowerCase().contains(q))) return true;
       return false;
     }).toList();
@@ -576,7 +580,9 @@ class LibraryStore {
     if (q.isEmpty) return const [];
     return _allAlbums.where((a) {
       if (a.name.toLowerCase().contains(q)) return true;
-      if (a.artist != null && a.artist!.name.toLowerCase().contains(q)) return true;
+      if (a.artist != null && a.artist!.name.toLowerCase().contains(q)) {
+        return true;
+      }
       return false;
     }).toList();
   }

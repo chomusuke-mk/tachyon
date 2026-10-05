@@ -6,12 +6,12 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:tachyon/core/backend/backend_host.dart';
 import 'package:tachyon/core/backend/backend_protocol.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
-import 'package:tachyon/core/backend/services/metadata_service.dart' show ExtractedTrackData;
+import 'package:tachyon/core/backend/services/metadata_service.dart'
+    show ExtractedTrackData;
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
@@ -22,7 +22,8 @@ import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/domain/track_sort_option.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
-import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
+import 'package:tachyon/features/settings/data/settings_repository.dart'
+    show CrossfadeCurve;
 
 /// Abstract client interface consumed exclusively by UI controllers.
 /// The UI isolate contains ZERO database queries, ZERO audio player adapters,
@@ -49,16 +50,21 @@ abstract class TachyonBackendClient {
   Future<void> setEqualizer(Equalizer equalizer);
   Future<void> setOutputDevice(AudioDevice device);
   Future<List<AudioDevice>> getAudioDevices();
-  Future<void> playTrack(Track track, {bool play = true});
-  Future<void> playQueue(List<Track> tracks, {int startIndex = 0, bool play = true});
+  Future<void> playTrack(int trackId, {bool play = true});
+  Future<void> playQueue(
+    List<int> trackIds, {
+    int startIndex = 0,
+    bool play = true,
+    bool shuffle = false,
+  });
   Future<void> open(
-    List<QueueItem> items, {
+    List<int> trackIds, {
     int index = 0,
     bool play = true,
     bool shuffle = false,
   });
-  Future<void> insertNext(QueueItem item);
-  Future<void> append(List<QueueItem> items);
+  Future<void> insertNext(int trackId);
+  Future<void> append(List<int> trackIds);
   Future<void> skipToIndex(int index);
   Future<void> setShuffle(bool enabled);
   Future<void> setLoopMode(Loop mode);
@@ -87,8 +93,14 @@ abstract class TachyonBackendClient {
 
   // --- Metadata & Thumbnails (Worker Isolates) ---
   Future<ExtractedTrackData?> getMetadata(String filePath);
-  Future<String?> getThumbnail(String filePath, {ThumbnailQuality quality = ThumbnailQuality.low});
-  Future<String?> getArtistCover(String artistName, {ThumbnailQuality quality = ThumbnailQuality.low});
+  Future<String?> getThumbnail(
+    String filePath, {
+    ThumbnailQuality quality = ThumbnailQuality.low,
+  });
+  Future<String?> getArtistCover(
+    String artistName, {
+    ThumbnailQuality quality = ThumbnailQuality.low,
+  });
   Future<void> clearCoverCache();
 
   // --- Playlists ---
@@ -100,11 +112,14 @@ abstract class TachyonBackendClient {
   Future<List<int>> getPlaylistTrackIds(int playlistId);
   Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds);
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId);
-  Future<void> reorderPlaylistTracks(int playlistId, int oldIndex, int newIndex);
+  Future<void> reorderPlaylistTracks(
+    int playlistId,
+    int oldIndex,
+    int newIndex,
+  );
   Future<bool> toggleLikeTrack(int trackId, [String? filePath]);
   Future<bool> isTrackLiked(int trackId);
   Future<void> clearHistory();
-
 
   // --- Lyrics ---
   Future<LyricsResult?> resolveLyrics({
@@ -153,7 +168,8 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
       StreamController<void>.broadcast();
 
   @override
-  Stream<PlaybackState> get playbackStateStream => _playbackStateController.stream;
+  Stream<PlaybackState> get playbackStateStream =>
+      _playbackStateController.stream;
 
   @override
   Stream<Duration> get positionStream => _positionController.stream;
@@ -248,7 +264,10 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
     }
   }
 
-  Future<T> _send<T>(String method, [Map<String, dynamic> params = const {}]) async {
+  Future<T> _send<T>(
+    String method, [
+    Map<String, dynamic> params = const {},
+  ]) async {
     if (_hostSendPort == null) {
       await _initCompleter.future;
     }
@@ -257,11 +276,9 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
     final completer = Completer<T>();
     _pendingRequests[id] = completer;
 
-    _hostSendPort!.send(BackendRequest(
-      requestId: id,
-      method: method,
-      params: params,
-    ));
+    _hostSendPort!.send(
+      BackendRequest(requestId: id, method: method, params: params),
+    );
 
     return completer.future;
   }
@@ -279,10 +296,9 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   Future<void> stop() => _send(BackendMethods.playbackStop);
 
   @override
-  Future<void> seek(Duration position) => _send(
-        BackendMethods.playbackSeek,
-        {'positionMs': position.inMilliseconds},
-      );
+  Future<void> seek(Duration position) => _send(BackendMethods.playbackSeek, {
+    'positionMs': position.inMilliseconds,
+  });
 
   @override
   Future<void> next() => _send(BackendMethods.playbackNext);
@@ -291,113 +307,98 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   Future<void> previous() => _send(BackendMethods.playbackPrevious);
 
   @override
-  Future<void> setVolume(double volume) => _send(
-        BackendMethods.playbackSetVolume,
-        {'volume': volume},
-      );
+  Future<void> setVolume(double volume) =>
+      _send(BackendMethods.playbackSetVolume, {'volume': volume});
 
   @override
-  Future<void> setRate(double rate) => _send(
-        BackendMethods.playbackSetRate,
-        {'rate': rate},
-      );
+  Future<void> setRate(double rate) =>
+      _send(BackendMethods.playbackSetRate, {'rate': rate});
 
   @override
-  Future<void> setPitch(double pitch) => _send(
-        BackendMethods.playbackSetPitch,
-        {'pitch': pitch},
-      );
+  Future<void> setPitch(double pitch) =>
+      _send(BackendMethods.playbackSetPitch, {'pitch': pitch});
 
   @override
-  Future<void> setSkipSilence(bool enabled) => _send(
-        BackendMethods.playbackSetSkipSilence,
-        {'enabled': enabled},
-      );
+  Future<void> setSkipSilence(bool enabled) =>
+      _send(BackendMethods.playbackSetSkipSilence, {'enabled': enabled});
 
   @override
-  Future<void> setEqualizer(Equalizer equalizer) => _send(
-        BackendMethods.playbackSetEqualizer,
-        {'gains': equalizer.toList()},
-      );
+  Future<void> setEqualizer(Equalizer equalizer) =>
+      _send(BackendMethods.playbackSetEqualizer, {'gains': equalizer.toList()});
 
   @override
-  Future<void> setOutputDevice(AudioDevice device) => _send(
-        BackendMethods.playbackSetOutputDevice,
-        {'device': device},
-      );
+  Future<void> setOutputDevice(AudioDevice device) =>
+      _send(BackendMethods.playbackSetOutputDevice, {'device': device});
 
   @override
   Future<List<AudioDevice>> getAudioDevices() async {
-    final result = await _send<List<dynamic>>(BackendMethods.playbackGetAudioDevices);
+    final result = await _send<List<dynamic>>(
+      BackendMethods.playbackGetAudioDevices,
+    );
     return result.cast<AudioDevice>();
   }
 
   @override
-  Future<void> playTrack(Track track, {bool play = true}) => _send(
-        BackendMethods.playbackPlayTrack,
-        {'track': track, 'play': play},
-      );
+  Future<void> playTrack(int trackId, {bool play = true}) => _send(
+    BackendMethods.playbackPlayTrack,
+    {'trackId': trackId, 'play': play},
+  );
 
   @override
   Future<void> playQueue(
-    List<Track> tracks, {
+    List<int> trackIds, {
     int startIndex = 0,
     bool play = true,
-  }) =>
-      _send(
-        BackendMethods.playbackPlayQueue,
-        {'tracks': tracks, 'startIndex': startIndex, 'play': play},
-      );
+    bool shuffle = false,
+  }) => _send(BackendMethods.playbackPlayQueue, {
+    'trackIds': trackIds,
+    'startIndex': startIndex,
+    'play': play,
+    'shuffle': shuffle,
+  });
 
   @override
   Future<void> open(
-    List<QueueItem> items, {
+    List<int> trackIds, {
     int index = 0,
     bool play = true,
     bool shuffle = false,
-  }) =>
-      _send(BackendMethods.playbackOpen, {
-        'items': items,
-        'index': index,
-        'play': play,
-        'shuffle': shuffle,
-      });
+  }) => _send(BackendMethods.playbackOpen, {
+    'trackIds': trackIds,
+    'index': index,
+    'play': play,
+    'shuffle': shuffle,
+  });
 
   @override
-  Future<void> insertNext(QueueItem item) =>
-      _send(BackendMethods.playbackInsertNext, {'item': item});
+  Future<void> insertNext(int trackId) =>
+      _send(BackendMethods.playbackInsertNext, {'trackId': trackId});
 
   @override
-  Future<void> append(List<QueueItem> items) =>
-      _send(BackendMethods.playbackAppend, {'items': items});
+  Future<void> append(List<int> trackIds) =>
+      _send(BackendMethods.playbackAppend, {'trackIds': trackIds});
 
   @override
   Future<void> skipToIndex(int index) =>
       _send(BackendMethods.playbackSkipToIndex, {'index': index});
 
   @override
-  Future<void> setShuffle(bool enabled) => _send(
-        BackendMethods.playbackSetShuffle,
-        {'enabled': enabled},
-      );
+  Future<void> setShuffle(bool enabled) =>
+      _send(BackendMethods.playbackSetShuffle, {'enabled': enabled});
 
   @override
-  Future<void> setLoopMode(Loop mode) => _send(
-        BackendMethods.playbackSetLoopMode,
-        {'loopMode': mode.index},
-      );
+  Future<void> setLoopMode(Loop mode) =>
+      _send(BackendMethods.playbackSetLoopMode, {'loopMode': mode.index});
 
   @override
-  Future<void> removeQueueItem(int index) => _send(
-        BackendMethods.playbackRemoveQueueItem,
-        {'index': index},
-      );
+  Future<void> removeQueueItem(int index) =>
+      _send(BackendMethods.playbackRemoveQueueItem, {'index': index});
 
   @override
   Future<void> reorderQueue(int oldIndex, int newIndex) => _send(
-        BackendMethods.playbackReorderQueue,
-        {'oldIndex': oldIndex, 'newIndex': newIndex},
-      );
+    BackendMethods.playbackReorderQueue,
+    {'oldIndex': oldIndex, 'newIndex': newIndex},
+  );
 
   @override
   Future<void> clearQueue() => _send(BackendMethods.playbackClearQueue);
@@ -408,15 +409,13 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
 
   @override
   Future<void> setCrossfadeDuration(Duration duration) => _send(
-        BackendMethods.playbackSetCrossfadeDuration,
-        {'durationMs': duration.inMilliseconds},
-      );
+    BackendMethods.playbackSetCrossfadeDuration,
+    {'durationMs': duration.inMilliseconds},
+  );
 
   @override
-  Future<void> setCrossfadeCurve(CrossfadeCurve curve) => _send(
-        BackendMethods.playbackSetCrossfadeCurve,
-        {'curve': curve.index},
-      );
+  Future<void> setCrossfadeCurve(CrossfadeCurve curve) =>
+      _send(BackendMethods.playbackSetCrossfadeCurve, {'curve': curve.index});
 
   @override
   Future<void> setCrossfadeConfig(CrossfadeConfig config) =>
@@ -431,16 +430,21 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   // ===========================================================================
   @override
   Future<CatalogSnapshot> getCatalogSnapshot() async {
-    final result = await _send<dynamic>(BackendMethods.libraryGetCatalogSnapshot);
+    final result = await _send<dynamic>(
+      BackendMethods.libraryGetCatalogSnapshot,
+    );
     return result as CatalogSnapshot;
   }
 
   @override
-  Future<List<Track>> getTracks({TrackSortOption? sort, bool ascending = true}) async {
-    final result = await _send<List<dynamic>>(
-      BackendMethods.libraryGetTracks,
-      {'sort': sort, 'ascending': ascending},
-    );
+  Future<List<Track>> getTracks({
+    TrackSortOption? sort,
+    bool ascending = true,
+  }) async {
+    final result = await _send<List<dynamic>>(BackendMethods.libraryGetTracks, {
+      'sort': sort,
+      'ascending': ascending,
+    });
     return result.cast<Track>();
   }
 
@@ -481,54 +485,52 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   }
 
   @override
-  Future<void> startScan(String directoryPath) => _send(
-        BackendMethods.libraryStartScan,
-        {'directoryPath': directoryPath},
-      );
+  Future<void> startScan(String directoryPath) =>
+      _send(BackendMethods.libraryStartScan, {'directoryPath': directoryPath});
 
   @override
   Future<void> cancelScan() => _send(BackendMethods.libraryCancelScan);
 
   @override
-  Future<void> deleteTrack(int trackId) => _send(
-        BackendMethods.libraryDeleteTrack,
-        {'trackId': trackId},
-      );
+  Future<void> deleteTrack(int trackId) =>
+      _send(BackendMethods.libraryDeleteTrack, {'trackId': trackId});
 
   @override
   Future<void> startScanDirectories(List<String> directories) =>
       _send(BackendMethods.libraryStartScan, {'directories': directories});
 
   @override
-  Future<void> deleteTracksInFolder(String folderPath) =>
-      _send(BackendMethods.libraryDeleteTracksInFolder, {'folderPath': folderPath});
+  Future<void> deleteTracksInFolder(String folderPath) => _send(
+    BackendMethods.libraryDeleteTracksInFolder,
+    {'folderPath': folderPath},
+  );
 
   // ===========================================================================
   // METADATA & THUMBNAILS (WORKER ISOLATES)
   // ===========================================================================
   @override
   Future<ExtractedTrackData?> getMetadata(String filePath) =>
-      _send<ExtractedTrackData?>(BackendMethods.metadataGetMetadata, {'filePath': filePath});
+      _send<ExtractedTrackData?>(BackendMethods.metadataGetMetadata, {
+        'filePath': filePath,
+      });
 
   @override
   Future<String?> getThumbnail(
     String filePath, {
     ThumbnailQuality quality = ThumbnailQuality.low,
-  }) =>
-      _send<String?>(BackendMethods.metadataGetThumbnail, {
-        'filePath': filePath,
-        'quality': quality.name,
-      });
+  }) => _send<String?>(BackendMethods.metadataGetThumbnail, {
+    'filePath': filePath,
+    'quality': quality.name,
+  });
 
   @override
   Future<String?> getArtistCover(
     String artistName, {
     ThumbnailQuality quality = ThumbnailQuality.low,
-  }) =>
-      _send<String?>(BackendMethods.metadataGetArtistCover, {
-        'artistName': artistName,
-        'quality': quality.name,
-      });
+  }) => _send<String?>(BackendMethods.metadataGetArtistCover, {
+    'artistName': artistName,
+    'quality': quality.name,
+  });
 
   @override
   Future<void> clearCoverCache() =>
@@ -553,9 +555,9 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
 
   @override
   Future<void> renamePlaylist(int playlistId, String name) => _send(
-        BackendMethods.playlistsRename,
-        {'playlistId': playlistId, 'name': name},
-      );
+    BackendMethods.playlistsRename,
+    {'playlistId': playlistId, 'name': name},
+  );
 
   @override
   Future<List<Track>> getPlaylistTracks(int playlistId) async {
@@ -567,30 +569,27 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   }
 
   @override
-  Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) =>
-      _send(BackendMethods.playlistsAddTracks, {
-        'playlistId': playlistId,
-        'trackIds': trackIds,
-      });
+  Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) => _send(
+    BackendMethods.playlistsAddTracks,
+    {'playlistId': playlistId, 'trackIds': trackIds},
+  );
 
   @override
-  Future<void> removeTrackFromPlaylist(int playlistId, int trackId) =>
-      _send(BackendMethods.playlistsRemoveTrack, {
-        'playlistId': playlistId,
-        'trackId': trackId,
-      });
+  Future<void> removeTrackFromPlaylist(int playlistId, int trackId) => _send(
+    BackendMethods.playlistsRemoveTrack,
+    {'playlistId': playlistId, 'trackId': trackId},
+  );
 
   @override
   Future<void> reorderPlaylistTracks(
     int playlistId,
     int oldIndex,
     int newIndex,
-  ) =>
-      _send(BackendMethods.playlistsReorderTracks, {
-        'playlistId': playlistId,
-        'oldIndex': oldIndex,
-        'newIndex': newIndex,
-      });
+  ) => _send(BackendMethods.playlistsReorderTracks, {
+    'playlistId': playlistId,
+    'oldIndex': oldIndex,
+    'newIndex': newIndex,
+  });
 
   @override
   Future<List<int>> getPlaylistTrackIds(int playlistId) async {
@@ -622,7 +621,6 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
 
   @override
   Future<void> clearHistory() => _send(BackendMethods.playlistsClearHistory);
-
 
   // ===========================================================================
   // LYRICS
@@ -684,7 +682,8 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
     if (res is Map) {
       if (res['error'] == 'rate_limit') {
         throw LyricsTranslationException(
-          res['message'] as String? ?? 'Rate limit exceeded (Too many requests)',
+          res['message'] as String? ??
+              'Rate limit exceeded (Too many requests)',
           statusCode: res['statusCode'] as int? ?? 429,
         );
       }

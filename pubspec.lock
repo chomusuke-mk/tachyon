@@ -507,10 +507,10 @@ packages:
     dependency: "direct main"
     description:
       name: miniaudio_player
-      sha256: b7e650dc346efe280a863203e7de185027b593656e3bfa5a18b5e90a6c047f97
+      sha256: "1b9a776267498f769923eb7934fae872a33fbdfcecbef6299a7a2bb108a4e0a8"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.0"
+    version: "1.0.1"
   native_toolchain_c:
     dependency: transitive
     description:

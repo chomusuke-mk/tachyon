@@ -214,13 +214,15 @@ class LyricsService {
     required List<String> rawLines,
   }) async {
     if (kDebugMode) {
-      debugPrint('Translating lyrics $lyricsId from ${sourceLang ?? 'auto'} into $targetLang...');
-      debugPrint('Raw lines: ${rawLines.length}');
+      debugPrint(
+        'Translating lyrics $lyricsId from ${sourceLang ?? 'auto'} into $targetLang...',
+      );
     }
     if (rawLines.isEmpty) return const [];
 
     final storedLang = database.getLyricsLang(lyricsId);
-    final isExplicitSame = sourceLang != null &&
+    final isExplicitSame =
+        sourceLang != null &&
         sourceLang != 'auto' &&
         sourceLang != 'autodetect' &&
         sourceLang == targetLang;
@@ -239,7 +241,12 @@ class LyricsService {
     );
     if (cached != null && cached.isNotEmpty) return cached;
 
-    debugPrint('No cached translation found, requesting from API...');
+    if (kDebugMode) {
+      debugPrint(
+        'No stored translation found for lyrics $lyricsId into $targetLang, requesting remote translation...',
+      );
+    }
+
     final result = await translationClient.translate(
       rawLines,
       targetLanguage: targetLang,

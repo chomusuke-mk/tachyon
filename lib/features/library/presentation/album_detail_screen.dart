@@ -9,7 +9,6 @@ import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 
-
 class AlbumDetailScreen extends StatelessWidget {
   final Album album;
 
@@ -29,8 +28,8 @@ class AlbumDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
-    final currentTrackFilePath = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.filePath,
+    final currentTrack = context.select<PlaybackController, Track?>(
+      (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
 
@@ -47,9 +46,7 @@ class AlbumDetailScreen extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
-            child: AmbientBackdrop(filePath: firstFilePath),
-          ),
+          Positioned.fill(child: AmbientBackdrop(filePath: firstFilePath)),
           CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
@@ -60,85 +57,92 @@ class AlbumDetailScreen extends StatelessWidget {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
-              child: Column(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16.0),
-                    child: SizedBox(
-                      width: 200,
-                      height: 200,
-                      child: AlbumArtImage(
-                        filePath: firstFilePath,
-                        quality: ThumbnailQuality.high,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    album.name,
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    album.artist?.name ?? strings.trUnknownArtist,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${album.year ?? ''} • ${strings.alTracksCountFormatted(albumTracks.length)} • ${_formatTotalDuration(albumTracks)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 12,
-                    runSpacing: 12,
+                  child: Column(
                     children: [
-                      FilledButton.icon(
-                        icon: const Icon(Icons.play_arrow_rounded),
-                        label: Text(strings.alPlayAll),
-                        onPressed: albumTracks.isNotEmpty
-                            ? () => playback.playAll(albumTracks, startIndex: 0)
-                            : null,
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16.0),
+                        child: SizedBox(
+                          width: 200,
+                          height: 200,
+                          child: AlbumArtImage(
+                            filePath: firstFilePath,
+                            quality: ThumbnailQuality.high,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
                       ),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.shuffle_rounded),
-                        label: Text(strings.alShuffleAll),
-                        onPressed: albumTracks.isNotEmpty
-                            ? () => playback.playAll(albumTracks, shuffle: true)
-                            : null,
+                      const SizedBox(height: 16),
+                      Text(
+                        album.name,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        album.artist?.name ?? strings.trUnknownArtist,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${album.year ?? ''} • ${strings.alTracksCountFormatted(albumTracks.length)} • ${_formatTotalDuration(albumTracks)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          FilledButton.icon(
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: Text(strings.alPlayAll),
+                            onPressed: albumTracks.isNotEmpty
+                                ? () => playback.playAll(
+                                    albumTracks,
+                                    startIndex: 0,
+                                  )
+                                : null,
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.shuffle_rounded),
+                            label: Text(strings.alShuffleAll),
+                            onPressed: albumTracks.isNotEmpty
+                                ? () => playback.playAll(
+                                    albumTracks,
+                                    shuffle: true,
+                                  )
+                                : null,
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final track = albumTracks[index];
-              final isPlaying = currentTrackFilePath == track.filePath;
+              SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final track = albumTracks[index];
+                  final isPlaying = currentTrack == track;
 
-              return TrackTile(
-                key: ValueKey(track.filePath),
-                track: track,
-                isPlaying: isPlaying,
-                onTap: () =>
-                    playback.playTrack(track, contextTracks: albumTracks),
-              );
-            }, childCount: albumTracks.length),
+                  return TrackTile(
+                    key: ValueKey(track.filePath),
+                    track: track,
+                    isPlaying: isPlaying,
+                    onTap: () =>
+                        playback.playTrack(track, contextTracks: albumTracks),
+                  );
+                }, childCount: albumTracks.length),
+              ),
+            ],
           ),
         ],
       ),
-    ],
-  ),
-);
+    );
   }
 }

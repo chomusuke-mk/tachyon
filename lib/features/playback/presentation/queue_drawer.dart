@@ -6,7 +6,7 @@ import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 
-import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'playback_controller.dart';
 
 /// Modal bottom sheet representation of the playback queue on Mobile.
@@ -123,7 +123,7 @@ class _QueueViewState extends State<QueueView> {
 
   @override
   Widget build(BuildContext context) {
-    final queue = context.select<PlaybackController, List<QueueItem>>((c) => c.queue);
+    final queue = context.select<PlaybackController, List<PlaylistEntry>>((c) => c.queue);
     final currentIndex = context.select<PlaybackController, int>((c) => c.currentIndex);
     final isPlaying = context.select<PlaybackController, bool>((c) => c.isPlaying);
     final isInfiniteMixEnabled =
@@ -211,10 +211,11 @@ class _QueueViewState extends State<QueueView> {
                   },
                   itemBuilder: (context, index) {
                     final item = queue[index];
+                    final track = item.track;
                     final isCurrent = index == currentIndex;
 
                     return Dismissible(
-                      key: ValueKey('${item.filePath}_$index'),
+                      key: ValueKey(item.id),
                       direction: DismissDirection.endToStart,
                       background: Container(
                         alignment: Alignment.centerRight,
@@ -242,7 +243,7 @@ class _QueueViewState extends State<QueueView> {
                                   width: 42,
                                   height: 42,
                                   child: AlbumArtImage(
-                                    filePath: item.filePath,
+                                    filePath: track?.filePath ?? '',
                                     fit: BoxFit.cover,
                                     cacheWidth: 100,
                                     cacheHeight: 100,
@@ -268,7 +269,7 @@ class _QueueViewState extends State<QueueView> {
                             ],
                           ),
                           title: Text(
-                            item.title,
+                            track?.title ?? '',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -281,7 +282,7 @@ class _QueueViewState extends State<QueueView> {
                             ),
                           ),
                           subtitle: Text(
-                            item.artist,
+                            track?.artists.map((a) => a.name).join(', ') ?? '',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -293,7 +294,7 @@ class _QueueViewState extends State<QueueView> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                _formatDuration(item.duration),
+                                _formatDuration(track?.duration ?? Duration.zero),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                               const SizedBox(width: 8),

@@ -17,7 +17,7 @@ import 'package:tachyon/features/library/presentation/artist_detail_screen.dart'
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
@@ -75,17 +75,17 @@ class _TestPlaybackController extends PlaybackController {
   });
 
   Duration? lastSeekPosition;
-  QueueItem? _mockTrack;
+  Track? _mockTrack;
   Duration _mockDuration = Duration.zero;
 
   @override
-  QueueItem? get currentTrack => _mockTrack ?? super.currentTrack;
+  Track? get currentTrack => _mockTrack ?? super.currentTrack;
 
   @override
   Duration get duration =>
       _mockDuration > Duration.zero ? _mockDuration : super.duration;
 
-  void setMockTrack(QueueItem? track, {Duration? duration}) {
+  void setMockTrack(Track? track, {Duration? duration}) {
     _mockTrack = track;
     if (duration != null) _mockDuration = duration;
     notifyListeners();
@@ -514,14 +514,13 @@ void main() {
   });
 
   group('DesktopShortcutsHandler - Number Keys 0-9 Seek', () {
-    final sampleTrack = QueueItem(
-      id: '100',
-      trackId: 100,
+    const sampleTrack = Track(
+      id: 100,
       filePath: '/music/queen/bohemian.mp3',
       title: 'Bohemian Rhapsody',
-      artist: 'Queen',
-      album: 'A Night at the Opera',
-      duration: const Duration(seconds: 200),
+      durationMs: 200000,
+      fileSize: 1000,
+      modifiedAt: 1000,
     );
 
     testWidgets('Pressing 0-9 seeks to corresponding 0%-90% fraction of track duration', (tester) async {
@@ -682,14 +681,13 @@ void main() {
   });
 
   group('DesktopShortcutsHandler - Spacebar Play/Pause', () {
-    final sampleTrack = QueueItem(
-      id: '100',
-      trackId: 100,
+    const sampleTrack = Track(
+      id: 100,
       filePath: '/music/queen/bohemian.mp3',
       title: 'Bohemian Rhapsody',
-      artist: 'Queen',
-      album: 'A Night at the Opera',
-      duration: const Duration(seconds: 200),
+      durationMs: 200000,
+      fileSize: 1000,
+      modifiedAt: 1000,
     );
 
     testWidgets('Pressing Spacebar calls playOrPause when track is loaded', (tester) async {

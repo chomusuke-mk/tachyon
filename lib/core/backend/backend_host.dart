@@ -21,9 +21,10 @@ import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
+import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
-import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
+import 'package:tachyon/features/settings/data/settings_repository.dart'
+    show CrossfadeCurve;
 
 /// Configuration passed from the UI Isolate when spawning the Core Service Isolate.
 class CoreInitConfig {
@@ -76,7 +77,9 @@ class TachyonBackendHost {
     await _database.init(config.dbPath);
 
     // 3. Initialize cover cache and metadata service
-    _coverCache = CoverCacheService(cacheDirectory: Directory(config.cacheDirPath));
+    _coverCache = CoverCacheService(
+      cacheDirectory: Directory(config.cacheDirPath),
+    );
     _metadataService = MetadataService(
       database: _database,
       coverCacheService: _coverCache,
@@ -94,10 +97,9 @@ class TachyonBackendHost {
     // 6. Set up event forwarding to the UI isolate
     _subscriptions.add(
       _audioEngine.stateStream.listen((state) {
-        config.uiSendPort.send(BackendEvent(
-          topic: BackendTopics.playbackState,
-          payload: state,
-        ));
+        config.uiSendPort.send(
+          BackendEvent(topic: BackendTopics.playbackState, payload: state),
+        );
       }),
     );
 
@@ -106,13 +108,16 @@ class TachyonBackendHost {
       _audioEngine.positionStream.listen((pos) {
         final now = DateTime.now().millisecondsSinceEpoch;
         final deltaMs = now - _lastPositionEmitTimestamp;
-        if (deltaMs >= 40 || (pos.inMilliseconds - _lastEmittedPositionMs).abs() > 1000) {
+        if (deltaMs >= 40 ||
+            (pos.inMilliseconds - _lastEmittedPositionMs).abs() > 1000) {
           _lastPositionEmitTimestamp = now;
           _lastEmittedPositionMs = pos.inMilliseconds;
-          config.uiSendPort.send(BackendEvent(
-            topic: BackendTopics.playbackPosition,
-            payload: pos.inMilliseconds,
-          ));
+          config.uiSendPort.send(
+            BackendEvent(
+              topic: BackendTopics.playbackPosition,
+              payload: pos.inMilliseconds,
+            ),
+          );
         }
       }),
     );
@@ -129,16 +134,16 @@ class TachyonBackendHost {
 
     try {
       final result = await _dispatch(message.method, message.params);
-      config.uiSendPort.send(BackendResponse(
-        requestId: message.requestId,
-        data: result,
-      ));
+      config.uiSendPort.send(
+        BackendResponse(requestId: message.requestId, data: result),
+      );
     } catch (e, stack) {
-      debugPrint('[CoreBackendHost] Error handling request ${message.method}: $e\n$stack');
-      config.uiSendPort.send(BackendResponse(
-        requestId: message.requestId,
-        error: e.toString(),
-      ));
+      debugPrint(
+        '[CoreBackendHost] Error handling request ${message.method}: $e\n$stack',
+      );
+      config.uiSendPort.send(
+        BackendResponse(requestId: message.requestId, error: e.toString()),
+      );
     }
   }
 
@@ -191,17 +196,35 @@ class TachyonBackendHost {
         return await _audioEngine.getAudioDevices();
 
       case BackendMethods.playbackPlayTrack:
-        final track = params['track'] as Track;
+        final trackId = params['trackId'] as int;
         final autoPlay = params['play'] as bool? ?? true;
-        await _audioEngine.open([QueueItem.fromTrack(track)], play: autoPlay);
+        final track = _database.getTrackById(trackId);
+        if (track != null) {
+          final entry = PlaylistEntry.forQueue(
+            id: 0,
+            position: 0,
+            track: track,
+          );
+          await _audioEngine.open([entry], play: autoPlay);
+        }
         return null;
 
       case BackendMethods.playbackPlayQueue:
-        final tracks = (params['tracks'] as List).cast<Track>();
+        final trackIds = (params['trackIds'] as List).cast<int>();
         final startIndex = params['startIndex'] as int? ?? 0;
         final autoPlay = params['play'] as bool? ?? true;
-        final queueItems = tracks.map((t) => QueueItem.fromTrack(t)).toList();
-        await _audioEngine.open(queueItems, index: startIndex, play: autoPlay);
+        final shuffle = params['shuffle'] as bool? ?? false;
+        final tracks = _database.getTracksByIds(trackIds);
+        final entries = [
+          for (int i = 0; i < tracks.length; i++)
+            PlaylistEntry.forQueue(id: i, position: i, track: tracks[i]),
+        ];
+        await _audioEngine.open(
+          entries,
+          index: startIndex,
+          play: autoPlay,
+          shuffle: shuffle,
+        );
         return null;
 
       case BackendMethods.playbackSetShuffle:
@@ -234,7 +257,9 @@ class TachyonBackendHost {
 
       case BackendMethods.playbackSetCrossfadeDuration:
         final durationMs = params['durationMs'] as int;
-        await _audioEngine.setCrossfadeDuration(Duration(milliseconds: durationMs));
+        await _audioEngine.setCrossfadeDuration(
+          Duration(milliseconds: durationMs),
+        );
         return null;
 
       case BackendMethods.playbackSetCrossfadeCurve:
@@ -243,21 +268,46 @@ class TachyonBackendHost {
         return null;
 
       case BackendMethods.playbackOpen:
-        final items = (params['items'] as List).cast<QueueItem>();
+        final rawTrackIds = (params['trackIds'] ?? params['items']) as List;
+        final trackIds = rawTrackIds.cast<int>();
         final index = params['index'] as int? ?? 0;
         final autoPlay = params['play'] as bool? ?? true;
         final shuffle = params['shuffle'] as bool? ?? false;
-        await _audioEngine.open(items, index: index, play: autoPlay, shuffle: shuffle);
+        final tracks = _database.getTracksByIds(trackIds);
+        final entries = [
+          for (int i = 0; i < tracks.length; i++)
+            PlaylistEntry.forQueue(id: i, position: i, track: tracks[i]),
+        ];
+        await _audioEngine.open(
+          entries,
+          index: index,
+          play: autoPlay,
+          shuffle: shuffle,
+        );
         return null;
 
       case BackendMethods.playbackInsertNext:
-        final item = params['item'] as QueueItem;
-        await _audioEngine.insertNext(item);
+        final trackId = (params['trackId'] ?? params['item']) as int;
+        final track = _database.getTrackById(trackId);
+        if (track != null) {
+          final entry = PlaylistEntry.forQueue(
+            id: 0,
+            position: 0,
+            track: track,
+          );
+          await _audioEngine.insertNext(entry);
+        }
         return null;
 
       case BackendMethods.playbackAppend:
-        final items = (params['items'] as List).cast<QueueItem>();
-        await _audioEngine.append(items);
+        final rawTrackIds = (params['trackIds'] ?? params['items']) as List;
+        final trackIds = rawTrackIds.cast<int>();
+        final tracks = _database.getTracksByIds(trackIds);
+        final entries = [
+          for (int i = 0; i < tracks.length; i++)
+            PlaylistEntry.forQueue(id: i, position: i, track: tracks[i]),
+        ];
+        await _audioEngine.append(entries);
         return null;
 
       case BackendMethods.playbackSkipToIndex:
@@ -319,17 +369,21 @@ class TachyonBackendHost {
             ? (params['directories'] as List).cast<String>()
             : [params['directoryPath'] as String];
         await _scanSubscription?.cancel();
-        _scanSubscription = _metadataService.scanDirectories(directories).listen((progress) {
-          config.uiSendPort.send(BackendEvent(
-            topic: BackendTopics.libraryScanProgress,
-            payload: progress,
-          ));
-          if (progress.phase == ScanPhase.completed) {
-            config.uiSendPort.send(const BackendEvent(
-              topic: BackendTopics.catalogUpdated,
-            ));
-          }
-        });
+        _scanSubscription = _metadataService
+            .scanDirectories(directories)
+            .listen((progress) {
+              config.uiSendPort.send(
+                BackendEvent(
+                  topic: BackendTopics.libraryScanProgress,
+                  payload: progress,
+                ),
+              );
+              if (progress.phase == ScanPhase.completed) {
+                config.uiSendPort.send(
+                  const BackendEvent(topic: BackendTopics.catalogUpdated),
+                );
+              }
+            });
         return null;
 
       case BackendMethods.libraryCancelScan:
@@ -340,13 +394,17 @@ class TachyonBackendHost {
       case BackendMethods.libraryDeleteTrack:
         final trackId = params['trackId'] as int;
         _database.deleteTrack(trackId);
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return null;
 
       case BackendMethods.libraryDeleteTracksInFolder:
         final folderPath = params['folderPath'] as String;
         _database.deleteTracksInFolder(folderPath);
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return null;
 
       // =======================================================================
@@ -370,7 +428,10 @@ class TachyonBackendHost {
         final quality = qualityStr != null
             ? ThumbnailQuality.values.byName(qualityStr)
             : ThumbnailQuality.low;
-        return await _metadataService.getArtistCover(artistName, quality: quality);
+        return await _metadataService.getArtistCover(
+          artistName,
+          quality: quality,
+        );
 
       case BackendMethods.metadataClearCoverCache:
         await _metadataService.clearCoverCache();
@@ -385,20 +446,26 @@ class TachyonBackendHost {
       case BackendMethods.playlistsCreate:
         final name = params['name'] as String;
         final id = _database.createPlaylist(name);
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return id;
 
       case BackendMethods.playlistsDelete:
         final playlistId = params['playlistId'] as int;
         _database.deletePlaylist(playlistId);
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return null;
 
       case BackendMethods.playlistsRename:
         final playlistId = params['playlistId'] as int;
         final name = params['name'] as String;
         _database.renamePlaylist(playlistId, name);
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return null;
 
       case BackendMethods.playlistsGetTracks:
@@ -408,14 +475,18 @@ class TachyonBackendHost {
         final playlistId = params['playlistId'] as int;
         final trackIds = (params['trackIds'] as List).cast<int>();
         _database.addTracksToPlaylist(playlistId, trackIds);
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return null;
 
       case BackendMethods.playlistsRemoveTrack:
         final playlistId = params['playlistId'] as int;
         final trackId = params['trackId'] as int;
         _database.removeTrackFromPlaylist(playlistId, trackId);
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return null;
 
       case BackendMethods.playlistsReorderTracks:
@@ -423,7 +494,9 @@ class TachyonBackendHost {
         final oldIndex = params['oldIndex'] as int;
         final newIndex = params['newIndex'] as int;
         _database.reorderPlaylistEntries(playlistId, oldIndex, newIndex);
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return null;
 
       case BackendMethods.playlistsGetTrackIds:
@@ -433,7 +506,9 @@ class TachyonBackendHost {
         final trackId = params['trackId'] as int;
         final filePath = params['filePath'] as String?;
         _database.toggleLikeTrack(trackId, filePath);
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return true;
 
       case BackendMethods.playlistsIsLiked:
@@ -441,9 +516,10 @@ class TachyonBackendHost {
 
       case BackendMethods.playlistsClearHistory:
         _database.clearHistory();
-        config.uiSendPort.send(const BackendEvent(topic: BackendTopics.catalogUpdated));
+        config.uiSendPort.send(
+          const BackendEvent(topic: BackendTopics.catalogUpdated),
+        );
         return null;
-
 
       // =======================================================================
       // LYRICS
@@ -460,7 +536,9 @@ class TachyonBackendHost {
           durationMs: params['durationMs'] as int?,
           allowRemote: params['allowRemote'] as bool? ?? true,
           bypassCache: params['bypassCache'] as bool? ?? false,
-          allowedSources: allowedSourcesList?.map((s) => LyricsSource.fromDbString(s as String)).toSet(),
+          allowedSources: allowedSourcesList
+              ?.map((s) => LyricsSource.fromDbString(s as String))
+              .toSet(),
           onThresholdCountdown: (seconds) => retryAfterSeconds = seconds,
         );
         if (result == null && retryAfterSeconds != null) {

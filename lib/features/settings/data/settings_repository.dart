@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/features/library/domain/track_sort_option.dart';
 import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 
 enum CrossfadeCurve {

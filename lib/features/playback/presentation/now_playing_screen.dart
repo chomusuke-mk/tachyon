@@ -7,8 +7,10 @@ import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
+import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 
 import 'audio_effects_sheet.dart';
 import 'lyrics_view.dart';
@@ -64,12 +66,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   Future<void> _toggleLike() async {
     final playback = context.read<PlaybackController>();
     final track = playback.currentTrack;
-    if (track == null || track.trackId == null) return;
+    if (track == null || track.id == null) return;
 
     try {
       final playlists = context.read<PlaylistsController?>();
       if (playlists != null) {
-        await playlists.toggleLike(track.trackId!, track.filePath);
+        await playlists.toggleLike(track.id!, track.filePath);
       }
     } catch (_) {}
   }
@@ -229,7 +231,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           Positioned.fill(
             child: AmbientBackdrop(
               filePath: currentTrack.filePath,
-              artistName: currentTrack.artist,
+              artistName: currentTrack.artists.map((a) => a.name).join(', '),
             ),
           ),
 
@@ -299,7 +301,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   }
 
   Widget _buildPlayer(
-    QueueItem currentTrack,
+    Track currentTrack,
     BuildContext context, {
     bool preferVertical = false,
     bool hideLyrics = false,
@@ -312,8 +314,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final colorScheme = theme.colorScheme;
     final playlists = context.watch<PlaylistsController?>();
     final isCurrentTrackLiked =
-        currentTrack.trackId != null &&
-        (playlists?.isTrackLiked(currentTrack.trackId!) ?? false);
+        currentTrack.id != null &&
+        (playlists?.isTrackLiked(currentTrack.id!) ?? false);
 
     final Widget playerControls = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -391,12 +393,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       .take(playback.currentIndex)
                       .fold<Duration>(
                         Duration.zero,
-                        (sum, item) => sum + item.duration,
+                        (sum, item) => sum + (item.track?.duration ?? Duration.zero),
                       ) +
                   playback.position,
               playlistDuration: () => playback.queue.fold<Duration>(
                 Duration.zero,
-                (sum, item) => sum + item.duration,
+                (sum, item) => sum + (item.track?.duration ?? Duration.zero),
               ),
             ),
           ),
@@ -554,13 +556,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             style: Theme.of(context).textTheme.titleLarge
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
-          SizedBox(height: 2),
-          Text(
-            currentTrack.artist,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: colorScheme.onSurfaceVariant),
+          const SizedBox(height: 2),
+          _ClickableArtistNames(
+            artists: currentTrack.artists,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+            colorScheme: colorScheme,
           ),
         ],
       ),
@@ -657,55 +659,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     );
   }
 
-  // Middle Section: Animated Switcher between Cover Art Hero and LyricsView
-  //Expanded(
-  //  child: AnimatedSwitcher(
-  //    duration: const Duration(milliseconds: 300),
-  //    child: _showLyrics
-  //        ? LyricsView(
-  //            key: const ValueKey('lyrics_view'),
-  //            filePath: currentTrack.filePath,
-  //            onSeek: playback.seek,
-  //          )
-  //        : _buildHeroCoverArt(currentTrack.filePath, context),
-  //  ),
-  //),
-  //// Bottom Controls Block
-  //Padding(
-  //  padding: const EdgeInsets.symmetric(
-  //    horizontal: 24.0,
-  //    vertical: 8.0,
-  //  ),
-  //  child: Column(
-  //    mainAxisSize: MainAxisSize.min,
-  //    children: [
-  //      Row(
-  //        children: [
-  //          //IconButton(
-  //          //  icon: Icon(
-  //          //    playback.volume == 0.0
-  //          //        ? Icons.volume_off_rounded
-  //          //        : (playback.volume > 0.5
-  //          //              ? Icons.volume_up_rounded
-  //          //              : Icons.volume_down_rounded),
-  //          //    size: 20,
-  //          //  ),
-  //          //  tooltip: strings.npVolume,
-  //          //  onPressed: () => _toggleMute(playback),
-  //          //),
-  //          //Expanded(
-  //          //  child: Slider(
-  //          //    value: playback.volume.clamp(0.0, 100.0),
-  //          //    min: 0.0,
-  //          //    max: 100.0,
-  //          //    onChanged: playback.setVolume,
-  //          //  ),
-  //          //),
-  //        ],
-  //      ),
-  //    ],
-  //  ),
-  //),
+
 
   Widget _buildHeroCoverArt(String filePath, BuildContext context, {Key? key}) {
     return RepaintBoundary(
@@ -1074,3 +1028,106 @@ class _PopupVolumeControlState extends State<_PopupVolumeControl>
     );
   }
 }
+
+class _ClickableArtistNames extends StatelessWidget {
+  final List<Artist> artists;
+  final TextStyle? style;
+  final ColorScheme colorScheme;
+
+  const _ClickableArtistNames({
+    required this.artists,
+    this.style,
+    required this.colorScheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (artists.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final effectiveStyle = style ??
+        Theme.of(context)
+            .textTheme
+            .bodyLarge
+            ?.copyWith(color: colorScheme.onSurfaceVariant);
+
+    return Center(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (int i = 0; i < artists.length; i++) ...[
+              if (i > 0)
+                Text(
+                  ', ',
+                  style: effectiveStyle,
+                ),
+              _ArtistLink(
+                artist: artists[i],
+                style: effectiveStyle,
+                colorScheme: colorScheme,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtistLink extends StatefulWidget {
+  final Artist artist;
+  final TextStyle? style;
+  final ColorScheme colorScheme;
+
+  const _ArtistLink({
+    required this.artist,
+    required this.style,
+    required this.colorScheme,
+  });
+
+  @override
+  State<_ArtistLink> createState() => _ArtistLinkState();
+}
+
+class _ArtistLinkState extends State<_ArtistLink> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onHover: (hovering) {
+        if (_isHovered != hovering) {
+          setState(() => _isHovered = hovering);
+        }
+      },
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ArtistDetailScreen(artist: widget.artist),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 1.0),
+        child: Text(
+          widget.artist.name,
+          maxLines: 1,
+          style: widget.style?.copyWith(
+            color: _isHovered
+                ? widget.colorScheme.primary
+                : widget.colorScheme.onSurfaceVariant,
+            decoration:
+                _isHovered ? TextDecoration.underline : TextDecoration.none,
+            decorationColor: widget.colorScheme.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+

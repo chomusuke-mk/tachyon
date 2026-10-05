@@ -4,8 +4,8 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
 
 void main() {
   group('Milestone 1 Empirical Domain Decoupling & Oracle Tests', () {
@@ -62,7 +62,7 @@ void main() {
       expect(reconstructed.toMap().containsKey('lyrics'), isFalse);
     });
 
-    test('Oracle 3: QueueItem has NO lyrics leaks in properties, extras, or serialization', () {
+    test('Oracle 3: PlaylistEntry has NO lyrics leaks and preserves in-memory Track reference', () {
       const track = Track(
         id: 77,
         filePath: '/music/queue_leak_test.mp3',
@@ -74,47 +74,18 @@ void main() {
         artists: [Artist(id: 2, name: 'Queue Artist')],
       );
 
-      final queueItem = QueueItem.fromTrack(track);
-      final dynamic dynamicItem = queueItem;
+      final entry = PlaylistEntry.forQueue(id: 0, track: track);
+      final dynamic dynamicItem = entry;
 
       // 1. Assert dynamic access throws NoSuchMethodError
       expect(() => dynamicItem.lyrics, throwsNoSuchMethodError);
       expect(() => dynamicItem.lyricsId, throwsNoSuchMethodError);
       expect(() => dynamicItem.lyrics_id, throwsNoSuchMethodError);
+      expect(() => dynamicItem.extras, throwsNoSuchMethodError);
 
-      // 2. Assert extras dictionary has zero lyrics references
-      expect(queueItem.extras.containsKey('lyrics'), isFalse);
-      expect(queueItem.extras.containsKey('lyrics_id'), isFalse);
-      expect(queueItem.extras.containsKey('lyricsId'), isFalse);
-      expect(queueItem.extras.containsKey('rawLyrics'), isFalse);
-
-      // 3. Round-trip conversion: QueueItem.toTrack() produces a clean Track
-      final roundTripTrack = queueItem.toTrack();
-      final dynamic roundTripDynamic = roundTripTrack;
-      expect(() => roundTripDynamic.lyrics, throwsNoSuchMethodError);
-      expect(roundTripTrack.toMap().containsKey('lyrics'), isFalse);
-
-      // 4. Json serialization check
-      final json = queueItem.toJson();
-      expect(json.containsKey('lyrics'), isFalse);
-      expect(json.containsKey('lyricsId'), isFalse);
-      expect(json['extras']?['lyrics'], isNull);
-
-      // 5. Json deserialization check with adversarial rogue keys
-      final adversarialJson = Map<String, dynamic>.from(json);
-      adversarialJson['lyrics'] = 'Adversarial Lyric';
-      adversarialJson['extras'] = {
-        ...?adversarialJson['extras'] as Map<String, dynamic>?,
-        'lyrics': 'Adversarial Lyric in extras',
-      };
-      final deserialized = QueueItem.fromJson(adversarialJson);
-      final dynamic deserializedDynamic = deserialized;
-      expect(() => deserializedDynamic.lyrics, throwsNoSuchMethodError);
-      // toTrack should NOT resurrect lyrics
-      final deserializedTrack = deserialized.toTrack();
-      final dynamic deserializedTrackDyn = deserializedTrack;
-      expect(() => deserializedTrackDyn.lyrics, throwsNoSuchMethodError);
-      expect(deserializedTrack.toMap().containsKey('lyrics'), isFalse);
+      // 2. Direct reference: PlaylistEntry.track holds in-memory Track
+      expect(identical(entry.track, track), isTrue);
+      expect(entry.track!.toMap().containsKey('lyrics'), isFalse);
     });
 
     test('Oracle 4: AppDatabase schema has zero lyrics column in tracks and cascades to lyrics/translations', () {

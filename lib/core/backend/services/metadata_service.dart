@@ -154,8 +154,7 @@ class MetadataService {
   }) async {
     // 1. Return immediately if cached image file exists on disk
     if (coverCacheService.hasCachedCover(filePath, quality: quality)) {
-      final file =
-          coverCacheService.getCoverFile(filePath, quality: quality);
+      final file = coverCacheService.getCoverFile(filePath, quality: quality);
       return file.path;
     }
 
@@ -185,10 +184,7 @@ class MetadataService {
     String artistName, {
     ThumbnailQuality quality = ThumbnailQuality.low,
   }) async {
-    if (coverCacheService.hasCachedArtistCover(
-      artistName,
-      quality: quality,
-    )) {
+    if (coverCacheService.hasCachedArtistCover(artistName, quality: quality)) {
       final file = coverCacheService.getArtistCoverFile(
         artistName,
         quality: quality,
@@ -515,7 +511,7 @@ ExtractedTrackData _buildFallbackTrackData({
 /// Worker function that runs in a dedicated isolate via [Isolate.run].
 /// In a single pass:
 /// 1. Reads file metadata (or falls back if format unsupported or parsing fails).
-/// 2. If present, generates dual-quality HQ & LQ covers and writes them to disk.
+/// 2. If present, generates covers and writes them to disk.
 /// 3. Returns the populated [ExtractedTrackData] directly.
 ///
 /// Passes zero raw byte arrays across the isolate boundary.
@@ -581,9 +577,19 @@ Future<ExtractedTrackData?> extractAndCacheTrackWorker({
 
       final artists = <String>[];
       if (tag.trackArtist != null && tag.trackArtist!.isNotEmpty) {
-        artists.addAll(tag.trackArtist!.split(', ').map((e) => e.trim()).where((e) => e.isNotEmpty));
+        artists.addAll(
+          tag.trackArtist!
+              .split(', ')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty),
+        );
       } else if (tag.albumArtist != null && tag.albumArtist!.isNotEmpty) {
-        artists.addAll(tag.albumArtist!.split(', ').map((e) => e.trim()).where((e) => e.isNotEmpty));
+        artists.addAll(
+          tag.albumArtist!
+              .split(', ')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty),
+        );
       }
 
       final genres = <String>[];
@@ -704,9 +710,19 @@ Future<ExtractedTrackData?> extractTrackMetadata(
 
       final artists = <String>[];
       if (tag.trackArtist != null && tag.trackArtist!.isNotEmpty) {
-        artists.addAll(tag.trackArtist!.split(', ').map((e) => e.trim()).where((e) => e.isNotEmpty));
+        artists.addAll(
+          tag.trackArtist!
+              .split(', ')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty),
+        );
       } else if (tag.albumArtist != null && tag.albumArtist!.isNotEmpty) {
-        artists.addAll(tag.albumArtist!.split(', ').map((e) => e.trim()).where((e) => e.isNotEmpty));
+        artists.addAll(
+          tag.albumArtist!
+              .split(', ')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty),
+        );
       }
 
       final genres = <String>[];

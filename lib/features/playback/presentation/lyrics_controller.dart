@@ -10,7 +10,7 @@ import 'package:tachyon/core/backend/services/lrc_parser.dart';
 import 'package:tachyon/features/playback/domain/lyric_line.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 import 'playback_controller.dart';
@@ -381,7 +381,7 @@ class LyricsController extends ChangeNotifier {
   }
 
   Future<void> _loadLyricsForTrack(
-    QueueItem? track,
+    Track? track,
     LyricsCancellationToken token, {
     bool forceRefresh = false,
   }) async {
@@ -411,11 +411,11 @@ class LyricsController extends ChangeNotifier {
 
       // Phase 1: Resolve original lyrics via backend RPC
       final result = await backendClient.resolveLyrics(
-        trackId: track.trackId ?? 0,
+        trackId: track.id ?? 0,
         filePath: track.filePath,
         title: track.title,
-        artist: track.artist,
-        album: track.album,
+        artist: track.artists.map((a) => a.name).join(', '),
+        album: track.album?.name,
         durationMs: track.duration.inMilliseconds,
         allowRemote: _isLyricsViewVisible,
         bypassCache: forceRefresh,

@@ -4,6 +4,7 @@ import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 
 import 'library_controller.dart';
 
@@ -21,8 +22,8 @@ class _GenresScreenState extends State<GenresScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrackFilePath = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.filePath,
+    final currentTrack = context.select<PlaybackController, Track?>(
+      (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
 
@@ -62,7 +63,7 @@ class _GenresScreenState extends State<GenresScreen> {
           itemCount: genreTracks.length,
           itemBuilder: (context, index) {
             final track = genreTracks[index];
-            final isPlaying = currentTrackFilePath == track.filePath;
+            final isPlaying = currentTrack == track;
 
             return TrackTile(
               key: ValueKey(track.filePath),

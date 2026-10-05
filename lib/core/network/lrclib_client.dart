@@ -11,10 +11,7 @@ sealed class LrclibResponse {
   final int statusCode;
   final Map<String, String> headers;
 
-  const LrclibResponse({
-    required this.statusCode,
-    this.headers = const {},
-  });
+  const LrclibResponse({required this.statusCode, this.headers = const {}});
 
   /// Whether the request completed successfully.
   bool get isSuccess => this is LrclibSuccess;
@@ -214,7 +211,8 @@ class LrclibError extends LrclibResponse {
   });
 
   @override
-  String toString() => 'LrclibError(status: $statusCode, message: $errorMessage)';
+  String toString() =>
+      'LrclibError(status: $statusCode, message: $errorMessage)';
 }
 
 /// Network client for the `lrclib.net` lyrics API.
@@ -231,7 +229,7 @@ class LrclibError extends LrclibResponse {
 class LrclibClient {
   static const String defaultBaseUrl = 'https://lrclib.net/api/get';
   static const String defaultUserAgent =
-      'Tachyon/1.0.0 (https://github.com/tachyon-player/tachyon)';
+      'Tachyon/1.0.0 (https://github.com/chomusuke-mk/tachyon)';
   static const Duration defaultPacing = Duration(milliseconds: 500);
   static const int defaultRetryAfterSeconds = 5;
 
@@ -253,17 +251,18 @@ class LrclibClient {
     Uri? baseUri,
     String? userAgent,
     Duration? minPacing,
-  })  : _httpClient = httpClient ?? http.Client(),
-        _ownsClient = httpClient == null,
-        _baseUri = baseUri ?? Uri.parse(defaultBaseUrl),
-        _userAgent = userAgent ?? defaultUserAgent,
-        _minPacing = minPacing ?? defaultPacing;
+  }) : _httpClient = httpClient ?? http.Client(),
+       _ownsClient = httpClient == null,
+       _baseUri = baseUri ?? Uri.parse(defaultBaseUrl),
+       _userAgent = userAgent ?? defaultUserAgent,
+       _minPacing = minPacing ?? defaultPacing;
 
   /// Timestamps of all dispatched outgoing network requests (useful for pacing verification).
   List<DateTime> get requestTimestamps => List.unmodifiable(_requestTimestamps);
 
   /// User-Agent headers recorded for outgoing requests.
-  List<String> get requestedUserAgents => List.unmodifiable(_requestedUserAgents);
+  List<String> get requestedUserAgents =>
+      List.unmodifiable(_requestedUserAgents);
 
   /// Exact URIs dispatched to the HTTP client.
   List<Uri> get requestedUris => List.unmodifiable(_requestedUris);
@@ -333,10 +332,7 @@ class LrclibClient {
     _requestedUris.add(requestUri);
     _requestedUserAgents.add(_userAgent);
 
-    final headers = {
-      'User-Agent': _userAgent,
-      'Accept': 'application/json',
-    };
+    final headers = {'User-Agent': _userAgent, 'Accept': 'application/json'};
 
     // 6. Execute HTTP request
     try {
@@ -514,38 +510,40 @@ class LrclibClient {
     final previous = _pacingFuture;
     _pacingFuture = completer.future;
 
-    return previous.then((_) async {
-      if (cancellationToken?.isCancelled == true ||
-          isCancelled?.call() == true) {
-        completer.complete();
-        return;
-      }
+    return previous
+        .then((_) async {
+          if (cancellationToken?.isCancelled == true ||
+              isCancelled?.call() == true) {
+            completer.complete();
+            return;
+          }
 
-      if (_lastRequestTime != null) {
-        final elapsed = DateTime.now().difference(_lastRequestTime!);
-        if (elapsed < _minPacing) {
-          final wait = _minPacing - elapsed;
-          if (wait > Duration.zero) {
-            if (cancellationToken != null) {
-              final delayCompleter = Completer<void>();
-              final timer = Timer(wait, () {
-                if (!delayCompleter.isCompleted) delayCompleter.complete();
-              });
-              cancellationToken.onCancelled(() {
-                timer.cancel();
-                if (!delayCompleter.isCompleted) delayCompleter.complete();
-              });
-              await delayCompleter.future;
-            } else {
-              await Future.delayed(wait);
+          if (_lastRequestTime != null) {
+            final elapsed = DateTime.now().difference(_lastRequestTime!);
+            if (elapsed < _minPacing) {
+              final wait = _minPacing - elapsed;
+              if (wait > Duration.zero) {
+                if (cancellationToken != null) {
+                  final delayCompleter = Completer<void>();
+                  final timer = Timer(wait, () {
+                    if (!delayCompleter.isCompleted) delayCompleter.complete();
+                  });
+                  cancellationToken.onCancelled(() {
+                    timer.cancel();
+                    if (!delayCompleter.isCompleted) delayCompleter.complete();
+                  });
+                  await delayCompleter.future;
+                } else {
+                  await Future.delayed(wait);
+                }
+              }
             }
           }
-        }
-      }
-      completer.complete();
-    }).catchError((_) {
-      completer.complete();
-    });
+          completer.complete();
+        })
+        .catchError((_) {
+          completer.complete();
+        });
   }
 
   /// Resets pacing state and timestamps (useful for isolated unit tests).

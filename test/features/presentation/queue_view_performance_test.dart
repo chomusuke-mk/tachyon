@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/queue_drawer.dart';
 
@@ -26,15 +28,20 @@ class _FileSystemLocaleRepository extends LocaleRepository {
 
 class MockPlaybackController extends ChangeNotifier implements PlaybackController {
   @override
-  List<QueueItem> queue = List.generate(
+  List<PlaylistEntry> queue = List.generate(
     1500,
-    (i) => QueueItem(
-      id: 'item_$i',
-      filePath: '/music/track_$i.mp3',
-      title: 'Track Title $i',
-      artist: 'Artist Name $i',
-      album: 'Album Name $i',
-      duration: const Duration(minutes: 3, seconds: 30),
+    (i) => PlaylistEntry.forQueue(
+      id: i,
+      position: i,
+      track: Track(
+        id: i,
+        filePath: '/music/track_$i.mp3',
+        title: 'Track Title $i',
+        artists: [Artist(id: i, name: 'Artist Name $i')],
+        durationMs: 210000,
+        fileSize: 1000,
+        modifiedAt: 1000,
+      ),
     ),
   );
 

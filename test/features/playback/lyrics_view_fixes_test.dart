@@ -12,8 +12,11 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/library/domain/album.dart';
+import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_view.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
@@ -115,15 +118,21 @@ Line 10 plain
 
 class MockPlaybackController extends ChangeNotifier implements PlaybackController {
   @override
-  List<QueueItem> queue = [];
+  List<PlaylistEntry> queue = [];
 
   @override
   int currentIndex = 0;
 
   @override
-  QueueItem? currentTrack;
+  Track? currentTrack;
 
-  void setCurrentTrack(QueueItem? track) {
+  @override
+  PlaylistEntry? get currentEntry =>
+      queue.isNotEmpty && currentIndex >= 0 && currentIndex < queue.length
+          ? queue[currentIndex]
+          : null;
+
+  void setCurrentTrack(Track? track) {
     currentTrack = track;
     notifyListeners();
   }
@@ -210,16 +219,16 @@ void main() {
 
     lyrics.setLyricsViewVisible(true);
 
-    const testTrack = QueueItem(
-      id: 'track1',
+    const testTrack = Track(
+      id: 1,
       filePath: '/music/track1.mp3',
       title: 'Track 1',
-      artist: 'Artist 1',
-      album: 'Album 1',
-      duration: Duration(minutes: 3),
+      durationMs: 180000,
+      fileSize: 1000,
+      modifiedAt: 1000,
     );
 
-    playback.queue = [testTrack];
+    playback.queue = [PlaylistEntry.forQueue(id: 1, track: testTrack)];
     playback.currentIndex = 0;
     playback.setCurrentTrack(testTrack);
     playback.position = const Duration(seconds: 2);
@@ -286,16 +295,16 @@ void main() {
 
     lyrics.setLyricsViewVisible(true);
 
-    const testTrack = QueueItem(
-      id: 'track_unsynced',
+    const testTrack = Track(
+      id: 2,
       filePath: '/music/track_unsynced.mp3',
       title: 'Unsynced Track',
-      artist: 'Artist Unsynced',
-      album: 'Album Unsynced',
-      duration: Duration(minutes: 3),
+      durationMs: 180000,
+      fileSize: 1000,
+      modifiedAt: 1000,
     );
 
-    playback.queue = [testTrack];
+    playback.queue = [PlaylistEntry.forQueue(id: 2, track: testTrack)];
     playback.currentIndex = 0;
     playback.setCurrentTrack(testTrack);
 
@@ -351,16 +360,16 @@ void main() {
 
     lyrics.setLyricsViewVisible(true);
 
-    const testTrack = QueueItem(
-      id: 'track1',
+    const testTrack = Track(
+      id: 1,
       filePath: '/music/track1.mp3',
       title: 'Track 1',
-      artist: 'Artist 1',
-      album: 'Album 1',
-      duration: Duration(minutes: 3),
+      durationMs: 180000,
+      fileSize: 1000,
+      modifiedAt: 1000,
     );
 
-    playback.queue = [testTrack];
+    playback.queue = [PlaylistEntry.forQueue(id: 1, track: testTrack)];
     playback.currentIndex = 0;
     playback.setCurrentTrack(testTrack);
 
@@ -420,25 +429,32 @@ void main() {
 
     lyrics.setLyricsViewVisible(true);
 
-    const track1 = QueueItem(
-      id: 'track1',
+    const track1 = Track(
+      id: 1,
       filePath: '/music/track1.mp3',
       title: 'Track 1',
-      artist: 'Artist 1',
-      album: 'Album 1',
-      duration: Duration(minutes: 3),
+      durationMs: 180000,
+      fileSize: 1024,
+      modifiedAt: 1000,
+      artists: [Artist(id: 1, name: 'Artist 1')],
+      album: Album(id: 1, name: 'Album 1'),
     );
 
-    const track2 = QueueItem(
-      id: 'track2',
+    const track2 = Track(
+      id: 2,
       filePath: '/music/track2.mp3',
       title: 'Track 2',
-      artist: 'Artist 2',
-      album: 'Album 2',
-      duration: Duration(minutes: 3),
+      durationMs: 180000,
+      fileSize: 1024,
+      modifiedAt: 1000,
+      artists: [Artist(id: 2, name: 'Artist 2')],
+      album: Album(id: 2, name: 'Album 2'),
     );
 
-    playback.queue = [track1, track2];
+    playback.queue = [
+      PlaylistEntry.forQueue(id: 1, track: track1),
+      PlaylistEntry.forQueue(id: 2, track: track2),
+    ];
     playback.currentIndex = 0;
     playback.setCurrentTrack(track1);
     playback.position = const Duration(seconds: 4);
@@ -513,16 +529,18 @@ void main() {
       settingsRepository: settingsRepo,
     );
 
-    const track = QueueItem(
-      id: 'track2',
+    const track = Track(
+      id: 2,
       filePath: '/music/track2.mp3',
       title: 'Track 2',
-      artist: 'Artist 2',
-      album: 'Album 2',
-      duration: Duration(minutes: 3),
+      durationMs: 180000,
+      fileSize: 1024,
+      modifiedAt: 1000,
+      artists: [Artist(id: 2, name: 'Artist 2')],
+      album: Album(id: 2, name: 'Album 2'),
     );
 
-    playback.queue = [track];
+    playback.queue = [PlaylistEntry.forQueue(id: 2, track: track)];
     playback.currentIndex = 0;
     playback.setCurrentTrack(track);
     playback.position = const Duration(seconds: 4); // Line 2

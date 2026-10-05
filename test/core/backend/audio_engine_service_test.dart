@@ -2,9 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/core/backend/services/crossfade_manager.dart';
 import 'package:tachyon/core/backend/services/queue_manager.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
 
 import 'crossfade_manager_test.dart';
@@ -17,15 +18,19 @@ void main() {
     late QueueManager queueManager;
     late CrossfadeManager crossfadeManager;
 
-    final List<QueueItem> testItems = List.generate(
+    final List<PlaylistEntry> testItems = List.generate(
       6,
-      (i) => QueueItem(
-        id: '${i + 1}',
-        filePath: '/music/track_${i + 1}.mp3',
-        title: 'Track ${i + 1}',
-        artist: 'Artist ${i + 1}',
-        album: 'Album 1',
-        duration: const Duration(seconds: 180),
+      (i) => PlaylistEntry.forQueue(
+        id: i + 1,
+        position: i,
+        track: Track(
+          id: i + 1,
+          filePath: '/music/track_${i + 1}.mp3',
+          title: 'Track ${i + 1}',
+          durationMs: 180000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+        ),
       ),
     );
 
@@ -402,9 +407,9 @@ void main() {
 
   group('QueueManager peekNext & hasNextDifferent Tests', () {
     late QueueManager qm;
-    final itemA = QueueItem(id: '1', filePath: '/a.mp3', title: 'A', artist: 'A', album: 'A', duration: const Duration(seconds: 100));
-    final itemB = QueueItem(id: '2', filePath: '/b.mp3', title: 'B', artist: 'B', album: 'B', duration: const Duration(seconds: 100));
-    final itemADup = QueueItem(id: '3', filePath: '/a.mp3', title: 'A Duplicate', artist: 'A', album: 'A', duration: const Duration(seconds: 100));
+    final itemA = PlaylistEntry.forQueue(id: 0, position: 0, track: const Track(id: 1, filePath: '/a.mp3', title: 'A', durationMs: 100000, fileSize: 1000, modifiedAt: 1000));
+    final itemB = PlaylistEntry.forQueue(id: 1, position: 1, track: const Track(id: 2, filePath: '/b.mp3', title: 'B', durationMs: 100000, fileSize: 1000, modifiedAt: 1000));
+    final itemADup = PlaylistEntry.forQueue(id: 2, position: 2, track: const Track(id: 3, filePath: '/a.mp3', title: 'A Duplicate', durationMs: 100000, fileSize: 1000, modifiedAt: 1000));
 
     setUp(() {
       qm = QueueManager();
@@ -465,15 +470,19 @@ void main() {
     late QueueManager queueManager;
     late CrossfadeManager crossfadeManager;
 
-    final List<QueueItem> testItems = List.generate(
+    final List<PlaylistEntry> testItems = List.generate(
       6,
-      (i) => QueueItem(
-        id: '${i + 1}',
-        filePath: '/music/track_${i + 1}.mp3',
-        title: 'Track ${i + 1}',
-        artist: 'Artist ${i + 1}',
-        album: 'Album 1',
-        duration: const Duration(seconds: 180),
+      (i) => PlaylistEntry.forQueue(
+        id: i + 1,
+        position: i,
+        track: Track(
+          id: i + 1,
+          filePath: '/music/track_${i + 1}.mp3',
+          title: 'Track ${i + 1}',
+          durationMs: 180000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+        ),
       ),
     );
 
@@ -543,13 +552,16 @@ void main() {
       final activeMock = service.activePlayer as MockAudioPlayerAdapter;
       await triggerCrossfade(service, activeMock);
 
-      final newItem = QueueItem(
-        id: 'new_99',
-        filePath: '/music/new_99.mp3',
-        title: 'New Track',
-        artist: 'New Artist',
-        album: 'Album 1',
-        duration: const Duration(seconds: 180),
+      final newItem = PlaylistEntry.forQueue(
+        id: 99,
+        track: const Track(
+          id: 99,
+          filePath: '/music/new_99.mp3',
+          title: 'New Track',
+          durationMs: 180000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+        ),
       );
 
       // Insert new item right after current playing track
@@ -634,13 +646,70 @@ void main() {
 
         expect(infiniteService.queueManager.currentIndex, equals(2));
         expect(infiniteService.queueManager.length, equals(4));
-        expect(infiniteService.queueManager.currentTrack?.filePath, equals('/music/mix_1.mp3'));
+        expect(infiniteService.queueManager.currentTrack?.track?.filePath, equals('/music/mix_1.mp3'));
         expect(infiniteService.currentState.mixOffset, equals(2));
         expect(infiniteService.activePlayer.isPlaying, isTrue);
         expect(infiniteService.currentState.completed, isFalse);
       } finally {
         await infiniteService.dispose();
       }
+    });
+
+    test('End-of-Queue Anti-Freeze Test: Last track completing in Loop.off stops once and does NOT infinite loop on subsequent completed events', () async {
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+
+      // Start on track 2 of 2 (the final element)
+      await service.open(testItems.take(2).toList(), index: 1, play: true);
+      await service.setLoopMode(Loop.off);
+
+      expect(service.queueManager.currentIndex, equals(1));
+      expect(service.activePlayer.isPlaying, isTrue);
+      expect(service.currentState.completed, isFalse);
+
+      int stateEmissionsAfterCompletion = 0;
+      final sub = service.stateStream.listen((_) {
+        stateEmissionsAfterCompletion++;
+      });
+
+      // Track reaches end
+      activeMock.currentPosition = const Duration(seconds: 180);
+      activeMock.emitCompleted(true);
+
+      // Simulate native miniaudio behavior: calling stop() can trigger additional completed events
+      activeMock.emitCompleted(true);
+      activeMock.emitCompleted(false);
+      activeMock.emitCompleted(true);
+
+      // Allow microtasks and serialized queue lane to process
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(service.currentState.completed, isTrue);
+      expect(service.activePlayer.isPlaying, isFalse);
+      expect(service.standbyPlayer.isPlaying, isFalse);
+      expect(service.currentState.position, equals(const Duration(seconds: 180)));
+
+      // Ensure no runaway emissions (e.g. hundreds of events in loop)
+      expect(stateEmissionsAfterCompletion, lessThan(10));
+
+      // Buttons / actions must work immediately after queue ended
+      // 1. First previous restarts track (since position > 3s threshold)
+      await service.previous();
+      expect(service.queueManager.currentIndex, equals(1));
+      expect(activeMock.seekHistory, contains(Duration.zero));
+
+      // Second previous (at position 0) moves to track 0
+      activeMock.currentPosition = Duration.zero;
+      await service.previous();
+      expect(service.queueManager.currentIndex, equals(0));
+      expect(service.currentState.completed, isFalse);
+
+      // 2. Play new queue works
+      await service.open(testItems, index: 2, play: true);
+      expect(service.queueManager.currentIndex, equals(2));
+      expect(service.activePlayer.isPlaying, isTrue);
+      expect(service.currentState.completed, isFalse);
+
+      await sub.cancel();
     });
   });
 }

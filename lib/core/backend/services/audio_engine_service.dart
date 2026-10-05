@@ -2,13 +2,15 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:miniaudio_player/miniaudio_player.dart' show AudioDevice, Equalizer;
+import 'package:miniaudio_player/miniaudio_player.dart'
+    show AudioDevice, Equalizer;
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/playback/domain/behavior_subject.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
-import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
+import 'package:tachyon/features/settings/data/settings_repository.dart'
+    show CrossfadeCurve;
 
 import 'audio_player_adapter.dart';
 import 'crossfade_manager.dart';
@@ -35,7 +37,7 @@ class _Transition {
   });
 
   _TransitionKind kind;
-  final QueueItem target;
+  final PlaylistEntry target;
   final AudioPlayerAdapter outgoing;
   final AudioPlayerAdapter incoming;
 }
@@ -84,7 +86,7 @@ class AudioEngineService {
   final StreamController<Duration> _positionStreamController =
       StreamController<Duration>.broadcast();
   final List<StreamSubscription<dynamic>> _playerSubscriptions = [];
-  StreamSubscription<QueueItem?>? _queueSubscription;
+  StreamSubscription<PlaylistEntry?>? _queueSubscription;
 
   /// Tail of the serialized command lane.
   Future<void> _commandTail = Future<void>.value();
@@ -101,7 +103,7 @@ class AudioEngineService {
   int _playbackSession = 0;
 
   bool _autoStartScheduled = false;
-  QueueItem? _failedAutoTarget;
+  PlaylistEntry? _failedAutoTarget;
   bool _queueEnded = false;
   DateTime? _lastStateEmit;
 
@@ -120,20 +122,21 @@ class AudioEngineService {
     CrossfadeManager? crossfadeManager,
     this.tickerInterval = const Duration(milliseconds: 25),
     math.Random? random,
-  })  : _playerA = playerA ?? AudioPlayerAdapter(),
-        _playerB = playerB ?? AudioPlayerAdapter(),
-        _queueManager = queueManager ?? QueueManager(random: random),
-        _ownsQueueManager = queueManager == null,
-        _crossfadeManager = crossfadeManager ??
-            CrossfadeManager(tickerInterval: tickerInterval),
-        _stateSubject = BehaviorSubject<PlaybackState>(
-          const PlaybackState.initial(),
-        ) {
+  }) : _playerA = playerA ?? AudioPlayerAdapter(),
+       _playerB = playerB ?? AudioPlayerAdapter(),
+       _queueManager = queueManager ?? QueueManager(random: random),
+       _ownsQueueManager = queueManager == null,
+       _crossfadeManager =
+           crossfadeManager ?? CrossfadeManager(tickerInterval: tickerInterval),
+       _stateSubject = BehaviorSubject<PlaybackState>(
+         const PlaybackState.initial(),
+       ) {
     _activePlayer = _playerA;
     _standbyPlayer = _playerB;
     _bindActivePlayer();
-    _queueSubscription =
-        _queueManager.nextTrackStream.listen(_onNextCandidateChanged);
+    _queueSubscription = _queueManager.nextTrackStream.listen(
+      _onNextCandidateChanged,
+    );
   }
 
   // --------------------------------------------------------------------------
@@ -164,101 +167,107 @@ class AudioEngineService {
   // --------------------------------------------------------------------------
 
   Future<void> open(
-    List<QueueItem> playables, {
+    List<PlaylistEntry> playables, {
     int index = 0,
     bool play = true,
     bool shuffle = false,
-  }) =>
-      _serialize(
-        () => _openImpl(playables, index: index, play: play, shuffle: shuffle),
-      );
+  }) => _serialize(
+    () => _openImpl(playables, index: index, play: play, shuffle: shuffle),
+  );
 
   Future<void> play() => _serialize(() async {
-        if (_queueManager.isEmpty) return;
-        _queueEnded = false;
-        if (_crossfadeManager.isActive) {
-          await _crossfadeManager.resume();
-        } else {
-          await _activePlayer.play();
-        }
-        _emitState();
-      });
+    if (_queueManager.isEmpty) return;
+    final wasQueueEnded = _queueEnded;
+    _queueEnded = false;
+    if (_crossfadeManager.isActive) {
+      await _crossfadeManager.resume();
+    } else {
+      if (wasQueueEnded && !_activePlayer.isPlaying) {
+        await _activePlayer.seek(Duration.zero);
+      }
+      await _activePlayer.play();
+    }
+    _emitState();
+  });
 
   Future<void> pause() => _serialize(() async {
-        if (_crossfadeManager.isActive) {
-          await _crossfadeManager.pause();
-        } else {
-          await _activePlayer.pause();
-        }
-        _emitState();
-      });
+    if (_crossfadeManager.isActive) {
+      await _crossfadeManager.pause();
+    } else {
+      await _activePlayer.pause();
+    }
+    _emitState();
+  });
 
   Future<void> stop() => _serialize(() async {
-        await _abortTransition();
-        await _stopPlayers();
-        _emitState();
-      });
+    await _abortTransition();
+    await _stopPlayers();
+    _emitState();
+  });
 
   Future<void> seek(Duration position) => _serialize(() async {
-        if (_queueManager.isEmpty) return;
-        final wasPlaying = _activePlayer.isPlaying || currentState.playing;
+    if (_queueManager.isEmpty) return;
+    final wasPlaying = _activePlayer.isPlaying || currentState.playing;
 
-        await _abortTransition();
-        _bumpSession();
-        _queueEnded = false;
+    await _abortTransition();
+    _bumpSession();
+    _queueEnded = false;
 
-        await _activePlayer.seek(position);
-        if (wasPlaying && !_activePlayer.isPlaying) {
-          await _activePlayer.play();
-        }
-        _emitState();
-      });
+    await _activePlayer.seek(position);
+    if (wasPlaying && !_activePlayer.isPlaying) {
+      await _activePlayer.play();
+    }
+    _emitState();
+  });
 
   Future<void> next() => _serialize(() async {
-        if (_queueManager.isEmpty) return;
+    if (_queueManager.isEmpty) return;
 
-        // The user skips while an automatic crossfade towards the very same
-        // next track is running: commit it instead of restarting the fade.
-        if (_promoteAutoTransition()) return;
+    // The user skips while an automatic crossfade towards the very same
+    // next track is running: commit it instead of restarting the fade.
+    if (_promoteAutoTransition()) return;
 
-        await _abortTransition();
-        final before = _queueManager.currentTrack;
-        final target = await _queueManager.next(isManual: true);
-        if (target == null) {
-          await _endOfQueue();
-        } else if (identical(target, before)) {
-          await _restartCurrent(play: true);
-        } else {
-          await _playTarget(target, play: true, crossfade: true);
-        }
-      });
+    await _abortTransition();
+    final before = _queueManager.currentTrack;
+    final target = await _queueManager.next(isManual: true);
+    if (target == null) {
+      await _endOfQueue();
+    } else if (identical(target, before)) {
+      await _restartCurrent(play: true);
+    } else {
+      await _playTarget(target, play: true, crossfade: true);
+    }
+  });
 
   Future<void> previous() => _serialize(() async {
-        if (_queueManager.isEmpty) return;
-        final wasPlaying = _activePlayer.isPlaying || currentState.playing;
+    if (_queueManager.isEmpty) return;
+    final wasPlaying = _activePlayer.isPlaying || currentState.playing;
+    _queueEnded = false;
 
-        // Restart-vs-previous is the queue's policy; it returns null when the
-        // current track must be restarted.
-        final target = _queueManager.previous(position: _activePlayer.position);
-        if (target == null) {
-          await _restartCurrent(play: wasPlaying);
-        } else {
-          await _playTarget(target, play: wasPlaying, crossfade: true);
-        }
-      });
+    // Restart-vs-previous is the queue's policy; it returns null when the
+    // current track must be restarted.
+    final target = _queueManager.previous(position: _activePlayer.position);
+    if (target == null) {
+      await _restartCurrent(play: wasPlaying);
+    } else {
+      await _playTarget(target, play: wasPlaying, crossfade: true);
+    }
+  });
 
   Future<void> skipToIndex(int index, {bool? play}) => _serialize(() async {
-        if (index < 0 || index >= _queueManager.length) return;
-        final shouldPlay = play ?? (_activePlayer.isPlaying || currentState.playing || true);
-        final before = _queueManager.currentTrack;
-        final target = _queueManager.jumpTo(index);
-        if (target == null) return;
-        if (identical(target, before)) {
-          await _restartCurrent(play: shouldPlay);
-        } else {
-          await _playTarget(target, play: shouldPlay, crossfade: true);
-        }
-      });
+    if (index < 0 || index >= _queueManager.length) return;
+    _queueEnded = false;
+    final shouldPlay =
+        play ?? (_activePlayer.isPlaying || currentState.playing || true);
+    final before = _queueManager.currentTrack;
+    final target = _queueManager.jumpTo(index);
+    if (target == null) return;
+    if (identical(target, before)) {
+      await _restartCurrent(play: shouldPlay);
+    } else {
+      await _playTarget(target, play: shouldPlay, crossfade: true);
+    }
+  });
 
   Future<void> clearQueue() => open(const []);
 
@@ -271,79 +280,79 @@ class AudioEngineService {
   // --------------------------------------------------------------------------
 
   Future<void> setShuffle(bool enabled) => _serialize(() async {
-        _queueManager.setShuffle(enabled);
-        await _settle();
-        _emitState();
-      });
+    _queueManager.setShuffle(enabled);
+    await _settle();
+    _emitState();
+  });
 
   Future<void> toggleShuffle() => _serialize(() async {
-        _queueManager.toggleShuffle();
-        await _settle();
-        _emitState();
-      });
+    _queueManager.toggleShuffle();
+    await _settle();
+    _emitState();
+  });
 
   Future<void> setLoopMode(Loop loop) => _serialize(() async {
-        _queueManager.setLoopMode(loop);
-        await _settle();
-        _emitState();
-      });
+    _queueManager.setLoopMode(loop);
+    await _settle();
+    _emitState();
+  });
 
   Future<void> setInfiniteMix(bool enabled) => _serialize(() async {
-        _queueManager.setInfiniteMix(enabled);
-        _emitState();
-      });
+    _queueManager.setInfiniteMix(enabled);
+    _emitState();
+  });
 
-  Future<void> insertNext(QueueItem playable) => _serialize(() async {
-        if (_queueManager.isEmpty) {
-          await _openImpl([playable]);
-          return;
-        }
-        _queueManager.insertNext(playable);
-        await _settle();
-        _emitState();
-      });
+  Future<void> insertNext(PlaylistEntry playable) => _serialize(() async {
+    if (_queueManager.isEmpty) {
+      await _openImpl([playable]);
+      return;
+    }
+    _queueManager.insertNext(playable);
+    await _settle();
+    _emitState();
+  });
 
-  Future<void> append(List<QueueItem> playables) => _serialize(() async {
-        if (playables.isEmpty) return;
-        if (_queueManager.isEmpty) {
-          await _openImpl(playables);
-          return;
-        }
-        _queueManager.append(playables);
-        await _settle();
-        _emitState();
-      });
+  Future<void> append(List<PlaylistEntry> playables) => _serialize(() async {
+    if (playables.isEmpty) return;
+    if (_queueManager.isEmpty) {
+      await _openImpl(playables);
+      return;
+    }
+    _queueManager.append(playables);
+    await _settle();
+    _emitState();
+  });
 
   Future<void> remove(int index) => _serialize(() async {
-        if (index < 0 || index >= _queueManager.length) return;
+    if (index < 0 || index >= _queueManager.length) return;
 
-        final before = _queueManager.currentTrack;
-        final wasPlaying = _activePlayer.isPlaying;
-        _queueManager.remove(index);
-        await _settle();
+    final before = _queueManager.currentTrack;
+    final wasPlaying = _activePlayer.isPlaying;
+    _queueManager.remove(index);
+    await _settle();
 
-        if (_queueManager.isEmpty) {
-          await _abortTransition();
-          await _stopPlayers();
-          _emitState();
-          return;
-        }
+    if (_queueManager.isEmpty) {
+      await _abortTransition();
+      await _stopPlayers();
+      _emitState();
+      return;
+    }
 
-        final after = _queueManager.currentTrack;
-        if (after != null && !identical(after, before)) {
-          // The current item was removed: the queue already selected the
-          // replacement, the engine just loads it (no crossfade).
-          await _playTarget(after, play: wasPlaying, crossfade: false);
-          return;
-        }
-        _emitState();
-      });
+    final after = _queueManager.currentTrack;
+    if (after != null && !identical(after, before)) {
+      // The current item was removed: the queue already selected the
+      // replacement, the engine just loads it (no crossfade).
+      await _playTarget(after, play: wasPlaying, crossfade: false);
+      return;
+    }
+    _emitState();
+  });
 
   Future<void> reorder(int from, int to) => _serialize(() async {
-        _queueManager.reorder(from, to);
-        await _settle();
-        _emitState();
-      });
+    _queueManager.reorder(from, to);
+    await _settle();
+    _emitState();
+  });
 
   // --------------------------------------------------------------------------
   // Audio Configuration Controls
@@ -353,7 +362,10 @@ class AudioEngineService {
   // --------------------------------------------------------------------------
 
   Future<void> setVolume(double volume) async {
-    _masterVolume = volume.clamp(AppDefaults.volumeMin, AppDefaults.volumeBoostMax);
+    _masterVolume = volume.clamp(
+      AppDefaults.volumeMin,
+      AppDefaults.volumeBoostMax,
+    );
     if (_crossfadeManager.isActive) {
       _crossfadeManager.setMasterVolume(_masterVolume);
     } else {
@@ -363,7 +375,10 @@ class AudioEngineService {
   }
 
   Future<void> setRate(double rate) async {
-    _playbackRate = rate.clamp(AppDefaults.playbackRateMin, AppDefaults.playbackRateMax);
+    _playbackRate = rate.clamp(
+      AppDefaults.playbackRateMin,
+      AppDefaults.playbackRateMax,
+    );
     if (_crossfadeManager.isActive) {
       _crossfadeManager.setPlaybackRate(_playbackRate);
     }
@@ -375,7 +390,10 @@ class AudioEngineService {
   }
 
   Future<void> setPitch(double pitch) async {
-    _playbackPitch = pitch.clamp(AppDefaults.playbackPitchMin, AppDefaults.playbackPitchMax);
+    _playbackPitch = pitch.clamp(
+      AppDefaults.playbackPitchMin,
+      AppDefaults.playbackPitchMax,
+    );
     await Future.wait([
       _playerA.setPitch(_playbackPitch),
       _playerB.setPitch(_playbackPitch),
@@ -409,20 +427,22 @@ class AudioEngineService {
     return results.any((ok) => ok);
   }
 
-  Future<List<AudioDevice>> getAudioDevices() => _activePlayer.getAudioDevices();
+  Future<List<AudioDevice>> getAudioDevices() =>
+      _activePlayer.getAudioDevices();
 
   Future<void> setCrossfadeDuration(Duration duration) => _serialize(() async {
-        _crossfadeConfig = _crossfadeConfig.copyWith(duration: duration);
-        await _abortAutoTransitionIfDisabled();
-        _emitState();
-      });
+    _crossfadeConfig = _crossfadeConfig.copyWith(duration: duration);
+    await _abortAutoTransitionIfDisabled();
+    _emitState();
+  });
 
   Future<void> setCrossfadeCurve(CrossfadeCurve curve) async {
     _crossfadeConfig = _crossfadeConfig.copyWith(curve: curve);
     _emitState();
   }
 
-  Future<void> setCrossfadeConfig(CrossfadeConfig config) => _serialize(() async {
+  Future<void> setCrossfadeConfig(CrossfadeConfig config) =>
+      _serialize(() async {
         _crossfadeConfig = config;
         await _abortAutoTransitionIfDisabled();
         _emitState();
@@ -462,7 +482,7 @@ class AudioEngineService {
   // --------------------------------------------------------------------------
 
   Future<void> _openImpl(
-    List<QueueItem> playables, {
+    List<PlaylistEntry> playables, {
     int index = 0,
     bool play = true,
     bool shuffle = false,
@@ -472,11 +492,13 @@ class AudioEngineService {
 
     if (playables.isEmpty) {
       _queueManager.clear();
+      _queueEnded = true;
       await _stopPlayers();
       _emitState();
       return;
     }
 
+    _queueEnded = false;
     _queueManager.setQueue(playables, startIndex: index, shuffle: shuffle);
     final target = _queueManager.currentTrack;
     if (target == null) {
@@ -490,7 +512,7 @@ class AudioEngineService {
   /// opened, the queue is asked for the next one, bounded by the queue length
   /// so a fully broken queue cannot loop forever.
   Future<void> _playTarget(
-    QueueItem target, {
+    PlaylistEntry target, {
     required bool play,
     required bool crossfade,
   }) async {
@@ -506,7 +528,9 @@ class AudioEngineService {
           : await _hardLoad(candidate, play: play);
       if (ok) return;
 
-      debugPrint('[AudioEngine] Skipping unplayable track: ${candidate.filePath}');
+      debugPrint(
+        '[AudioEngine] Skipping unplayable track: ${candidate.track?.filePath}',
+      );
       final skipped = await _queueManager.next(isManual: true);
       if (skipped == null || identical(skipped, candidate)) break;
       candidate = skipped;
@@ -520,7 +544,7 @@ class AudioEngineService {
       _crossfadeConfig.manualDuration > Duration.zero &&
       _activePlayer.isPlaying;
 
-  Future<bool> _hardLoad(QueueItem item, {required bool play}) async {
+  Future<bool> _hardLoad(PlaylistEntry item, {required bool play}) async {
     _bumpSession();
     final ok = await _openOn(
       _activePlayer,
@@ -532,7 +556,7 @@ class AudioEngineService {
     return ok;
   }
 
-  Future<bool> _crossfadeTo(QueueItem item) async {
+  Future<bool> _crossfadeTo(PlaylistEntry item) async {
     final outgoing = _activePlayer;
     final incoming = _standbyPlayer;
 
@@ -559,8 +583,9 @@ class AudioEngineService {
       outgoingDuration: outgoing.duration,
       outgoingRemaining: outgoing.duration - outgoing.position,
       targetDuration: _crossfadeConfig.manualDuration,
-      incomingDuration:
-          incoming.duration > Duration.zero ? incoming.duration : item.duration,
+      incomingDuration: incoming.duration > Duration.zero
+          ? incoming.duration
+          : (item.track?.duration ?? Duration.zero),
     );
 
     await _crossfadeManager.cross(
@@ -588,9 +613,10 @@ class AudioEngineService {
   }
 
   Future<void> _endOfQueue() async {
+    if (_queueEnded) return;
+    _queueEnded = true;
     await _abortTransition();
     await _stopPlayers();
-    _queueEnded = true;
     _emitState();
   }
 
@@ -634,14 +660,15 @@ class AudioEngineService {
 
     final active = _activePlayer;
     final standby = _standbyPlayer;
-    final restore = Future.wait<void>([
-      active.setVolume(_masterVolume),
-      standby.setVolume(0.0),
-      standby.stop(),
-    ]).then<void>(
-      (_) {},
-      onError: (Object e) => debugPrint('[AudioEngine] Restore failed: $e'),
-    );
+    final restore =
+        Future.wait<void>([
+          active.setVolume(_masterVolume),
+          standby.setVolume(0.0),
+          standby.stop(),
+        ]).then<void>(
+          (_) {},
+          onError: (Object e) => debugPrint('[AudioEngine] Restore failed: $e'),
+        );
     _pendingRestore = restore;
 
     // The outgoing track may have ended while the (now aborted) auto
@@ -662,7 +689,7 @@ class AudioEngineService {
   }
 
   /// Reacts to queue candidate changes (synchronous broadcast).
-  void _onNextCandidateChanged(QueueItem? candidate) {
+  void _onNextCandidateChanged(PlaylistEntry? candidate) {
     final transition = _transition;
     if (transition == null || transition.kind != _TransitionKind.auto) return;
     if (QueueManager.isSameItem(candidate, transition.target)) return;
@@ -721,8 +748,11 @@ class AudioEngineService {
     });
   }
 
-  ({QueueItem next, Duration duration})? _planAutoCrossfade(Duration position) {
-    if (!_crossfadeConfig.enabled || _crossfadeConfig.duration <= Duration.zero) {
+  ({PlaylistEntry next, Duration duration})? _planAutoCrossfade(
+    Duration position,
+  ) {
+    if (!_crossfadeConfig.enabled ||
+        _crossfadeConfig.duration <= Duration.zero) {
       return null;
     }
     if (!_activePlayer.isPlaying) return null;
@@ -743,7 +773,7 @@ class AudioEngineService {
       outgoingDuration: total,
       outgoingRemaining: remaining,
       targetDuration: _crossfadeConfig.duration,
-      incomingDuration: next.duration,
+      incomingDuration: next.track?.duration ?? Duration.zero,
     );
     if (duration <= Duration.zero || remaining > duration) return null;
     return (next: next, duration: duration);
@@ -764,7 +794,10 @@ class AudioEngineService {
     });
   }
 
-  Future<void> _startAutoCrossfade(QueueItem next, Duration plannedDuration) async {
+  Future<void> _startAutoCrossfade(
+    PlaylistEntry next,
+    Duration plannedDuration,
+  ) async {
     final outgoing = _activePlayer;
     final incoming = _standbyPlayer;
     final transition = _Transition(
@@ -812,13 +845,17 @@ class AudioEngineService {
       dur = outgoingRemaining;
     }
     if (outgoingDuration > Duration.zero) {
-      final halfOutgoing = Duration(milliseconds: outgoingDuration.inMilliseconds ~/ 2);
+      final halfOutgoing = Duration(
+        milliseconds: outgoingDuration.inMilliseconds ~/ 2,
+      );
       if (halfOutgoing > Duration.zero && dur > halfOutgoing) {
         dur = halfOutgoing;
       }
     }
     if (incomingDuration > Duration.zero) {
-      final halfIncoming = Duration(milliseconds: incomingDuration.inMilliseconds ~/ 2);
+      final halfIncoming = Duration(
+        milliseconds: incomingDuration.inMilliseconds ~/ 2,
+      );
       if (halfIncoming > Duration.zero && dur > halfIncoming) {
         dur = halfIncoming;
       }
@@ -831,10 +868,14 @@ class AudioEngineService {
   // --------------------------------------------------------------------------
 
   void _scheduleCompletion({bool verifyPosition = true}) {
+    if (_queueEnded) return;
     final session = _playbackSession;
     final player = _activePlayer;
     _schedule(() async {
-      if (session != _playbackSession || !identical(player, _activePlayer)) return;
+      if (_queueEnded) return;
+      if (session != _playbackSession || !identical(player, _activePlayer)) {
+        return;
+      }
       if (_transition?.kind == _TransitionKind.auto) return;
       if (verifyPosition && !_isAtEnd(player)) return; // stale event
       await _advanceAfterCompletion();
@@ -855,21 +896,26 @@ class AudioEngineService {
   /// optionally starts it. Returns false if the file could not be opened.
   Future<bool> _openOn(
     AudioPlayerAdapter player,
-    QueueItem item, {
+    PlaylistEntry item, {
     required bool play,
     required double volume,
   }) async {
     try {
+      final filePath = item.track?.filePath ?? '';
+      if (filePath.isEmpty) {
+        debugPrint('[AudioEngine] Track has empty filePath');
+        return false;
+      }
       await player.setVolume(volume);
       await _configurePlayerProperties(player);
-      await player.open(item.filePath, play: false);
+      await player.open(filePath, play: false);
       await player.seek(Duration.zero);
       if (play) {
         await player.play();
       }
       return true;
     } catch (e) {
-      debugPrint('[AudioEngine] Failed to open ${item.filePath}: $e');
+      debugPrint('[AudioEngine] Failed to open ${item.track?.filePath}: $e');
       try {
         await player.stop();
       } catch (_) {}
@@ -919,6 +965,7 @@ class AudioEngineService {
     _playerSubscriptions.add(
       player.positionStream.listen((pos) {
         if (!isCurrent()) return;
+        if (_queueEnded) return;
         if (!_positionStreamController.isClosed) {
           _positionStreamController.add(pos);
         }
@@ -940,7 +987,8 @@ class AudioEngineService {
         _stateSubject.add(
           currentState.copyWith(
             playing: playing,
-            completed: playing ? false : currentState.completed,
+            completed:
+                _queueEnded || (playing ? false : currentState.completed),
           ),
         );
       }),
@@ -956,12 +1004,14 @@ class AudioEngineService {
     _playerSubscriptions.add(
       player.completedStream.listen((completed) {
         if (!isCurrent()) return;
+        if (_queueEnded) return;
         if (!completed) {
           if (currentState.completed) {
             _stateSubject.add(currentState.copyWith(completed: false));
           }
           return;
         }
+        if (!player.isPlaying && !currentState.playing) return;
         // During an auto crossfade the outgoing track is expected to end; the
         // crossfade completion commits the transition instead.
         if (_transition?.kind == _TransitionKind.auto) return;
@@ -973,8 +1023,12 @@ class AudioEngineService {
   void _maybeEmitPositionState(Duration position) {
     final last = _lastStateEmit;
     final now = DateTime.now();
-    final jumped = (position - currentState.position).abs() > const Duration(milliseconds: 1500);
-    if (!jumped && last != null && now.difference(last) < _positionStateInterval) {
+    final jumped =
+        (position - currentState.position).abs() >
+        const Duration(milliseconds: 1500);
+    if (!jumped &&
+        last != null &&
+        now.difference(last) < _positionStateInterval) {
       return;
     }
     _lastStateEmit = now;
@@ -996,7 +1050,11 @@ class AudioEngineService {
         playing: active.isPlaying,
         buffering: active.isBuffering,
         completed: _queueEnded || (!active.isPlaying && active.isCompleted),
-        position: active.position,
+        position: _queueEnded
+            ? (active.duration > Duration.zero
+                  ? active.duration
+                  : active.position)
+            : active.position,
         duration: active.duration,
         rate: _playbackRate,
         pitch: _playbackPitch,

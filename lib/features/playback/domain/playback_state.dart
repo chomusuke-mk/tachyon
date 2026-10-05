@@ -1,15 +1,17 @@
 import 'package:flutter/foundation.dart';
-import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 
 import 'crossfade_config.dart';
-import 'queue_item.dart';
+import 'loop_mode.dart';
+export 'loop_mode.dart';
 
 enum PlaybackStatus { idle, loading, playing, paused, completed }
 
 @immutable
 class PlaybackState {
   final int index;
-  final List<QueueItem> playables;
+  final List<PlaylistEntry> playables;
   final int? mixOffset;
   final bool playing;
   final bool buffering;
@@ -50,8 +52,10 @@ class PlaybackState {
 
   const PlaybackState.initial() : this();
 
-  QueueItem? get currentTrack =>
+  PlaylistEntry? get currentEntry =>
       (index >= 0 && index < playables.length) ? playables[index] : null;
+
+  Track? get currentTrack => currentEntry?.track;
 
   bool get hasNext =>
       loop == Loop.all || loop == Loop.one || index < playables.length - 1;
@@ -77,7 +81,7 @@ class PlaybackState {
   bool get isPlaying => playing;
   bool get isBuffering => buffering;
   bool get isCompleted => completed;
-  List<QueueItem> get queue => playables;
+  List<PlaylistEntry> get queue => playables;
   int get currentIndex => index;
   Loop get loopMode => loop;
   bool get isShuffled => shuffle;
@@ -86,7 +90,7 @@ class PlaybackState {
 
   PlaybackState copyWith({
     int? index,
-    List<QueueItem>? playables,
+    List<PlaylistEntry>? playables,
     int? mixOffset,
     bool? playing,
     bool? buffering,
@@ -127,69 +131,6 @@ class PlaybackState {
       audioBitrate: audioBitrate ?? this.audioBitrate,
       audioSampleRate: audioSampleRate ?? this.audioSampleRate,
       audioChannels: audioChannels ?? this.audioChannels,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'index': index,
-      'playables': playables.map((p) => p.toJson()).toList(),
-      'mixOffset': mixOffset,
-      'playing': playing,
-      'buffering': buffering,
-      'completed': completed,
-      'positionMs': position.inMilliseconds,
-      'durationMs': duration.inMilliseconds,
-      'rate': rate,
-      'pitch': pitch,
-      'volume': volume,
-      'shuffle': shuffle,
-      'loop': loop.index,
-      'crossfadeDurationMs': crossfadeDuration.inMilliseconds,
-      'skipSilence': skipSilence,
-      'audioBitrate': audioBitrate,
-      'audioSampleRate': audioSampleRate,
-      'audioChannels': audioChannels,
-    };
-  }
-
-  factory PlaybackState.fromJson(Map<String, dynamic> json) {
-    return PlaybackState(
-      index: json['index'] as int? ?? 0,
-      playables:
-          (json['playables'] as List<dynamic>?)
-              ?.map((e) => QueueItem.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          const [],
-      mixOffset: json['mixOffset'] as int?,
-      playing: json['playing'] as bool? ?? false,
-      buffering: json['buffering'] as bool? ?? false,
-      completed: json['completed'] as bool? ?? false,
-      position: Duration(
-        milliseconds: (json['positionMs'] as num?)?.toInt() ?? 0,
-      ),
-      duration: Duration(
-        milliseconds: (json['durationMs'] as num?)?.toInt() ?? 0,
-      ),
-      rate:
-          (json['rate'] as num?)?.toDouble() ?? AppDefaults.playbackRateDefault,
-      pitch:
-          (json['pitch'] as num?)?.toDouble() ??
-          AppDefaults.playbackPitchDefault,
-      volume: (json['volume'] as num?)?.toDouble() ?? AppDefaults.volumeDefault,
-      shuffle: json['shuffle'] as bool? ?? false,
-      loop: Loop.fromString(json['loop'] as String?),
-      crossfadeDuration: Duration(
-        milliseconds:
-            ((json['crossfadeDurationMs'] ??
-                        AppDefaults.crossfadeDefaultDuration * 1000)
-                    as num)
-                .toInt(),
-      ),
-      skipSilence: json['skipSilence'] as bool? ?? false,
-      audioBitrate: (json['audioBitrate'] as num?)?.toDouble(),
-      audioSampleRate: json['audioSampleRate'] as int?,
-      audioChannels: json['audioChannels'] as int?,
     );
   }
 

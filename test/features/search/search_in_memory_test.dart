@@ -10,6 +10,7 @@ import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/data/library_store.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
@@ -24,7 +25,7 @@ import 'package:tachyon/features/settings/presentation/settings_controller.dart'
 import 'dart:async';
 
 import 'package:tachyon/features/playback/domain/playback_state.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/shared/widgets/album_card.dart';
 import 'package:tachyon/shared/widgets/artist_card.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
@@ -104,9 +105,10 @@ CatalogSnapshot _createSampleSnapshot() {
 }
 
 class _TestBackendClient extends DirectTachyonBackendClient {
-  _TestBackendClient({required super.database});
+  _TestBackendClient({required super.database, this.storeSupplier});
 
-  List<QueueItem>? openedItems;
+  final LibraryStore Function()? storeSupplier;
+  List<PlaylistEntry>? openedItems;
   int? openedIndex;
   final StreamController<PlaybackState> _stateCtrl =
       StreamController<PlaybackState>.broadcast();
@@ -116,19 +118,62 @@ class _TestBackendClient extends DirectTachyonBackendClient {
 
   @override
   Future<void> open(
-    List<QueueItem> items, {
+    List<int> trackIds, {
     int index = 0,
     bool play = true,
     bool shuffle = false,
   }) async {
-    openedItems = items;
+    final tracks = database?.getTracksByIds(trackIds) ?? [];
+    final trackMap = {for (final t in tracks) t.id: t};
+    final store = storeSupplier?.call();
+    int pos = 0;
+    final resolvedItems = trackIds.map((id) {
+      final t = trackMap[id] ?? store?.getTrackById(id);
+      if (t != null) {
+        return PlaylistEntry.forQueue(id: pos, position: pos++, track: t);
+      }
+      return null;
+    }).whereType<PlaylistEntry>().toList();
+
+    openedItems = resolvedItems;
     openedIndex = index;
     final state = PlaybackState(
-      playables: items,
+      playables: resolvedItems,
       index: index,
       playing: true,
     );
     _stateCtrl.add(state);
+  }
+
+  @override
+  Future<void> playQueue(
+    List<int> trackIds, {
+    int startIndex = 0,
+    bool play = true,
+    bool shuffle = false,
+  }) async {
+    final dbTracks = database?.getTracksByIds(trackIds) ?? [];
+    final trackMap = {for (final t in dbTracks) t.id: t};
+    final store = storeSupplier?.call();
+    int pos = 0;
+    final items = trackIds
+        .map((id) => trackMap[id] ?? store?.getTrackById(id))
+        .whereType<Track>()
+        .map((t) => PlaylistEntry.forQueue(id: pos, position: pos++, track: t))
+        .toList();
+    openedItems = items;
+    openedIndex = startIndex;
+    final state = PlaybackState(
+      playables: items,
+      index: startIndex,
+      playing: play,
+    );
+    _stateCtrl.add(state);
+  }
+
+  @override
+  Future<void> playTrack(int trackId, {bool play = true}) async {
+    await playQueue([trackId], play: play);
   }
 
   @override
@@ -161,8 +206,11 @@ void main() {
     await localeController.whenReady;
 
     db = AppDatabase.inMemory();
-    backend = _TestBackendClient(database: db);
     libraryStore = LibraryStore.fromSnapshot(_createSampleSnapshot());
+    backend = _TestBackendClient(
+      database: db,
+      storeSupplier: () => libraryStore,
+    );
 
     settingsController = SettingsController(
       repository: settingsRepo,
@@ -176,6 +224,7 @@ void main() {
     playbackController = PlaybackController(
       backend: backend,
       settingsRepository: settingsRepo,
+      libraryStoreSupplier: () => libraryStore,
     );
     playlistsController = PlaylistsController(
       backend: backend,
@@ -433,7 +482,7 @@ void main() {
       await tester.tap(find.text('Radio Ga Ga'));
       await tester.pumpAndSettle();
 
-      expect(backend.openedItems?.firstOrNull?.title, 'Radio Ga Ga');
+      expect(backend.openedItems?.firstOrNull?.track?.title, 'Radio Ga Ga');
       expect(playbackController.currentTrack?.title, 'Radio Ga Ga');
     });
 

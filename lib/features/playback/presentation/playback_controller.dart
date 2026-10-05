@@ -1,3 +1,4 @@
+// ignore_for_file: prefer_initializing_formals
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -6,18 +7,23 @@ import 'package:miniaudio_player/miniaudio_player.dart'
 
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/library/data/library_store.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
-import 'package:tachyon/features/playback/domain/queue_item.dart';
+
+export 'package:tachyon/features/playback/domain/loop_mode.dart';
 
 class PlaybackController extends ChangeNotifier {
   final TachyonBackendClient _backend;
   final SettingsRepository _settingsRepository;
+  final LibraryStore Function()? _libraryStoreSupplier;
 
   late StreamSubscription<PlaybackState> _engineSubscription;
   StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<void>? _catalogSubscription;
   PlaybackState _state = const PlaybackState.initial();
 
   Equalizer _equalizer = Equalizer.flat;
@@ -46,32 +52,43 @@ class PlaybackController extends ChangeNotifier {
   bool _historyLoggedForCurrentTrack = false;
 
   PlaybackController({
-    required this._backend,
-    required this._settingsRepository,
-  }) {
+    required TachyonBackendClient backend,
+    required SettingsRepository settingsRepository,
+    LibraryStore Function()? libraryStoreSupplier,
+  })  : _backend = backend,
+        _settingsRepository = settingsRepository,
+        _libraryStoreSupplier = libraryStoreSupplier {
     _backend.getPlaybackState().then((s) {
       if (!_isDisposed) {
-        _state = s;
-        _positionNotifier.value = s.position;
+        _state = _resolveStateTracks(s);
+        _positionNotifier.value = _state.position;
         notifyListeners();
       }
     });
 
     _engineSubscription = _backend.playbackStateStream.listen((newState) {
       final oldState = _state;
-      _state = newState;
+      final resolvedState = _resolveStateTracks(newState);
+      _state = resolvedState;
 
       // 1. Update high-frequency position notifier
-      if (_positionNotifier.value != newState.position) {
-        _positionNotifier.value = newState.position;
+      if (_positionNotifier.value != resolvedState.position) {
+        _positionNotifier.value = resolvedState.position;
       }
 
       // 2. Perform background checks
-      _checkHistoryLogging(newState);
-      _checkStatePersistence(oldState, newState);
+      _checkHistoryLogging(resolvedState);
+      _checkStatePersistence(oldState, resolvedState);
 
       // 3. Notify listeners ONLY on discrete state changes
-      if (_hasDiscreteStateChanged(oldState, newState)) {
+      if (_hasDiscreteStateChanged(oldState, resolvedState)) {
+        notifyListeners();
+      }
+    });
+
+    _catalogSubscription = _backend.catalogUpdatedStream.listen((_) {
+      if (!_isDisposed) {
+        _state = _resolveStateTracks(_state);
         notifyListeners();
       }
     });
@@ -83,11 +100,34 @@ class PlaybackController extends ChangeNotifier {
     });
   }
 
+  PlaybackState _resolveStateTracks(PlaybackState raw) {
+    final store = _libraryStoreSupplier?.call();
+    if (store == null || raw.playables.isEmpty) return raw;
+
+    final resolvedPlayables = raw.playables.map((item) {
+      final t = item.track;
+      if (t == null) return item;
+      final resolved = (t.id != null ? store.getTrackById(t.id!) : null) ??
+          store.getTrackByPath(t.filePath);
+      if (resolved != null && !identical(resolved, t)) {
+        return item.copyWith(track: resolved);
+      }
+      return item;
+    }).toList();
+
+    return raw.copyWith(playables: resolvedPlayables);
+  }
+
   // ---------------------------------------------------------------------------
   // Reactive Getters (Exposed for MiniPlayer, NowPlaying, TransportBar)
   // ---------------------------------------------------------------------------
   PlaybackState get state => _state;
-  QueueItem? get currentTrack => _state.currentTrack;
+  PlaylistEntry? get currentEntry => _state.currentEntry;
+  Track? get currentTrack => _state.currentTrack;
+  bool isCurrentTrack(Track? track) =>
+      track != null &&
+      (_state.currentTrack == track ||
+          (_state.currentTrack?.id != null && _state.currentTrack?.id == track.id));
   bool get isPlaying => _state.playing;
   bool get isBuffering => _state.buffering;
   bool get isCompleted => _state.completed;
@@ -106,7 +146,7 @@ class PlaybackController extends ChangeNotifier {
   Loop get loopMode => _state.loop;
   bool get isShuffled => _state.shuffle;
 
-  List<QueueItem> get queue => _state.playables;
+  List<PlaylistEntry> get queue => _state.playables;
   int get currentIndex => _state.index;
 
   bool get hasNext => _state.hasNext;
@@ -114,6 +154,7 @@ class PlaybackController extends ChangeNotifier {
 
   CrossfadeConfig get crossfadeConfig => _state.crossfadeConfig;
   bool get skipSilence => _state.skipSilence;
+
   // ---------------------------------------------------------------------------
   // High-Level Track Selection & Queue Actions
   // ---------------------------------------------------------------------------
@@ -122,16 +163,20 @@ class PlaybackController extends ChangeNotifier {
         ? contextTracks
         : [track];
 
-    final queueItems = trackList.map((t) => QueueItem.fromTrack(t)).toList();
-    var startIndex = queueItems.indexWhere((q) => q.filePath == track.filePath);
+    final trackIds = trackList.map((t) => t.id).whereType<int>().toList();
+    var startIndex = trackList.indexWhere((t) => t.filePath == track.filePath);
     if (startIndex == -1) startIndex = 0;
 
-    await _backend.open(
-      queueItems,
-      index: startIndex,
-      play: true,
-      shuffle: _state.shuffle,
-    );
+    if (trackIds.length == trackList.length && trackIds.isNotEmpty) {
+      await _backend.playQueue(
+        trackIds,
+        startIndex: startIndex,
+        play: true,
+        shuffle: _state.shuffle,
+      );
+    } else if (track.id != null) {
+      await _backend.playTrack(track.id!, play: true);
+    }
   }
 
   Future<void> playAll(
@@ -140,30 +185,35 @@ class PlaybackController extends ChangeNotifier {
     int startIndex = 0,
   }) async {
     if (tracks.isEmpty) return;
-    final queueItems = tracks.map((t) => QueueItem.fromTrack(t)).toList();
-
-    await _backend.open(
-      queueItems,
-      index: startIndex,
-      play: true,
-      shuffle: shuffle,
-    );
+    final trackIds = tracks.map((t) => t.id).whereType<int>().toList();
+    if (trackIds.length == tracks.length && trackIds.isNotEmpty) {
+      await _backend.playQueue(
+        trackIds,
+        startIndex: startIndex,
+        play: true,
+        shuffle: shuffle,
+      );
+    }
   }
 
   Future<void> playNext(Track track) async {
-    final item = QueueItem.fromTrack(track);
-    await _backend.insertNext(item);
+    if (track.id != null) {
+      await _backend.insertNext(track.id!);
+    }
   }
 
   Future<void> addToQueue(Track track) async {
-    final item = QueueItem.fromTrack(track);
-    await _backend.append([item]);
+    if (track.id != null) {
+      await _backend.append([track.id!]);
+    }
   }
 
   Future<void> appendTracks(List<Track> tracks) async {
     if (tracks.isEmpty) return;
-    final items = tracks.map((t) => QueueItem.fromTrack(t)).toList();
-    await _backend.append(items);
+    final trackIds = tracks.map((t) => t.id).whereType<int>().toList();
+    if (trackIds.isNotEmpty) {
+      await _backend.append(trackIds);
+    }
   }
 
   Future<void> removeFromQueue(int index) async {
@@ -271,7 +321,7 @@ class PlaybackController extends ChangeNotifier {
 
       if (hasPlayedThreshold) {
         _historyLoggedForCurrentTrack = true;
-        final trackId = newState.currentTrack!.trackId;
+        final trackId = newState.currentTrack!.id;
         if (trackId != null) {
           _backend.addTracksToPlaylist(AppDatabase.historyPlaylistId, [
             trackId,
@@ -380,6 +430,7 @@ class PlaybackController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _engineSubscription.cancel();
+    _catalogSubscription?.cancel();
     _positionSubscription?.cancel();
     if (_state.currentTrack != null) {
       _settingsRepository.setLastPlayed(

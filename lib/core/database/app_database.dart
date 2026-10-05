@@ -383,42 +383,26 @@ class AppDatabase {
   }
 
   Map<String, dynamic>? getBestLyricsForTrack(int trackId) {
-    final rows = db.select('''
-      SELECT id, track_id, source, state, raw_lrc, is_synced, updated_at
-      FROM lyrics
-      WHERE track_id = ? AND state = 'FOUND' AND raw_lrc IS NOT NULL
-      ORDER BY CASE source
-        WHEN 'embedded' THEN 1
-        WHEN 'file' THEN 2
-        WHEN 'lrclib' THEN 3
-        WHEN 'lyrics_ovh' THEN 4
-        ELSE 5 END ASC
-      LIMIT 1;
-    ''', [trackId]);
+    final rows = db.select(
+      "SELECT id, track_id, source, state, raw_lrc, is_synced, updated_at FROM lyrics "
+      "WHERE track_id = ? AND state = 'FOUND' AND raw_lrc IS NOT NULL "
+      "ORDER BY CASE source WHEN 'embedded' THEN 1 WHEN 'file' THEN 2 WHEN 'lrclib' THEN 3 WHEN 'lyrics_ovh' THEN 4 ELSE 5 END ASC LIMIT 1;",
+      [trackId],
+    );
     return rows.isEmpty ? null : rows.first;
   }
 
   int saveLyricsEntry({
-    required int trackId,
-    required String source,
-    required String state,
-    String? rawLrc,
-    bool isSynced = false,
-    String? lang,
-    int? updatedAt,
+    required int trackId, required String source, required String state,
+    String? rawLrc, bool isSynced = false, String? lang, int? updatedAt,
   }) {
     final ts = updatedAt ?? DateTime.now().millisecondsSinceEpoch;
-    final res = db.select('''
-      INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, lang, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(track_id, source) DO UPDATE SET
-        state = excluded.state,
-        raw_lrc = excluded.raw_lrc,
-        is_synced = excluded.is_synced,
-        lang = COALESCE(excluded.lang, lyrics.lang),
-        updated_at = excluded.updated_at
-      RETURNING id;
-    ''', [trackId, source, state, rawLrc, isSynced ? 1 : 0, lang, ts]);
+    final res = db.select(
+      'INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, lang, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) '
+      'ON CONFLICT(track_id, source) DO UPDATE SET state = excluded.state, raw_lrc = excluded.raw_lrc, '
+      'is_synced = excluded.is_synced, lang = COALESCE(excluded.lang, lyrics.lang), updated_at = excluded.updated_at RETURNING id;',
+      [trackId, source, state, rawLrc, isSynced ? 1 : 0, lang, ts],
+    );
     final lyricsId = res.first['id'] as int;
     db.execute('DELETE FROM lyrics_translations WHERE lyrics_id = ?;', [lyricsId]);
     return lyricsId;
@@ -450,13 +434,11 @@ class AppDatabase {
   }
 
   void saveLyricsTranslation({required int lyricsId, required String lang, required List<String> translatedLines}) {
-    db.execute('''
-      INSERT INTO lyrics_translations (lyrics_id, lang, translated_lines, updated_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(lyrics_id, lang) DO UPDATE SET
-        translated_lines = excluded.translated_lines,
-        updated_at = excluded.updated_at;
-    ''', [lyricsId, lang, jsonEncode(translatedLines), DateTime.now().millisecondsSinceEpoch]);
+    db.execute(
+      'INSERT INTO lyrics_translations (lyrics_id, lang, translated_lines, updated_at) VALUES (?, ?, ?, ?) '
+      'ON CONFLICT(lyrics_id, lang) DO UPDATE SET translated_lines = excluded.translated_lines, updated_at = excluded.updated_at;',
+      [lyricsId, lang, jsonEncode(translatedLines), DateTime.now().millisecondsSinceEpoch],
+    );
   }
 
   List<Track> getRandomTracks(int limit) {
@@ -483,6 +465,30 @@ class AppDatabase {
         artists: (art != null && art.isNotEmpty) ? art.split(';;;').map((n) => Artist(name: n.trim())).toList() : const [],
       );
     }).toList();
+  }
+
+  Track? getTrackById(int id) {
+    final list = getTracksByIds([id]);
+    return list.isNotEmpty ? list.first : null;
+  }
+
+  List<Track> getTracksByIds(List<int> ids) {
+    if (ids.isEmpty) return const [];
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = db.select(
+      'SELECT id, file_path, title, duration_ms, replay_gain_track_gain, replay_gain_track_peak FROM tracks WHERE id IN ($placeholders);',
+      ids,
+    );
+    final byId = {
+      for (final r in rows)
+        (r['id'] as int): Track(
+          id: r['id'] as int?, filePath: r['file_path'] as String, title: r['title'] as String,
+          durationMs: r['duration_ms'] as int, fileSize: 0, modifiedAt: 0,
+          replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
+          replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
+        ),
+    };
+    return ids.map((id) => byId[id]).whereType<Track>().toList();
   }
 
   Future<void> close() async {

@@ -199,8 +199,8 @@ class _TracksScreenState extends State<TracksScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrackFilePath = context.select<PlaybackController, String?>(
-      (c) => c.currentTrack?.filePath,
+    final currentTrack = context.select<PlaybackController, Track?>(
+      (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
     final playlists = context.watch<PlaylistsController>();
@@ -427,8 +427,7 @@ class _TracksScreenState extends State<TracksScreen> {
                   itemCount: tracks.length,
                   itemBuilder: (context, index) {
                     final track = tracks[index];
-                    final isPlaying =
-                        currentTrackFilePath == track.filePath;
+                    final isPlaying = currentTrack == track;
                     final isSelected = track.id != null &&
                         _selectedTrackIds.contains(track.id!);
 
@@ -561,7 +560,7 @@ class _TracksScreenState extends State<TracksScreen> {
                   itemCount: tracks.length,
                   itemBuilder: (context, index) {
                     final track = tracks[index];
-                    final isPlaying = currentTrackFilePath == track.filePath;
+                    final isPlaying = currentTrack == track;
                     final isLiked =
                         track.id != null && playlists.isTrackLiked(track.id!);
                     final isSelected =

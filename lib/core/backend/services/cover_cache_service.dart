@@ -253,8 +253,7 @@ class CoverCacheService {
     File hqFile,
     File mqFile,
     File lqFile,
-  ) =>
-      _writeTripleQualityImages(rawBytes, hqFile, mqFile, lqFile);
+  ) => _writeTripleQualityImages(rawBytes, hqFile, mqFile, lqFile);
 
   static Future<void> _writeTripleQualityImages(
     Uint8List rawBytes,
@@ -270,7 +269,8 @@ class CoverCacheService {
         final cropX = (decoded.width - minDim) ~/ 2;
         final cropY = (decoded.height - minDim) ~/ 2;
 
-        final squareImage = (cropX == 0 &&
+        final squareImage =
+            (cropX == 0 &&
                 cropY == 0 &&
                 decoded.width == minDim &&
                 decoded.height == minDim)
