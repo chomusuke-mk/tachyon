@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/features/shell/tachyon_shell.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
-import 'package:tachyon/shared/widgets/desktop_back_navigation_handler.dart';
+import 'package:tachyon/shared/widgets/desktop_shortcuts_handler.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -23,7 +23,7 @@ class App extends StatelessWidget {
       theme: TachyonTheme.lightTheme,
       darkTheme: TachyonTheme.darkTheme,
       builder: (context, child) {
-        return DesktopBackNavigationHandler(
+        return DesktopShortcutsHandler(
           navigatorKey: navigatorKey,
           child: child ?? const SizedBox.shrink(),
         );

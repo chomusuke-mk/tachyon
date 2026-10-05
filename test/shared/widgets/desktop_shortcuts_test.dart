@@ -17,6 +17,7 @@ import 'package:tachyon/features/library/presentation/artist_detail_screen.dart'
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/domain/queue_item.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
@@ -26,7 +27,7 @@ import 'package:tachyon/features/search/presentation/tachyon_search_controller.d
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/features/shell/tachyon_shell.dart';
-import 'package:tachyon/shared/widgets/desktop_back_navigation_handler.dart';
+import 'package:tachyon/shared/widgets/desktop_shortcuts_handler.dart';
 
 class _TestLocaleRepo extends LocaleRepository {
   @override
@@ -67,6 +68,49 @@ CatalogSnapshot _createSampleSnapshot() {
   );
 }
 
+class _TestPlaybackController extends PlaybackController {
+  _TestPlaybackController({
+    required super.backend,
+    required super.settingsRepository,
+  });
+
+  Duration? lastSeekPosition;
+  QueueItem? _mockTrack;
+  Duration _mockDuration = Duration.zero;
+
+  @override
+  QueueItem? get currentTrack => _mockTrack ?? super.currentTrack;
+
+  @override
+  Duration get duration =>
+      _mockDuration > Duration.zero ? _mockDuration : super.duration;
+
+  void setMockTrack(QueueItem? track, {Duration? duration}) {
+    _mockTrack = track;
+    if (duration != null) _mockDuration = duration;
+    notifyListeners();
+  }
+
+  int playOrPauseCallCount = 0;
+  bool mockIsPlaying = false;
+
+  @override
+  bool get isPlaying => mockIsPlaying;
+
+  @override
+  Future<void> playOrPause() async {
+    playOrPauseCallCount++;
+    mockIsPlaying = !mockIsPlaying;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> seek(Duration pos) async {
+    lastSeekPosition = pos;
+    await super.seek(pos);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -78,7 +122,7 @@ void main() {
   late SettingsController settingsController;
   late LibraryStore libraryStore;
   late LibraryController libraryController;
-  late PlaybackController playbackController;
+  late _TestPlaybackController playbackController;
   late LyricsController lyricsController;
   late PlaylistsController playlistsController;
   late TachyonSearchController searchController;
@@ -108,7 +152,7 @@ void main() {
       settingsRepository: settingsRepo,
       store: libraryStore,
     );
-    playbackController = PlaybackController(
+    playbackController = _TestPlaybackController(
       backend: backend,
       settingsRepository: settingsRepo,
     );
@@ -152,7 +196,7 @@ void main() {
       ],
       child: MaterialApp(
         navigatorKey: navigatorKey,
-        builder: (context, child) => DesktopBackNavigationHandler(
+        builder: (context, child) => DesktopShortcutsHandler(
           navigatorKey: navigatorKey,
           child: child ?? const SizedBox.shrink(),
         ),
@@ -171,7 +215,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  group('DesktopBackNavigationHandler - Keyboard ESC Navigation', () {
+  group('DesktopShortcutsHandler - Keyboard ESC Navigation', () {
     testWidgets('ESC pops SearchScreen even with focused TextField', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1000, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -295,7 +339,7 @@ void main() {
     });
   });
 
-  group('DesktopBackNavigationHandler - Mouse Back Button Navigation', () {
+  group('DesktopShortcutsHandler - Mouse Back Button Navigation', () {
     testWidgets('Mouse back button pops SearchScreen', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1000, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -391,7 +435,7 @@ void main() {
     });
   });
 
-  group('DesktopBackNavigationHandler - Alt+Left & Folders Navigation', () {
+  group('DesktopShortcutsHandler - Alt+Left & Folders Navigation', () {
     testWidgets('Alt+Left Arrow pops active route', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1000, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -468,4 +512,291 @@ void main() {
       expect(find.byTooltip('Minimizar'), findsOneWidget);
     });
   });
+
+  group('DesktopShortcutsHandler - Number Keys 0-9 Seek', () {
+    final sampleTrack = QueueItem(
+      id: '100',
+      trackId: 100,
+      filePath: '/music/queen/bohemian.mp3',
+      title: 'Bohemian Rhapsody',
+      artist: 'Queen',
+      album: 'A Night at the Opera',
+      duration: const Duration(seconds: 200),
+    );
+
+    testWidgets('Pressing 0-9 seeks to corresponding 0%-90% fraction of track duration', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(sampleTrack, duration: const Duration(seconds: 200));
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      final digitKeys = [
+        LogicalKeyboardKey.digit0,
+        LogicalKeyboardKey.digit1,
+        LogicalKeyboardKey.digit2,
+        LogicalKeyboardKey.digit3,
+        LogicalKeyboardKey.digit4,
+        LogicalKeyboardKey.digit5,
+        LogicalKeyboardKey.digit6,
+        LogicalKeyboardKey.digit7,
+        LogicalKeyboardKey.digit8,
+        LogicalKeyboardKey.digit9,
+      ];
+
+      for (int i = 0; i <= 9; i++) {
+        await tester.pump(const Duration(milliseconds: 150));
+        await tester.sendKeyEvent(digitKeys[i]);
+        await tester.pump();
+
+        final expectedSeconds = (200 * (i / 10.0)).round();
+        expect(
+          playbackController.lastSeekPosition,
+          Duration(seconds: expectedSeconds),
+          reason: 'Key $i should seek to $expectedSeconds seconds (fraction ${i / 10.0})',
+        );
+      }
+    });
+
+    testWidgets('Numpad numbers 0-9 seek to corresponding fraction', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(sampleTrack, duration: const Duration(seconds: 200));
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpad0);
+      await tester.pump();
+      expect(playbackController.lastSeekPosition, Duration.zero);
+
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpad5);
+      await tester.pump();
+      expect(playbackController.lastSeekPosition, const Duration(seconds: 100));
+
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpad9);
+      await tester.pump();
+      expect(playbackController.lastSeekPosition, const Duration(seconds: 180));
+    });
+
+    testWidgets('Pressing 0-9 does nothing when no track is loaded/playing', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(null);
+      playbackController.lastSeekPosition = null;
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+      await tester.pump();
+
+      expect(playbackController.lastSeekPosition, isNull);
+    });
+
+    testWidgets('Pressing 0-9 does nothing when duration is Duration.zero', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(sampleTrack, duration: Duration.zero);
+      playbackController.lastSeekPosition = null;
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+      await tester.pump();
+
+      expect(playbackController.lastSeekPosition, isNull);
+    });
+
+    testWidgets('Pressing 0-9 does NOT seek when a text input (TextField) is focused', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(sampleTrack, duration: const Duration(seconds: 200));
+      playbackController.lastSeekPosition = null;
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      // Open SearchScreen
+      navigatorKey.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const SearchScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Focus TextField
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+
+      // Press digit 5 while focused
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+      await tester.pump();
+
+      // Seek must NOT have been called
+      expect(playbackController.lastSeekPosition, isNull);
+    });
+
+    testWidgets('Pressing 0-9 with modifiers (Alt, Control, Shift) does NOT seek', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(sampleTrack, duration: const Duration(seconds: 200));
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      // Alt + 5
+      playbackController.lastSeekPosition = null;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      expect(playbackController.lastSeekPosition, isNull);
+
+      // Control + 5
+      playbackController.lastSeekPosition = null;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(playbackController.lastSeekPosition, isNull);
+
+      // Shift + 5 (e.g. typing '%')
+      playbackController.lastSeekPosition = null;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(playbackController.lastSeekPosition, isNull);
+    });
+  });
+
+  group('DesktopShortcutsHandler - Spacebar Play/Pause', () {
+    final sampleTrack = QueueItem(
+      id: '100',
+      trackId: 100,
+      filePath: '/music/queen/bohemian.mp3',
+      title: 'Bohemian Rhapsody',
+      artist: 'Queen',
+      album: 'A Night at the Opera',
+      duration: const Duration(seconds: 200),
+    );
+
+    testWidgets('Pressing Spacebar calls playOrPause when track is loaded', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(sampleTrack, duration: const Duration(seconds: 200));
+      playbackController.playOrPauseCallCount = 0;
+      playbackController.mockIsPlaying = false;
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      // Press Spacebar -> play
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+
+      expect(playbackController.playOrPauseCallCount, 1);
+      expect(playbackController.isPlaying, true);
+
+      // Press Spacebar again -> pause
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+
+      expect(playbackController.playOrPauseCallCount, 2);
+      expect(playbackController.isPlaying, false);
+    });
+
+    testWidgets('Pressing Spacebar does nothing when no track is loaded', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(null);
+      playbackController.playOrPauseCallCount = 0;
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+
+      expect(playbackController.playOrPauseCallCount, 0);
+    });
+
+    testWidgets('Pressing Spacebar does NOT toggle play/pause when a text input is focused', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(sampleTrack, duration: const Duration(seconds: 200));
+      playbackController.playOrPauseCallCount = 0;
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      // Open SearchScreen
+      navigatorKey.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const SearchScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Focus TextField
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+
+      // Press Space while focused
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+
+      // playOrPause must NOT have been called
+      expect(playbackController.playOrPauseCallCount, 0);
+    });
+
+    testWidgets('Pressing Spacebar with modifiers (Alt, Control, Shift) does NOT toggle play/pause', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      playbackController.setMockTrack(sampleTrack, duration: const Duration(seconds: 200));
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      // Alt + Space
+      playbackController.playOrPauseCallCount = 0;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      expect(playbackController.playOrPauseCallCount, 0);
+
+      // Control + Space
+      playbackController.playOrPauseCallCount = 0;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(playbackController.playOrPauseCallCount, 0);
+
+      // Shift + Space
+      playbackController.playOrPauseCallCount = 0;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(playbackController.playOrPauseCallCount, 0);
+    });
+  });
 }
+
