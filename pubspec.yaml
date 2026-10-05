@@ -29,22 +29,21 @@ dependencies:
   permission_handler: ^13.0.2
   external_path: ^3.0.0
   jsonc: ^0.0.3
-  device_info_plus: ^13.2.0
+  device_info_plus: ^13.3.0
   path: ^1.9.1
   crypto: ^3.0.7
   convert: ^3.1.2
   openpgp: ^3.10.7
   dio: ^5.11.1
   archive: ^4.3.0
-  url_launcher: ^6.3.2
+  url_launcher: ^6.3.3
   open_filex: ^4.7.0
   file_picker: ^13.1.0
   flutter_markdown_plus: ^1.0.12
-  haudiotagger: ^3.0.0
+  haudiotagger: ^3.1.0
   image: ^4.10.1
   sqlite3: ^3.7.0
-  miniaudio_player:
-    path: ../miniaudio_player
+  miniaudio_player: ^1.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
