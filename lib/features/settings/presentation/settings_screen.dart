@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/constants/languages.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
@@ -470,6 +473,154 @@ class SettingsScreen extends StatelessWidget {
                       },
                     ),
                   ),
+                  const Divider(),
+                  SettingRow(
+                    title: strings.sThemeOled,
+                    description: strings.sThemeOledDesc,
+                    type: ControllerType.switchCtrl,
+                    child: Switch(
+                      value: settings.isOledMode,
+                      onChanged: settings.themeMode == ThemeMode.light
+                          ? null
+                          : (val) => settings.setIsOledMode(val),
+                    ),
+                  ),
+                  const Divider(),
+                  SettingRow(
+                    title: strings.sAccentColor,
+                    description: strings.sAccentColorDesc,
+                    type: ControllerType.complex,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 10.0),
+                      child: Wrap(
+                        key: const Key('accent_colors_wrap'),
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          for (final color in TachyonColors.predefinedAccentColors)
+                            _buildColorCircle(
+                              context: context,
+                              color: color,
+                              isSelected:
+                                  settings.accentColorValue == color.toARGB32(),
+                              onTap: () => settings.setAccentColor(color.toARGB32()),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Divider(),
+                  SettingRow(
+                    title: strings.sCustomBackground,
+                    description: strings.sCustomBackgroundDesc,
+                    type: ControllerType.complex,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (settings.customBackgroundPath == null) ...[
+                            OutlinedButton.icon(
+                              icon: const Icon(Icons.image_outlined),
+                              label: Text(strings.sSelectBackgroundImage),
+                              onPressed: () async {
+                                final picked = await FilePickerService.pickImage(
+                                  dialogTitle: strings.sSelectBackgroundImage,
+                                );
+                                if (picked != null) {
+                                  final success =
+                                      await settings.setCustomBackground(picked);
+                                  if (!success && context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          strings.sCustomBackgroundFileError,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+                          ] else ...[
+                            Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.file(
+                                    File(settings.customBackgroundPath!),
+                                    width: 52,
+                                    height: 52,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) => const Icon(
+                                      Icons.broken_image_rounded,
+                                      size: 32,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.photo_library_outlined),
+                                  label: Text(strings.sChangeBackgroundImage),
+                                  onPressed: () async {
+                                    final picked =
+                                        await FilePickerService.pickImage(
+                                          dialogTitle:
+                                              strings.sChangeBackgroundImage,
+                                        );
+                                    if (picked != null) {
+                                      await settings.setCustomBackground(picked);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded),
+                                  tooltip: strings.sRemoveBackgroundImage,
+                                  onPressed: () =>
+                                      settings.setCustomBackground(null),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (settings.customBackgroundPath != null) ...[
+                    const Divider(),
+                    SettingRow(
+                      title: strings.sBackgroundBlur,
+                      description: '${settings.backgroundBlurSigma.round()} px',
+                      type: ControllerType.slider,
+                      child: Slider(
+                        value: settings.backgroundBlurSigma,
+                        min: 0.0,
+                        max: 50.0,
+                        divisions: 50,
+                        label: '${settings.backgroundBlurSigma.round()} px',
+                        onChanged: (val) =>
+                            settings.setBackgroundBlurSigma(val),
+                      ),
+                    ),
+                    const Divider(),
+                    SettingRow(
+                      title: strings.sBackgroundDim,
+                      description:
+                          '${(settings.backgroundDimOpacity * 100).round()}%',
+                      type: ControllerType.slider,
+                      child: Slider(
+                        value: settings.backgroundDimOpacity,
+                        min: 0.20,
+                        max: 0.95,
+                        divisions: 15,
+                        label:
+                            '${(settings.backgroundDimOpacity * 100).round()}%',
+                        onChanged: (val) =>
+                            settings.setBackgroundDimOpacity(val),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -585,6 +736,59 @@ class SettingsScreen extends StatelessWidget {
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
           fontWeight: FontWeight.bold,
           color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildColorCircle({
+    required BuildContext context,
+    required Color color,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final isLightColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.light;
+    final checkColor = isLightColor ? Colors.black : Colors.white;
+
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isSelected
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Colors.transparent,
+              width: isSelected ? 2.5 : 1.0,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : null,
+          ),
+          child: isSelected
+              ? Center(
+                  child: Icon(
+                    Icons.check_rounded,
+                    size: 20,
+                    color: checkColor,
+                  ),
+                )
+              : null,
         ),
       ),
     );

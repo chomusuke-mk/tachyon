@@ -29,6 +29,11 @@ class AppSettings {
 
   // Appearance & Localization
   final ThemeMode themeMode; // ThemeMode.dark (default)
+  final int accentColorValue; // default 0xFF7C4DFF (TachyonColors.electricVioletSeed)
+  final bool isOledMode; // default false
+  final String? customBackgroundPath; // default null
+  final double backgroundBlurSigma; // default 20.0
+  final double backgroundDimOpacity; // default 0.65
   final String appLanguage; // 'defaultOption', 'en', 'es'
   final String lyricsTranslationTargetLang; // 'defaultOption', 'es', 'en', etc.
   final String lyricsTranslationSourceLang; // 'auto', 'en', 'es', etc.
@@ -67,6 +72,11 @@ class AppSettings {
     this.exclusiveAudio = false,
     this.audioOutputDeviceId,
     this.themeMode = ThemeMode.dark,
+    this.accentColorValue = 0xFF7C4DFF,
+    this.isOledMode = false,
+    this.customBackgroundPath,
+    this.backgroundBlurSigma = 20.0,
+    this.backgroundDimOpacity = 0.65,
     this.appLanguage = 'defaultOption',
     this.lyricsTranslationTargetLang = 'defaultOption',
     this.lyricsTranslationSourceLang = 'auto',
@@ -93,6 +103,8 @@ class AppSettings {
     ],
   });
 
+  Color get accentColor => Color(accentColorValue);
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -113,6 +125,11 @@ class AppSettings {
           exclusiveAudio == other.exclusiveAudio &&
           audioOutputDeviceId == other.audioOutputDeviceId &&
           themeMode == other.themeMode &&
+          accentColorValue == other.accentColorValue &&
+          isOledMode == other.isOledMode &&
+          customBackgroundPath == other.customBackgroundPath &&
+          backgroundBlurSigma == other.backgroundBlurSigma &&
+          backgroundDimOpacity == other.backgroundDimOpacity &&
           appLanguage == other.appLanguage &&
           lyricsTranslationTargetLang == other.lyricsTranslationTargetLang &&
           lyricsTranslationSourceLang == other.lyricsTranslationSourceLang &&
@@ -143,6 +160,12 @@ class AppSettings {
     bool? exclusiveAudio,
     String? audioOutputDeviceId,
     ThemeMode? themeMode,
+    int? accentColorValue,
+    bool? isOledMode,
+    String? customBackgroundPath,
+    bool clearCustomBackground = false,
+    double? backgroundBlurSigma,
+    double? backgroundDimOpacity,
     String? appLanguage,
     String? lyricsTranslationTargetLang,
     String? lyricsTranslationSourceLang,
@@ -174,6 +197,13 @@ class AppSettings {
       exclusiveAudio: exclusiveAudio ?? this.exclusiveAudio,
       audioOutputDeviceId: audioOutputDeviceId ?? this.audioOutputDeviceId,
       themeMode: themeMode ?? this.themeMode,
+      accentColorValue: accentColorValue ?? this.accentColorValue,
+      isOledMode: isOledMode ?? this.isOledMode,
+      customBackgroundPath: clearCustomBackground
+          ? null
+          : (customBackgroundPath ?? this.customBackgroundPath),
+      backgroundBlurSigma: backgroundBlurSigma ?? this.backgroundBlurSigma,
+      backgroundDimOpacity: backgroundDimOpacity ?? this.backgroundDimOpacity,
       appLanguage: appLanguage ?? this.appLanguage,
       lyricsTranslationTargetLang:
           lyricsTranslationTargetLang ?? this.lyricsTranslationTargetLang,
@@ -209,6 +239,11 @@ class AppSettings {
     exclusiveAudio,
     audioOutputDeviceId,
     themeMode,
+    accentColorValue,
+    isOledMode,
+    customBackgroundPath,
+    backgroundBlurSigma,
+    backgroundDimOpacity,
     appLanguage,
     lyricsTranslationTargetLang,
     lyricsTranslationSourceLang,

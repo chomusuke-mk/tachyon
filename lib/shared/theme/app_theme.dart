@@ -6,6 +6,18 @@ abstract final class TachyonColors {
   static const Color secondarySeed = Color(0xFF64748B);
   static const Color tertiarySeed = Color(0xFF00E5FF);
 
+  // Predefined Accent Palette
+  static const List<Color> predefinedAccentColors = [
+    Color(0xFF7C4DFF), // Electric Violet (Default Brand)
+    Color(0xFF3B82F6), // Royal Blue
+    Color(0xFF00E5FF), // Cyber Cyan
+    Color(0xFF10B981), // Emerald Green
+    Color(0xFFEAB308), // Amber Gold
+    Color(0xFFFF5722), // Sunset Orange
+    Color(0xFFF43F5E), // Ruby Rose
+    Color(0xFFD946EF), // Neon Magenta
+  ];
+
   // ---------------------------------------------------------------------------
   // 5-Tier Surface Hierarchy - Dark Theme (Default)
   // ---------------------------------------------------------------------------
@@ -61,9 +73,12 @@ abstract final class TachyonBreakpoints {
 
 abstract final class TachyonTheme {
   /// Dark Theme (Primary Default)
-  static ThemeData get darkTheme {
+  static ThemeData buildDarkTheme({
+    Color seedColor = TachyonColors.electricVioletSeed,
+    bool hasCustomBackground = false,
+  }) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: TachyonColors.electricVioletSeed,
+      seedColor: seedColor,
       brightness: Brightness.dark,
       surface: TachyonColors.darkCanvas,
       surfaceContainerLowest: TachyonColors.darkSurfaceLowest,
@@ -76,13 +91,20 @@ abstract final class TachyonTheme {
       outline: TachyonColors.darkBorderSubtle,
     );
 
-    return _buildTheme(colorScheme, TachyonColors.darkBorderSubtle);
+    return _buildTheme(
+      colorScheme,
+      TachyonColors.darkBorderSubtle,
+      hasCustomBackground: hasCustomBackground,
+    );
   }
 
   /// True OLED Pure Black Theme
-  static ThemeData get oledTheme {
+  static ThemeData buildOledTheme({
+    Color seedColor = TachyonColors.electricVioletSeed,
+    bool hasCustomBackground = false,
+  }) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: TachyonColors.electricVioletSeed,
+      seedColor: seedColor,
       brightness: Brightness.dark,
       surface: TachyonColors.oledCanvas,
       surfaceContainerLowest: TachyonColors.oledSurfaceLowest,
@@ -95,13 +117,20 @@ abstract final class TachyonTheme {
       outline: TachyonColors.oledBorderSubtle,
     );
 
-    return _buildTheme(colorScheme, TachyonColors.oledBorderSubtle);
+    return _buildTheme(
+      colorScheme,
+      TachyonColors.oledBorderSubtle,
+      hasCustomBackground: hasCustomBackground,
+    );
   }
 
   /// Light Theme
-  static ThemeData get lightTheme {
+  static ThemeData buildLightTheme({
+    Color seedColor = TachyonColors.electricVioletSeed,
+    bool hasCustomBackground = false,
+  }) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: TachyonColors.electricVioletSeed,
+      seedColor: seedColor,
       brightness: Brightness.light,
       surface: TachyonColors.lightCanvas,
       surfaceContainerLowest: TachyonColors.lightSurfaceLowest,
@@ -114,8 +143,16 @@ abstract final class TachyonTheme {
       outline: TachyonColors.lightBorderSubtle,
     );
 
-    return _buildTheme(colorScheme, TachyonColors.lightBorderSubtle);
+    return _buildTheme(
+      colorScheme,
+      TachyonColors.lightBorderSubtle,
+      hasCustomBackground: hasCustomBackground,
+    );
   }
+
+  static ThemeData get darkTheme => buildDarkTheme();
+  static ThemeData get oledTheme => buildOledTheme();
+  static ThemeData get lightTheme => buildLightTheme();
 
   static TextTheme _createTextTheme(Color onSurface, Color onSurfaceVariant) {
     const tabularFeatures = [FontFeature.tabularFigures()];
@@ -203,7 +240,11 @@ abstract final class TachyonTheme {
     );
   }
 
-  static ThemeData _buildTheme(ColorScheme colorScheme, Color rimBorder) {
+  static ThemeData _buildTheme(
+    ColorScheme colorScheme,
+    Color rimBorder, {
+    bool hasCustomBackground = false,
+  }) {
     final textTheme = _createTextTheme(
       colorScheme.onSurface,
       colorScheme.onSurfaceVariant,
@@ -213,17 +254,21 @@ abstract final class TachyonTheme {
       useMaterial3: true,
       brightness: colorScheme.brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.surface,
+      scaffoldBackgroundColor:
+          hasCustomBackground ? Colors.transparent : colorScheme.surface,
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: colorScheme.surface,
+        backgroundColor:
+            hasCustomBackground ? Colors.transparent : colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
       ),
       cardTheme: CardThemeData(
-        color: colorScheme.surfaceContainer,
+        color: hasCustomBackground
+            ? colorScheme.surfaceContainer.withValues(alpha: 0.70)
+            : colorScheme.surfaceContainer,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
@@ -288,7 +333,9 @@ abstract final class TachyonTheme {
         ),
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: colorScheme.surfaceContainerLow,
+        backgroundColor: hasCustomBackground
+            ? colorScheme.surfaceContainerLow.withValues(alpha: 0.85)
+            : colorScheme.surfaceContainerLow,
         indicatorColor: colorScheme.primaryContainer,
         selectedIconTheme: IconThemeData(
           color: colorScheme.onPrimaryContainer,
@@ -301,7 +348,9 @@ abstract final class TachyonTheme {
         labelType: NavigationRailLabelType.all,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: colorScheme.surfaceContainerLow,
+        backgroundColor: hasCustomBackground
+            ? colorScheme.surfaceContainerLow.withValues(alpha: 0.85)
+            : colorScheme.surfaceContainerLow,
         indicatorColor: colorScheme.primaryContainer,
         elevation: 0,
       ),

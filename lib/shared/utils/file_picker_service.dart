@@ -13,4 +13,18 @@ abstract final class FilePickerService {
       return null;
     }
   }
+
+  /// Opens the native system image picker to select a background image.
+  /// Returns the absolute path string, or null if cancelled or error.
+  static Future<String?> pickImage({String? dialogTitle}) async {
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.image,
+        dialogTitle: dialogTitle,
+      );
+      return file?.path;
+    } catch (_) {
+      return null;
+    }
+  }
 }

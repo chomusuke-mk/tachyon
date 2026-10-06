@@ -55,6 +55,11 @@ class SettingsRepository {
       's_lyrics_translation_source_lang';
   static const _keyAudioOutputDeviceId = 's_audio_output_device_id';
   static const _keyEqualizerPreset = 's_equalizer_preset';
+  static const _keyAccentColor = 's_accent_color_val';
+  static const _keyIsOledMode = 's_is_oled_mode';
+  static const _keyCustomBackgroundPath = 's_custom_bg_path';
+  static const _keyBackgroundBlurSigma = 's_bg_blur_sigma';
+  static const _keyBackgroundDimOpacity = 's_bg_dim_opacity';
 
   ThemeMode _getAppTheme() {
     final themeIndex = _prefs.getInt(_keyTheme);
@@ -87,6 +92,11 @@ class SettingsRepository {
       skipSilence: _prefs.getBool(_keySkipSilence) ?? false,
       volumeBoost: _prefs.getDouble(_keyVolumeBoost) ?? 100.0,
       themeMode: _getAppTheme(),
+      accentColorValue: _prefs.getInt(_keyAccentColor) ?? 0xFF7C4DFF,
+      isOledMode: _prefs.getBool(_keyIsOledMode) ?? false,
+      customBackgroundPath: _prefs.getString(_keyCustomBackgroundPath),
+      backgroundBlurSigma: _prefs.getDouble(_keyBackgroundBlurSigma) ?? 20.0,
+      backgroundDimOpacity: _prefs.getDouble(_keyBackgroundDimOpacity) ?? 0.65,
       appLanguage: _prefs.getString(_keyLanguage) ?? 'defaultOption',
       lyricsTranslationTargetLang:
           _prefs.getString(_keyLyricsTranslationTargetLang) ?? 'defaultOption',
@@ -129,6 +139,10 @@ class SettingsRepository {
       _prefs.setBool(_keySkipSilence, settings.skipSilence),
       _prefs.setDouble(_keyVolumeBoost, settings.volumeBoost),
       _prefs.setInt(_keyTheme, settings.themeMode.index),
+      _prefs.setInt(_keyAccentColor, settings.accentColorValue),
+      _prefs.setBool(_keyIsOledMode, settings.isOledMode),
+      _prefs.setDouble(_keyBackgroundBlurSigma, settings.backgroundBlurSigma),
+      _prefs.setDouble(_keyBackgroundDimOpacity, settings.backgroundDimOpacity),
       _prefs.setString(_keyLanguage, settings.appLanguage),
       _prefs.setString(
         _keyLyricsTranslationTargetLang,
@@ -161,6 +175,17 @@ class SettingsRepository {
       );
     } else {
       futures.add(_prefs.remove(_keyAudioOutputDeviceId));
+    }
+
+    if (settings.customBackgroundPath != null) {
+      futures.add(
+        _prefs.setString(
+          _keyCustomBackgroundPath,
+          settings.customBackgroundPath!,
+        ),
+      );
+    } else {
+      futures.add(_prefs.remove(_keyCustomBackgroundPath));
     }
 
     if (settings.lastPlayedFilePath != null) {
@@ -268,6 +293,26 @@ class SettingsRepository {
 
   Future<void> setThemeMode(ThemeMode theme) =>
       _prefs.setInt(_keyTheme, theme.index);
+
+  Future<void> setAccentColor(int colorValue) =>
+      _prefs.setInt(_keyAccentColor, colorValue);
+
+  Future<void> setIsOledMode(bool isOled) =>
+      _prefs.setBool(_keyIsOledMode, isOled);
+
+  Future<void> setCustomBackgroundPath(String? path) async {
+    if (path == null) {
+      await _prefs.remove(_keyCustomBackgroundPath);
+    } else {
+      await _prefs.setString(_keyCustomBackgroundPath, path);
+    }
+  }
+
+  Future<void> setBackgroundBlurSigma(double sigma) =>
+      _prefs.setDouble(_keyBackgroundBlurSigma, sigma);
+
+  Future<void> setBackgroundDimOpacity(double opacity) =>
+      _prefs.setDouble(_keyBackgroundDimOpacity, opacity);
 
   Future<void> setAppLanguage(String language) =>
       _prefs.setString(_keyLanguage, language);

@@ -395,12 +395,31 @@ class AppStringKey {
   String get sThemeLight => _cadenasLocalizadas['s_theme_light'] ?? '';
   String get sThemeDark => _cadenasLocalizadas['s_theme_dark'] ?? '';
   String get sThemeOled => _cadenasLocalizadas['s_theme_oled'] ?? '';
+  String get sThemeOledDesc => _cadenasLocalizadas['s_theme_oled_desc'] ?? '';
   String get sAccentColor => _cadenasLocalizadas['s_accent_color'] ?? '';
   String get sAccentColorDesc =>
       _cadenasLocalizadas['s_accent_color_desc'] ?? '';
   String get sDynamicColor => _cadenasLocalizadas['s_dynamic_color'] ?? '';
   String get sDynamicColorDesc =>
       _cadenasLocalizadas['s_dynamic_color_desc'] ?? '';
+  String get sCustomBackground =>
+      _cadenasLocalizadas['s_custom_background'] ?? '';
+  String get sCustomBackgroundDesc =>
+      _cadenasLocalizadas['s_custom_background_desc'] ?? '';
+  String get sSelectBackgroundImage =>
+      _cadenasLocalizadas['s_select_background_image'] ?? '';
+  String get sChangeBackgroundImage =>
+      _cadenasLocalizadas['s_change_background_image'] ?? '';
+  String get sRemoveBackgroundImage =>
+      _cadenasLocalizadas['s_remove_background_image'] ?? '';
+  String get sBackgroundBlur => _cadenasLocalizadas['s_background_blur'] ?? '';
+  String get sBackgroundBlurDesc =>
+      _cadenasLocalizadas['s_background_blur_desc'] ?? '';
+  String get sBackgroundDim => _cadenasLocalizadas['s_background_dim'] ?? '';
+  String get sBackgroundDimDesc =>
+      _cadenasLocalizadas['s_background_dim_desc'] ?? '';
+  String get sCustomBackgroundFileError =>
+      _cadenasLocalizadas['s_custom_background_file_error'] ?? '';
   String get sLanguageSection =>
       _cadenasLocalizadas['s_language_section'] ?? '';
   String get sLanguage => _cadenasLocalizadas['s_language'] ?? '';
@@ -704,8 +723,13 @@ class AppStringKey {
     's_theme_mode',
     's_theme_mode_desc',
     's_theme_system',
-    's_theme_light', 's_theme_dark', 's_theme_oled', 's_accent_color',
-    's_accent_color_desc', 's_dynamic_color', 's_dynamic_color_desc',
+    's_theme_light', 's_theme_dark', 's_theme_oled', 's_theme_oled_desc',
+    's_accent_color', 's_accent_color_desc', 's_dynamic_color',
+    's_dynamic_color_desc', 's_custom_background', 's_custom_background_desc',
+    's_select_background_image', 's_change_background_image',
+    's_remove_background_image', 's_background_blur', 's_background_blur_desc',
+    's_background_dim', 's_background_dim_desc',
+    's_custom_background_file_error',
     's_language_section',
     's_language',
     's_language_desc',

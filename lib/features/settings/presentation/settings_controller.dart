@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' show Equalizer;
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
@@ -40,6 +41,12 @@ class SettingsController extends ChangeNotifier {
   bool get skipSilence => _settings.skipSilence;
   double get volumeBoost => _settings.volumeBoost;
   ThemeMode get themeMode => _settings.themeMode;
+  int get accentColorValue => _settings.accentColorValue;
+  Color get accentColor => _settings.accentColor;
+  bool get isOledMode => _settings.isOledMode;
+  String? get customBackgroundPath => _settings.customBackgroundPath;
+  double get backgroundBlurSigma => _settings.backgroundBlurSigma;
+  double get backgroundDimOpacity => _settings.backgroundDimOpacity;
   String get appLanguage => _settings.appLanguage;
   String get lyricsTranslationTargetLang => _settings.lyricsTranslationTargetLang;
   String get lyricsTranslationSourceLang => _settings.lyricsTranslationSourceLang;
@@ -258,6 +265,65 @@ class SettingsController extends ChangeNotifier {
   Future<void> setThemeMode(ThemeMode mode) async {
     _settings = _settings.copyWith(themeMode: mode);
     await _repository.setThemeMode(mode);
+    notifyListeners();
+  }
+
+  Future<void> setAccentColor(int colorValue) async {
+    _settings = _settings.copyWith(accentColorValue: colorValue);
+    await _repository.setAccentColor(colorValue);
+    notifyListeners();
+  }
+
+  Future<void> setIsOledMode(bool isOled) async {
+    _settings = _settings.copyWith(isOledMode: isOled);
+    await _repository.setIsOledMode(isOled);
+    notifyListeners();
+  }
+
+  Future<bool> setCustomBackground(String? sourceImagePath) async {
+    if (sourceImagePath == null) {
+      _settings = _settings.copyWith(clearCustomBackground: true);
+      await _repository.setCustomBackgroundPath(null);
+      notifyListeners();
+      return true;
+    }
+
+    try {
+      final sourceFile = File(sourceImagePath);
+      if (!await sourceFile.exists()) return false;
+
+      final supportDir = await getApplicationSupportDirectory();
+      final bgDir = Directory('${supportDir.path}/backgrounds');
+      if (!await bgDir.exists()) {
+        await bgDir.create(recursive: true);
+      }
+
+      final ext = sourceImagePath.contains('.')
+          ? '.${sourceImagePath.split('.').last}'
+          : '.jpg';
+      final targetPath = '${bgDir.path}/custom_bg$ext';
+      final targetFile = await sourceFile.copy(targetPath);
+
+      _settings = _settings.copyWith(customBackgroundPath: targetFile.path);
+      await _repository.setCustomBackgroundPath(targetFile.path);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> setBackgroundBlurSigma(double sigma) async {
+    final clamped = sigma.clamp(0.0, 50.0);
+    _settings = _settings.copyWith(backgroundBlurSigma: clamped);
+    await _repository.setBackgroundBlurSigma(clamped);
+    notifyListeners();
+  }
+
+  Future<void> setBackgroundDimOpacity(double opacity) async {
+    final clamped = opacity.clamp(0.1, 0.95);
+    _settings = _settings.copyWith(backgroundDimOpacity: clamped);
+    await _repository.setBackgroundDimOpacity(clamped);
     notifyListeners();
   }
 
