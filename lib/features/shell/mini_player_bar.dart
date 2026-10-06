@@ -50,7 +50,8 @@ abstract final class MiniPlayerColorResolver {
     required ThemeData theme,
   }) async {
     final isDark = theme.brightness == Brightness.dark;
-    final isOled = isDark && theme.colorScheme.surface == const Color(0xFF000000);
+    final isOled =
+        isDark && theme.colorScheme.surface == const Color(0xFF000000);
     final cacheKey =
         '$thumbnailHash:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
 
@@ -146,12 +147,10 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
         currentTrack.thumbnailHash ?? currentTrack.album?.thumbnailHash;
 
     final isDark = theme.brightness == Brightness.dark;
-    final isOled =
-        isDark && colorScheme.surface == const Color(0xFF000000);
-    final cacheKey =
-        (thumbnailHash != null && thumbnailHash.trim().isNotEmpty)
-            ? '$thumbnailHash:${theme.brightness.name}:${isOled ? 'oled' : 'std'}'
-            : null;
+    final isOled = isDark && colorScheme.surface == const Color(0xFF000000);
+    final cacheKey = (thumbnailHash != null && thumbnailHash.trim().isNotEmpty)
+        ? '$thumbnailHash:${theme.brightness.name}:${isOled ? 'oled' : 'std'}'
+        : null;
 
     final defaultBg = colorScheme.surfaceContainerHigh;
     final Color targetColor;
@@ -203,8 +202,9 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                           final progressBar = LinearProgressIndicator(
                             value: prog,
                             minHeight: widget.isDesktop ? 4.0 : 2.5,
-                            backgroundColor:
-                                colorScheme.onSurface.withValues(alpha: 0.12),
+                            backgroundColor: colorScheme.onSurface.withValues(
+                              alpha: 0.12,
+                            ),
                             valueColor: AlwaysStoppedAnimation<Color>(
                               colorScheme.primary,
                             ),
@@ -350,10 +350,10 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                 const Icon(Icons.shuffle_rounded, size: 24),
                                 if (playback.isShuffled)
                                   Positioned(
-                                    bottom: 0,
+                                    left: 3,
                                     child: Container(
-                                      width: 4,
-                                      height: 4,
+                                      width: 3,
+                                      height: 3,
                                       decoration: BoxDecoration(
                                         color: colorScheme.primary,
                                         shape: BoxShape.circle,
@@ -381,11 +381,31 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
 
                         // Play / Pause Button
                         IconButton.filledTonal(
-                          icon: Icon(
-                            playback.isPlaying
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                            size: 26,
+                          icon: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 150),
+                              transitionBuilder:
+                                  (Widget child, Animation<double> animation) {
+                                    return ScaleTransition(
+                                      scale: animation,
+                                      child: RotationTransition(
+                                        turns: Tween<double>(
+                                          begin: 0.9,
+                                          end: 1.0,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                              child: Icon(
+                                playback.isPlaying
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                key: ValueKey<bool>(playback.isPlaying),
+                                size: 26,
+                              ),
+                            ),
                           ),
                           tooltip: playback.isPlaying
                               ? strings.npPause

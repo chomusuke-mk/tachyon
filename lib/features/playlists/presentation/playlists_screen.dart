@@ -136,11 +136,6 @@ class PlaylistsScreen extends StatelessWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.add_rounded),
-        label: Text(strings.plCreateNew),
-        onPressed: () => _showCreateDialog(context),
-      ),
       body: CustomScrollView(
         slivers: [
           SliverPadding(

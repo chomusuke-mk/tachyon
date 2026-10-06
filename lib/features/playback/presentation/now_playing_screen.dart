@@ -21,6 +21,30 @@ import 'waveform_slider.dart';
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
 
+  /// Opens the Now Playing screen with standard slide-up transition.
+  static void open(BuildContext context) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const NowPlayingScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+          final tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 350),
+      ),
+    );
+  }
+
   @override
   State<NowPlayingScreen> createState() => _NowPlayingScreenState();
 }
@@ -413,10 +437,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                     const Icon(Icons.shuffle_rounded, size: 24),
                     if (playback.isShuffled)
                       Positioned(
-                        bottom: 0,
+                        left: 3,
                         child: Container(
-                          width: 4,
-                          height: 4,
+                          width: 3,
+                          height: 3,
                           decoration: BoxDecoration(
                             color: colorScheme.primary,
                             shape: BoxShape.circle,
@@ -459,15 +483,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                         child: AnimatedSwitcher(
                           duration: const Duration(
                             milliseconds: 150,
-                          ), // Duración de la animación
+                          ),
                           transitionBuilder:
                               (Widget child, Animation<double> animation) {
-                                // 2. Definimos la transición: Rotación + Escala
                                 return ScaleTransition(
                                   scale: animation,
                                   child: RotationTransition(
-                                    // Un Tween de 0.5 a 1.0 hace que dé medio giro (180 grados).
-                                    // Si quieres un giro completo, usa simplemente: turns: animation
                                     turns: Tween<double>(
                                       begin: 0.9,
                                       end: 1.0,
@@ -480,8 +501,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                             playback.isPlaying
                                 ? Icons.pause_rounded
                                 : Icons.play_arrow_rounded,
-                            // ¡EL KEY ES OBLIGATORIO!
-                            // Sin esto, Flutter piensa que es el mismo ícono y no lo anima.
                             key: ValueKey<bool>(playback.isPlaying),
                             size: 40,
                           ),

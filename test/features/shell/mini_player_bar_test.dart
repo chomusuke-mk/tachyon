@@ -7,11 +7,22 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/features/library/data/library_store.dart';
+import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
+import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
+import 'package:tachyon/features/library/domain/genre.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
+import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
+import 'package:tachyon/features/library/presentation/genre_detail_screen.dart';
+import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/playlists/presentation/playlist_detail_screen.dart';
+import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
@@ -185,6 +196,45 @@ void main() {
       );
     });
 
+    testWidgets('MiniPlayerBar in Scaffold.bottomNavigationBar works properly', (tester) async {
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: localeController),
+            ChangeNotifierProvider<PlaybackController>.value(value: playback),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Center(child: Text('Body Content')),
+              bottomNavigationBar: RepaintBoundary(
+                child: MiniPlayerBar(isDesktop: false),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Body Content'), findsOneWidget);
+      expect(find.descendant(of: find.byType(MiniPlayerBar), matching: find.byType(Material)), findsNothing);
+
+      // Now set track
+      final track = Track(
+        id: 1,
+        filePath: '/music/song1.mp3',
+        title: 'Song In BottomNav',
+        durationMs: 200000,
+        fileSize: 1000,
+        modifiedAt: 0,
+        artists: const [Artist(id: 1, name: 'Sample Artist')],
+      );
+      playback.setMockTrack(track);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Song In BottomNav'), findsOneWidget);
+      expect(find.descendant(of: find.byType(MiniPlayerBar), matching: find.byType(Material)), findsWidgets);
+    });
+
     testWidgets('MiniPlayerBar renders fallback surfaceContainerHigh when track has no thumbnail', (tester) async {
       final track = Track(
         id: 1,
@@ -337,6 +387,173 @@ void main() {
       expect(find.byIcon(Icons.repeat_rounded), findsOneWidget);
       expect(find.byIcon(Icons.shuffle_rounded), findsOneWidget);
       expect(find.text('00:00 / 03:00'), findsOneWidget);
+    });
+
+    testWidgets('AlbumDetailScreen renders MiniPlayerBar in bottomNavigationBar when track is playing', (tester) async {
+      final track = Track(
+        id: 10,
+        filePath: '/music/album_song.mp3',
+        title: 'Album Song',
+        durationMs: 120000,
+        fileSize: 1000,
+        modifiedAt: 0,
+      );
+      final album = Album(
+        id: 1,
+        name: 'Great Album',
+        tracks: [track],
+      );
+      playback.setMockTrack(track);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: localeController),
+            ChangeNotifierProvider<PlaybackController>.value(value: playback),
+          ],
+          child: MaterialApp(
+            home: AlbumDetailScreen(album: album),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlbumDetailScreen), findsOneWidget);
+      expect(find.byType(MiniPlayerBar), findsOneWidget);
+      expect(find.text('Album Song'), findsWidgets);
+    });
+
+    testWidgets('ArtistDetailScreen renders MiniPlayerBar in bottomNavigationBar when track is playing', (tester) async {
+      final track = Track(
+        id: 20,
+        filePath: '/music/artist_song.mp3',
+        title: 'Artist Song',
+        durationMs: 140000,
+        fileSize: 1000,
+        modifiedAt: 0,
+      );
+      final artist = Artist(
+        id: 2,
+        name: 'Great Artist',
+        tracks: [track],
+      );
+      playback.setMockTrack(track);
+
+      final snapshot = CatalogSnapshot(
+        tracks: [
+          const RawTrackDto(
+            id: 20,
+            filePath: '/music/artist_song.mp3',
+            title: 'Artist Song',
+            durationMs: 140000,
+            fileSize: 1000,
+            modifiedAt: 0,
+          ),
+        ],
+        albums: const [],
+        artists: [const RawArtistDto(id: 2, name: 'Great Artist')],
+        genres: const [],
+        playlists: const [],
+        playlistEntries: const [],
+        trackArtists: const [TrackArtistPair(trackId: 20, artistId: 2)],
+        trackGenres: const [],
+      );
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final library = LibraryController(backend: backend, settingsRepository: settingsRepo, store: store);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: localeController),
+            ChangeNotifierProvider<PlaybackController>.value(value: playback),
+            ChangeNotifierProvider<LibraryController>.value(value: library),
+          ],
+          child: MaterialApp(
+            home: ArtistDetailScreen(artist: artist),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ArtistDetailScreen), findsOneWidget);
+      expect(find.byType(MiniPlayerBar), findsOneWidget);
+      expect(find.text('Artist Song'), findsWidgets);
+
+      library.dispose();
+    });
+
+    testWidgets('PlaylistDetailScreen renders MiniPlayerBar in bottomNavigationBar when track is playing', (tester) async {
+      final track = Track(
+        id: 30,
+        filePath: '/music/playlist_song.mp3',
+        title: 'Playlist Song',
+        durationMs: 160000,
+        fileSize: 1000,
+        modifiedAt: 0,
+      );
+      final playlist = Playlist(
+        id: 3,
+        name: 'Cool Playlist',
+        createdAt: 0,
+        entries: [PlaylistEntry(id: 1, position: 0, addedAt: 0, track: track)],
+      );
+      playback.setMockTrack(track);
+
+      final playlistsCtrl = PlaylistsController(backend: backend);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: localeController),
+            ChangeNotifierProvider<PlaybackController>.value(value: playback),
+            ChangeNotifierProvider<PlaylistsController>.value(value: playlistsCtrl),
+          ],
+          child: MaterialApp(
+            home: PlaylistDetailScreen(playlist: playlist),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PlaylistDetailScreen), findsOneWidget);
+      expect(find.byType(MiniPlayerBar), findsOneWidget);
+      expect(find.text('Playlist Song'), findsWidgets);
+
+      playlistsCtrl.dispose();
+    });
+
+    testWidgets('GenreDetailScreen renders MiniPlayerBar in bottomNavigationBar when track is playing', (tester) async {
+      final track = Track(
+        id: 40,
+        filePath: '/music/genre_song.mp3',
+        title: 'Genre Song',
+        durationMs: 180000,
+        fileSize: 1000,
+        modifiedAt: 0,
+      );
+      final genre = Genre(
+        id: 4,
+        name: 'Jazz',
+        tracks: [track],
+      );
+      playback.setMockTrack(track);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: localeController),
+            ChangeNotifierProvider<PlaybackController>.value(value: playback),
+          ],
+          child: MaterialApp(
+            home: GenreDetailScreen(genre: genre),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GenreDetailScreen), findsOneWidget);
+      expect(find.byType(MiniPlayerBar), findsOneWidget);
+      expect(find.text('Genre Song'), findsWidgets);
     });
   });
 }

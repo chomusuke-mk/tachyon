@@ -7,6 +7,9 @@ import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
+import 'package:tachyon/features/shell/mini_player_bar.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 
 import 'tachyon_search_controller.dart';
@@ -59,6 +62,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final matchedTracks = searchCtrl.matchedTracks;
     final matchedAlbums = searchCtrl.matchedAlbums;
     final matchedArtists = searchCtrl.matchedArtists;
+
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
+    final hasKeyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -357,6 +363,14 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: !hasKeyboard
+          ? RepaintBoundary(
+              child: MiniPlayerBar(
+                isDesktop: isDesktop,
+                onTap: () => NowPlayingScreen.open(context),
+              ),
+            )
+          : null,
     );
   }
 }

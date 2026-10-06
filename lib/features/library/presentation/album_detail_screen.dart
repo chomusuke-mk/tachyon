@@ -8,6 +8,9 @@ import 'package:tachyon/features/playback/presentation/playback_controller.dart'
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
+import 'package:tachyon/features/shell/mini_player_bar.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
 
 class AlbumDetailScreen extends StatelessWidget {
   final Album album;
@@ -39,6 +42,8 @@ class AlbumDetailScreen extends StatelessWidget {
             : null) ??
         album;
     final albumTracks = currentAlbum.tracks;
+
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -150,6 +155,12 @@ class AlbumDetailScreen extends StatelessWidget {
             ],
           ),
         ],
+      ),
+      bottomNavigationBar: RepaintBoundary(
+        child: MiniPlayerBar(
+          isDesktop: isDesktop,
+          onTap: () => NowPlayingScreen.open(context),
+        ),
       ),
     );
   }

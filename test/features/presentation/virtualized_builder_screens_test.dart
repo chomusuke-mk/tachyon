@@ -29,6 +29,7 @@ import 'package:tachyon/features/playlists/presentation/playlist_detail_screen.d
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_screen.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/shell/mini_player_bar.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/album_card.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
@@ -764,8 +765,14 @@ void main() {
       expect(find.byIcon(Icons.equalizer_rounded), findsOneWidget);
 
       // The title of the playing track should have primary color
-      final textWidget = tester.widget<Text>(find.text('Active Jam'));
+      final textWidget = tester.widget<Text>(
+        find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.text('Active Jam'),
+        ),
+      );
       expect(textWidget.style?.color, isNotNull);
+      expect(find.byType(MiniPlayerBar), findsOneWidget);
 
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
@@ -864,8 +871,14 @@ void main() {
       expect(find.byIcon(Icons.equalizer_rounded), findsOneWidget);
 
       // The title of the playing track should have primary color
-      final textWidget = tester.widget<Text>(find.text('Playing Album Song'));
+      final textWidget = tester.widget<Text>(
+        find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.text('Playing Album Song'),
+        ),
+      );
       expect(textWidget.style?.color, isNotNull);
+      expect(find.byType(MiniPlayerBar), findsOneWidget);
 
       playbackCtrl.dispose();
       await backend.dispose();

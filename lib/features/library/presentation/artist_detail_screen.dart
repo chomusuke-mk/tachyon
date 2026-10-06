@@ -8,6 +8,9 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
+import 'package:tachyon/features/shell/mini_player_bar.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
 
 import 'album_detail_screen.dart';
 import 'library_controller.dart';
@@ -31,6 +34,7 @@ class ArtistDetailScreen extends StatelessWidget {
         artist;
     final artistTracks = currentArtist.tracks;
     final artistAlbums = currentArtist.albums;
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -200,6 +204,12 @@ class ArtistDetailScreen extends StatelessWidget {
             ],
           ),
         ],
+      ),
+      bottomNavigationBar: RepaintBoundary(
+        child: MiniPlayerBar(
+          isDesktop: isDesktop,
+          onTap: () => NowPlayingScreen.open(context),
+        ),
       ),
     );
   }

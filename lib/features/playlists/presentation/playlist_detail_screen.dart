@@ -7,6 +7,9 @@ import 'package:tachyon/features/library/domain/track.dart';
 
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
+import 'package:tachyon/features/shell/mini_player_bar.dart';
 
 import 'playlist_cover_helper.dart';
 import 'playlists_controller.dart';
@@ -183,6 +186,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               .whereType<Track>()
               .toList();
     final coverHash = findPlaylistCoverHash(currentPlaylist, tracks);
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -427,6 +431,12 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
             ],
           ),
         ],
+      ),
+      bottomNavigationBar: RepaintBoundary(
+        child: MiniPlayerBar(
+          isDesktop: isDesktop,
+          onTap: () => NowPlayingScreen.open(context),
+        ),
       ),
     );
   }
