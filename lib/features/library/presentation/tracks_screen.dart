@@ -381,11 +381,35 @@ class _TracksScreenState extends State<TracksScreen> {
           ],
         ],
       ),
-      body: tracks.isEmpty
+      body: (library.isLoading && tracks.isEmpty)
           ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      strings.trLoadingTracks,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    const SizedBox(
+                      width: 200,
+                      child: LinearProgressIndicator(
+                        key: Key('tracks_loading_indicator'),
+                        borderRadius: BorderRadius.all(Radius.circular(4)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : tracks.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                   Icon(
                     Icons.music_off_rounded,
                     size: 64,

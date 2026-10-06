@@ -111,6 +111,7 @@
   "tr_deleted_success": "Pista eliminada de la biblioteca",
   "tr_no_tracks": "No hay pistas en tu biblioteca aún",
   "tr_no_tracks_desc": "Añade carpetas de música en Configuración para poblar tu biblioteca.",
+  "tr_loading_tracks": "Cargando canciones...",
   "tr_count": "{count} pistas",
   "tr_sort": "Ordenar por",
   "tr_sort_title": "Título",

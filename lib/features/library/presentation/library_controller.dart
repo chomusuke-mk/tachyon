@@ -30,7 +30,8 @@ class LibraryController extends ChangeNotifier {
     required this.backend,
     required this.settingsRepository,
     LibraryStore? store,
-  }) : _store = store ?? LibraryStore() {
+  })  : _store = store ?? LibraryStore(),
+        _isLoading = store == null {
     _sortOption = _settingsRepository.getTrackSortOption();
     _sortAscending = _settingsRepository.getTrackSortAscending();
 

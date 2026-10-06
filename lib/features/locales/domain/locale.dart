@@ -168,6 +168,7 @@ class AppStringKey {
       _cadenasLocalizadas['tr_deleted_success'] ?? '';
   String get trNoTracks => _cadenasLocalizadas['tr_no_tracks'] ?? '';
   String get trNoTracksDesc => _cadenasLocalizadas['tr_no_tracks_desc'] ?? '';
+  String get trLoadingTracks => _cadenasLocalizadas['tr_loading_tracks'] ?? '';
   String get trCount => _cadenasLocalizadas['tr_count'] ?? '';
   String get trSort => _cadenasLocalizadas['tr_sort'] ?? '';
   String get trSortTitle => _cadenasLocalizadas['tr_sort_title'] ?? '';
@@ -647,7 +648,7 @@ class AppStringKey {
     'tr_title', 'tr_search_hint', 'tr_play', 'tr_play_next', 'tr_add_queue',
     'tr_add_playlist', 'tr_view_album', 'tr_view_artist', 'tr_edit_tags',
     'tr_file_info', 'tr_share', 'tr_delete', 'tr_delete_confirm',
-    'tr_deleted_success', 'tr_no_tracks', 'tr_no_tracks_desc', 'tr_count',
+    'tr_deleted_success', 'tr_no_tracks', 'tr_no_tracks_desc', 'tr_loading_tracks', 'tr_count',
     'tr_sort', 'tr_sort_title', 'tr_sort_artist', 'tr_sort_album',
     'tr_sort_date_added', 'tr_sort_duration', 'tr_sort_ascending',
     'tr_sort_descending', 'tr_file_path', 'tr_codec', 'tr_file_size',

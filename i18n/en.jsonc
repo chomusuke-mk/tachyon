@@ -111,6 +111,7 @@
   "tr_deleted_success": "Track removed from library",
   "tr_no_tracks": "No tracks in your library yet",
   "tr_no_tracks_desc": "Add music folders in Settings to start populating your library.",
+  "tr_loading_tracks": "Loading tracks...",
   "tr_count": "{count} tracks",
   "tr_sort": "Sort by",
   "tr_sort_title": "Title",
