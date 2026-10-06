@@ -1,19 +1,135 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
 
-class MiniPlayerBar extends StatelessWidget {
+/// Service responsible for extracting and caching a harmonized background color
+/// from a track's low-quality thumbnail image.
+abstract final class MiniPlayerColorResolver {
+  static final Map<String, Color> _cache = <String, Color>{};
+
+  @visibleForTesting
+  static Map<String, Color> get cache => _cache;
+
+  @visibleForTesting
+  static void clearCache() => _cache.clear();
+
+  /// Computes a surface color harmonized with the extracted artwork color scheme,
+  /// preserving readability and contrasting with [ThemeData.colorScheme].
+  static Color computeColor({
+    required ColorScheme extractedScheme,
+    required ColorScheme themeScheme,
+    required bool isDark,
+    required bool isOled,
+  }) {
+    if (isOled) {
+      return Color.alphaBlend(
+        extractedScheme.primaryContainer.withValues(alpha: 0.28),
+        themeScheme.surfaceContainerHigh,
+      );
+    } else if (isDark) {
+      return Color.alphaBlend(
+        extractedScheme.primaryContainer.withValues(alpha: 0.45),
+        extractedScheme.surfaceContainerHigh,
+      );
+    } else {
+      return Color.alphaBlend(
+        extractedScheme.primaryContainer.withValues(alpha: 0.35),
+        extractedScheme.surfaceContainerHigh,
+      );
+    }
+  }
+
+  /// Asynchronously loads the low-quality thumbnail and extracts
+  /// a Material ColorScheme seeded from the artwork.
+  static Future<Color?> resolveColor({
+    required String thumbnailHash,
+    required ThemeData theme,
+  }) async {
+    final isDark = theme.brightness == Brightness.dark;
+    final isOled = isDark && theme.colorScheme.surface == const Color(0xFF000000);
+    final cacheKey =
+        '$thumbnailHash:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
+
+    if (_cache.containsKey(cacheKey)) {
+      return _cache[cacheKey];
+    }
+
+    try {
+      final filePath = await AlbumArtImage.getThumbnail(
+        thumbnailHash,
+        quality: ThumbnailQuality.low,
+      );
+      if (filePath == null) return null;
+
+      final file = File(filePath);
+      if (!await file.exists() || await file.length() <= 0) return null;
+
+      final scheme = await ColorScheme.fromImageProvider(
+        provider: FileImage(file),
+        brightness: theme.brightness,
+      );
+
+      final color = computeColor(
+        extractedScheme: scheme,
+        themeScheme: theme.colorScheme,
+        isDark: isDark,
+        isOled: isOled,
+      );
+
+      _cache[cacheKey] = color;
+      return color;
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class MiniPlayerBar extends StatefulWidget {
   final bool isDesktop;
   final VoidCallback? onTap;
 
   const MiniPlayerBar({super.key, required this.isDesktop, this.onTap});
 
+  @override
+  State<MiniPlayerBar> createState() => _MiniPlayerBarState();
+}
+
+class _MiniPlayerBarState extends State<MiniPlayerBar> {
+  String? _lastRequestedKey;
+  String? _currentThumbnailHash;
+  Color? _extractedColor;
+
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+
+  void _requestColorResolution(
+    String thumbnailHash,
+    ThemeData theme,
+    String cacheKey,
+  ) {
+    if (_lastRequestedKey == cacheKey) return;
+    _lastRequestedKey = cacheKey;
+    _currentThumbnailHash = thumbnailHash;
+
+    MiniPlayerColorResolver.resolveColor(
+      thumbnailHash: thumbnailHash,
+      theme: theme,
+    ).then((color) {
+      if (!mounted) return;
+      if (_currentThumbnailHash != thumbnailHash) return;
+      if (color != null) {
+        setState(() {
+          _extractedColor = color;
+        });
+      }
+    });
   }
 
   @override
@@ -26,14 +142,49 @@ class MiniPlayerBar extends StatelessWidget {
 
     if (currentTrack == null) return const SizedBox.shrink();
 
-    final height = isDesktop ? 72.0 : 64.0;
+    final thumbnailHash =
+        currentTrack.thumbnailHash ?? currentTrack.album?.thumbnailHash;
+
+    final isDark = theme.brightness == Brightness.dark;
+    final isOled =
+        isDark && colorScheme.surface == const Color(0xFF000000);
+    final cacheKey =
+        (thumbnailHash != null && thumbnailHash.trim().isNotEmpty)
+            ? '$thumbnailHash:${theme.brightness.name}:${isOled ? 'oled' : 'std'}'
+            : null;
+
+    final defaultBg = colorScheme.surfaceContainerHigh;
+    final Color targetColor;
+
+    if (cacheKey != null &&
+        MiniPlayerColorResolver.cache.containsKey(cacheKey)) {
+      targetColor = MiniPlayerColorResolver.cache[cacheKey]!;
+    } else if (_extractedColor != null &&
+        _currentThumbnailHash == thumbnailHash) {
+      targetColor = _extractedColor!;
+    } else {
+      targetColor = defaultBg;
+      if (thumbnailHash != null && thumbnailHash.trim().isNotEmpty) {
+        _requestColorResolution(thumbnailHash, theme, cacheKey!);
+      }
+    }
+
+    final height = widget.isDesktop ? 72.0 : 64.0;
 
     return RepaintBoundary(
-      child: Material(
-        color: colorScheme.surfaceContainerHigh,
-        elevation: isDesktop ? 2 : 4,
+      child: TweenAnimationBuilder<Color?>(
+        tween: ColorTween(end: targetColor),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        builder: (context, animatedColor, child) {
+          return Material(
+            color: animatedColor ?? targetColor,
+            elevation: widget.isDesktop ? 2 : 4,
+            child: child,
+          );
+        },
         child: InkWell(
-          onTap: onTap,
+          onTap: widget.onTap,
           child: SizedBox(
             height: height,
             child: Column(
@@ -51,15 +202,15 @@ class MiniPlayerBar extends StatelessWidget {
                               : 0.0;
                           final progressBar = LinearProgressIndicator(
                             value: prog,
-                            minHeight: isDesktop ? 4.0 : 2.5,
+                            minHeight: widget.isDesktop ? 4.0 : 2.5,
                             backgroundColor:
-                                colorScheme.surfaceContainerHighest,
+                                colorScheme.onSurface.withValues(alpha: 0.12),
                             valueColor: AlwaysStoppedAnimation<Color>(
                               colorScheme.primary,
                             ),
                           );
 
-                          if (!isDesktop) return progressBar;
+                          if (!widget.isDesktop) return progressBar;
 
                           return MouseRegion(
                             cursor: SystemMouseCursors.click,
@@ -104,11 +255,10 @@ class MiniPlayerBar extends StatelessWidget {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8.0),
                             child: SizedBox(
-                              width: isDesktop ? 48 : 42,
-                              height: isDesktop ? 48 : 42,
+                              width: widget.isDesktop ? 48 : 42,
+                              height: widget.isDesktop ? 48 : 42,
                               child: AlbumArtImage(
-                                thumbnailHash: currentTrack.thumbnailHash ??
-                                    currentTrack.album?.thumbnailHash,
+                                thumbnailHash: thumbnailHash,
                                 quality: ThumbnailQuality.low,
                                 fit: BoxFit.cover,
                               ),
@@ -147,7 +297,7 @@ class MiniPlayerBar extends StatelessWidget {
                         ),
 
                         // Desktop Extra Controls (Duration & Repeat/Shuffle/Prev)
-                        if (isDesktop) ...[
+                        if (widget.isDesktop) ...[
                           ValueListenableBuilder<Duration>(
                             valueListenable: playback.positionListenable,
                             builder: (context, pos, _) {
