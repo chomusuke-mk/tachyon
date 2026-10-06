@@ -178,7 +178,8 @@ class FoldersScreen extends StatelessWidget {
                         );
                       }),
                       ...library.currentFolderTracks.map((track) {
-                        final isPlaying = currentTrack == track;
+                        final isPlaying =
+                            currentTrack == track || playback.isCurrentTrack(track);
                         return TrackTile(
                           key: ValueKey(track.filePath),
                           track: track,

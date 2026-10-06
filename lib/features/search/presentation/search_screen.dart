@@ -233,7 +233,8 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ),
                               ),
                               ...matchedTracks.map((track) {
-                                final isPlaying = currentTrack == track;
+                                final isPlaying =
+                                    currentTrack == track || playback.isCurrentTrack(track);
                                 return TrackTile(
                                   key: ValueKey('search_${track.filePath}'),
                                   track: track,

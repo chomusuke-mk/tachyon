@@ -423,7 +423,8 @@ class _TracksScreenState extends State<TracksScreen> {
               itemCount: tracks.length,
               itemBuilder: (context, index) {
                 final track = tracks[index];
-                final isPlaying = currentTrack == track;
+                final isPlaying =
+                    currentTrack == track || playback.isCurrentTrack(track);
                 final isSelected =
                     track.id != null && _selectedTrackIds.contains(track.id!);
 
@@ -550,7 +551,8 @@ class _TracksScreenState extends State<TracksScreen> {
               itemCount: tracks.length,
               itemBuilder: (context, index) {
                 final track = tracks[index];
-                final isPlaying = currentTrack == track;
+                final isPlaying =
+                    currentTrack == track || playback.isCurrentTrack(track);
                 final isLiked =
                     track.id != null && playlists.isTrackLiked(track.id!);
                 final isSelected =

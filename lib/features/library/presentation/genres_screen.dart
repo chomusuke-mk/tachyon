@@ -63,7 +63,8 @@ class _GenresScreenState extends State<GenresScreen> {
           itemCount: genreTracks.length,
           itemBuilder: (context, index) {
             final track = genreTracks[index];
-            final isPlaying = currentTrack == track;
+            final isPlaying =
+                currentTrack == track || playback.isCurrentTrack(track);
 
             return TrackTile(
               key: ValueKey(track.filePath),

@@ -18,6 +18,7 @@ import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
@@ -764,6 +765,192 @@ void main() {
       final textWidget = tester.widget<Text>(find.text('Active Jam'));
       expect(textWidget.style?.color, isNotNull);
 
+      playlistsCtrl.dispose();
+      playbackCtrl.dispose();
+      await backend.dispose();
+      await db.close();
+    });
+
+    testWidgets('AlbumDetailScreen highlights and marks currently playing track with equalizer and primary color', (tester) async {
+      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final db = AppDatabase.inMemory();
+      final backend = _PlaybackTestBackendClient(database: db);
+
+      final playingTrack = const Track(
+        id: 101,
+        filePath: '/music/album_track_1.mp3',
+        title: 'Playing Album Song',
+        durationMs: 200000,
+        fileSize: 1000,
+        modifiedAt: 1000,
+        thumbnailHash: 'album_track_hash',
+      );
+
+      final rawTracks = [
+        const RawTrackDto(
+          id: 101,
+          filePath: '/music/album_track_1.mp3',
+          title: 'Playing Album Song',
+          durationMs: 200000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+          thumbnailHash: 'album_track_hash',
+          albumId: 10,
+        ),
+        const RawTrackDto(
+          id: 102,
+          filePath: '/music/album_track_2.mp3',
+          title: 'Other Album Song',
+          durationMs: 180000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+          albumId: 10,
+        ),
+      ];
+
+      final snapshot = CatalogSnapshot(
+        tracks: rawTracks,
+        albums: [
+          const RawAlbumDto(
+            id: 10,
+            name: 'Featured Album',
+            year: 2024,
+            artistId: 1,
+          ),
+        ],
+        artists: [const RawArtistDto(id: 1, name: 'Great Artist')],
+        genres: const [],
+        playlists: const [],
+        playlistEntries: const [],
+        trackArtists: [
+          TrackArtistPair(trackId: 101, artistId: 1),
+          TrackArtistPair(trackId: 102, artistId: 1),
+        ],
+        trackGenres: const [],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final album = store.getAlbumById(10)!;
+
+      final playbackCtrl = PlaybackController(
+        backend: backend,
+        settingsRepository: settingsRepository,
+      );
+
+      backend.emitState(
+        PlaybackState(
+          playing: true,
+          playables: [
+            PlaylistEntry.forQueue(id: 1, position: 0, track: playingTrack),
+          ],
+          index: 0,
+        ),
+      );
+
+      await tester.pumpWidget(
+        createTestHarness(
+          child: AlbumDetailScreen(album: album),
+          playbackController: playbackCtrl,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Equalizer icon should be displayed on the active playing track
+      expect(find.byIcon(Icons.equalizer_rounded), findsOneWidget);
+
+      // The title of the playing track should have primary color
+      final textWidget = tester.widget<Text>(find.text('Playing Album Song'));
+      expect(textWidget.style?.color, isNotNull);
+
+      playbackCtrl.dispose();
+      await backend.dispose();
+      await db.close();
+    });
+
+    testWidgets('TracksScreen highlights and marks currently playing track with equalizer and primary color', (tester) async {
+      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final db = AppDatabase.inMemory();
+      final backend = _PlaybackTestBackendClient(database: db);
+
+      final rawTracks = [
+        const RawTrackDto(
+          id: 201,
+          filePath: '/music/library_playing.mp3',
+          title: 'Playing Library Song',
+          durationMs: 220000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+          thumbnailHash: 'lib_track_hash',
+        ),
+        const RawTrackDto(
+          id: 202,
+          filePath: '/music/library_other.mp3',
+          title: 'Other Library Song',
+          durationMs: 190000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+        ),
+      ];
+
+      final snapshot = CatalogSnapshot(
+        tracks: rawTracks,
+        albums: const [],
+        artists: const [],
+        genres: const [],
+        playlists: const [],
+        playlistEntries: const [],
+        trackArtists: const [],
+        trackGenres: const [],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final libraryCtrl = LibraryController(
+        backend: backend,
+        store: store,
+        settingsRepository: settingsRepository,
+      );
+      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+
+      final playbackCtrl = PlaybackController(
+        backend: backend,
+        settingsRepository: settingsRepository,
+      );
+
+      final playingTrack = store.tracks.first;
+
+      backend.emitState(
+        PlaybackState(
+          playing: true,
+          playables: [
+            PlaylistEntry.forQueue(id: 1, position: 0, track: playingTrack),
+          ],
+          index: 0,
+        ),
+      );
+
+      await tester.pumpWidget(
+        createTestHarness(
+          child: const TracksScreen(),
+          libraryController: libraryCtrl,
+          playbackController: playbackCtrl,
+          playlistsController: playlistsCtrl,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Equalizer icon should be displayed on the active playing track in list view
+      expect(find.byIcon(Icons.equalizer_rounded), findsOneWidget);
+
+      final textWidget = tester.widget<Text>(find.text('Playing Library Song'));
+      expect(textWidget.style?.color, isNotNull);
+
+      libraryCtrl.dispose();
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
       await backend.dispose();

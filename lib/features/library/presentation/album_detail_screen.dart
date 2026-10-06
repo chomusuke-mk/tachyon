@@ -7,6 +7,7 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/features/library/presentation/library_controller.dart';
 
 class AlbumDetailScreen extends StatelessWidget {
   final Album album;
@@ -27,12 +28,17 @@ class AlbumDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
+    final library = context.watch<LibraryController?>();
     final currentTrack = context.select<PlaybackController, Track?>(
       (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
 
-    final albumTracks = album.tracks;
+    final currentAlbum = (album.id != null && library != null
+            ? library.store.getAlbumById(album.id!)
+            : null) ??
+        album;
+    final albumTracks = currentAlbum.tracks;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -129,7 +135,8 @@ class AlbumDetailScreen extends StatelessWidget {
                 itemCount: albumTracks.length,
                 itemBuilder: (context, index) {
                   final track = albumTracks[index];
-                  final isPlaying = currentTrack == track;
+                  final isPlaying =
+                      currentTrack == track || playback.isCurrentTrack(track);
 
                   return TrackTile(
                     key: ValueKey(track.filePath),

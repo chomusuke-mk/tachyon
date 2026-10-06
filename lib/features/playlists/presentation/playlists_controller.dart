@@ -102,13 +102,13 @@ class PlaylistsController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final snapshot = await _backend.getCatalogSnapshot();
       if (_store != null) {
-        _store!.hydrateFromSnapshot(snapshot);
+        _syncFromStore();
       } else {
+        final snapshot = await _backend.getCatalogSnapshot();
         _store = LibraryStore.fromSnapshot(snapshot);
+        _syncFromStore();
       }
-      _syncFromStore();
     } catch (e, st) {
       _errorMessage = 'Failed to load playlists: $e';
       debugPrint('$_errorMessage\n$st');

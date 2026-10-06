@@ -74,7 +74,7 @@ Future<void> main() async {
   final playlistsController = PlaylistsController(
     backend: backendClient,
     store: libraryController.store,
-  )..loadPlaylists();
+  );
 
   libraryController.addListener(() {
     playlistsController.updateStore(libraryController.store);
