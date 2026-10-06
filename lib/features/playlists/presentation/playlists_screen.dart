@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 
+import 'playlist_cover_helper.dart';
 import 'playlist_detail_screen.dart';
 import 'playlists_controller.dart';
 
@@ -15,7 +16,7 @@ class PlaylistsScreen extends StatelessWidget {
 
     showDialog<void>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: Text(strings.plCreateNew),
           content: TextField(
@@ -25,7 +26,7 @@ class PlaylistsScreen extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(strings.plCancelButton),
             ),
             FilledButton(
@@ -34,14 +35,14 @@ class PlaylistsScreen extends StatelessWidget {
                 if (name.isNotEmpty) {
                   context.read<PlaylistsController>().createPlaylist(name);
                 }
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
               },
               child: Text(strings.plCreateButton),
             ),
           ],
         );
       },
-    );
+    ).then((_) => controller.dispose());
   }
 
   void _showRenameDialog(BuildContext context, Playlist playlist) {
@@ -50,7 +51,7 @@ class PlaylistsScreen extends StatelessWidget {
     final strings = context.read<LocaleController>().localeStrings;
     showDialog<void>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: Text(strings.plRename),
           content: TextField(
@@ -60,7 +61,7 @@ class PlaylistsScreen extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(strings.plCancelButton),
             ),
             FilledButton(
@@ -72,14 +73,14 @@ class PlaylistsScreen extends StatelessWidget {
                     name,
                   );
                 }
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
               },
               child: Text(strings.plRename),
             ),
           ],
         );
       },
-    );
+    ).then((_) => controller.dispose());
   }
 
   void _showDeleteDialog(BuildContext context, Playlist playlist) {
@@ -140,177 +141,207 @@ class PlaylistsScreen extends StatelessWidget {
         label: Text(strings.plCreateNew),
         onPressed: () => _showCreateDialog(context),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          // Special Playlists: Liked Songs & History
-          if (likedPlaylist != null)
-            Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: colorScheme.primary,
-                  child: const Icon(
-                    Icons.favorite_rounded,
-                    color: Colors.white,
-                  ),
-                ),
-                title: Text(
-                  strings.plLikedSongs,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  strings.plTracksCountFormatted(likedPlaylist.trackCount),
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          PlaylistDetailScreen(playlist: likedPlaylist),
+      body: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Special Playlists: Liked Songs & History
+                  if (likedPlaylist != null)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 8.0),
+                      child: ListTile(
+                        leading: buildPlaylistLeading(context, likedPlaylist),
+                        title: Text(
+                          strings.plLikedSongs,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          strings.plTracksCountFormatted(
+                            likedPlaylist.trackCount,
+                          ),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  PlaylistDetailScreen(playlist: likedPlaylist),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  );
-                },
-              ),
-            ),
-          const SizedBox(height: 8),
-          if (historyPlaylist != null)
-            Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: colorScheme.surfaceContainerHighest,
-                  child: Icon(
-                    Icons.history_rounded,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                title: Text(
-                  strings.plHistory,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  strings.plTracksCountFormatted(historyPlaylist.trackCount),
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.delete_sweep_rounded, size: 20),
-                      tooltip: strings.srClearHistory,
-                      onPressed: () => playlistsCtrl.clearHistory(),
+                  if (historyPlaylist != null)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 8.0),
+                      child: ListTile(
+                        leading: buildPlaylistLeading(context, historyPlaylist),
+                        title: Text(
+                          strings.plHistory,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          strings.plTracksCountFormatted(
+                            historyPlaylist.trackCount,
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_sweep_rounded,
+                                size: 20,
+                              ),
+                              tooltip: strings.srClearHistory,
+                              onPressed: () => playlistsCtrl.clearHistory(),
+                            ),
+                            const Icon(Icons.chevron_right_rounded),
+                          ],
+                        ),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => PlaylistDetailScreen(
+                                playlist: historyPlaylist,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    const Icon(Icons.chevron_right_rounded),
-                  ],
-                ),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          PlaylistDetailScreen(playlist: historyPlaylist),
-                    ),
-                  );
-                },
-              ),
-            ),
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 8),
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const SizedBox(height: 8),
 
-          // User Playlists Section
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-            child: Text(
-              '${strings.plTitle} (${userPlaylists.length})',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.bold,
+                  // User Playlists Section Title
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4.0,
+                      vertical: 4.0,
+                    ),
+                    child: Text(
+                      '${strings.plTitle} (${userPlaylists.length})',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
           if (userPlaylists.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32.0),
-              child: Center(
-                child: Text(
-                  strings.plNoPlaylists,
-                  style: TextStyle(color: colorScheme.onSurfaceVariant),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40.0),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.playlist_play_rounded,
+                        size: 48,
+                        color: colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        strings.plNoPlaylists,
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             )
           else
-            ...userPlaylists.map((playlist) {
-              return Card(
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: colorScheme.secondaryContainer,
-                    child: Icon(
-                      Icons.playlist_play_rounded,
-                      color: colorScheme.onSecondaryContainer,
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16.0, 0.0, 16.0, 80.0),
+              sliver: SliverList.builder(
+                itemCount: userPlaylists.length,
+                itemBuilder: (context, index) {
+                  final playlist = userPlaylists[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8.0),
+                    child: ListTile(
+                      leading: buildPlaylistLeading(context, playlist),
+                      title: Text(
+                        playlist.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        strings.plTracksCountFormatted(playlist.trackCount),
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'rename') {
+                            _showRenameDialog(context, playlist);
+                          } else if (value == 'delete') {
+                            _showDeleteDialog(context, playlist);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'rename',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.edit_rounded, size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    strings.plRename,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 20,
+                                  color: Colors.redAccent,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    strings.plDelete,
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                PlaylistDetailScreen(playlist: playlist),
+                          ),
+                        );
+                      },
                     ),
-                  ),
-                  title: Text(
-                    playlist.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
-                    strings.plTracksCountFormatted(playlist.trackCount),
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'rename') {
-                        _showRenameDialog(context, playlist);
-                      } else if (value == 'delete') {
-                        _showDeleteDialog(context, playlist);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'rename',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.edit_rounded, size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                strings.plRename,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.delete_outline_rounded,
-                              size: 20,
-                              color: Colors.redAccent,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                strings.plDelete,
-                                style: const TextStyle(color: Colors.redAccent),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) =>
-                            PlaylistDetailScreen(playlist: playlist),
-                      ),
-                    );
-                  },
-                ),
-              );
-            }),
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );

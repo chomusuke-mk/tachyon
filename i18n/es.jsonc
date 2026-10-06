@@ -335,5 +335,19 @@
   "common_view_as_cards": "Vista de tarjetas",
   "common_view_as_list": "Vista de lista",
   "common_back": "Atrás",
-  "common_minimize": "Minimizar"
+  "common_minimize": "Minimizar",
+  // --- scan_: Superposición de Progreso de Escaneo -------------------------
+  "scan_stage_idle": "Inactivo",
+  "scan_stage_getting_database": "Obteniendo base de datos...",
+  "scan_stage_getting_tracks": "Obteniendo canciones...",
+  "scan_stage_discovering": "Buscando archivos...",
+  "scan_stage_comparing": "Comparando...",
+  "scan_stage_extracting": "Obteniendo metadatos",
+  "scan_stage_inserting": "Guardando canciones...",
+  "scan_stage_cleaning_orphans": "Limpiando canciones huérfanas...",
+  "scan_stage_cleaning_thumbnails": "Limpiando miniaturas...",
+  "scan_stage_completed": "Completado",
+  "scan_stage_failed": "Error en el escaneo",
+  "scan_stage_cancelled": "Cancelado",
+  "scan_cancel_tooltip": "Cancelar escaneo"
 }

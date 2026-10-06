@@ -6,7 +6,6 @@ import 'package:tachyon/core/backend/backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
-import 'package:tachyon/shared/utils/cover_utils.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/features/library/domain/album.dart';
@@ -30,7 +29,6 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   final AudioEngineService? audioEngine;
   final AppDatabase? database;
   final MetadataService? metadataService;
-  final CoverUtils? coverCacheService;
   final LyricsService? lyricsService;
 
   final StreamController<List<AudioDevice>> _devicesController =
@@ -45,7 +43,6 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     this.audioEngine,
     this.database,
     this.metadataService,
-    this.coverCacheService,
     this.lyricsService,
   });
 
@@ -72,6 +69,11 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
 
   @override
   Stream<ScanProgress> get scanProgressStream => _scanProgressController.stream;
+
+  /// Test-only hook to emit synthetic scan progress events.
+  void emitScanProgress(ScanProgress progress) {
+    _scanProgressController.add(progress);
+  }
 
   @override
   Stream<void> get catalogUpdatedStream => _catalogUpdatedController.stream;
@@ -267,11 +269,11 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<void> startScanDirectories(List<String> directories) async {
     final scanner = metadataService;
-    if (scanner == null) return;
+    if (scanner == null || scanner.isScanning) return;
     await _scanSubscription?.cancel();
     _scanSubscription = scanner.scanDirectories(directories).listen((progress) {
       _scanProgressController.add(progress);
-      if (progress.phase == ScanPhase.completed) {
+      if (progress.stage == ScanStage.completed) {
         _catalogUpdatedController.add(null);
       }
     });
@@ -286,12 +288,6 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<void> deleteTrack(int trackId) async {
     database?.deleteTrack(trackId);
-    _catalogUpdatedController.add(null);
-  }
-
-  @override
-  Future<void> deleteTracksInFolder(String folderPath) async {
-    database?.deleteTracksInFolder(folderPath);
     _catalogUpdatedController.add(null);
   }
 

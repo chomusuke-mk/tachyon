@@ -78,15 +78,28 @@ class FoldersScreen extends StatelessWidget {
                           icon: const Icon(Icons.add_rounded),
                           label: Text(strings.sAddFolder),
                           onPressed: () async {
-                            final picked = await FilePickerService.pickDirectory(
-                              dialogTitle: strings.sAddFolderTitle,
-                            );
-                            if (picked != null) {
-                              final added = await settings.addMusicDirectory(picked);
-                              if (context.mounted && !added) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(strings.sFolderErrorInvalid)),
+                            final picked =
+                                await FilePickerService.pickDirectory(
+                                  dialogTitle: strings.sAddFolderTitle,
                                 );
+                            if (picked != null) {
+                              final added = await settings.addMusicDirectory(
+                                picked,
+                              );
+                              if (context.mounted) {
+                                if (!added) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        strings.sFolderErrorInvalid,
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  context.read<LibraryController>().startScan(
+                                    settings.musicDirectories,
+                                  );
+                                }
                               }
                             }
                           },

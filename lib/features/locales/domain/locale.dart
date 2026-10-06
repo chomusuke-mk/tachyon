@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:tachyon/features/library/domain/scan_progress.dart';
 
 /// Central domain class managing localized string lookups for Tachyon.
 ///
@@ -480,6 +481,63 @@ class AppStringKey {
       _cadenasLocalizadas['common_minimize'] ?? '';
 
   // ---------------------------------------------------------------------------
+  // scan_: Scan Progress Overlay
+  // ---------------------------------------------------------------------------
+  String get scanStageIdle => _cadenasLocalizadas['scan_stage_idle'] ?? '';
+  String get scanStageGettingDatabase =>
+      _cadenasLocalizadas['scan_stage_getting_database'] ?? '';
+  String get scanStageGettingTracks =>
+      _cadenasLocalizadas['scan_stage_getting_tracks'] ?? '';
+  String get scanStageDiscovering =>
+      _cadenasLocalizadas['scan_stage_discovering'] ?? '';
+  String get scanStageComparing =>
+      _cadenasLocalizadas['scan_stage_comparing'] ?? '';
+  String get scanStageExtracting =>
+      _cadenasLocalizadas['scan_stage_extracting'] ?? '';
+  String get scanStageInserting =>
+      _cadenasLocalizadas['scan_stage_inserting'] ?? '';
+  String get scanStageCleaningOrphans =>
+      _cadenasLocalizadas['scan_stage_cleaning_orphans'] ?? '';
+  String get scanStageCleaningThumbnails =>
+      _cadenasLocalizadas['scan_stage_cleaning_thumbnails'] ?? '';
+  String get scanStageCompleted =>
+      _cadenasLocalizadas['scan_stage_completed'] ?? '';
+  String get scanStageFailed => _cadenasLocalizadas['scan_stage_failed'] ?? '';
+  String get scanStageCancelled =>
+      _cadenasLocalizadas['scan_stage_cancelled'] ?? '';
+  String get scanCancelTooltip =>
+      _cadenasLocalizadas['scan_cancel_tooltip'] ?? '';
+
+  String scanStageText(ScanStage stage) {
+    switch (stage) {
+      case ScanStage.idle:
+        return scanStageIdle;
+      case ScanStage.gettingDatabase:
+        return scanStageGettingDatabase;
+      case ScanStage.gettingTracks:
+        return scanStageGettingTracks;
+      case ScanStage.discovering:
+        return scanStageDiscovering;
+      case ScanStage.comparing:
+        return scanStageComparing;
+      case ScanStage.extracting:
+        return scanStageExtracting;
+      case ScanStage.inserting:
+        return scanStageInserting;
+      case ScanStage.cleaningOrphans:
+        return scanStageCleaningOrphans;
+      case ScanStage.cleaningThumbnails:
+        return scanStageCleaningThumbnails;
+      case ScanStage.completed:
+        return scanStageCompleted;
+      case ScanStage.failed:
+        return scanStageFailed;
+      case ScanStage.cancelled:
+        return scanStageCancelled;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Parametric Formatters
   // ---------------------------------------------------------------------------
   String trCountFormatted(int count) =>
@@ -671,6 +729,13 @@ class AppStringKey {
     // common_
     'common_view_as_cards', 'common_view_as_list', 'common_back',
     'common_minimize',
+    // scan_
+    'scan_stage_idle', 'scan_stage_getting_database',
+    'scan_stage_getting_tracks', 'scan_stage_discovering',
+    'scan_stage_comparing', 'scan_stage_extracting',
+    'scan_stage_inserting', 'scan_stage_cleaning_orphans',
+    'scan_stage_cleaning_thumbnails', 'scan_stage_completed',
+    'scan_stage_failed', 'scan_stage_cancelled', 'scan_cancel_tooltip',
   ];
 
   List<String> get allKeys => List.unmodifiable(_allAppStrings);

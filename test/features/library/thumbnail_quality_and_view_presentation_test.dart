@@ -129,14 +129,12 @@ void main() {
     });
   });
 
-  group('CoverCacheService Triple-Quality JPEG Caching', () {
+  group('CoverUtils Triple-Quality JPEG Caching', () {
     late Directory tempDir;
-    late CoverUtils service;
 
     setUp(() async {
       tempDir = Directory.systemTemp.createTempSync('cover_cache_test_');
-      service = CoverUtils(cacheDirectory: tempDir);
-      await service.init();
+      CoverUtils.init(tempDir);
     });
 
     tearDown(() {
@@ -148,15 +146,15 @@ void main() {
     test('File path resolution follows _lq.jpg, _mq.jpg, _hq.jpg naming', () {
       const testHash = 'a1b2c3d4e5f6';
 
-      final lqFile = service.getCoverFile(
+      final lqFile = CoverUtils.getCoverFile(
         testHash,
         quality: ThumbnailQuality.low,
       );
-      final mqFile = service.getCoverFile(
+      final mqFile = CoverUtils.getCoverFile(
         testHash,
         quality: ThumbnailQuality.medium,
       );
-      final hqFile = service.getCoverFile(
+      final hqFile = CoverUtils.getCoverFile(
         testHash,
         quality: ThumbnailQuality.high,
       );
@@ -169,15 +167,15 @@ void main() {
     test('Artist cover file path resolution follows triple quality naming', () {
       const artistHash = 'b2c3d4e5f6a1';
 
-      final lqFile = service.getArtistCoverFile(
+      final lqFile = CoverUtils.getArtistCoverFile(
         artistHash,
         quality: ThumbnailQuality.low,
       );
-      final mqFile = service.getArtistCoverFile(
+      final mqFile = CoverUtils.getArtistCoverFile(
         artistHash,
         quality: ThumbnailQuality.medium,
       );
-      final hqFile = service.getArtistCoverFile(
+      final hqFile = CoverUtils.getArtistCoverFile(
         artistHash,
         quality: ThumbnailQuality.high,
       );
@@ -190,15 +188,15 @@ void main() {
     test('Album cover file path resolution follows triple quality naming', () {
       const albumHash = 'c3d4e5f6a1b2';
 
-      final lqFile = service.getAlbumCoverFile(
+      final lqFile = CoverUtils.getAlbumCoverFile(
         albumHash,
         quality: ThumbnailQuality.low,
       );
-      final mqFile = service.getAlbumCoverFile(
+      final mqFile = CoverUtils.getAlbumCoverFile(
         albumHash,
         quality: ThumbnailQuality.medium,
       );
-      final hqFile = service.getAlbumCoverFile(
+      final hqFile = CoverUtils.getAlbumCoverFile(
         albumHash,
         quality: ThumbnailQuality.high,
       );
@@ -215,12 +213,12 @@ void main() {
       final rawJpegBytes = img.encodeJpg(testImg);
       final hash = CoverUtils.computeBytesHash(rawJpegBytes);
 
-      final lqFile = service.getCoverFile(hash, quality: ThumbnailQuality.low);
-      final mqFile = service.getCoverFile(
+      final lqFile = CoverUtils.getCoverFile(hash, quality: ThumbnailQuality.low);
+      final mqFile = CoverUtils.getCoverFile(
         hash,
         quality: ThumbnailQuality.medium,
       );
-      final hqFile = service.getCoverFile(hash, quality: ThumbnailQuality.high);
+      final hqFile = CoverUtils.getCoverFile(hash, quality: ThumbnailQuality.high);
 
       await CoverUtils.writeTripleQualityImages(
         rawJpegBytes,
@@ -234,15 +232,15 @@ void main() {
       expect(mqFile.existsSync(), isTrue);
       expect(hqFile.existsSync(), isTrue);
       expect(
-        service.hasCachedCover(hash, quality: ThumbnailQuality.low),
+        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.low),
         isTrue,
       );
       expect(
-        service.hasCachedCover(hash, quality: ThumbnailQuality.medium),
+        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.medium),
         isTrue,
       );
       expect(
-        service.hasCachedCover(hash, quality: ThumbnailQuality.high),
+        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.high),
         isTrue,
       );
 
@@ -265,8 +263,8 @@ void main() {
       img.fill(testImg, color: img.ColorRgb8(0, 0, 255));
       final rawJpegBytes = img.encodeJpg(testImg);
 
-      final files1 = service.getTrackFiles('/test/song1.mp3');
-      final files2 = service.getTrackFiles('/test/song2.mp3');
+      final files1 = CoverUtils.getTrackFiles('/test/song1.mp3');
+      final files2 = CoverUtils.getTrackFiles('/test/song2.mp3');
 
       await CoverUtils.writeTripleQualityImages(
         rawJpegBytes,
@@ -280,7 +278,7 @@ void main() {
     });
 
     test('parseArtistNames splits comma-separated artists cleanly', () {
-      expect(CoverUtils.parseArtistNames('Queen, David Bowie'), [
+      expect(MetadataService.parseArtistNames('Queen, David Bowie'), [
         'Queen',
         'David Bowie',
       ]);
@@ -288,9 +286,9 @@ void main() {
         MetadataService.parseArtistNames('Queen,David Bowie, Freddie Mercury'),
         ['Queen', 'David Bowie', 'Freddie Mercury'],
       );
-      expect(CoverUtils.parseArtistNames('Cher'), ['Cher']);
-      expect(CoverUtils.parseArtistNames(''), isEmpty);
-      expect(CoverUtils.parseArtistNames(null), isEmpty);
+      expect(MetadataService.parseArtistNames('Cher'), ['Cher']);
+      expect(MetadataService.parseArtistNames(''), isEmpty);
+      expect(MetadataService.parseArtistNames(null), isEmpty);
     });
 
     test('Standardized hash methods produce deterministic SHA-256 hashes', () {
@@ -304,7 +302,7 @@ void main() {
     });
 
     test('CoverFileSet provides unified access across qualities and existence checks', () {
-      final files = service.getTrackFiles('/music/song.mp3');
+      final files = CoverUtils.getTrackFiles('/music/song.mp3');
       expect(files.lq.path.endsWith('_lq.jpg'), isTrue);
       expect(files.mq.path.endsWith('_mq.jpg'), isTrue);
       expect(files.hq.path.endsWith('_hq.jpg'), isTrue);
@@ -320,19 +318,19 @@ void main() {
       final testJpg = img.encodeJpg(testImg);
       final hash = CoverUtils.computeBytesHash(testJpg);
 
-      await service.saveThumbnailBytes(hash, testJpg);
+      await CoverUtils.saveThumbnailBytes(hash, testJpg);
 
-      expect(service.hasCachedCover(hash), isTrue);
+      expect(CoverUtils.hasCachedCover(hash), isTrue);
       expect(
-        service.hasCachedCover(hash, quality: ThumbnailQuality.high),
+        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.high),
         isTrue,
       );
       expect(
-        service.hasCachedCover(hash, quality: ThumbnailQuality.medium),
+        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.medium),
         isTrue,
       );
       expect(
-        service.hasCachedCover(hash, quality: ThumbnailQuality.low),
+        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.low),
         isTrue,
       );
     });
@@ -346,20 +344,20 @@ void main() {
         final hash = CoverUtils.computeBytesHash(testJpg);
 
         // Concurrently save identical thumbnail bytes
-        await Future.wait([
-          service.saveThumbnailBytes(hash, testJpg, force: true),
-          service.saveThumbnailBytes(hash, testJpg, force: true),
+        await Future.wait<File?>([
+          CoverUtils.saveThumbnailBytes(hash, testJpg, force: true),
+          CoverUtils.saveThumbnailBytes(hash, testJpg, force: true),
         ]);
 
-        final hqFile = service.getCoverFile(
+        final hqFile = CoverUtils.getCoverFile(
           hash,
           quality: ThumbnailQuality.high,
         );
-        final mqFile = service.getCoverFile(
+        final mqFile = CoverUtils.getCoverFile(
           hash,
           quality: ThumbnailQuality.medium,
         );
-        final lqFile = service.getCoverFile(
+        final lqFile = CoverUtils.getCoverFile(
           hash,
           quality: ThumbnailQuality.low,
         );
@@ -381,19 +379,20 @@ void main() {
         final testJpg = img.encodeJpg(testImg);
         final hash = CoverUtils.computeBytesHash(testJpg);
 
-        await service.saveThumbnailBytes(hash, testJpg);
-        expect(service.hasCachedCover(hash), isTrue);
+        await CoverUtils.saveThumbnailBytes(hash, testJpg);
+        expect(CoverUtils.hasCachedCover(hash), isTrue);
 
         // Create a dummy leftover temporary file in tempDir
-        final tempFile = File('${service._tempDir.path}/leftover_worker.tmp')
+        final tempFile = File('${CoverUtils.tempDir.path}/leftover_worker.tmp')
           ..writeAsStringSync('stale temp content');
         expect(tempFile.existsSync(), isTrue);
 
-        await service.clearTemp();
+        await CoverUtils.clearTemp();
 
         expect(tempFile.existsSync(), isFalse);
-        expect(service.hasCachedCover(hash), isTrue);
-    });
+        expect(CoverUtils.hasCachedCover(hash), isTrue);
+      },
+    );
   });
 
   group('Presentation View Modes (List vs Cards) UI Integration', () {
@@ -548,6 +547,9 @@ void main() {
       final keys = AppStringKey().allKeys;
       expect(keys.contains('common_view_as_cards'), isTrue);
       expect(keys.contains('common_view_as_list'), isTrue);
+      expect(keys.contains('scan_stage_idle'), isTrue);
+      expect(keys.contains('scan_stage_extracting'), isTrue);
+      expect(keys.contains('scan_cancel_tooltip'), isTrue);
     });
   });
 }

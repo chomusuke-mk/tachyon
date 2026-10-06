@@ -83,7 +83,13 @@ void main() {
 
       // 4. Delete folderA (contains 4 remaining tracks: song2, song3, song4, song5)
       // 4 tracks * 4 lyrics = 16 lyrics; 16 * 3 = 48 translations deleted
-      database.deleteTracksInFolder('/music/folderA');
+      final folderATrackIds = database
+          .getCatalogSnapshot()
+          .tracks
+          .where((t) => t.filePath.startsWith('/music/folderA'))
+          .map((t) => t.id)
+          .toList();
+      database.deleteTracksAndPurgeOrphans(folderATrackIds);
 
       final postFolderALyrics = database.db.select('SELECT count(*) AS c FROM lyrics;').first['c'] as int;
       final postFolderATrans = database.db.select('SELECT count(*) AS c FROM lyrics_translations;').first['c'] as int;
@@ -458,7 +464,13 @@ void main() {
       expect(totalTrans, 100);
 
       // Bulk delete all tracks in folder
-      database.deleteTracksInFolder('/music/bulk');
+      final bulkTrackIds = database
+          .getCatalogSnapshot()
+          .tracks
+          .where((t) => t.filePath.startsWith('/music/bulk'))
+          .map((t) => t.id)
+          .toList();
+      database.deleteTracksAndPurgeOrphans(bulkTrackIds);
 
       final remainingTracks = database.getCatalogSnapshot().tracks.length;
       expect(remainingTracks, 0);

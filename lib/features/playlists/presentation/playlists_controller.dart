@@ -18,10 +18,7 @@ class PlaylistsController extends ChangeNotifier {
   StreamSubscription<void>? _catalogSubscription;
   bool _isDisposed = false;
 
-  PlaylistsController({
-    required this.backend,
-    this.store,
-  }) {
+  PlaylistsController({required this.backend, this.store}) {
     _catalogSubscription = _backend.catalogUpdatedStream.listen((_) {
       loadPlaylists();
     });
@@ -106,7 +103,11 @@ class PlaylistsController extends ChangeNotifier {
 
     try {
       final snapshot = await _backend.getCatalogSnapshot();
-      _store = LibraryStore.fromSnapshot(snapshot);
+      if (_store != null) {
+        _store!.hydrateFromSnapshot(snapshot);
+      } else {
+        _store = LibraryStore.fromSnapshot(snapshot);
+      }
       _syncFromStore();
     } catch (e, st) {
       _errorMessage = 'Failed to load playlists: $e';
@@ -137,7 +138,16 @@ class PlaylistsController extends ChangeNotifier {
 
       // Resolve directly from memory pointers in playlist entries
       _selectedPlaylistTracks = playlist.entries
-          .map((e) => e.track)
+          .map((e) {
+            final t = e.track;
+            if (t == null) return null;
+            if (_store != null) {
+              return (t.id != null ? _store!.getTrackById(t.id!) : null) ??
+                  _store!.getTrackByPath(t.filePath) ??
+                  t;
+            }
+            return t;
+          })
           .whereType<Track>()
           .toList();
     } catch (e) {

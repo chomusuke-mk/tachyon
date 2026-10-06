@@ -228,6 +228,10 @@ class MetadataService {
     );
   }
 
+  /// Whether a scan is currently running.
+  bool get isScanning =>
+      _currentScanToken != null && !_currentScanToken!.isCancelled;
+
   /// Starts the scan pipeline using a pool of [Isolate.run] workers proportional
   /// to CPU cores and returns a [Stream<ScanProgress>].
   Stream<ScanProgress> scanDirectories(
@@ -235,6 +239,10 @@ class MetadataService {
     CancellationToken? cancellationToken,
   }) {
     final controller = StreamController<ScanProgress>();
+    if (isScanning) {
+      controller.close();
+      return controller.stream;
+    }
     _runScanPipeline(directories, controller, cancellationToken);
     return controller.stream;
   }
@@ -254,8 +262,6 @@ class MetadataService {
     StreamController<ScanProgress> controller,
     CancellationToken? cancellationToken,
   ) async {
-    cancelScan();
-
     final scanToken = CancellationToken();
     _currentScanToken = scanToken;
 
@@ -272,8 +278,11 @@ class MetadataService {
     };
 
     if (scanToken.isCancelled) {
+      if (_currentScanToken == scanToken) {
+        _currentScanToken = null;
+      }
       if (!controller.isClosed) {
-        controller.add(const ScanProgress(phase: ScanPhase.cancelled));
+        controller.add(const ScanProgress(stage: ScanStage.cancelled));
         controller.close();
       }
       return;
@@ -284,7 +293,7 @@ class MetadataService {
     int lastEmitMs = -50;
 
     void sendProgress(ScanProgress p, {bool force = false}) {
-      current = p.copyWith(elapsedTime: stopwatch.elapsed);
+      current = p;
       final now = stopwatch.elapsedMilliseconds;
       if (force || now - lastEmitMs >= 50) {
         lastEmitMs = now;
@@ -295,19 +304,13 @@ class MetadataService {
     try {
       // Estado inicial: Obteniendo base de datos...
       sendProgress(
-        const ScanProgress(
-          phase: ScanPhase.gettingDatabase,
-          message: 'Obteniendo base de datos...',
-        ),
+        const ScanProgress(stage: ScanStage.gettingDatabase),
         force: true,
       );
 
       // Etapa 1: Obteniendo canciones... (desde base de datos)
       sendProgress(
-        const ScanProgress(
-          phase: ScanPhase.gettingTracks,
-          message: 'Obteniendo canciones...',
-        ),
+        const ScanProgress(stage: ScanStage.gettingTracks),
         force: true,
       );
 
@@ -315,23 +318,16 @@ class MetadataService {
 
       if (scanToken.isCancelled) {
         sendProgress(
-          current.copyWith(
-            phase: ScanPhase.cancelled,
-            message: 'Cancelado',
-            clearProgress: true,
-          ),
+          const ScanProgress(stage: ScanStage.cancelled),
           force: true,
         );
         if (!controller.isClosed) controller.close();
         return;
       }
 
-      // Etapa 2: Comparando... (listar archivos de carpetas y comparar con trackStored)
+      // Etapa 2: Buscando archivos...
       sendProgress(
-        const ScanProgress(
-          phase: ScanPhase.comparing,
-          message: 'Comparando...',
-        ),
+        const ScanProgress(stage: ScanStage.discovering),
         force: true,
       );
 
@@ -346,16 +342,15 @@ class MetadataService {
 
       if (scanToken.isCancelled) {
         sendProgress(
-          current.copyWith(
-            phase: ScanPhase.cancelled,
-            message: 'Cancelado',
-            clearProgress: true,
-          ),
+          const ScanProgress(stage: ScanStage.cancelled),
           force: true,
         );
         if (!controller.isClosed) controller.close();
         return;
       }
+
+      // Etapa 3: Comparando...
+      sendProgress(const ScanProgress(stage: ScanStage.comparing), force: true);
 
       final storedByPath = {for (final s in trackStored) s.filePath: s};
       final toExtract = <DiscoveredAudioFile>[];
@@ -375,7 +370,7 @@ class MetadataService {
       }
       final toDeleteStored = toDeleteMap.values.toList();
 
-      // Etapa 3: Obteniendo metadatos completos de cada trackDiscover
+      // Etapa 4: Obteniendo metadatos completos de cada trackDiscover
       final totalExtract = toExtract.length;
       final extractedTracks = <ExtractedTrackData>[];
       final activeTasks = <Future<void>>{};
@@ -384,11 +379,9 @@ class MetadataService {
 
       sendProgress(
         ScanProgress(
-          phase: ScanPhase.extracting,
-          message: 'Obteniendo metadatos 0/$totalExtract',
-          progress: totalExtract == 0 ? 1.0 : 0.0,
-          totalFiles: totalExtract,
-          scannedFiles: 0,
+          stage: ScanStage.extracting,
+          progressLabel: '0/$totalExtract',
+          progressValue: totalExtract == 0 ? 1.0 : 0.0,
         ),
         force: true,
       );
@@ -418,12 +411,9 @@ class MetadataService {
               : 1.0;
           sendProgress(
             ScanProgress(
-              phase: ScanPhase.extracting,
-              message: 'Obteniendo metadatos $extractedCount/$totalExtract',
-              progress: progressVal,
-              totalFiles: totalExtract,
-              scannedFiles: extractedCount,
-              currentFile: file.path,
+              stage: ScanStage.extracting,
+              progressLabel: '$extractedCount/$totalExtract',
+              progressValue: progressVal,
             ),
           );
         }().whenComplete(() => activeTasks.remove(task));
@@ -441,25 +431,15 @@ class MetadataService {
 
       if (scanToken.isCancelled) {
         sendProgress(
-          current.copyWith(
-            phase: ScanPhase.cancelled,
-            message: 'Cancelado',
-            clearProgress: true,
-          ),
+          const ScanProgress(stage: ScanStage.cancelled),
           force: true,
         );
         if (!controller.isClosed) controller.close();
         return;
       }
 
-      // Etapa 4: Insertando...
-      sendProgress(
-        const ScanProgress(
-          phase: ScanPhase.inserting,
-          message: 'Insertando...',
-        ),
-        force: true,
-      );
+      // Etapa 5: Insertando...
+      sendProgress(const ScanProgress(stage: ScanStage.inserting), force: true);
 
       if (extractedTracks.isNotEmpty) {
         try {
@@ -475,23 +455,16 @@ class MetadataService {
 
       if (scanToken.isCancelled) {
         sendProgress(
-          current.copyWith(
-            phase: ScanPhase.cancelled,
-            message: 'Cancelado',
-            clearProgress: true,
-          ),
+          const ScanProgress(stage: ScanStage.cancelled),
           force: true,
         );
         if (!controller.isClosed) controller.close();
         return;
       }
 
-      // Etapa 5: Limpiando orphan...
+      // Etapa 6: Limpiando orphan...
       sendProgress(
-        const ScanProgress(
-          phase: ScanPhase.cleaningOrphans,
-          message: 'Limpiando orphan...',
-        ),
+        const ScanProgress(stage: ScanStage.cleaningOrphans),
         force: true,
       );
 
@@ -505,23 +478,16 @@ class MetadataService {
 
       if (scanToken.isCancelled) {
         sendProgress(
-          current.copyWith(
-            phase: ScanPhase.cancelled,
-            message: 'Cancelado',
-            clearProgress: true,
-          ),
+          const ScanProgress(stage: ScanStage.cancelled),
           force: true,
         );
         if (!controller.isClosed) controller.close();
         return;
       }
 
-      // Etapa 6: Limpiando thumbnails...
+      // Etapa 7: Limpiando thumbnails...
       sendProgress(
-        const ScanProgress(
-          phase: ScanPhase.cleaningThumbnails,
-          message: 'Limpiando thumbnails...',
-        ),
+        const ScanProgress(stage: ScanStage.cleaningThumbnails),
         force: true,
       );
 
@@ -553,11 +519,9 @@ class MetadataService {
 
       sendProgress(
         ScanProgress(
-          phase: ScanPhase.completed,
-          message: 'Completado',
-          progress: 1.0,
-          totalFiles: totalExtract,
-          scannedFiles: extractedCount,
+          stage: ScanStage.completed,
+          progressLabel: '$extractedCount/$totalExtract',
+          progressValue: 1.0,
         ),
         force: true,
       );
@@ -565,11 +529,7 @@ class MetadataService {
     } catch (e, st) {
       debugPrint('[MetadataService] Pipeline failed: $e\n$st');
       sendProgress(
-        current.copyWith(
-          phase: ScanPhase.failed,
-          errorMessage: e.toString(),
-          elapsedTime: stopwatch.elapsed,
-        ),
+        ScanProgress(stage: ScanStage.failed, errorMessage: e.toString()),
         force: true,
       );
       if (!controller.isClosed) controller.close();

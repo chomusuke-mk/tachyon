@@ -363,6 +363,9 @@ class TachyonBackendHost {
         return const <Track>[];
 
       case BackendMethods.libraryStartScan:
+        if (_metadataService.isScanning) {
+          return null;
+        }
         final directories = params['directories'] != null
             ? (params['directories'] as List).cast<String>()
             : [params['directoryPath'] as String];
@@ -376,7 +379,7 @@ class TachyonBackendHost {
                   payload: progress,
                 ),
               );
-              if (progress.phase == ScanPhase.completed) {
+              if (progress.stage == ScanStage.completed) {
                 config.uiSendPort.send(
                   const BackendEvent(topic: BackendTopics.catalogUpdated),
                 );
@@ -397,31 +400,12 @@ class TachyonBackendHost {
         );
         return null;
 
-      case BackendMethods.libraryDeleteTracksInFolder:
-        final folderPath = params['folderPath'] as String;
-        _database.deleteTracksInFolder(folderPath);
-        config.uiSendPort.send(
-          const BackendEvent(topic: BackendTopics.catalogUpdated),
-        );
-        return null;
-
       // =======================================================================
-      // METADATA & THUMBNAILS (WORKER ISOLATES)
+      // METADATA (WORKER ISOLATES)
       // =======================================================================
       case BackendMethods.metadataGetMetadata:
         final filePath = params['filePath'] as String;
         return await _metadataService.getMetadata(filePath);
-
-      case BackendMethods.metadataGetThumbnail:
-      case BackendMethods.metadataGetCover:
-        final thumbnailHash =
-            (params['thumbnailHash'] ?? params['coverHash']) as String?;
-        if (thumbnailHash == null || thumbnailHash.isEmpty) return null;
-        final qualityStr = params['quality'] as String?;
-        final quality = qualityStr != null
-            ? ThumbnailQuality.values.byName(qualityStr)
-            : ThumbnailQuality.low;
-        return CoverUtils.getCoverFile(thumbnailHash, quality: quality);
 
       // =======================================================================
       // PLAYLISTS

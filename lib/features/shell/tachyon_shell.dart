@@ -13,6 +13,7 @@ import 'package:tachyon/features/settings/presentation/settings_screen.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 
 import 'mini_player_bar.dart';
+import 'scan_progress_overlay.dart';
 
 enum ShellDestination {
   tracks,
@@ -168,9 +169,15 @@ class _TachyonShellState extends State<TachyonShell> {
               child: Column(
                 children: [
                   Expanded(
-                    child: IndexedStack(
-                      index: _currentIndex,
-                      children: _screens,
+                    child: Stack(
+                      children: [
+                        IndexedStack(index: _currentIndex, children: _screens),
+                        const Positioned(
+                          right: 16,
+                          bottom: 16,
+                          child: ScanProgressOverlay(),
+                        ),
+                      ],
                     ),
                   ),
                   RepaintBoundary(
@@ -196,7 +203,16 @@ class _TachyonShellState extends State<TachyonShell> {
       body: Column(
         children: [
           Expanded(
-            child: IndexedStack(index: _currentIndex, children: _screens),
+            child: Stack(
+              children: [
+                IndexedStack(index: _currentIndex, children: _screens),
+                const Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: ScanProgressOverlay(),
+                ),
+              ],
+            ),
           ),
           RepaintBoundary(
             child: MiniPlayerBar(

@@ -56,6 +56,9 @@ abstract final class CoverUtils {
   static Directory get _tempDir =>
       Directory(p.join(cacheDirectory.path, 'covers_tmp'));
 
+  @visibleForTesting
+  static Directory get tempDir => _tempDir;
+
   static void init(Directory cacheDir) {
     cacheDirectory = cacheDir;
     _isInitialized = true;
@@ -289,7 +292,7 @@ abstract final class CoverUtils {
         await Future.wait(writeFutures);
       }
     } catch (e) {
-      debugPrint('[CoverCache] Error generating triple quality images: $e');
+      debugPrint('[CoverUtils] Error generating triple quality images: $e');
       try {
         final writeFutures = <Future<void>>[];
         for (final f in [...uniqueHq, ...uniqueMq, ...uniqueLq]) {

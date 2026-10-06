@@ -71,8 +71,14 @@ Future<void> main() async {
     settingsRepository: settingsRepository,
   )..loadLibrary();
 
-  final playlistsController = PlaylistsController(backend: backendClient)
-    ..loadPlaylists();
+  final playlistsController = PlaylistsController(
+    backend: backendClient,
+    store: libraryController.store,
+  )..loadPlaylists();
+
+  libraryController.addListener(() {
+    playlistsController.updateStore(libraryController.store);
+  });
 
   final searchController = TachyonSearchController(
     storeSupplier: () => libraryController.store,

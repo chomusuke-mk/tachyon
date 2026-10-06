@@ -43,9 +43,7 @@ class ArtistDetailScreen extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(
-            child: AmbientBackdrop(
-              thumbnailHash: currentArtist.thumbnailHash,
-            ),
+            child: AmbientBackdrop(thumbnailHash: currentArtist.thumbnailHash),
           ),
           CustomScrollView(
             slivers: [
@@ -125,70 +123,79 @@ class ArtistDetailScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (artistAlbums.isNotEmpty) ...[
-                        const SizedBox(height: 24),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            strings.arDiscography,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 160,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: artistAlbums.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(width: 12),
-                            itemBuilder: (context, index) {
-                              final album = artistAlbums[index];
-                              return AlbumCard(
-                                album: album,
-                                width: 110,
-                                subtitle: album.year?.toString(),
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) =>
-                                          AlbumDetailScreen(album: album),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          strings.arAllTracks,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                      ),
                     ],
                   ),
                 ),
               ),
-              SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final track = artistTracks[index];
-                  final isPlaying = currentTrack == track;
+              if (artistAlbums.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                    child: Text(
+                      strings.arDiscography,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  sliver: SliverGrid.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 180,
+                          childAspectRatio: 0.72,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                    itemCount: artistAlbums.length,
+                    itemBuilder: (context, index) {
+                      final album = artistAlbums[index];
+                      return AlbumCard(
+                        album: album,
+                        subtitle: album.year?.toString(),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => AlbumDetailScreen(album: album),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+              if (artistTracks.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                    child: Text(
+                      strings.arAllTracks,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                SliverList.builder(
+                  itemCount: artistTracks.length,
+                  itemBuilder: (context, index) {
+                    final track = artistTracks[index];
+                    final isPlaying = currentTrack == track;
 
-                  return TrackTile(
-                    key: ValueKey(track.filePath),
-                    track: track,
-                    isPlaying: isPlaying,
-                    onTap: () =>
-                        playback.playTrack(track, contextTracks: artistTracks),
-                  );
-                }, childCount: artistTracks.length),
-              ),
+                    return TrackTile(
+                      key: ValueKey(track.filePath),
+                      track: track,
+                      isPlaying: isPlaying,
+                      onTap: () => playback.playTrack(
+                        track,
+                        contextTracks: artistTracks,
+                      ),
+                    );
+                  },
+                ),
+              ],
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ],
           ),
         ],

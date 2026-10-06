@@ -88,7 +88,6 @@ abstract class TachyonBackendClient {
   Future<void> startScanDirectories(List<String> directories);
   Future<void> cancelScan();
   Future<void> deleteTrack(int trackId);
-  Future<void> deleteTracksInFolder(String folderPath);
 
   // --- Metadata (Worker Isolates) ---
   Future<ExtractedTrackData?> getMetadata(String filePath);
@@ -245,6 +244,16 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
       case BackendTopics.libraryScanProgress:
         if (event.payload is ScanProgress) {
           _scanProgressController.add(event.payload as ScanProgress);
+        } else if (event.payload is Map<String, dynamic>) {
+          _scanProgressController.add(
+            ScanProgress.fromJson(event.payload as Map<String, dynamic>),
+          );
+        } else if (event.payload is Map) {
+          _scanProgressController.add(
+            ScanProgress.fromJson(
+              (event.payload as Map).cast<String, dynamic>(),
+            ),
+          );
         }
         break;
 
@@ -488,12 +497,6 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   @override
   Future<void> startScanDirectories(List<String> directories) =>
       _send(BackendMethods.libraryStartScan, {'directories': directories});
-
-  @override
-  Future<void> deleteTracksInFolder(String folderPath) => _send(
-    BackendMethods.libraryDeleteTracksInFolder,
-    {'folderPath': folderPath},
-  );
 
   // ===========================================================================
   // METADATA (WORKER ISOLATES)

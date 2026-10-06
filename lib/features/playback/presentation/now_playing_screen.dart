@@ -393,7 +393,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       .take(playback.currentIndex)
                       .fold<Duration>(
                         Duration.zero,
-                        (sum, item) => sum + (item.track?.duration ?? Duration.zero),
+                        (sum, item) =>
+                            sum + (item.track?.duration ?? Duration.zero),
                       ) +
                   playback.position,
               playlistDuration: () => playback.queue.fold<Duration>(
@@ -559,9 +560,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           const SizedBox(height: 2),
           _ClickableArtistNames(
             artists: currentTrack.artists,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: colorScheme.onSurfaceVariant),
             colorScheme: colorScheme,
           ),
         ],
@@ -664,8 +664,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       },
     );
   }
-
-
 
   Widget _buildHeroCoverArt(
     String filePath,
@@ -1057,10 +1055,9 @@ class _ClickableArtistNames extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final effectiveStyle = style ??
-        Theme.of(context)
-            .textTheme
-            .bodyLarge
+    final effectiveStyle =
+        style ??
+        Theme.of(context).textTheme.bodyLarge
             ?.copyWith(color: colorScheme.onSurfaceVariant);
 
     return Center(
@@ -1071,11 +1068,7 @@ class _ClickableArtistNames extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             for (int i = 0; i < artists.length; i++) ...[
-              if (i > 0)
-                Text(
-                  ', ',
-                  style: effectiveStyle,
-                ),
+              if (i > 0) Text(', ', style: effectiveStyle),
               _ArtistLink(
                 artist: artists[i],
                 style: effectiveStyle,
@@ -1132,8 +1125,9 @@ class _ArtistLinkState extends State<_ArtistLink> {
             color: _isHovered
                 ? widget.colorScheme.primary
                 : widget.colorScheme.onSurfaceVariant,
-            decoration:
-                _isHovered ? TextDecoration.underline : TextDecoration.none,
+            decoration: _isHovered
+                ? TextDecoration.underline
+                : TextDecoration.none,
             decorationColor: widget.colorScheme.primary,
           ),
         ),
@@ -1141,4 +1135,3 @@ class _ArtistLinkState extends State<_ArtistLink> {
     );
   }
 }
-

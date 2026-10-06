@@ -314,6 +314,9 @@ class AppDatabase {
       db.execute(
         'DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM track_artists);',
       );
+      db.execute(
+        'DELETE FROM genres WHERE id NOT IN (SELECT DISTINCT genre_id FROM track_genres);',
+      );
       db.execute('COMMIT;');
     } catch (_) {
       db.execute('ROLLBACK;');
@@ -347,11 +350,6 @@ class AppDatabase {
 
   void deleteTrack(int trackId) {
     db.execute('DELETE FROM tracks WHERE id = ?;', [trackId]);
-  }
-
-  void deleteTracksInFolder(String folderPath) {
-    final prefix = folderPath.endsWith('/') ? folderPath : '$folderPath/';
-    db.execute("DELETE FROM tracks WHERE file_path LIKE ? ESCAPE '\\';", ['${prefix.replaceAll('%', r'\%').replaceAll('_', r'\_')}%']);
   }
 
   int createPlaylist(String name) {

@@ -296,11 +296,9 @@ class LibraryController extends ChangeNotifier {
   // Scanning Operations
   // ---------------------------------------------------------------------------
   Future<void> startScan(List<String> directories) async {
-    if (directories.isEmpty) return;
+    if (isScanning) return;
 
-    cancelScan();
-
-    _scanProgress = const ScanProgress(phase: ScanPhase.discovering);
+    _scanProgress = const ScanProgress(stage: ScanStage.gettingDatabase);
     notifyListeners();
 
     _scanSubscription = _backend.scanProgressStream.listen(
@@ -308,13 +306,13 @@ class LibraryController extends ChangeNotifier {
         _scanProgress = progress;
         notifyListeners();
 
-        if (progress.phase == ScanPhase.completed) {
+        if (progress.stage == ScanStage.completed) {
           loadLibrary();
         }
       },
       onError: (Object err) {
         _scanProgress = _scanProgress.copyWith(
-          phase: ScanPhase.failed,
+          stage: ScanStage.failed,
           errorMessage: err.toString(),
         );
         notifyListeners();
@@ -332,7 +330,7 @@ class LibraryController extends ChangeNotifier {
     _scanSubscription?.cancel();
     _scanSubscription = null;
     if (_scanProgress.isRunning) {
-      _scanProgress = _scanProgress.copyWith(phase: ScanPhase.cancelled);
+      _scanProgress = _scanProgress.copyWith(stage: ScanStage.cancelled);
       notifyListeners();
     }
   }
@@ -344,17 +342,6 @@ class LibraryController extends ChangeNotifier {
       await loadLibrary();
     } catch (e) {
       _errorMessage = 'Failed to delete track: $e';
-      notifyListeners();
-    }
-  }
-
-  /// Removes from the database all tracks whose file path starts with [folderPath].
-  Future<void> deleteTracksInFolder(String folderPath) async {
-    try {
-      await _backend.deleteTracksInFolder(folderPath);
-      await loadLibrary();
-    } catch (e) {
-      _errorMessage = 'Failed to delete tracks in folder: $e';
       notifyListeners();
     }
   }

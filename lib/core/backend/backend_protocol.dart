@@ -81,13 +81,9 @@ abstract final class BackendMethods {
   static const String libraryStartScan = 'library.startScan';
   static const String libraryCancelScan = 'library.cancelScan';
   static const String libraryDeleteTrack = 'library.deleteTrack';
-  static const String libraryDeleteTracksInFolder =
-      'library.deleteTracksInFolder';
 
-  // Metadata & Thumbnail processing (Worker Isolates)
+  // Metadata processing (Worker Isolates)
   static const String metadataGetMetadata = 'metadata.getMetadata';
-  static const String metadataGetThumbnail = 'metadata.getThumbnail';
-  static const String metadataGetCover = 'metadata.getCover';
 
   // Playlists
   static const String playlistsGetAll = 'playlists.getAll';

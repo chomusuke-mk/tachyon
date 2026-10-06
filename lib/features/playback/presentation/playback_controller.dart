@@ -55,9 +55,9 @@ class PlaybackController extends ChangeNotifier {
     required TachyonBackendClient backend,
     required SettingsRepository settingsRepository,
     LibraryStore Function()? libraryStoreSupplier,
-  })  : _backend = backend,
-        _settingsRepository = settingsRepository,
-        _libraryStoreSupplier = libraryStoreSupplier {
+  }) : _backend = backend,
+       _settingsRepository = settingsRepository,
+       _libraryStoreSupplier = libraryStoreSupplier {
     _backend.getPlaybackState().then((s) {
       if (!_isDisposed) {
         _state = _resolveStateTracks(s);
@@ -107,7 +107,8 @@ class PlaybackController extends ChangeNotifier {
     final resolvedPlayables = raw.playables.map((item) {
       final t = item.track;
       if (t == null) return item;
-      final resolved = (t.id != null ? store.getTrackById(t.id!) : null) ??
+      final resolved =
+          (t.id != null ? store.getTrackById(t.id!) : null) ??
           store.getTrackByPath(t.filePath);
       if (resolved != null && !identical(resolved, t)) {
         return item.copyWith(track: resolved);
@@ -127,7 +128,10 @@ class PlaybackController extends ChangeNotifier {
   bool isCurrentTrack(Track? track) =>
       track != null &&
       (_state.currentTrack == track ||
-          (_state.currentTrack?.id != null && _state.currentTrack?.id == track.id));
+          (_state.currentTrack?.id != null &&
+              _state.currentTrack?.id == track.id) ||
+          (_state.currentTrack?.filePath.isNotEmpty == true &&
+              _state.currentTrack?.filePath == track.filePath));
   bool get isPlaying => _state.playing;
   bool get isBuffering => _state.buffering;
   bool get isCompleted => _state.completed;

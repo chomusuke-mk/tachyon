@@ -45,9 +45,7 @@ class AlbumDetailScreen extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(
-            child: AmbientBackdrop(
-              thumbnailHash: album.thumbnailHash,
-            ),
+            child: AmbientBackdrop(thumbnailHash: album.thumbnailHash),
           ),
           CustomScrollView(
             slivers: [
@@ -127,8 +125,9 @@ class AlbumDetailScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
+              SliverList.builder(
+                itemCount: albumTracks.length,
+                itemBuilder: (context, index) {
                   final track = albumTracks[index];
                   final isPlaying = currentTrack == track;
 
@@ -139,7 +138,7 @@ class AlbumDetailScreen extends StatelessWidget {
                     onTap: () =>
                         playback.playTrack(track, contextTracks: albumTracks),
                   );
-                }, childCount: albumTracks.length),
+                },
               ),
             ],
           ),

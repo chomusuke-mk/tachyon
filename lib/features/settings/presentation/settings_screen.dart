@@ -75,9 +75,11 @@ class SettingsScreen extends StatelessWidget {
                     Navigator.of(dialogCtx).pop();
                     if (!added && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(strings.sFolderErrorInvalid),
-                        ),
+                        SnackBar(content: Text(strings.sFolderErrorInvalid)),
+                      );
+                    } else if (added && context.mounted) {
+                      context.read<LibraryController>().startScan(
+                        settings.musicDirectories,
                       );
                     }
                   }
@@ -140,7 +142,7 @@ class SettingsScreen extends StatelessWidget {
                           if (searchQuery.isEmpty && index == 0) {
                             final isSelected =
                                 settings.lyricsTranslationTargetLang ==
-                                    'defaultOption';
+                                'defaultOption';
                             return ListTile(
                               leading: Icon(
                                 Icons.auto_awesome_rounded,
@@ -166,14 +168,17 @@ class SettingsScreen extends StatelessWidget {
                                   : null,
                               onTap: () {
                                 settings.setLyricsTranslationTargetLang(
-                                    'defaultOption');
+                                  'defaultOption',
+                                );
                                 Navigator.of(dialogCtx).pop();
                               },
                             );
                           }
 
-                          final item = filteredEntries[
-                              searchQuery.isEmpty ? index - 1 : index];
+                          final item =
+                              filteredEntries[searchQuery.isEmpty
+                                  ? index - 1
+                                  : index];
                           final isSelected =
                               settings.lyricsTranslationTargetLang == item.key;
 
@@ -227,8 +232,9 @@ class SettingsScreen extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     final isScanning = library.isScanning;
-    final scanPercentage = library.scanProgress.progress != null
-        ? (library.scanProgress.progress! * 100).toInt()
+    final progress = library.scanProgress;
+    final scanPercentage = progress.progressValue != null
+        ? (progress.progressValue! * 100).toInt()
         : null;
 
     return Scaffold(
@@ -281,10 +287,10 @@ class SettingsScreen extends StatelessWidget {
                           ),
                           tooltip: strings.sRemoveFolder,
                           onPressed: () {
-                            context
-                                .read<LibraryController>()
-                                .deleteTracksInFolder(dir);
                             settings.removeMusicDirectory(dir);
+                            context.read<LibraryController>().startScan(
+                              settings.musicDirectories,
+                            );
                           },
                         ),
                       );
@@ -314,11 +320,16 @@ class SettingsScreen extends StatelessWidget {
                         label: Text(
                           isScanning
                               ? (scanPercentage != null
-                                  ? strings.sScanningProgressFormatted(
-                                      scanPercentage,
-                                    )
-                                  : (library.scanProgress.message ??
-                                      strings.sRescanLibrary))
+                                    ? strings.sScanningProgressFormatted(
+                                        scanPercentage,
+                                      )
+                                    : (strings
+                                              .scanStageText(progress.stage)
+                                              .isNotEmpty
+                                          ? strings.scanStageText(
+                                              progress.stage,
+                                            )
+                                          : strings.sRescanLibrary))
                               : strings.sRescanLibrary,
                         ),
                         onPressed: isScanning
@@ -330,19 +341,15 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   if (isScanning) ...[
                     const SizedBox(height: 12),
-                    LinearProgressIndicator(
-                      value: library.scanProgress.progress,
-                    ),
-                    if (library.scanProgress.message != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        library.scanProgress.message!,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                    LinearProgressIndicator(value: progress.progressValue),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${strings.scanStageText(progress.stage)}${progress.progressLabel != null ? ' ${progress.progressLabel}' : ''}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
                       ),
-                    ],
+                    ),
                   ],
                 ],
               ),
@@ -482,7 +489,8 @@ class SettingsScreen extends StatelessWidget {
                     type: ControllerType.dropdown,
                     child: DropdownButton<String>(
                       isExpanded: true,
-                      value: (settings.appLanguage == 'en' ||
+                      value:
+                          (settings.appLanguage == 'en' ||
                               settings.appLanguage == 'es')
                           ? settings.appLanguage
                           : 'default',
@@ -528,8 +536,8 @@ class SettingsScreen extends StatelessWidget {
                                       'defaultOption'
                                   ? strings.sTranslationLangDefault
                                   : (languagesEndonyms[settings
-                                          .lyricsTranslationTargetLang] ??
-                                      settings.lyricsTranslationTargetLang),
+                                            .lyricsTranslationTargetLang] ??
+                                        settings.lyricsTranslationTargetLang),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),

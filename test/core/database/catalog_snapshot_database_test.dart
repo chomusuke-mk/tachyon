@@ -417,7 +417,7 @@ void main() {
             reason: 'Cascade delete must clear trackGenres');
       });
 
-      test('deleteTracksInFolder cascades deletion of relational pairs for all deleted tracks', () {
+      test('deleteTracksAndPurgeOrphans cascades deletion of relational pairs for all deleted tracks', () {
         final t1 = ExtractedTrackData(
           filePath: '/music/folder/t1.mp3',
           title: 'T1',
@@ -449,7 +449,13 @@ void main() {
         database.upsertTracks([t1, t2, t3]);
         expect(database.getCatalogSnapshot().tracks.length, 3);
 
-        database.deleteTracksInFolder('/music/folder');
+        final toDelete = database
+            .getCatalogSnapshot()
+            .tracks
+            .where((t) => t.filePath.startsWith('/music/folder'))
+            .map((t) => t.id)
+            .toList();
+        database.deleteTracksAndPurgeOrphans(toDelete);
 
         final snapshot = database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 1);

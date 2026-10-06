@@ -335,5 +335,19 @@
   "common_view_as_cards": "Cards view",
   "common_view_as_list": "List view",
   "common_back": "Back",
-  "common_minimize": "Minimize"
+  "common_minimize": "Minimize",
+  // --- scan_: Scan Progress Overlay ----------------------------------------
+  "scan_stage_idle": "Idle",
+  "scan_stage_getting_database": "Loading database...",
+  "scan_stage_getting_tracks": "Fetching tracks...",
+  "scan_stage_discovering": "Discovering files...",
+  "scan_stage_comparing": "Comparing files...",
+  "scan_stage_extracting": "Reading metadata",
+  "scan_stage_inserting": "Saving tracks...",
+  "scan_stage_cleaning_orphans": "Cleaning missing tracks...",
+  "scan_stage_cleaning_thumbnails": "Cleaning thumbnails...",
+  "scan_stage_completed": "Completed",
+  "scan_stage_failed": "Scan failed",
+  "scan_stage_cancelled": "Cancelled",
+  "scan_cancel_tooltip": "Cancel scan"
 }
