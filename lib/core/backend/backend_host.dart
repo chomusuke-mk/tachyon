@@ -444,29 +444,41 @@ class TachyonBackendHost {
       case BackendMethods.playlistsAddTracks:
         final playlistId = params['playlistId'] as int;
         final trackIds = (params['trackIds'] as List).cast<int>();
-        _database.addTracksToPlaylist(playlistId, trackIds);
-        config.uiSendPort.send(
-          const BackendEvent(topic: BackendTopics.catalogUpdated),
-        );
+        try {
+          _database.addTracksToPlaylist(playlistId, trackIds);
+          config.uiSendPort.send(
+            const BackendEvent(topic: BackendTopics.catalogUpdated),
+          );
+        } catch (e) {
+          debugPrint('[CoreBackendHost] Error adding tracks to playlist $playlistId: $e');
+        }
         return null;
 
       case BackendMethods.playlistsRemoveTrack:
         final playlistId = params['playlistId'] as int;
         final trackId = params['trackId'] as int;
-        _database.removeTrackFromPlaylist(playlistId, trackId);
-        config.uiSendPort.send(
-          const BackendEvent(topic: BackendTopics.catalogUpdated),
-        );
+        try {
+          _database.removeTrackFromPlaylist(playlistId, trackId);
+          config.uiSendPort.send(
+            const BackendEvent(topic: BackendTopics.catalogUpdated),
+          );
+        } catch (e) {
+          debugPrint('[CoreBackendHost] Error removing track from playlist $playlistId: $e');
+        }
         return null;
 
       case BackendMethods.playlistsReorderTracks:
         final playlistId = params['playlistId'] as int;
         final oldIndex = params['oldIndex'] as int;
         final newIndex = params['newIndex'] as int;
-        _database.reorderPlaylistEntries(playlistId, oldIndex, newIndex);
-        config.uiSendPort.send(
-          const BackendEvent(topic: BackendTopics.catalogUpdated),
-        );
+        try {
+          _database.reorderPlaylistEntries(playlistId, oldIndex, newIndex);
+          config.uiSendPort.send(
+            const BackendEvent(topic: BackendTopics.catalogUpdated),
+          );
+        } catch (e) {
+          debugPrint('[CoreBackendHost] Error reordering playlist entries: $e');
+        }
         return null;
 
       case BackendMethods.playlistsGetTrackIds:
@@ -475,20 +487,28 @@ class TachyonBackendHost {
       case BackendMethods.playlistsToggleLike:
         final trackId = params['trackId'] as int;
         final filePath = params['filePath'] as String?;
-        _database.toggleLikeTrack(trackId, filePath);
-        config.uiSendPort.send(
-          const BackendEvent(topic: BackendTopics.catalogUpdated),
-        );
+        try {
+          _database.toggleLikeTrack(trackId, filePath);
+          config.uiSendPort.send(
+            const BackendEvent(topic: BackendTopics.catalogUpdated),
+          );
+        } catch (e) {
+          debugPrint('[CoreBackendHost] Error toggling like for track $trackId: $e');
+        }
         return true;
 
       case BackendMethods.playlistsIsLiked:
         return false;
 
       case BackendMethods.playlistsClearHistory:
-        _database.clearHistory();
-        config.uiSendPort.send(
-          const BackendEvent(topic: BackendTopics.catalogUpdated),
-        );
+        try {
+          _database.clearHistory();
+          config.uiSendPort.send(
+            const BackendEvent(topic: BackendTopics.catalogUpdated),
+          );
+        } catch (e) {
+          debugPrint('[CoreBackendHost] Error clearing history: $e');
+        }
         return null;
 
       // =======================================================================

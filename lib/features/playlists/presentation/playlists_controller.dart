@@ -162,9 +162,14 @@ class PlaylistsController extends ChangeNotifier {
     final clean = name.trim();
     if (clean.isEmpty) return -1;
 
-    final id = await _backend.createPlaylist(clean);
-    await loadPlaylists();
-    return id;
+    try {
+      final id = await _backend.createPlaylist(clean);
+      await loadPlaylists();
+      return id;
+    } catch (e) {
+      debugPrint('[PlaylistsController] createPlaylist error: $e');
+      return -1;
+    }
   }
 
   Future<void> renamePlaylist(int playlistId, String newName) async {
@@ -175,8 +180,12 @@ class PlaylistsController extends ChangeNotifier {
       return; // Protected system playlist
     }
 
-    await _backend.renamePlaylist(playlistId, clean);
-    await loadPlaylists();
+    try {
+      await _backend.renamePlaylist(playlistId, clean);
+      await loadPlaylists();
+    } catch (e) {
+      debugPrint('[PlaylistsController] renamePlaylist error: $e');
+    }
   }
 
   Future<void> deletePlaylist(int playlistId) async {
@@ -185,12 +194,16 @@ class PlaylistsController extends ChangeNotifier {
       return; // Protected system playlist
     }
 
-    await _backend.deletePlaylist(playlistId);
-    if (_selectedPlaylist?.id == playlistId) {
-      _selectedPlaylist = null;
-      _selectedPlaylistTracks.clear();
+    try {
+      await _backend.deletePlaylist(playlistId);
+      if (_selectedPlaylist?.id == playlistId) {
+        _selectedPlaylist = null;
+        _selectedPlaylistTracks.clear();
+      }
+      await loadPlaylists();
+    } catch (e) {
+      debugPrint('[PlaylistsController] deletePlaylist error: $e');
     }
-    await loadPlaylists();
   }
 
   Future<void> addTrackToPlaylist(int playlistId, int trackId) async {
@@ -201,8 +214,12 @@ class PlaylistsController extends ChangeNotifier {
     _syncFromStore();
     notifyListeners();
 
-    await _backend.addTracksToPlaylist(playlistId, [trackId]);
-    await loadPlaylists();
+    try {
+      await _backend.addTracksToPlaylist(playlistId, [trackId]);
+      await loadPlaylists();
+    } catch (e) {
+      debugPrint('[PlaylistsController] addTrackToPlaylist error: $e');
+    }
   }
 
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) async {
@@ -213,8 +230,12 @@ class PlaylistsController extends ChangeNotifier {
     _syncFromStore();
     notifyListeners();
 
-    await _backend.removeTrackFromPlaylist(playlistId, trackId);
-    await loadPlaylists();
+    try {
+      await _backend.removeTrackFromPlaylist(playlistId, trackId);
+      await loadPlaylists();
+    } catch (e) {
+      debugPrint('[PlaylistsController] removeTrackFromPlaylist error: $e');
+    }
   }
 
   Future<void> reorderPlaylistEntries(
@@ -231,7 +252,12 @@ class PlaylistsController extends ChangeNotifier {
     _selectedPlaylistTracks.insert(toIndex, item);
     notifyListeners();
 
-    await _backend.reorderPlaylistTracks(playlistId, fromIndex, toIndex);
+    try {
+      await _backend.reorderPlaylistTracks(playlistId, fromIndex, toIndex);
+    } catch (e) {
+      debugPrint('[PlaylistsController] reorderPlaylistEntries error: $e');
+      await loadPlaylists();
+    }
   }
 
   Future<bool> toggleLike(int trackId, [String? filePath]) async {
@@ -268,7 +294,8 @@ class PlaylistsController extends ChangeNotifier {
       _store?.setTrackLiked(trackId, wasLiked);
       _syncFromStore();
       notifyListeners();
-      rethrow;
+      debugPrint('[PlaylistsController] toggleLike error: $e');
+      return wasLiked;
     }
   }
 
@@ -278,11 +305,15 @@ class PlaylistsController extends ChangeNotifier {
   }
 
   Future<void> clearHistory() async {
-    await _backend.clearHistory();
-    if (_selectedPlaylist?.id == AppDatabase.historyPlaylistId) {
-      _selectedPlaylistTracks.clear();
+    try {
+      await _backend.clearHistory();
+      if (_selectedPlaylist?.id == AppDatabase.historyPlaylistId) {
+        _selectedPlaylistTracks.clear();
+      }
+      await loadPlaylists();
+    } catch (e) {
+      debugPrint('[PlaylistsController] clearHistory error: $e');
     }
-    await loadPlaylists();
   }
 
   @override

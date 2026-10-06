@@ -329,14 +329,16 @@ class LibraryStore {
         final alreadyIn = likedPl.entries.any((e) => e.track?.id == trackId);
         if (!alreadyIn) {
           final track = _tracksById[trackId];
-          final newEntry = PlaylistEntry(
-            id: null,
-            position: likedPl.entries.length,
-            addedAt: DateTime.now().millisecondsSinceEpoch,
-            playlist: likedPl,
-            track: track,
-          );
-          likedPl.entries.add(newEntry);
+          if (track != null) {
+            final newEntry = PlaylistEntry(
+              id: null,
+              position: likedPl.entries.length,
+              addedAt: DateTime.now().millisecondsSinceEpoch,
+              playlist: likedPl,
+              track: track,
+            );
+            likedPl.entries.add(newEntry);
+          }
         }
       } else {
         likedPl.entries.removeWhere((e) => e.track?.id == trackId);
@@ -370,6 +372,7 @@ class LibraryStore {
     final playlist = _playlistsById[playlistId];
     if (playlist == null) return;
     final track = _tracksById[trackId];
+    if (track == null) return;
     final pos = position ?? playlist.entries.length;
     final entry = PlaylistEntry(
       id: entryId,

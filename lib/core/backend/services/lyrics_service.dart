@@ -331,24 +331,33 @@ class LyricsService {
     bool isSynced, {
     String? lang,
   }) {
-    final existing = database.getLyricsEntry(
-      trackId: trackId,
-      source: source.dbValue,
-    );
-    final unchanged =
-        existing != null &&
-        existing['state'] == LyricsSourceState.found.dbValue &&
-        existing['raw_lrc'] == raw;
-    final lyricsId = unchanged
-        ? existing['id'] as int
-        : database.saveLyricsEntry(
-            trackId: trackId,
-            source: source.dbValue,
-            state: LyricsSourceState.found.dbValue,
-            rawLrc: raw,
-            isSynced: isSynced,
-            lang: lang,
-          );
+    int? lyricsId;
+    String? finalLang = lang;
+    try {
+      final existing = database.getLyricsEntry(
+        trackId: trackId,
+        source: source.dbValue,
+      );
+      final unchanged =
+          existing != null &&
+          existing['state'] == LyricsSourceState.found.dbValue &&
+          existing['raw_lrc'] == raw;
+      lyricsId = unchanged
+          ? existing['id'] as int
+          : database.saveLyricsEntry(
+              trackId: trackId,
+              source: source.dbValue,
+              state: LyricsSourceState.found.dbValue,
+              rawLrc: raw,
+              isSynced: isSynced,
+              lang: lang,
+            );
+      if (unchanged) {
+        finalLang = existing['lang'] as String?;
+      }
+    } catch (e) {
+      debugPrint('[LyricsService] Error storing found lyrics for track $trackId: $e');
+    }
     return LyricsResult(
       lyricsId: lyricsId,
       lyrics: LrcParser.parse(raw),
@@ -356,36 +365,44 @@ class LyricsService {
       state: LyricsSourceState.found,
       rawLrc: raw,
       isSynced: isSynced,
-      lang: unchanged ? existing['lang'] as String? : lang,
+      lang: finalLang,
     );
   }
 
   /// Persists `NOT_FOUND` unless a `FOUND` row already exists for that source.
   void _storeNotFound(int trackId, LyricsSource source) {
-    final existing = database.getLyricsEntry(
-      trackId: trackId,
-      source: source.dbValue,
-    );
-    if (existing?['state'] == LyricsSourceState.found.dbValue) return;
-    database.saveLyricsEntry(
-      trackId: trackId,
-      source: source.dbValue,
-      state: LyricsSourceState.notFound.dbValue,
-    );
+    try {
+      final existing = database.getLyricsEntry(
+        trackId: trackId,
+        source: source.dbValue,
+      );
+      if (existing?['state'] == LyricsSourceState.found.dbValue) return;
+      database.saveLyricsEntry(
+        trackId: trackId,
+        source: source.dbValue,
+        state: LyricsSourceState.notFound.dbValue,
+      );
+    } catch (e) {
+      debugPrint('[LyricsService] Error storing not-found for track $trackId: $e');
+    }
   }
 
   /// Mirrors `<track>.lrc` / `<track>.LRC` into the `file` row (insert, update or delete).
   Future<void> _syncFileLyrics(int trackId, String filePath) async {
-    final raw = await _readContiguousLrc(filePath);
-    final existing = database.getLyricsEntry(
-      trackId: trackId,
-      source: LyricsSource.file.dbValue,
-    );
-    if (raw == null || raw.trim().isEmpty) {
-      if (existing != null) database.deleteLyrics(existing['id'] as int);
-      return;
+    try {
+      final raw = await _readContiguousLrc(filePath);
+      final existing = database.getLyricsEntry(
+        trackId: trackId,
+        source: LyricsSource.file.dbValue,
+      );
+      if (raw == null || raw.trim().isEmpty) {
+        if (existing != null) database.deleteLyrics(existing['id'] as int);
+        return;
+      }
+      _storeFound(trackId, LyricsSource.file, raw, LrcParser.parse(raw).isSynced);
+    } catch (e) {
+      debugPrint('[LyricsService] Error in _syncFileLyrics for track $trackId: $e');
     }
-    _storeFound(trackId, LyricsSource.file, raw, LrcParser.parse(raw).isSynced);
   }
 
   Future<String?> _readContiguousLrc(String filePath) async {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -143,9 +144,10 @@ class AppDatabase {
         playlists: playlists, playlistEntries: playlistEntries,
         trackArtists: trackArtists, trackGenres: trackGenres,
       );
-    } catch (_) {
-      db.execute('ROLLBACK;');
-      rethrow;
+    } catch (e) {
+      try { db.execute('ROLLBACK;'); } catch (_) {}
+      debugPrint('[AppDatabase] Error in getCatalogSnapshot: $e');
+      return const CatalogSnapshot.empty();
     }
   }
 
@@ -349,91 +351,143 @@ class AppDatabase {
   }
 
   void deleteTrack(int trackId) {
-    db.execute('DELETE FROM tracks WHERE id = ?;', [trackId]);
+    try {
+      db.execute('DELETE FROM tracks WHERE id = ?;', [trackId]);
+    } catch (e) {
+      debugPrint('[AppDatabase] Ignored error in deleteTrack: $e');
+    }
   }
 
   int createPlaylist(String name) {
-    db.execute('INSERT INTO playlists (name, created_at, type) VALUES (?, ?, ?);', [name.trim(), DateTime.now().millisecondsSinceEpoch, PlaylistType.user.value]);
-    return db.lastInsertRowId;
+    try {
+      db.execute('INSERT INTO playlists (name, created_at, type) VALUES (?, ?, ?);', [name.trim(), DateTime.now().millisecondsSinceEpoch, PlaylistType.user.value]);
+      return db.lastInsertRowId;
+    } catch (e) {
+      debugPrint('[AppDatabase] Ignored error in createPlaylist: $e');
+      return -1;
+    }
   }
 
   void deletePlaylist(int playlistId) {
-    db.execute('DELETE FROM playlists WHERE id = ? AND type = ?;', [playlistId, PlaylistType.user.value]);
+    try {
+      db.execute('DELETE FROM playlists WHERE id = ? AND type = ?;', [playlistId, PlaylistType.user.value]);
+    } catch (e) {
+      debugPrint('[AppDatabase] Ignored error in deletePlaylist: $e');
+    }
   }
 
   void renamePlaylist(int playlistId, String name) {
-    db.execute('UPDATE playlists SET name = ? WHERE id = ?;', [name.trim(), playlistId]);
+    try {
+      db.execute('UPDATE playlists SET name = ? WHERE id = ?;', [name.trim(), playlistId]);
+    } catch (e) {
+      debugPrint('[AppDatabase] Ignored error in renamePlaylist: $e');
+    }
   }
 
   void addTrackToPlaylist(int playlistId, int trackId, [String? filePath]) {
-    final posRes = db.select('SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM playlist_entries WHERE playlist_id = ?;', [playlistId]);
-    final nextPos = (posRes.first['next_pos'] as int?) ?? 0;
-    db.execute('INSERT INTO playlist_entries (playlist_id, track_id, position, added_at) VALUES (?, ?, ?, ?);', [playlistId, trackId, nextPos, DateTime.now().millisecondsSinceEpoch]);
+    try {
+      final trackExists = db.select('SELECT 1 FROM tracks WHERE id = ? LIMIT 1;', [trackId]).isNotEmpty;
+      if (!trackExists) {
+        debugPrint('[AppDatabase] Warning: Cannot add non-existent track (id: $trackId) to playlist $playlistId');
+        return;
+      }
+      final playlistExists = db.select('SELECT 1 FROM playlists WHERE id = ? LIMIT 1;', [playlistId]).isNotEmpty;
+      if (!playlistExists) {
+        debugPrint('[AppDatabase] Warning: Cannot add track to non-existent playlist (id: $playlistId)');
+        return;
+      }
+      final posRes = db.select('SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM playlist_entries WHERE playlist_id = ?;', [playlistId]);
+      final nextPos = (posRes.first['next_pos'] as int?) ?? 0;
+      db.execute('INSERT INTO playlist_entries (playlist_id, track_id, position, added_at) VALUES (?, ?, ?, ?);', [playlistId, trackId, nextPos, DateTime.now().millisecondsSinceEpoch]);
+    } catch (e) {
+      debugPrint('[AppDatabase] Ignored error in addTrackToPlaylist(playlist: $playlistId, track: $trackId): $e');
+    }
   }
 
   void addTracksToPlaylist(int playlistId, List<int> trackIds) {
-    db.execute('BEGIN TRANSACTION;');
+    if (trackIds.isEmpty) return;
     try {
-      for (final id in trackIds) { addTrackToPlaylist(playlistId, id); }
-      db.execute('COMMIT;');
-    } catch (_) {
-      db.execute('ROLLBACK;');
-      rethrow;
+      db.execute('BEGIN TRANSACTION;');
+      try {
+        for (final id in trackIds) { addTrackToPlaylist(playlistId, id); }
+        db.execute('COMMIT;');
+      } catch (e) {
+        try { db.execute('ROLLBACK;'); } catch (_) {}
+        debugPrint('[AppDatabase] Ignored error in addTracksToPlaylist: $e');
+      }
+    } catch (e) {
+      debugPrint('[AppDatabase] Failed transaction in addTracksToPlaylist: $e');
     }
   }
 
   void removeTrackFromPlaylist(int playlistId, int trackId) {
-    db.execute('BEGIN TRANSACTION;');
     try {
-      db.execute('DELETE FROM playlist_entries WHERE playlist_id = ? AND track_id = ?;', [playlistId, trackId]);
-      final remaining = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? ORDER BY position ASC;', [playlistId]);
-      final stmt = db.prepare('UPDATE playlist_entries SET position = ? WHERE id = ?;');
+      db.execute('BEGIN TRANSACTION;');
       try {
-        for (var i = 0; i < remaining.length; i++) { stmt.execute([i, remaining[i]['id']]); }
-      } finally {
-        stmt.close();
+        db.execute('DELETE FROM playlist_entries WHERE playlist_id = ? AND track_id = ?;', [playlistId, trackId]);
+        final remaining = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? ORDER BY position ASC;', [playlistId]);
+        final stmt = db.prepare('UPDATE playlist_entries SET position = ? WHERE id = ?;');
+        try {
+          for (var i = 0; i < remaining.length; i++) { stmt.execute([i, remaining[i]['id']]); }
+        } finally {
+          stmt.close();
+        }
+        db.execute('COMMIT;');
+      } catch (e) {
+        try { db.execute('ROLLBACK;'); } catch (_) {}
+        debugPrint('[AppDatabase] Ignored error in removeTrackFromPlaylist: $e');
       }
-      db.execute('COMMIT;');
-    } catch (_) {
-      db.execute('ROLLBACK;');
-      rethrow;
+    } catch (e) {
+      debugPrint('[AppDatabase] Failed transaction in removeTrackFromPlaylist: $e');
     }
   }
 
   void reorderPlaylistEntries(int playlistId, int fromIndex, int toIndex) {
-    db.execute('BEGIN TRANSACTION;');
     try {
-      final entries = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? ORDER BY position ASC;', [playlistId]);
-      if (fromIndex < 0 || fromIndex >= entries.length || toIndex < 0 || toIndex >= entries.length) {
-        db.execute('COMMIT;');
-        return;
-      }
-      final ids = entries.map((e) => e['id'] as int).toList();
-      ids.insert(toIndex, ids.removeAt(fromIndex));
-      final stmt = db.prepare('UPDATE playlist_entries SET position = ? WHERE id = ?;');
+      db.execute('BEGIN TRANSACTION;');
       try {
-        for (var i = 0; i < ids.length; i++) { stmt.execute([i, ids[i]]); }
-      } finally {
-        stmt.close();
+        final entries = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? ORDER BY position ASC;', [playlistId]);
+        if (fromIndex < 0 || fromIndex >= entries.length || toIndex < 0 || toIndex >= entries.length) {
+          db.execute('COMMIT;');
+          return;
+        }
+        final ids = entries.map((e) => e['id'] as int).toList();
+        ids.insert(toIndex, ids.removeAt(fromIndex));
+        final stmt = db.prepare('UPDATE playlist_entries SET position = ? WHERE id = ?;');
+        try {
+          for (var i = 0; i < ids.length; i++) { stmt.execute([i, ids[i]]); }
+        } finally {
+          stmt.close();
+        }
+        db.execute('COMMIT;');
+      } catch (e) {
+        try { db.execute('ROLLBACK;'); } catch (_) {}
+        debugPrint('[AppDatabase] Ignored error in reorderPlaylistEntries: $e');
       }
-      db.execute('COMMIT;');
-    } catch (_) {
-      db.execute('ROLLBACK;');
-      rethrow;
+    } catch (e) {
+      debugPrint('[AppDatabase] Failed transaction in reorderPlaylistEntries: $e');
     }
   }
 
   void toggleLikeTrack(int trackId, [String? filePath]) {
-    final rows = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? AND track_id = ? LIMIT 1;', [likedSongsPlaylistId, trackId]);
-    if (rows.isNotEmpty) {
-      removeTrackFromPlaylist(likedSongsPlaylistId, trackId);
-    } else {
-      addTrackToPlaylist(likedSongsPlaylistId, trackId, filePath);
+    try {
+      final rows = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? AND track_id = ? LIMIT 1;', [likedSongsPlaylistId, trackId]);
+      if (rows.isNotEmpty) {
+        removeTrackFromPlaylist(likedSongsPlaylistId, trackId);
+      } else {
+        addTrackToPlaylist(likedSongsPlaylistId, trackId, filePath);
+      }
+    } catch (e) {
+      debugPrint('[AppDatabase] Ignored error in toggleLikeTrack: $e');
     }
   }
 
   void clearHistory() {
-    db.execute('DELETE FROM playlist_entries WHERE playlist_id = ?;', [historyPlaylistId]);
+    try {
+      db.execute('DELETE FROM playlist_entries WHERE playlist_id = ?;', [historyPlaylistId]);
+    } catch (e) {
+      debugPrint('[AppDatabase] Ignored error in clearHistory: $e');
+    }
   }
 
   List<int> getTrackIdsForPlaylist(int playlistId) {
@@ -475,15 +529,18 @@ class AppDatabase {
     return rows.isEmpty ? null : rows.first;
   }
 
-  void updateLyricsLang(int lyricsId, String lang) =>
-      db.execute('UPDATE lyrics SET lang = ? WHERE id = ?;', [lang, lyricsId]);
+  void updateLyricsLang(int lyricsId, String lang) {
+    db.execute('UPDATE lyrics SET lang = ? WHERE id = ?;', [lang, lyricsId]);
+  }
 
   String? getLyricsLang(int lyricsId) {
     final rows = db.select('SELECT lang FROM lyrics WHERE id = ? LIMIT 1;', [lyricsId]);
     return rows.isEmpty ? null : rows.first['lang'] as String?;
   }
 
-  void deleteLyrics(int lyricsId) => db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]);
+  void deleteLyrics(int lyricsId) {
+    db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]);
+  }
 
   List<String>? getLyricsTranslation({required int lyricsId, required String lang}) {
     final rows = db.select('SELECT translated_lines FROM lyrics_translations WHERE lyrics_id = ? AND lang = ? LIMIT 1;', [lyricsId, lang]);

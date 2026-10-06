@@ -64,6 +64,8 @@ class PlaybackController extends ChangeNotifier {
         _positionNotifier.value = _state.position;
         notifyListeners();
       }
+    }).catchError((e) {
+      debugPrint('[PlaybackController] Error getting initial playback state: $e');
     });
 
     _engineSubscription = _backend.playbackStateStream.listen((newState) {
@@ -171,15 +173,19 @@ class PlaybackController extends ChangeNotifier {
     var startIndex = trackList.indexWhere((t) => t.filePath == track.filePath);
     if (startIndex == -1) startIndex = 0;
 
-    if (trackIds.length == trackList.length && trackIds.isNotEmpty) {
-      await _backend.playQueue(
-        trackIds,
-        startIndex: startIndex,
-        play: true,
-        shuffle: _state.shuffle,
-      );
-    } else if (track.id != null) {
-      await _backend.playTrack(track.id!, play: true);
+    try {
+      if (trackIds.length == trackList.length && trackIds.isNotEmpty) {
+        await _backend.playQueue(
+          trackIds,
+          startIndex: startIndex,
+          play: true,
+          shuffle: _state.shuffle,
+        );
+      } else if (track.id != null) {
+        await _backend.playTrack(track.id!, play: true);
+      }
+    } catch (e) {
+      debugPrint('[PlaybackController] Error in playTrack: $e');
     }
   }
 
@@ -189,52 +195,84 @@ class PlaybackController extends ChangeNotifier {
     int startIndex = 0,
   }) async {
     if (tracks.isEmpty) return;
-    final trackIds = tracks.map((t) => t.id).whereType<int>().toList();
-    if (trackIds.length == tracks.length && trackIds.isNotEmpty) {
-      await _backend.playQueue(
-        trackIds,
-        startIndex: startIndex,
-        play: true,
-        shuffle: shuffle,
-      );
+    try {
+      final trackIds = tracks.map((t) => t.id).whereType<int>().toList();
+      if (trackIds.length == tracks.length && trackIds.isNotEmpty) {
+        await _backend.playQueue(
+          trackIds,
+          startIndex: startIndex,
+          play: true,
+          shuffle: shuffle,
+        );
+      }
+    } catch (e) {
+      debugPrint('[PlaybackController] Error in playAll: $e');
     }
   }
 
   Future<void> playNext(Track track) async {
     if (track.id != null) {
-      await _backend.insertNext(track.id!);
+      try {
+        await _backend.insertNext(track.id!);
+      } catch (e) {
+        debugPrint('[PlaybackController] Error in playNext: $e');
+      }
     }
   }
 
   Future<void> addToQueue(Track track) async {
     if (track.id != null) {
-      await _backend.append([track.id!]);
+      try {
+        await _backend.append([track.id!]);
+      } catch (e) {
+        debugPrint('[PlaybackController] Error in addToQueue: $e');
+      }
     }
   }
 
   Future<void> appendTracks(List<Track> tracks) async {
     if (tracks.isEmpty) return;
-    final trackIds = tracks.map((t) => t.id).whereType<int>().toList();
-    if (trackIds.isNotEmpty) {
-      await _backend.append(trackIds);
+    try {
+      final trackIds = tracks.map((t) => t.id).whereType<int>().toList();
+      if (trackIds.isNotEmpty) {
+        await _backend.append(trackIds);
+      }
+    } catch (e) {
+      debugPrint('[PlaybackController] Error in appendTracks: $e');
     }
   }
 
   Future<void> removeFromQueue(int index) async {
-    await _backend.removeQueueItem(index);
+    try {
+      await _backend.removeQueueItem(index);
+    } catch (e) {
+      debugPrint('[PlaybackController] Error in removeFromQueue: $e');
+    }
   }
 
   Future<void> reorderQueue(int from, int to) async {
-    await _backend.reorderQueue(from, to);
+    try {
+      await _backend.reorderQueue(from, to);
+    } catch (e) {
+      debugPrint('[PlaybackController] Error in reorderQueue: $e');
+    }
   }
 
   Future<void> clearQueue() async {
-    await _backend.clearQueue();
+    try {
+      await _backend.clearQueue();
+    } catch (e) {
+      debugPrint('[PlaybackController] Error in clearQueue: $e');
+    }
   }
 
   Future<void> skipToQueueIndex(int index) async {
     if (index < 0 || index >= _state.queue.length) return;
-    await _backend.skipToIndex(index);
+    try {
+      await _backend.skipToIndex(index);
+    } catch (e) {
+      debugPrint('[PlaybackController] Error in skipToQueueIndex: $e');
+    }
   }
 
   Future<void> playTrackAtIndex(int index) => skipToQueueIndex(index);
@@ -244,24 +282,45 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setEqualizer(Equalizer equalizer) async {
     _equalizer = equalizer;
-    await _backend.setEqualizer(equalizer);
+    try {
+      await _backend.setEqualizer(equalizer);
+    } catch (e) {
+      debugPrint('[PlaybackController] setEqualizer error: $e');
+    }
     notifyListeners();
   }
 
-  Future<List<AudioDevice>> getAudioDevices() => _backend.getAudioDevices();
+  Future<List<AudioDevice>> getAudioDevices() async {
+    try {
+      return await _backend.getAudioDevices();
+    } catch (e) {
+      debugPrint('[PlaybackController] getAudioDevices error: $e');
+      return const [];
+    }
+  }
 
   Future<bool> setAudioDevice(AudioDevice device) async {
     _currentDevice = device;
-    await _backend.setOutputDevice(device);
-    notifyListeners();
-    return true;
+    try {
+      await _backend.setOutputDevice(device);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[PlaybackController] setAudioDevice error: $e');
+      notifyListeners();
+      return false;
+    }
   }
 
   bool get isInfiniteMixEnabled => _isInfiniteMixEnabled;
 
   void setInfiniteMix(bool enabled) {
     _isInfiniteMixEnabled = enabled;
-    _backend.setInfiniteMix(enabled);
+    try {
+      _backend.setInfiniteMix(enabled);
+    } catch (e) {
+      debugPrint('[PlaybackController] setInfiniteMix error: $e');
+    }
     notifyListeners();
   }
 
@@ -272,8 +331,21 @@ class PlaybackController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Transport Controls
   // ---------------------------------------------------------------------------
-  Future<void> play() => _backend.play();
-  Future<void> pause() => _backend.pause();
+  Future<void> play() async {
+    try {
+      await _backend.play();
+    } catch (e) {
+      debugPrint('[PlaybackController] play error: $e');
+    }
+  }
+
+  Future<void> pause() async {
+    try {
+      await _backend.pause();
+    } catch (e) {
+      debugPrint('[PlaybackController] pause error: $e');
+    }
+  }
 
   Future<void> playOrPause() async {
     if (_state.playing) {
@@ -283,29 +355,104 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Future<void> stop() => _backend.stop();
-  Future<void> next() => _backend.next();
-  Future<void> previous() => _backend.previous();
-  Future<void> seek(Duration pos) => _backend.seek(pos);
+  Future<void> stop() async {
+    try {
+      await _backend.stop();
+    } catch (e) {
+      debugPrint('[PlaybackController] stop error: $e');
+    }
+  }
 
-  Future<void> setVolume(double vol) => _backend.setVolume(vol);
-  Future<void> setRate(double rate) => _backend.setRate(rate);
-  Future<void> setPitch(double pitch) => _backend.setPitch(pitch);
+  Future<void> next() async {
+    try {
+      await _backend.next();
+    } catch (e) {
+      debugPrint('[PlaybackController] next error: $e');
+    }
+  }
 
-  Future<void> toggleShuffle() => _backend.setShuffle(!_state.shuffle);
-  Future<void> setLoopMode(Loop loop) => _backend.setLoopMode(loop);
+  Future<void> previous() async {
+    try {
+      await _backend.previous();
+    } catch (e) {
+      debugPrint('[PlaybackController] previous error: $e');
+    }
+  }
+
+  Future<void> seek(Duration pos) async {
+    try {
+      await _backend.seek(pos);
+    } catch (e) {
+      debugPrint('[PlaybackController] seek error: $e');
+    }
+  }
+
+  Future<void> setVolume(double vol) async {
+    try {
+      await _backend.setVolume(vol);
+    } catch (e) {
+      debugPrint('[PlaybackController] setVolume error: $e');
+    }
+  }
+
+  Future<void> setRate(double rate) async {
+    try {
+      await _backend.setRate(rate);
+    } catch (e) {
+      debugPrint('[PlaybackController] setRate error: $e');
+    }
+  }
+
+  Future<void> setPitch(double pitch) async {
+    try {
+      await _backend.setPitch(pitch);
+    } catch (e) {
+      debugPrint('[PlaybackController] setPitch error: $e');
+    }
+  }
+
+  Future<void> toggleShuffle() async {
+    try {
+      await _backend.setShuffle(!_state.shuffle);
+    } catch (e) {
+      debugPrint('[PlaybackController] toggleShuffle error: $e');
+    }
+  }
+
+  Future<void> setLoopMode(Loop loop) async {
+    try {
+      await _backend.setLoopMode(loop);
+    } catch (e) {
+      debugPrint('[PlaybackController] setLoopMode error: $e');
+    }
+  }
 
   Future<void> toggleLoopMode() async {
-    final nextMode = _state.loop.next();
-    await _backend.setLoopMode(nextMode);
+    try {
+      final nextMode = _state.loop.next();
+      await _backend.setLoopMode(nextMode);
+    } catch (e) {
+      debugPrint('[PlaybackController] toggleLoopMode error: $e');
+    }
   }
 
   Future<void> cycleLoopMode() => toggleLoopMode();
 
-  Future<void> setCrossfadeConfig(CrossfadeConfig config) =>
-      _backend.setCrossfadeConfig(config);
+  Future<void> setCrossfadeConfig(CrossfadeConfig config) async {
+    try {
+      await _backend.setCrossfadeConfig(config);
+    } catch (e) {
+      debugPrint('[PlaybackController] setCrossfadeConfig error: $e');
+    }
+  }
 
-  Future<void> setSkipSilence(bool enabled) => _backend.setSkipSilence(enabled);
+  Future<void> setSkipSilence(bool enabled) async {
+    try {
+      await _backend.setSkipSilence(enabled);
+    } catch (e) {
+      debugPrint('[PlaybackController] setSkipSilence error: $e');
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // History Logging & State Persistence Helpers
@@ -329,7 +476,11 @@ class PlaybackController extends ChangeNotifier {
         if (trackId != null) {
           _backend.addTracksToPlaylist(AppDatabase.historyPlaylistId, [
             trackId,
-          ]);
+          ]).catchError((e) {
+            debugPrint(
+              '[PlaybackController] Failed to add track $trackId to history: $e',
+            );
+          });
         }
       }
     }
