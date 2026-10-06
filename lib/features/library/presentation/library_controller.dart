@@ -71,7 +71,8 @@ class LibraryController extends ChangeNotifier {
   List<String> _folderBreadcrumbs = [];
 
   // Scanning State
-  ScanProgress _scanProgress = const ScanProgress();
+  final ValueNotifier<ScanProgress> _scanProgressNotifier =
+      ValueNotifier<ScanProgress>(const ScanProgress());
   StreamSubscription<ScanProgress>? _scanSubscription;
 
   // ---------------------------------------------------------------------------
@@ -108,8 +109,9 @@ class LibraryController extends ChangeNotifier {
       List.unmodifiable(_currentFolderTracks);
   List<String> get folderBreadcrumbs => List.unmodifiable(_folderBreadcrumbs);
 
-  ScanProgress get scanProgress => _scanProgress;
-  bool get isScanning => _scanProgress.isRunning;
+  ValueListenable<ScanProgress> get scanProgressListenable => _scanProgressNotifier;
+  ScanProgress get scanProgress => _scanProgressNotifier.value;
+  bool get isScanning => _scanProgressNotifier.value.isRunning;
 
   // ---------------------------------------------------------------------------
   // Library Loading & Sorting
@@ -299,20 +301,25 @@ class LibraryController extends ChangeNotifier {
   Future<void> startScan(List<String> directories) async {
     if (isScanning) return;
 
-    _scanProgress = const ScanProgress(stage: ScanStage.gettingDatabase);
+    _scanProgressNotifier.value =
+        const ScanProgress(stage: ScanStage.gettingDatabase);
     notifyListeners();
 
     _scanSubscription = _backend.scanProgressStream.listen(
       (progress) {
-        _scanProgress = progress;
-        notifyListeners();
+        final wasRunning = _scanProgressNotifier.value.isRunning;
+        _scanProgressNotifier.value = progress;
+
+        if (wasRunning != progress.isRunning) {
+          notifyListeners();
+        }
 
         if (progress.stage == ScanStage.completed) {
           loadLibrary();
         }
       },
       onError: (Object err) {
-        _scanProgress = _scanProgress.copyWith(
+        _scanProgressNotifier.value = _scanProgressNotifier.value.copyWith(
           stage: ScanStage.failed,
           errorMessage: err.toString(),
         );
@@ -330,8 +337,9 @@ class LibraryController extends ChangeNotifier {
     _backend.cancelScan();
     _scanSubscription?.cancel();
     _scanSubscription = null;
-    if (_scanProgress.isRunning) {
-      _scanProgress = _scanProgress.copyWith(stage: ScanStage.cancelled);
+    if (_scanProgressNotifier.value.isRunning) {
+      _scanProgressNotifier.value =
+          _scanProgressNotifier.value.copyWith(stage: ScanStage.cancelled);
       notifyListeners();
     }
   }
@@ -360,6 +368,7 @@ class LibraryController extends ChangeNotifier {
     _catalogSubscription?.cancel();
     _catalogSubscription = null;
     cancelScan();
+    _scanProgressNotifier.dispose();
     super.dispose();
   }
 }

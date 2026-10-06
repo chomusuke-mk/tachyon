@@ -231,14 +231,7 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final settings = context.watch<SettingsController>();
-    final library = context.watch<LibraryController>();
     final colorScheme = Theme.of(context).colorScheme;
-
-    final isScanning = library.isScanning;
-    final progress = library.scanProgress;
-    final scanPercentage = progress.progressValue != null
-        ? (progress.progressValue! * 100).toInt()
-        : null;
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.sTitle)),
@@ -310,50 +303,16 @@ class SettingsScreen extends StatelessWidget {
                         onPressed: () => _showAddFolderDialog(context),
                       ),
                       FilledButton.icon(
-                        icon: isScanning
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.sync_rounded),
-                        label: Text(
-                          isScanning
-                              ? (scanPercentage != null
-                                    ? strings.sScanningProgressFormatted(
-                                        scanPercentage,
-                                      )
-                                    : (strings
-                                              .scanStageText(progress.stage)
-                                              .isNotEmpty
-                                          ? strings.scanStageText(
-                                              progress.stage,
-                                            )
-                                          : strings.sRescanLibrary))
-                              : strings.sRescanLibrary,
-                        ),
-                        onPressed: isScanning
-                            ? () => library.cancelScan()
-                            : () =>
-                                  library.startScan(settings.musicDirectories),
+                        icon: const Icon(Icons.sync_rounded),
+                        label: Text(strings.sRescanLibrary),
+                        onPressed: () {
+                          context.read<LibraryController>().startScan(
+                            settings.musicDirectories,
+                          );
+                        },
                       ),
                     ],
                   ),
-                  if (isScanning) ...[
-                    const SizedBox(height: 12),
-                    LinearProgressIndicator(value: progress.progressValue),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${strings.scanStageText(progress.stage)}${progress.progressLabel != null ? ' ${progress.progressLabel}' : ''}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
