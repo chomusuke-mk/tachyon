@@ -17,7 +17,6 @@ import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
-import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/domain/track_sort_option.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
@@ -91,17 +90,8 @@ abstract class TachyonBackendClient {
   Future<void> deleteTrack(int trackId);
   Future<void> deleteTracksInFolder(String folderPath);
 
-  // --- Metadata & Thumbnails (Worker Isolates) ---
+  // --- Metadata (Worker Isolates) ---
   Future<ExtractedTrackData?> getMetadata(String filePath);
-  Future<String?> getThumbnail(
-    String filePath, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  });
-  Future<String?> getArtistCover(
-    String artistName, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  });
-  Future<void> clearCoverCache();
 
   // --- Playlists ---
   Future<List<Playlist>> getPlaylists();
@@ -506,35 +496,13 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   );
 
   // ===========================================================================
-  // METADATA & THUMBNAILS (WORKER ISOLATES)
+  // METADATA (WORKER ISOLATES)
   // ===========================================================================
   @override
   Future<ExtractedTrackData?> getMetadata(String filePath) =>
       _send<ExtractedTrackData?>(BackendMethods.metadataGetMetadata, {
         'filePath': filePath,
       });
-
-  @override
-  Future<String?> getThumbnail(
-    String filePath, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  }) => _send<String?>(BackendMethods.metadataGetThumbnail, {
-    'filePath': filePath,
-    'quality': quality.name,
-  });
-
-  @override
-  Future<String?> getArtistCover(
-    String artistName, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  }) => _send<String?>(BackendMethods.metadataGetArtistCover, {
-    'artistName': artistName,
-    'quality': quality.name,
-  });
-
-  @override
-  Future<void> clearCoverCache() =>
-      _send(BackendMethods.metadataClearCoverCache, {});
 
   // ===========================================================================
   // PLAYLISTS

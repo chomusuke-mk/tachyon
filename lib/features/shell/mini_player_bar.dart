@@ -107,7 +107,9 @@ class MiniPlayerBar extends StatelessWidget {
                               width: isDesktop ? 48 : 42,
                               height: isDesktop ? 48 : 42,
                               child: AlbumArtImage(
-                                filePath: currentTrack.filePath,
+                                thumbnailHash: currentTrack.thumbnailHash ??
+                                    currentTrack.album?.thumbnailHash,
+                                quality: ThumbnailQuality.low,
                                 fit: BoxFit.cover,
                               ),
                             ),

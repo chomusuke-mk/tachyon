@@ -7,6 +7,7 @@ class Artist {
 
   /// The name of the artist.
   final String name;
+  final String? thumbnailHash;
 
   /// The list of albums associated with this artist.
   final List<Album> albums;
@@ -23,6 +24,7 @@ class Artist {
   const Artist({
     this.id,
     required this.name,
+    this.thumbnailHash,
     this.albums = const [],
     this.tracks = const [],
   });
@@ -31,12 +33,17 @@ class Artist {
     return {
       if (id != null) 'id': id,
       'name': name,
+      'thumbnail_hash': thumbnailHash,
       'album_ids': albums.map((a) => a.id).toList(),
       'track_ids': tracks.map((t) => t.id).toList(),
     };
   }
 
   factory Artist.fromDbMap(Map<String, dynamic> map) {
-    return Artist(id: map['id'] as int?, name: map['name'] as String? ?? '');
+    return Artist(
+      id: map['id'] as int?,
+      name: map['name'] as String? ?? '',
+      thumbnailHash: map['thumbnail_hash'] as String?,
+    );
   }
 }

@@ -21,11 +21,7 @@ class BackendResponse {
   final dynamic data;
   final String? error;
 
-  const BackendResponse({
-    required this.requestId,
-    this.data,
-    this.error,
-  });
+  const BackendResponse({required this.requestId, this.data, this.error});
 
   bool get isSuccess => error == null;
 }
@@ -36,10 +32,7 @@ class BackendEvent {
   final String topic;
   final dynamic payload;
 
-  const BackendEvent({
-    required this.topic,
-    this.payload,
-  });
+  const BackendEvent({required this.topic, this.payload});
 }
 
 /// Standardized RPC method names supported by the Core Service Isolate.
@@ -63,7 +56,8 @@ abstract final class BackendMethods {
   static const String playbackReorderQueue = 'playback.reorderQueue';
   static const String playbackClearQueue = 'playback.clearQueue';
   static const String playbackGetState = 'playback.getState';
-  static const String playbackSetCrossfadeDuration = 'playback.setCrossfadeDuration';
+  static const String playbackSetCrossfadeDuration =
+      'playback.setCrossfadeDuration';
   static const String playbackSetCrossfadeCurve = 'playback.setCrossfadeCurve';
   static const String playbackOpen = 'playback.open';
   static const String playbackInsertNext = 'playback.insertNext';
@@ -72,7 +66,8 @@ abstract final class BackendMethods {
   static const String playbackSetRate = 'playback.setRate';
   static const String playbackSetPitch = 'playback.setPitch';
   static const String playbackSetSkipSilence = 'playback.setSkipSilence';
-  static const String playbackSetCrossfadeConfig = 'playback.setCrossfadeConfig';
+  static const String playbackSetCrossfadeConfig =
+      'playback.setCrossfadeConfig';
   static const String playbackSetInfiniteMix = 'playback.setInfiniteMix';
 
   // Library & Catalog queries
@@ -86,13 +81,13 @@ abstract final class BackendMethods {
   static const String libraryStartScan = 'library.startScan';
   static const String libraryCancelScan = 'library.cancelScan';
   static const String libraryDeleteTrack = 'library.deleteTrack';
-  static const String libraryDeleteTracksInFolder = 'library.deleteTracksInFolder';
+  static const String libraryDeleteTracksInFolder =
+      'library.deleteTracksInFolder';
 
   // Metadata & Thumbnail processing (Worker Isolates)
   static const String metadataGetMetadata = 'metadata.getMetadata';
   static const String metadataGetThumbnail = 'metadata.getThumbnail';
-  static const String metadataGetArtistCover = 'metadata.getArtistCover';
-  static const String metadataClearCoverCache = 'metadata.clearCoverCache';
+  static const String metadataGetCover = 'metadata.getCover';
 
   // Playlists
   static const String playlistsGetAll = 'playlists.getAll';
@@ -107,7 +102,6 @@ abstract final class BackendMethods {
   static const String playlistsToggleLike = 'playlists.toggleLike';
   static const String playlistsIsLiked = 'playlists.isLiked';
   static const String playlistsClearHistory = 'playlists.clearHistory';
-
 
   // Lyrics
   static const String lyricsResolve = 'lyrics.resolve';

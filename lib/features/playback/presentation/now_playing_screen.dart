@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
-import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
@@ -230,8 +229,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           // 1. Ambient Blurred Backdrop
           Positioned.fill(
             child: AmbientBackdrop(
-              filePath: currentTrack.filePath,
-              artistName: currentTrack.artists.map((a) => a.name).join(', '),
+              thumbnailHash:
+                  currentTrack.thumbnailHash ??
+                  currentTrack.album?.thumbnailHash,
             ),
           ),
 
@@ -387,7 +387,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               isBuffering: playback.isBuffering,
               onSeek: playback.seek,
               currentIndex: playback.currentIndex + 1,
-              totalCount: playback.queue.length + 1,
+              totalCount: playback.queue.length,
               playlistPosition: () =>
                   playback.queue
                       .take(playback.currentIndex)
@@ -601,6 +601,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       : _buildHeroCoverArt(
                           currentTrack.filePath,
                           context,
+                          thumbnailHash:
+                              currentTrack.thumbnailHash ??
+                              currentTrack.album?.thumbnailHash,
                           key: const ValueKey('cover_art_view'),
                         ),
                 ),
@@ -628,6 +631,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       : _buildHeroCoverArt(
                           currentTrack.filePath,
                           context,
+                          thumbnailHash:
+                              currentTrack.thumbnailHash ??
+                              currentTrack.album?.thumbnailHash,
                           key: const ValueKey('cover_art_view'),
                         ),
                 ),
@@ -661,7 +667,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
 
 
-  Widget _buildHeroCoverArt(String filePath, BuildContext context, {Key? key}) {
+  Widget _buildHeroCoverArt(
+    String filePath,
+    BuildContext context, {
+    String? thumbnailHash,
+    Key? key,
+  }) {
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -688,7 +699,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(24.0),
                 child: AlbumArtImage(
-                  filePath: filePath,
+                  thumbnailHash: thumbnailHash,
                   quality: ThumbnailQuality.high,
                   fit: BoxFit.cover,
                 ),

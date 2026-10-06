@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/core/backend/backend_client.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/constants/languages.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
@@ -85,45 +84,6 @@ class SettingsScreen extends StatelessWidget {
                 }
               },
               child: Text(strings.sAdd),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showClearCacheConfirmation(BuildContext context) {
-    final strings = context.read<LocaleController>().localeStrings;
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(strings.sClearCache),
-          content: Text(strings.sClearCacheDesc),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(strings.sCancel),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-              ),
-              onPressed: () async {
-                final backend = context.read<TachyonBackendClient?>();
-                if (backend != null) {
-                  await backend.clearCoverCache();
-                }
-                if (context.mounted) {
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(strings.sClearCacheSuccess),
-                    ),
-                  );
-                }
-              },
-              child: Text(strings.sClear),
             ),
           ],
         );
@@ -267,7 +227,9 @@ class SettingsScreen extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     final isScanning = library.isScanning;
-    final scanPercentage = (library.scanProgress.progress * 100).toInt();
+    final scanPercentage = library.scanProgress.progress != null
+        ? (library.scanProgress.progress! * 100).toInt()
+        : null;
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.sTitle)),
@@ -351,9 +313,12 @@ class SettingsScreen extends StatelessWidget {
                             : const Icon(Icons.sync_rounded),
                         label: Text(
                           isScanning
-                              ? strings.sScanningProgressFormatted(
-                                  scanPercentage,
-                                )
+                              ? (scanPercentage != null
+                                  ? strings.sScanningProgressFormatted(
+                                      scanPercentage,
+                                    )
+                                  : (library.scanProgress.message ??
+                                      strings.sRescanLibrary))
                               : strings.sRescanLibrary,
                         ),
                         onPressed: isScanning
@@ -368,6 +333,16 @@ class SettingsScreen extends StatelessWidget {
                     LinearProgressIndicator(
                       value: library.scanProgress.progress,
                     ),
+                    if (library.scanProgress.message != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        library.scanProgress.message!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -582,16 +557,6 @@ class SettingsScreen extends StatelessWidget {
                     trailing: const Text(
                       '0.1.0',
                       style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const Divider(),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(strings.sClearCache),
-                    subtitle: Text(strings.sClearCacheDesc),
-                    trailing: OutlinedButton(
-                      onPressed: () => _showClearCacheConfirmation(context),
-                      child: Text(strings.sClear),
                     ),
                   ),
                 ],

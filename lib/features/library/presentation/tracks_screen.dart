@@ -3,7 +3,6 @@ import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
-import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
@@ -458,7 +457,7 @@ class _TracksScreenState extends State<TracksScreen> {
                                   child: AspectRatio(
                                     aspectRatio: 1.0,
                                     child: AlbumArtImage(
-                                      filePath: track.filePath,
+                                      thumbnailHash: track.thumbnailHash ?? track.album?.thumbnailHash,
                                       quality: ThumbnailQuality.medium,
                                       fit: BoxFit.cover,
                                     ),

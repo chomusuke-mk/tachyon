@@ -125,6 +125,7 @@ class LibraryStore {
       final artist = Artist(
         id: rawArtist.id,
         name: rawArtist.name,
+        thumbnailHash: rawArtist.thumbnailHash,
         albums: albumsList,
         tracks: tracksList,
       );
@@ -163,6 +164,7 @@ class LibraryStore {
         id: rawAlbum.id,
         name: rawAlbum.name,
         year: rawAlbum.year,
+        thumbnailHash: rawAlbum.thumbnailHash,
         artist: artist,
         tracks: tracksList,
       );
@@ -217,6 +219,7 @@ class LibraryStore {
         modifiedAt: rawTrack.modifiedAt,
         replayGainTrackGain: rawTrack.replayGainTrackGain,
         replayGainTrackPeak: rawTrack.replayGainTrackPeak,
+        thumbnailHash: rawTrack.thumbnailHash,
         album: album,
         artists: linkedArtists,
         genres: linkedGenres,

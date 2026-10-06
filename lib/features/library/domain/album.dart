@@ -12,6 +12,7 @@ class Album {
 
   /// The year the album was released. This is optional and may not be available for all albums.
   final int? year;
+  final String? thumbnailHash;
 
   final Artist? artist;
   final List<Track> tracks;
@@ -22,6 +23,7 @@ class Album {
     this.id,
     required this.name,
     this.year,
+    this.thumbnailHash,
 
     this.artist,
     this.tracks = const [],
@@ -32,6 +34,7 @@ class Album {
       if (id != null) 'id': id,
       'name': name,
       'year': year,
+      'thumbnail_hash': thumbnailHash,
 
       'artist_id': artist?.id,
       'track_ids': tracks.map((t) => t.id).toList(),
@@ -43,6 +46,7 @@ class Album {
       id: ParserUtils.parseInt(map['id']),
       name: ParserUtils.parseString(map['name']) ?? '',
       year: map['year'] as int?,
+      thumbnailHash: ParserUtils.parseString(map['thumbnail_hash']),
     );
   }
 }

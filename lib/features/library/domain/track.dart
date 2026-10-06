@@ -19,6 +19,7 @@ class Track {
   final int modifiedAt;
   final double? replayGainTrackGain;
   final double? replayGainTrackPeak;
+  final String? thumbnailHash;
 
   final Album? album;
   final List<Artist> artists;
@@ -40,6 +41,7 @@ class Track {
     required this.modifiedAt,
     this.replayGainTrackGain,
     this.replayGainTrackPeak,
+    this.thumbnailHash,
 
     this.album,
     this.genres = const [],
@@ -67,6 +69,7 @@ class Track {
       'modified_at': modifiedAt,
       'replay_gain_track_gain': replayGainTrackGain,
       'replay_gain_track_peak': replayGainTrackPeak,
+      'thumbnail_hash': thumbnailHash,
 
       'album_id': album?.id,
       'artist_ids': artists.map((a) => a.id).toList(),
@@ -95,6 +98,7 @@ class Track {
       replayGainTrackPeak: ParserUtils.parseDouble(
         map['replay_gain_track_peak'],
       ),
+      thumbnailHash: ParserUtils.parseString(map['thumbnail_hash']),
     );
   }
 }

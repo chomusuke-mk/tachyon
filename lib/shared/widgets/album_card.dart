@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/library/domain/album.dart';
-import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
@@ -36,9 +35,9 @@ class _AlbumCardState extends State<AlbumCard> {
     final strings = context.watch<LocaleController>().localeStrings;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final coverFilePath = widget.album.tracks.firstOrNull?.filePath ?? '';
 
-    final VoidCallback? effectiveOnPlay = widget.onPlay ??
+    final VoidCallback? effectiveOnPlay =
+        widget.onPlay ??
         (widget.album.tracks.isNotEmpty
             ? () {
                 try {
@@ -52,7 +51,7 @@ class _AlbumCardState extends State<AlbumCard> {
       fit: StackFit.expand,
       children: [
         AlbumArtImage(
-          filePath: coverFilePath,
+          thumbnailHash: widget.album.thumbnailHash,
           quality: ThumbnailQuality.medium,
           fit: BoxFit.cover,
         ),
@@ -109,10 +108,7 @@ class _AlbumCardState extends State<AlbumCard> {
             : Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12.0),
-                  child: AspectRatio(
-                    aspectRatio: 1.0,
-                    child: imageWidget,
-                  ),
+                  child: AspectRatio(aspectRatio: 1.0, child: imageWidget),
                 ),
               ),
         const SizedBox(height: 8),
@@ -120,10 +116,7 @@ class _AlbumCardState extends State<AlbumCard> {
           widget.album.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
         if (widget.subtitle != null) ...[
           const SizedBox(height: 2),
@@ -131,10 +124,7 @@ class _AlbumCardState extends State<AlbumCard> {
             widget.subtitle!,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11,
-              color: colorScheme.outline,
-            ),
+            style: TextStyle(fontSize: 11, color: colorScheme.outline),
           ),
         ] else ...[
           const SizedBox(height: 2),
@@ -142,18 +132,12 @@ class _AlbumCardState extends State<AlbumCard> {
             widget.album.artist?.name ?? strings.trUnknownArtist,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              color: colorScheme.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 2),
           Text(
             strings.alTracksCountFormatted(widget.album.trackCount),
-            style: TextStyle(
-              fontSize: 11,
-              color: colorScheme.outline,
-            ),
+            style: TextStyle(fontSize: 11, color: colorScheme.outline),
           ),
         ],
       ],
@@ -198,9 +182,9 @@ class _AlbumListTileState extends State<AlbumListTile> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final colorScheme = Theme.of(context).colorScheme;
-    final coverFilePath = widget.album.tracks.firstOrNull?.filePath ?? '';
 
-    final VoidCallback? effectiveOnPlay = widget.onPlay ??
+    final VoidCallback? effectiveOnPlay =
+        widget.onPlay ??
         (widget.album.tracks.isNotEmpty
             ? () {
                 try {
@@ -223,7 +207,7 @@ class _AlbumListTileState extends State<AlbumListTile> {
               fit: StackFit.expand,
               children: [
                 AlbumArtImage(
-                  filePath: coverFilePath,
+                  thumbnailHash: widget.album.thumbnailHash,
                   quality: ThumbnailQuality.low,
                   fit: BoxFit.cover,
                 ),

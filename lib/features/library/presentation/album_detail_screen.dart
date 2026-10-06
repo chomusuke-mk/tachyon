@@ -7,7 +7,6 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 
 class AlbumDetailScreen extends StatelessWidget {
   final Album album;
@@ -34,7 +33,6 @@ class AlbumDetailScreen extends StatelessWidget {
     final playback = context.read<PlaybackController>();
 
     final albumTracks = album.tracks;
-    final firstFilePath = album.tracks.firstOrNull?.filePath ?? '';
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -46,7 +44,11 @@ class AlbumDetailScreen extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          Positioned.fill(child: AmbientBackdrop(filePath: firstFilePath)),
+          Positioned.fill(
+            child: AmbientBackdrop(
+              thumbnailHash: album.thumbnailHash,
+            ),
+          ),
           CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
@@ -65,7 +67,7 @@ class AlbumDetailScreen extends StatelessWidget {
                           width: 200,
                           height: 200,
                           child: AlbumArtImage(
-                            filePath: firstFilePath,
+                            thumbnailHash: album.thumbnailHash,
                             quality: ThumbnailQuality.high,
                             fit: BoxFit.cover,
                           ),

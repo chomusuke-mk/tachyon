@@ -3,9 +3,14 @@ import 'package:flutter/foundation.dart';
 /// Phase states of the library scan lifecycle.
 enum ScanPhase {
   idle,
+  gettingDatabase,
+  gettingTracks,
   discovering,
+  comparing,
   extracting,
-  persisting,
+  inserting,
+  cleaningOrphans,
+  cleaningThumbnails,
   completed,
   failed,
   cancelled,
@@ -15,6 +20,7 @@ enum ScanPhase {
 @immutable
 class ScanProgress {
   final ScanPhase phase;
+  final String? message;
   final String? currentFile;
   final int scannedFiles;
   final int totalFiles;
@@ -22,12 +28,13 @@ class ScanProgress {
   final int updatedTracks;
   final int skippedTracks;
   final int failedTracks;
-  final double progress;
+  final double? progress;
   final String? errorMessage;
   final Duration elapsedTime;
 
   const ScanProgress({
     this.phase = ScanPhase.idle,
+    this.message,
     this.currentFile,
     this.scannedFiles = 0,
     this.totalFiles = 0,
@@ -35,15 +42,16 @@ class ScanProgress {
     this.updatedTracks = 0,
     this.skippedTracks = 0,
     this.failedTracks = 0,
-    this.progress = 0.0,
+    this.progress,
     this.errorMessage,
     this.elapsedTime = Duration.zero,
   });
 
   bool get isRunning =>
-      phase == ScanPhase.discovering ||
-      phase == ScanPhase.extracting ||
-      phase == ScanPhase.persisting;
+      phase != ScanPhase.idle &&
+      phase != ScanPhase.completed &&
+      phase != ScanPhase.failed &&
+      phase != ScanPhase.cancelled;
 
   bool get isDone =>
       phase == ScanPhase.completed ||
@@ -52,6 +60,8 @@ class ScanProgress {
 
   ScanProgress copyWith({
     ScanPhase? phase,
+    String? message,
+    bool clearMessage = false,
     String? currentFile,
     bool clearCurrentFile = false,
     int? scannedFiles,
@@ -61,11 +71,13 @@ class ScanProgress {
     int? skippedTracks,
     int? failedTracks,
     double? progress,
+    bool clearProgress = false,
     String? errorMessage,
     Duration? elapsedTime,
   }) {
     return ScanProgress(
       phase: phase ?? this.phase,
+      message: clearMessage ? null : (message ?? this.message),
       currentFile: clearCurrentFile ? null : (currentFile ?? this.currentFile),
       scannedFiles: scannedFiles ?? this.scannedFiles,
       totalFiles: totalFiles ?? this.totalFiles,
@@ -73,7 +85,7 @@ class ScanProgress {
       updatedTracks: updatedTracks ?? this.updatedTracks,
       skippedTracks: skippedTracks ?? this.skippedTracks,
       failedTracks: failedTracks ?? this.failedTracks,
-      progress: progress ?? this.progress,
+      progress: clearProgress ? null : (progress ?? this.progress),
       errorMessage: errorMessage ?? this.errorMessage,
       elapsedTime: elapsedTime ?? this.elapsedTime,
     );
@@ -82,6 +94,7 @@ class ScanProgress {
   /// Serializes this instance to a plain [Map] that can cross Isolate boundaries.
   Map<String, dynamic> toJson() => {
     'phase': phase.name,
+    'message': message,
     'currentFile': currentFile,
     'scannedFiles': scannedFiles,
     'totalFiles': totalFiles,
@@ -103,6 +116,7 @@ class ScanProgress {
     );
     return ScanProgress(
       phase: phase,
+      message: json['message'] as String?,
       currentFile: json['currentFile'] as String?,
       scannedFiles: (json['scannedFiles'] as num?)?.toInt() ?? 0,
       totalFiles: (json['totalFiles'] as num?)?.toInt() ?? 0,
@@ -110,7 +124,7 @@ class ScanProgress {
       updatedTracks: (json['updatedTracks'] as num?)?.toInt() ?? 0,
       skippedTracks: (json['skippedTracks'] as num?)?.toInt() ?? 0,
       failedTracks: (json['failedTracks'] as num?)?.toInt() ?? 0,
-      progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
+      progress: (json['progress'] as num?)?.toDouble(),
       errorMessage: json['errorMessage'] as String?,
       elapsedTime: Duration(
         milliseconds: (json['elapsedMs'] as num?)?.toInt() ?? 0,
@@ -124,6 +138,7 @@ class ScanProgress {
       other is ScanProgress &&
           runtimeType == other.runtimeType &&
           phase == other.phase &&
+          message == other.message &&
           currentFile == other.currentFile &&
           scannedFiles == other.scannedFiles &&
           totalFiles == other.totalFiles &&
@@ -138,6 +153,7 @@ class ScanProgress {
   @override
   int get hashCode => Object.hash(
     phase,
+    message,
     currentFile,
     scannedFiles,
     totalFiles,
@@ -152,7 +168,7 @@ class ScanProgress {
 
   @override
   String toString() =>
-      'ScanProgress($phase: $scannedFiles/$totalFiles, new: $newTracks, updated: $updatedTracks, skipped: $skippedTracks, ${(progress * 100).toStringAsFixed(1)}%)';
+      'ScanProgress($phase, msg: $message, files: $scannedFiles/$totalFiles, progress: $progress)';
 }
 
 /// Token enabling cooperative cancellation of asynchronous scan pipelines.

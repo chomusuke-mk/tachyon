@@ -3,17 +3,64 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 
-import 'package:haudiotagger/haudiotagger.dart';
 import 'package:flutter/foundation.dart';
+import 'package:haudiotagger/haudiotagger.dart';
 import 'package:path/path.dart' as p;
-
-import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/shared/utils/cover_utils.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
-import 'package:tachyon/core/backend/services/cover_cache_service.dart';
+import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 
 /// Track metadata snapshot used to detect unchanged files during incremental scanning.
 typedef TrackFileMeta = ({int modifiedAt, int fileSize});
+
+const Set<String> supportedTagExtensions = {
+  '.mp3',
+  '.flac',
+  '.m4a',
+  '.mp4',
+  '.aac',
+  '.ogg',
+  '.oga',
+  '.opus',
+  '.wav',
+  '.aif',
+  '.aiff',
+  '.aifc',
+  '.ape',
+  '.wv',
+  '.mpc',
+  '.spx',
+};
+
+const Map<PictureType, int> coverPriority = {
+  PictureType.coverFront: 0,
+  PictureType.coverBack: 1,
+  PictureType.illustration: 2,
+  PictureType.leadArtist: 3,
+  PictureType.artist: 4,
+  PictureType.band: 5,
+  PictureType.composer: 6,
+  PictureType.lyricist: 7,
+};
+
+const Map<PictureType, int> artistPriority = {
+  PictureType.leadArtist: 0,
+  PictureType.artist: 1,
+  PictureType.band: 2,
+  PictureType.bandLogo: 3,
+  PictureType.publisherLogo: 4,
+  PictureType.composer: 5,
+};
+
+const Map<PictureType, int> albumPriority = {
+  PictureType.coverFront: 0,
+  PictureType.coverBack: 1,
+  PictureType.leaflet: 2,
+  PictureType.media: 3,
+  PictureType.illustration: 4,
+  PictureType.brightFish: 5,
+};
 
 /// Pure metadata extraction DTO. Workers extract tags into this DTO
 /// and pass it to [AppDatabase.upsertTracks] for atomic persistence.
@@ -37,6 +84,9 @@ class ExtractedTrackData {
   final double? replayGainTrackPeak;
   final List<String> genreNames;
   final String? embeddedLyrics;
+  final String? thumbnailHash;
+  final String? albumThumbnailHash;
+  final String? artistThumbnailHash;
 
   const ExtractedTrackData({
     required this.filePath,
@@ -58,6 +108,9 @@ class ExtractedTrackData {
     this.replayGainTrackPeak,
     this.genreNames = const [],
     this.embeddedLyrics,
+    this.thumbnailHash,
+    this.albumThumbnailHash,
+    this.artistThumbnailHash,
   });
 }
 
@@ -85,18 +138,18 @@ class DiscoveredAudioFile {
 /// 2. If missing, delegates single-file operations to an ephemeral worker via [Isolate.run].
 /// 3. Runs multi-file directory scans using a concurrent pool of [Isolate.run] workers
 ///    scaled to the number of CPU processors ([Platform.numberOfProcessors]).
-/// 4. In each worker, extracts metadata and saves dual-quality HQ & LQ covers to disk
-///    in a single pass, completely eliminating unawaited futures and redundant file reads.
+/// 4. In each worker, extracts metadata and saves triple-quality (LQ, MQ, HQ) covers
+///    to disk in a single pass.
 /// 5. Workers write files directly to disk and return pure Dart models.
 ///    Zero raw byte buffers are passed between isolates.
 class MetadataService {
   final AppDatabase database;
-  final CoverCacheService coverCacheService;
   final int? customWorkerCount;
+  final String cacheDirPath;
 
   MetadataService({
     required this.database,
-    required this.coverCacheService,
+    required this.cacheDirPath,
     this.customWorkerCount,
   });
 
@@ -104,6 +157,24 @@ class MetadataService {
       customWorkerCount ?? math.max(1, Platform.numberOfProcessors);
 
   CancellationToken? _currentScanToken;
+
+  static List<String> parseArtistNames(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    return raw
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  static List<String> parseGenreNames(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    return raw
+        .split(RegExp(r'[,;/]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
 
   static Future<ExtractedTrackData?> _runWorkerInIsolate(
     String filePath,
@@ -127,7 +198,7 @@ class MetadataService {
     final file = File(filePath);
     if (!file.existsSync() && !await file.exists()) return null;
 
-    final cachePath = coverCacheService.cacheDirectory.path;
+    final cachePath = CoverUtils.cacheDirectory.path;
     return await _runWorkerInIsolate(filePath, cachePath);
   }
 
@@ -140,63 +211,6 @@ class MetadataService {
       database.upsertTracks([track]);
     }
     return track;
-  }
-
-  /// Retrieves the thumbnail image path for a file following a Cache-First strategy:
-  /// 1. Checks disk cache first (immediate return, 0 CPU).
-  /// 2. If absent, delegates image extraction, square center-cropping, and
-  ///    dual-quality JPEG encoding to a worker isolate via [Isolate.run].
-  /// 3. Updates track cover status in SQLite DB.
-  /// 4. Returns string path (never raw bytes across isolate boundary).
-  Future<String?> getThumbnail(
-    String filePath, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  }) async {
-    // 1. Return immediately if cached image file exists on disk
-    if (coverCacheService.hasCachedCover(filePath, quality: quality)) {
-      final file = coverCacheService.getCoverFile(filePath, quality: quality);
-      return file.path;
-    }
-
-    // 2. Delegate image extraction and disk writing to a worker isolate via Isolate.run
-    final cacheDirPath = coverCacheService.cacheDirectory.path;
-    final paths = await Isolate.run(
-      () => extractAndSaveThumbnailWorker(
-        filePath: filePath,
-        cacheDirPath: cacheDirPath,
-      ),
-    );
-
-    if (paths != null) {
-      database.updateTrackCoverStatus(filePath, true);
-      return switch (quality) {
-        ThumbnailQuality.high => paths['hq'],
-        ThumbnailQuality.medium => paths['mq'] ?? paths['hq'],
-        ThumbnailQuality.low => paths['lq'],
-      };
-    }
-
-    return null;
-  }
-
-  /// Returns cached artist cover file path if available.
-  Future<String?> getArtistCover(
-    String artistName, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  }) async {
-    if (coverCacheService.hasCachedArtistCover(artistName, quality: quality)) {
-      final file = coverCacheService.getArtistCoverFile(
-        artistName,
-        quality: quality,
-      );
-      return file.path;
-    }
-    return null;
-  }
-
-  /// Clears thumbnail disk cache directory.
-  Future<void> clearCoverCache() async {
-    await coverCacheService.clearCache();
   }
 
   // ---------------------------------------------------------------------------
@@ -279,107 +293,108 @@ class MetadataService {
     }
 
     try {
+      // Estado inicial: Obteniendo base de datos...
       sendProgress(
-        const ScanProgress(phase: ScanPhase.discovering),
+        const ScanProgress(
+          phase: ScanPhase.gettingDatabase,
+          message: 'Obteniendo base de datos...',
+        ),
         force: true,
       );
 
-      // 1. File discovery
-      final discoveredFiles = <DiscoveredAudioFile>[];
-      await for (final file in _discoverFilesLocal(
-        directories,
-        cancellationToken: scanToken,
-      )) {
-        if (scanToken.isCancelled) break;
-        discoveredFiles.add(file);
-        sendProgress(
-          ScanProgress(
-            phase: ScanPhase.discovering,
-            totalFiles: discoveredFiles.length,
-            currentFile: file.path,
-          ),
-        );
-      }
+      // Etapa 1: Obteniendo canciones... (desde base de datos)
+      sendProgress(
+        const ScanProgress(
+          phase: ScanPhase.gettingTracks,
+          message: 'Obteniendo canciones...',
+        ),
+        force: true,
+      );
+
+      final trackStored = database.getStoredTracks();
 
       if (scanToken.isCancelled) {
         sendProgress(
-          current.copyWith(phase: ScanPhase.cancelled, clearCurrentFile: true),
+          current.copyWith(
+            phase: ScanPhase.cancelled,
+            message: 'Cancelado',
+            clearProgress: true,
+          ),
           force: true,
         );
         if (!controller.isClosed) controller.close();
         return;
       }
 
-      final totalFiles = discoveredFiles.length;
-      int scannedCount = 0;
-      int skippedCount = 0;
-      int newCount = 0;
-      int updatedCount = 0;
-      int failedCount = 0;
-
-      // 2. Incremental scan preparation
+      // Etapa 2: Comparando... (listar archivos de carpetas y comparar con trackStored)
       sendProgress(
-        ScanProgress(phase: ScanPhase.extracting, totalFiles: totalFiles),
+        const ScanProgress(
+          phase: ScanPhase.comparing,
+          message: 'Comparando...',
+        ),
         force: true,
       );
 
-      Map<String, TrackFileMeta> existingMetas = const {};
-      try {
-        existingMetas = database.getExistingTrackMetas();
-      } catch (e) {
-        debugPrint('[MetadataService] Failed to load existing track metas: $e');
+      final trackDiscover = <DiscoveredAudioFile>[];
+      await for (final file in _discoverFilesLocal(
+        directories,
+        cancellationToken: scanToken,
+      )) {
+        if (scanToken.isCancelled) break;
+        trackDiscover.add(file);
       }
 
-      // 3. Concurrency-bounded extraction with Isolate.run pool
-      final pendingTracks = <ExtractedTrackData>[];
+      if (scanToken.isCancelled) {
+        sendProgress(
+          current.copyWith(
+            phase: ScanPhase.cancelled,
+            message: 'Cancelado',
+            clearProgress: true,
+          ),
+          force: true,
+        );
+        if (!controller.isClosed) controller.close();
+        return;
+      }
+
+      final storedByPath = {for (final s in trackStored) s.filePath: s};
+      final toExtract = <DiscoveredAudioFile>[];
+      final toDeleteMap = Map<String, StoredTrackInfo>.from(storedByPath);
+
+      for (final file in trackDiscover) {
+        final stored = storedByPath[file.path];
+        if (stored != null) {
+          if (stored.modifiedAt == file.modifiedAt) {
+            toDeleteMap.remove(file.path);
+          } else {
+            toExtract.add(file);
+          }
+        } else {
+          toExtract.add(file);
+        }
+      }
+      final toDeleteStored = toDeleteMap.values.toList();
+
+      // Etapa 3: Obteniendo metadatos completos de cada trackDiscover
+      final totalExtract = toExtract.length;
+      final extractedTracks = <ExtractedTrackData>[];
       final activeTasks = <Future<void>>{};
       final poolSize = workerCount;
-      final cacheDirPath = coverCacheService.cacheDirectory.path;
+      int extractedCount = 0;
 
-      Future<void> maybeInsertBatch({bool force = false}) async {
-        if (pendingTracks.length >= 30 || (force && pendingTracks.isNotEmpty)) {
-          final batch = List<ExtractedTrackData>.from(pendingTracks);
-          pendingTracks.clear();
-          sendProgress(
-            current.copyWith(phase: ScanPhase.persisting),
-            force: true,
-          );
-          try {
-            database.upsertTracks(batch);
-          } catch (e) {
-            debugPrint('[MetadataService] upsertTracks error: $e');
-          }
-          sendProgress(
-            current.copyWith(phase: ScanPhase.extracting),
-            force: true,
-          );
-        }
-      }
+      sendProgress(
+        ScanProgress(
+          phase: ScanPhase.extracting,
+          message: 'Obteniendo metadatos 0/$totalExtract',
+          progress: totalExtract == 0 ? 1.0 : 0.0,
+          totalFiles: totalExtract,
+          scannedFiles: 0,
+        ),
+        force: true,
+      );
 
-      for (final file in discoveredFiles) {
+      for (final file in toExtract) {
         if (scanToken.isCancelled) break;
-
-        final existing = existingMetas[file.path];
-        if (existing != null &&
-            existing.modifiedAt == file.modifiedAt &&
-            existing.fileSize == file.size) {
-          skippedCount++;
-          scannedCount++;
-          sendProgress(
-            ScanProgress(
-              phase: ScanPhase.extracting,
-              scannedFiles: scannedCount,
-              totalFiles: totalFiles,
-              newTracks: newCount,
-              updatedTracks: updatedCount,
-              skippedTracks: skippedCount,
-              failedTracks: failedCount,
-              progress: totalFiles > 0 ? scannedCount / totalFiles : 1.0,
-              currentFile: file.path,
-            ),
-          );
-          continue;
-        }
 
         late final Future<void> task;
         task = () async {
@@ -392,34 +407,25 @@ class MetadataService {
           }
 
           if (scanToken.isCancelled) return;
-          scannedCount++;
+          extractedCount++;
 
           if (track != null) {
-            pendingTracks.add(track);
-            if (existing != null) {
-              updatedCount++;
-            } else {
-              newCount++;
-            }
-          } else {
-            failedCount++;
+            extractedTracks.add(track);
           }
 
+          final progressVal = totalExtract > 0
+              ? extractedCount / totalExtract
+              : 1.0;
           sendProgress(
             ScanProgress(
               phase: ScanPhase.extracting,
-              scannedFiles: scannedCount,
-              totalFiles: totalFiles,
-              newTracks: newCount,
-              updatedTracks: updatedCount,
-              skippedTracks: skippedCount,
-              failedTracks: failedCount,
-              progress: totalFiles > 0 ? scannedCount / totalFiles : 1.0,
+              message: 'Obteniendo metadatos $extractedCount/$totalExtract',
+              progress: progressVal,
+              totalFiles: totalExtract,
+              scannedFiles: extractedCount,
               currentFile: file.path,
             ),
           );
-
-          await maybeInsertBatch();
         }().whenComplete(() => activeTasks.remove(task));
 
         activeTasks.add(task);
@@ -435,26 +441,123 @@ class MetadataService {
 
       if (scanToken.isCancelled) {
         sendProgress(
-          current.copyWith(phase: ScanPhase.cancelled, clearCurrentFile: true),
+          current.copyWith(
+            phase: ScanPhase.cancelled,
+            message: 'Cancelado',
+            clearProgress: true,
+          ),
           force: true,
         );
         if (!controller.isClosed) controller.close();
         return;
       }
 
-      // Flush remaining tracks
-      await maybeInsertBatch(force: true);
+      // Etapa 4: Insertando...
+      sendProgress(
+        const ScanProgress(
+          phase: ScanPhase.inserting,
+          message: 'Insertando...',
+        ),
+        force: true,
+      );
+
+      if (extractedTracks.isNotEmpty) {
+        try {
+          database.upsertTracks(extractedTracks);
+        } catch (e) {
+          debugPrint('[MetadataService] upsertTracks error: $e');
+        }
+      }
+
+      // Liberar memoria inmediatamente
+      toExtract.clear();
+      extractedTracks.clear();
+
+      if (scanToken.isCancelled) {
+        sendProgress(
+          current.copyWith(
+            phase: ScanPhase.cancelled,
+            message: 'Cancelado',
+            clearProgress: true,
+          ),
+          force: true,
+        );
+        if (!controller.isClosed) controller.close();
+        return;
+      }
+
+      // Etapa 5: Limpiando orphan...
+      sendProgress(
+        const ScanProgress(
+          phase: ScanPhase.cleaningOrphans,
+          message: 'Limpiando orphan...',
+        ),
+        force: true,
+      );
+
+      try {
+        database.deleteTracksAndPurgeOrphans(
+          toDeleteStored.map((t) => t.id).toList(),
+        );
+      } catch (e) {
+        debugPrint('[MetadataService] deleteTracksAndPurgeOrphans error: $e');
+      }
+
+      if (scanToken.isCancelled) {
+        sendProgress(
+          current.copyWith(
+            phase: ScanPhase.cancelled,
+            message: 'Cancelado',
+            clearProgress: true,
+          ),
+          force: true,
+        );
+        if (!controller.isClosed) controller.close();
+        return;
+      }
+
+      // Etapa 6: Limpiando thumbnails...
+      sendProgress(
+        const ScanProgress(
+          phase: ScanPhase.cleaningThumbnails,
+          message: 'Limpiando thumbnails...',
+        ),
+        force: true,
+      );
+
+      try {
+        final activeHashes = database.getAllThumbnailHashes();
+        await CoverUtils.clearTemp();
+
+        final coverFiles = CoverUtils.listCachedCoverFiles();
+
+        final remainingFiles = List<File>.from(coverFiles);
+        final validHashes = activeHashes
+            .where((h) => h.trim().isNotEmpty)
+            .toSet();
+
+        for (final hash in validHashes) {
+          remainingFiles.removeWhere(
+            (file) => p.basename(file.path).contains(hash),
+          );
+        }
+
+        for (final file in remainingFiles) {
+          try {
+            file.deleteSync();
+          } catch (_) {}
+        }
+      } catch (e) {
+        debugPrint('[MetadataService] cleaningThumbnails error: $e');
+      }
 
       sendProgress(
         ScanProgress(
           phase: ScanPhase.completed,
-          scannedFiles: totalFiles,
-          totalFiles: totalFiles,
-          newTracks: newCount,
-          updatedTracks: updatedCount,
-          skippedTracks: skippedCount,
-          failedTracks: failedCount,
+          message: 'Completado',
           progress: 1.0,
+          totalFiles: totalExtract,
+          scannedFiles: extractedCount,
         ),
         force: true,
       );
@@ -475,12 +578,13 @@ class MetadataService {
       if (_currentScanToken == scanToken) {
         _currentScanToken = null;
       }
+      await CoverUtils.clearTemp();
     }
   }
 }
 
 // =============================================================================
-// SHARED WORKER FUNCTIONS
+// SHARED EXTRACTION & WORKER FUNCTIONS
 // =============================================================================
 
 double? _parseReplayGain(dynamic value) {
@@ -490,8 +594,6 @@ double? _parseReplayGain(dynamic value) {
   return double.tryParse(str);
 }
 
-/// Reads contiguous `<track_name>.lrc` or `<track_name>.LRC` file if present on disk.
-/// Helper to construct a fallback [ExtractedTrackData] when metadata cannot be read.
 ExtractedTrackData _buildFallbackTrackData({
   required String filePath,
   required int size,
@@ -508,20 +610,138 @@ ExtractedTrackData _buildFallbackTrackData({
   );
 }
 
+Future<(Tag?, AudioProperties?)> _readTagsAndProperties(String filePath) async {
+  final ext = p.extension(filePath).toLowerCase();
+  if (!supportedTagExtensions.contains(ext)) {
+    return (null, null);
+  }
+
+  Tag? tag;
+  AudioProperties? properties;
+  try {
+    tag = await Haudiotagger.read(filePath);
+  } catch (e) {
+    debugPrint(
+      '[MetadataService] Error reading tags with haudiotagger for $filePath: $e',
+    );
+  }
+
+  try {
+    properties = await Haudiotagger.readProperties(filePath);
+  } catch (_) {}
+
+  return (tag, properties);
+}
+
+ExtractedTrackData _buildExtractedTrackData({
+  required String filePath,
+  required int fileSize,
+  required int modifiedAt,
+  Tag? tag,
+  AudioProperties? properties,
+  String? thumbnailHash,
+  String? albumThumbnailHash,
+  String? artistThumbnailHash,
+}) {
+  final ext = p.extension(filePath).toLowerCase();
+  final extClean = ext.replaceAll('.', '').toUpperCase();
+
+  if (tag != null) {
+    final durationMs = properties?.durationMicros != null
+        ? (properties!.durationMicros!.toInt() / 1000).round()
+        : (tag.duration != null ? tag.duration! * 1000 : 0);
+
+    final artists = MetadataService.parseArtistNames(tag.trackArtist);
+    final resolvedArtists = artists.isNotEmpty
+        ? artists
+        : MetadataService.parseArtistNames(tag.albumArtist);
+
+    final genres = MetadataService.parseGenreNames(tag.genre);
+
+    return ExtractedTrackData(
+      filePath: filePath,
+      title: tag.title?.trim().isNotEmpty == true
+          ? tag.title!.trim()
+          : p.basenameWithoutExtension(filePath),
+      albumName: tag.album?.trim().isNotEmpty == true
+          ? tag.album!.trim()
+          : null,
+      artistNames: resolvedArtists,
+      albumArtistName: tag.albumArtist?.trim().isNotEmpty == true
+          ? tag.albumArtist!.trim()
+          : null,
+      genreNames: genres,
+      trackNumber: tag.trackNumber,
+      discNumber: tag.discNumber ?? 1,
+      year: tag.year,
+      durationMs: durationMs,
+      bitrate: properties?.bitrate,
+      sampleRate: properties?.sampleRate,
+      channels: properties?.channels,
+      codec: properties?.codec ?? (extClean.isNotEmpty ? extClean : null),
+      fileSize: fileSize,
+      modifiedAt: modifiedAt,
+      embeddedLyrics: tag.lyrics,
+      replayGainTrackGain: _parseReplayGain(tag.replayGainTrackGain),
+      replayGainTrackPeak: _parseReplayGain(tag.replayGainTrackPeak),
+      thumbnailHash: thumbnailHash,
+      albumThumbnailHash: albumThumbnailHash,
+      artistThumbnailHash: artistThumbnailHash,
+    );
+  }
+
+  if (properties != null) {
+    final durationMs = properties.durationMicros != null
+        ? (properties.durationMicros!.toInt() / 1000).round()
+        : 0;
+
+    return ExtractedTrackData(
+      filePath: filePath,
+      title: p.basenameWithoutExtension(filePath),
+      durationMs: durationMs,
+      bitrate: properties.bitrate,
+      sampleRate: properties.sampleRate,
+      channels: properties.channels,
+      codec: properties.codec.isNotEmpty
+          ? properties.codec
+          : (extClean.isNotEmpty ? extClean : null),
+      fileSize: fileSize,
+      modifiedAt: modifiedAt,
+      thumbnailHash: thumbnailHash,
+      albumThumbnailHash: albumThumbnailHash,
+      artistThumbnailHash: artistThumbnailHash,
+    );
+  }
+
+  return _buildFallbackTrackData(
+    filePath: filePath,
+    size: fileSize,
+    modifiedAt: modifiedAt,
+  );
+}
+
 /// Worker function that runs in a dedicated isolate via [Isolate.run].
 /// In a single pass:
-/// 1. Reads file metadata (or falls back if format unsupported or parsing fails).
-/// 2. If present, generates covers and writes them to disk.
-/// 3. Returns the populated [ExtractedTrackData] directly.
-///
-/// Passes zero raw byte arrays across the isolate boundary.
+/// 1. Reads file metadata.
+/// 2. Saves content-addressed thumbnails in covers/ directory.
+/// 3. Returns the populated [ExtractedTrackData] with thumbnail hashes.
 @pragma('vm:entry-point')
 Future<ExtractedTrackData?> extractAndCacheTrackWorker({
   required String filePath,
-  required String cacheDirPath,
+  String? cacheDirPath,
 }) async {
   final file = File(filePath);
   if (!file.existsSync() && !await file.exists()) return null;
+
+  if (!CoverUtils.isInitialized) {
+    if (cacheDirPath == null) {
+      debugPrint(
+        '[MetadataService] Cache directory path is null. Cannot initialize CoverUtils.',
+      );
+      throw Exception('Bad use of CoverUtils: cacheDirPath is null.');
+    }
+    CoverUtils.init(Directory(cacheDirPath));
+  }
 
   int size = 0;
   int modifiedAt = 0;
@@ -532,120 +752,74 @@ Future<ExtractedTrackData?> extractAndCacheTrackWorker({
   } catch (_) {}
 
   try {
-    final ext = p.extension(filePath).toLowerCase();
-    final isSupportedByReader = CoverCacheService.supportedTagExtensions
-        .contains(ext);
+    final (tag, properties) = await _readTagsAndProperties(filePath);
 
-    Tag? tag;
-    AudioProperties? properties;
-    if (!isSupportedByReader) {
-      debugPrint(
-        '[MetadataService] Extension "$ext" is not in haudiotagger supported extensions. Using fallback metadata for: $filePath',
-      );
-    } else {
-      try {
-        tag = await Haudiotagger.read(filePath);
-      } catch (e) {
-        debugPrint(
-          '[MetadataService] Error reading metadata with haudiotagger for $filePath: $e. Using fallback metadata.',
-        );
+    Uint8List? coverBytes;
+    Uint8List? artistBytes;
+    Uint8List? albumBytes;
+
+    if (tag != null && tag.pictures.isNotEmpty) {
+      final pictures = tag.pictures.toList();
+      // Cover
+      pictures.sort((a, b) {
+        final aPriority = coverPriority[a.pictureType] ?? 99;
+        final bPriority = coverPriority[b.pictureType] ?? 99;
+        return aPriority.compareTo(bPriority);
+      });
+      coverBytes = pictures.isNotEmpty ? pictures.first.bytes : null;
+      // Album
+      pictures.sort((a, b) {
+        final aPriority = albumPriority[a.pictureType] ?? 99;
+        final bPriority = albumPriority[b.pictureType] ?? 99;
+        return aPriority.compareTo(bPriority);
+      });
+      albumBytes = pictures.isNotEmpty ? pictures.first.bytes : null;
+      // Artist
+      pictures.sort((a, b) {
+        final aPriority = artistPriority[a.pictureType] ?? 99;
+        final bPriority = artistPriority[b.pictureType] ?? 99;
+        return aPriority.compareTo(bPriority);
+      });
+      artistBytes = pictures.isNotEmpty ? pictures.first.bytes : null;
+    }
+
+    String? thumbnailHash;
+    if (coverBytes != null && coverBytes.isNotEmpty) {
+      thumbnailHash = CoverUtils.computeBytesHash(coverBytes);
+      if (!CoverUtils.hasCachedCover(thumbnailHash)) {
+        await CoverUtils.saveThumbnailBytes(thumbnailHash, coverBytes);
       }
-      try {
-        properties = await Haudiotagger.readProperties(filePath);
-      } catch (_) {}
     }
 
-    // 2. Cache covers immediately if not already cached
-    final coverCache = CoverCacheService(
-      cacheDirectory: Directory(cacheDirPath),
-    );
-    if (!coverCache.hasCachedCover(filePath)) {
-      try {
-        await coverCache.saveCacheCover(
-          filePath,
-          artistName: tag?.trackArtist ?? tag?.albumArtist,
-          albumName: tag?.album,
-          tag: tag,
-        );
-      } catch (_) {}
-    }
-
-    if (tag != null) {
-      final durationMs = properties?.durationMicros != null
-          ? (properties!.durationMicros!.toInt() / 1000).round()
-          : (tag.duration != null ? tag.duration! * 1000 : 0);
-
-      final artists = <String>[];
-      if (tag.trackArtist != null && tag.trackArtist!.isNotEmpty) {
-        artists.addAll(
-          tag.trackArtist!
-              .split(', ')
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty),
-        );
-      } else if (tag.albumArtist != null && tag.albumArtist!.isNotEmpty) {
-        artists.addAll(
-          tag.albumArtist!
-              .split(', ')
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty),
-        );
+    String? albumThumbnailHash;
+    if (albumBytes != null && albumBytes.isNotEmpty) {
+      albumThumbnailHash = CoverUtils.computeBytesHash(albumBytes);
+      if (!CoverUtils.hasCachedCover(albumThumbnailHash)) {
+        await CoverUtils.saveThumbnailBytes(albumThumbnailHash, albumBytes);
       }
+    }
 
-      final genres = <String>[];
-      if (tag.genre != null && tag.genre!.trim().isNotEmpty) {
-        genres.add(tag.genre!.trim());
+    String? artistThumbnailHash;
+    if (artistBytes != null && artistBytes.isNotEmpty) {
+      artistThumbnailHash = CoverUtils.computeBytesHash(artistBytes);
+      if (!CoverUtils.hasCachedCover(artistThumbnailHash)) {
+        await CoverUtils.saveThumbnailBytes(artistThumbnailHash, artistBytes);
       }
-
-      return ExtractedTrackData(
-        filePath: filePath,
-        title: tag.title ?? p.basenameWithoutExtension(filePath),
-        albumName: tag.album,
-        artistNames: artists,
-        albumArtistName: tag.albumArtist,
-        genreNames: genres,
-        trackNumber: tag.trackNumber,
-        discNumber: tag.discNumber,
-        year: tag.year,
-        durationMs: durationMs,
-        bitrate: properties?.bitrate,
-        sampleRate: properties?.sampleRate,
-        channels: properties?.channels,
-        codec: properties?.codec ?? (ext.replaceAll('.', '').toUpperCase()),
-        fileSize: size,
-        modifiedAt: modifiedAt,
-        embeddedLyrics: tag.lyrics,
-        replayGainTrackGain: _parseReplayGain(tag.replayGainTrackGain),
-        replayGainTrackPeak: _parseReplayGain(tag.replayGainTrackPeak),
-      );
     }
 
-    if (properties != null) {
-      final durationMs = properties.durationMicros != null
-          ? (properties.durationMicros!.toInt() / 1000).round()
-          : 0;
-
-      return ExtractedTrackData(
-        filePath: filePath,
-        title: p.basenameWithoutExtension(filePath),
-        durationMs: durationMs,
-        bitrate: properties.bitrate,
-        sampleRate: properties.sampleRate,
-        channels: properties.channels,
-        codec: properties.codec,
-        fileSize: size,
-        modifiedAt: modifiedAt,
-      );
-    }
-
-    return _buildFallbackTrackData(
+    return _buildExtractedTrackData(
       filePath: filePath,
-      size: size,
+      fileSize: size,
       modifiedAt: modifiedAt,
+      tag: tag,
+      properties: properties,
+      thumbnailHash: thumbnailHash,
+      albumThumbnailHash: albumThumbnailHash,
+      artistThumbnailHash: artistThumbnailHash,
     );
   } catch (e) {
     debugPrint(
-      '[MetadataService] Unexpected error extracting metadata for $filePath: $e. Using fallback metadata.',
+      '[MetadataService] Unexpected error extracting metadata for $filePath: $e',
     );
     return _buildFallbackTrackData(
       filePath: filePath,
@@ -656,163 +830,8 @@ Future<ExtractedTrackData?> extractAndCacheTrackWorker({
 }
 
 /// Parses audio tags and metadata for a single file.
-Future<ExtractedTrackData?> extractTrackMetadata(
-  String filePath, {
-  CoverCacheService? coverCacheService,
-  bool awaitCover = false,
-}) async {
-  if (coverCacheService != null) {
-    return extractAndCacheTrackWorker(
-      filePath: filePath,
-      cacheDirPath: coverCacheService.cacheDirectory.path,
-    );
-  }
-
-  final file = File(filePath);
-  if (!file.existsSync() && !await file.exists()) return null;
-
-  int size = 0;
-  int modifiedAt = 0;
-  try {
-    final stat = await file.stat();
-    size = stat.size;
-    modifiedAt = stat.modified.millisecondsSinceEpoch;
-  } catch (_) {}
-
-  try {
-    final ext = p.extension(filePath).toLowerCase();
-    final isSupportedByReader = CoverCacheService.supportedTagExtensions
-        .contains(ext);
-
-    Tag? tag;
-    AudioProperties? properties;
-    if (!isSupportedByReader) {
-      debugPrint(
-        '[MetadataService] Extension "$ext" is not in haudiotagger supported extensions. Using fallback metadata for: $filePath',
-      );
-    } else {
-      try {
-        tag = await Haudiotagger.read(filePath);
-      } catch (e) {
-        debugPrint(
-          '[MetadataService] Error reading metadata with haudiotagger for $filePath: $e. Using fallback metadata.',
-        );
-      }
-      try {
-        properties = await Haudiotagger.readProperties(filePath);
-      } catch (_) {}
-    }
-
-    if (tag != null) {
-      final durationMs = properties?.durationMicros != null
-          ? (properties!.durationMicros!.toInt() / 1000).round()
-          : (tag.duration != null ? tag.duration! * 1000 : 0);
-
-      final artists = <String>[];
-      if (tag.trackArtist != null && tag.trackArtist!.isNotEmpty) {
-        artists.addAll(
-          tag.trackArtist!
-              .split(', ')
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty),
-        );
-      } else if (tag.albumArtist != null && tag.albumArtist!.isNotEmpty) {
-        artists.addAll(
-          tag.albumArtist!
-              .split(', ')
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty),
-        );
-      }
-
-      final genres = <String>[];
-      if (tag.genre != null && tag.genre!.trim().isNotEmpty) {
-        genres.add(tag.genre!.trim());
-      }
-
-      return ExtractedTrackData(
-        filePath: filePath,
-        title: tag.title ?? p.basenameWithoutExtension(filePath),
-        albumName: tag.album,
-        artistNames: artists,
-        albumArtistName: tag.albumArtist,
-        genreNames: genres,
-        trackNumber: tag.trackNumber,
-        discNumber: tag.discNumber,
-        year: tag.year,
-        durationMs: durationMs,
-        bitrate: properties?.bitrate,
-        sampleRate: properties?.sampleRate,
-        channels: properties?.channels,
-        codec: properties?.codec ?? (ext.replaceAll('.', '').toUpperCase()),
-        fileSize: size,
-        modifiedAt: modifiedAt,
-        embeddedLyrics: tag.lyrics,
-        replayGainTrackGain: _parseReplayGain(tag.replayGainTrackGain),
-        replayGainTrackPeak: _parseReplayGain(tag.replayGainTrackPeak),
-      );
-    }
-
-    if (properties != null) {
-      final durationMs = properties.durationMicros != null
-          ? (properties.durationMicros!.toInt() / 1000).round()
-          : 0;
-
-      return ExtractedTrackData(
-        filePath: filePath,
-        title: p.basenameWithoutExtension(filePath),
-        durationMs: durationMs,
-        bitrate: properties.bitrate,
-        sampleRate: properties.sampleRate,
-        channels: properties.channels,
-        codec: properties.codec,
-        fileSize: size,
-        modifiedAt: modifiedAt,
-      );
-    }
-
-    return _buildFallbackTrackData(
-      filePath: filePath,
-      size: size,
-      modifiedAt: modifiedAt,
-    );
-  } catch (e) {
-    debugPrint(
-      '[MetadataService] Unexpected error extracting metadata for $filePath: $e. Using fallback metadata.',
-    );
-    return _buildFallbackTrackData(
-      filePath: filePath,
-      size: size,
-      modifiedAt: modifiedAt,
-    );
-  }
-}
-
-/// Worker function that extracts artwork from file or folder using [CoverCacheService],
-/// performs centered square crop (minDim x minDim), saves 100x100 LQ and max 1000x1000 HQ
-/// in WebP format to disk, and returns the disk file paths. Never returns raw bytes.
-@pragma('vm:entry-point')
-Future<Map<String, String>?> extractAndSaveThumbnailWorker({
-  required String filePath,
-  required String cacheDirPath,
-}) async {
-  final file = File(filePath);
-  if (!file.existsSync()) return null;
-
-  final coverCache = CoverCacheService(cacheDirectory: Directory(cacheDirPath));
-  final hqFile = await coverCache.saveCacheCover(filePath);
-  if (hqFile != null && hqFile.existsSync() && hqFile.lengthSync() > 0) {
-    final mqFile = coverCache.getCoverFile(
-      filePath,
-      quality: ThumbnailQuality.medium,
-    );
-    final lqFile = coverCache.getCoverFile(
-      filePath,
-      quality: ThumbnailQuality.low,
-    );
-    return {'hq': hqFile.path, 'mq': mqFile.path, 'lq': lqFile.path};
-  }
-  return null;
+Future<ExtractedTrackData?> extractTrackMetadata(String filePath) async {
+  return extractAndCacheTrackWorker(filePath: filePath);
 }
 
 // ---------------------------------------------------------------------------

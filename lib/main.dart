@@ -1,11 +1,13 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/app.dart';
+import 'package:tachyon/shared/utils/cover_utils.dart';
 
 import 'core/backend/backend.dart';
 import 'features/library/presentation/library_controller.dart';
@@ -27,7 +29,11 @@ Future<void> main() async {
   final appSupportDir = await getApplicationSupportDirectory();
   final cacheDirectory = await getApplicationCacheDirectory();
   final dbPath = p.join(appSupportDir.path, 'music.db');
-  debugPrint("CACHE DIR: ${cacheDirectory.path}");
+  if (kDebugMode) {
+    debugPrint("CACHE PATH: ${cacheDirectory.path}");
+    debugPrint("DATA PATH: ${appSupportDir.path}");
+  }
+  CoverUtils.init(cacheDirectory);
 
   // Spawn and initialize the Core Service Isolate
   final backendClient = TachyonIsolateBackendClient();
@@ -65,9 +71,8 @@ Future<void> main() async {
     settingsRepository: settingsRepository,
   )..loadLibrary();
 
-  final playlistsController = PlaylistsController(
-    backend: backendClient,
-  )..loadPlaylists();
+  final playlistsController = PlaylistsController(backend: backendClient)
+    ..loadPlaylists();
 
   final searchController = TachyonSearchController(
     storeSupplier: () => libraryController.store,
@@ -92,12 +97,22 @@ Future<void> main() async {
         Provider<TachyonBackendClient>.value(value: backendClient),
         Provider<SettingsRepository>.value(value: settingsRepository),
         Provider<LocaleRepository>.value(value: localeRepository),
-        ChangeNotifierProvider<SettingsController>.value(value: settingsController),
+        ChangeNotifierProvider<SettingsController>.value(
+          value: settingsController,
+        ),
         ChangeNotifierProvider<LocaleController>.value(value: localeController),
-        ChangeNotifierProvider<LibraryController>.value(value: libraryController),
-        ChangeNotifierProvider<PlaylistsController>.value(value: playlistsController),
-        ChangeNotifierProvider<TachyonSearchController>.value(value: searchController),
-        ChangeNotifierProvider<PlaybackController>.value(value: playbackController),
+        ChangeNotifierProvider<LibraryController>.value(
+          value: libraryController,
+        ),
+        ChangeNotifierProvider<PlaylistsController>.value(
+          value: playlistsController,
+        ),
+        ChangeNotifierProvider<TachyonSearchController>.value(
+          value: searchController,
+        ),
+        ChangeNotifierProvider<PlaybackController>.value(
+          value: playbackController,
+        ),
         ChangeNotifierProvider<LyricsController>.value(value: lyricsController),
       ],
       child: const App(),

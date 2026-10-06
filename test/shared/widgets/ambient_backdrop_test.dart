@@ -50,8 +50,7 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: AmbientBackdrop(
-            filePath: '/music/test.mp3',
-            artistName: 'Test Artist',
+            thumbnailHash: 'test_hash_123',
           ),
         ),
       ),
@@ -65,7 +64,7 @@ void main() {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
-          body: AmbientBackdrop(filePath: ''),
+          body: AmbientBackdrop(thumbnailHash: null),
         ),
       ),
     );
@@ -74,7 +73,7 @@ void main() {
     expect(find.byType(ImageFiltered), findsNothing);
   });
 
-  testWidgets('AlbumDetailScreen renders AmbientBackdrop with album firstFilePath', (tester) async {
+  testWidgets('AlbumDetailScreen renders AmbientBackdrop with thumbnailHash', (tester) async {
     final track = Track(
       id: 1,
       filePath: '/music/album_track.mp3',
@@ -89,6 +88,7 @@ void main() {
       name: 'Greatest Hits',
       artist: const Artist(id: 1, name: 'The Band'),
       tracks: [track],
+      thumbnailHash: 'album_hash_123',
     );
 
     final db = AppDatabase.inMemory();
@@ -111,14 +111,14 @@ void main() {
     final backdropFinder = find.byType(AmbientBackdrop);
     expect(backdropFinder, findsOneWidget);
     final backdrop = tester.widget<AmbientBackdrop>(backdropFinder);
-    expect(backdrop.filePath, equals('/music/album_track.mp3'));
+    expect(backdrop.thumbnailHash, equals('album_hash_123'));
 
     playback.dispose();
     await backend.dispose();
     await db.close();
   });
 
-  testWidgets('ArtistDetailScreen renders AmbientBackdrop with artist cover and filePath', (tester) async {
+  testWidgets('ArtistDetailScreen renders AmbientBackdrop with thumbnailHash', (tester) async {
     final track = Track(
       id: 2,
       filePath: '/music/artist_track.mp3',
@@ -131,6 +131,7 @@ void main() {
       id: 5,
       name: 'Legendary Artist',
       tracks: [track],
+      thumbnailHash: 'artist_hash_456',
     );
 
     final db = AppDatabase.inMemory();
@@ -147,7 +148,7 @@ void main() {
         ),
       ],
       albums: const [],
-      artists: [const RawArtistDto(id: 5, name: 'Legendary Artist')],
+      artists: [const RawArtistDto(id: 5, name: 'Legendary Artist', thumbnailHash: 'artist_hash_456')],
       genres: const [],
       playlists: const [],
       playlistEntries: const [],
@@ -175,8 +176,7 @@ void main() {
     final backdropFinder = find.byType(AmbientBackdrop);
     expect(backdropFinder, findsOneWidget);
     final backdrop = tester.widget<AmbientBackdrop>(backdropFinder);
-    expect(backdrop.filePath, equals('/music/artist_track.mp3'));
-    expect(backdrop.artistName, equals('Legendary Artist'));
+    expect(backdrop.thumbnailHash, equals('artist_hash_456'));
 
     library.dispose();
     playback.dispose();

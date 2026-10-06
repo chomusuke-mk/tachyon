@@ -7,20 +7,18 @@ import 'package:tachyon/shared/widgets/album_art_image.dart';
 /// matching the active theme, used as the dynamic backdrop across
 /// Now Playing, Album Detail, and Artist Detail screens.
 class AmbientBackdrop extends StatelessWidget {
-  final String filePath;
-  final String? artistName;
+  final String? thumbnailHash;
 
   const AmbientBackdrop({
     super.key,
-    required this.filePath,
-    this.artistName,
+    this.thumbnailHash,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final bool hasImage = filePath.isNotEmpty ||
-        (artistName != null && artistName!.trim().isNotEmpty);
+    final bool hasImage =
+        thumbnailHash != null && thumbnailHash!.trim().isNotEmpty;
 
     return RepaintBoundary(
       child: Stack(
@@ -30,8 +28,7 @@ class AmbientBackdrop extends StatelessWidget {
             ImageFiltered(
               imageFilter: ImageFilter.blur(sigmaX: 32.0, sigmaY: 32.0),
               child: AlbumArtImage(
-                filePath: filePath,
-                artistName: artistName,
+                thumbnailHash: thumbnailHash,
                 fit: BoxFit.cover,
                 cacheWidth: 128,
                 cacheHeight: 128,

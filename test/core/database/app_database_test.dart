@@ -322,5 +322,51 @@ void main() {
       final snapshot = database.getCatalogSnapshot();
       expect(snapshot.playlists.any((p) => p.id == playlistId), isFalse);
     });
+
+    test('getAllThumbnailHashes retrieves unique non-empty thumbnail hashes across tracks, albums, artists', () {
+      final track = ExtractedTrackData(
+        filePath: '/music/t1.mp3',
+        title: 'T1',
+        artistNames: ['Artist One'],
+        albumName: 'Album One',
+        durationMs: 1000,
+        fileSize: 1000,
+        modifiedAt: 1,
+        thumbnailHash: 'track_hash_1',
+        artistThumbnailHash: 'artist_hash_1',
+      );
+      database.upsertTracks([track]);
+
+      final hashes = database.getAllThumbnailHashes();
+      expect(hashes, containsAll({'track_hash_1', 'artist_hash_1'}));
+    });
+
+    test('getStoredTracks and deleteTracksAndPurgeOrphans work correctly', () {
+      final track = ExtractedTrackData(
+        filePath: '/music/t1.mp3',
+        title: 'T1',
+        artistNames: ['Artist Orphan'],
+        albumName: 'Album Orphan',
+        durationMs: 1000,
+        fileSize: 1000,
+        modifiedAt: 100,
+      );
+      database.upsertTracks([track]);
+
+      final stored = database.getStoredTracks();
+      expect(stored.length, 1);
+      expect(stored.first.filePath, '/music/t1.mp3');
+      expect(stored.first.modifiedAt, 100);
+
+      database.deleteTracksAndPurgeOrphans([stored.first.id]);
+
+      final afterDelete = database.getStoredTracks();
+      expect(afterDelete, isEmpty);
+
+      final snapshot = database.getCatalogSnapshot();
+      expect(snapshot.tracks, isEmpty);
+      expect(snapshot.albums, isEmpty);
+      expect(snapshot.artists, isEmpty);
+    });
   });
 }

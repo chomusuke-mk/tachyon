@@ -1,13 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:tachyon/core/backend/backend_client.dart';
-import 'package:tachyon/features/library/domain/thumbnail_quality.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/shared/utils/cover_utils.dart';
+
+export 'package:tachyon/features/library/domain/thumbnail_quality.dart';
 
 class AlbumArtImage extends StatelessWidget {
-  final String filePath;
-  final String? artistName;
+  final String? thumbnailHash;
   final ThumbnailQuality quality;
   final double? width;
   final double? height;
@@ -17,21 +17,16 @@ class AlbumArtImage extends StatelessWidget {
   final BorderRadius? borderRadius;
   final Widget? fallback;
 
-  static final Set<String> _existingCovers = <String>{};
-  static final Set<String> _missingCovers = <String>{};
   static final Map<String, String> _resolvedPaths = <String, String>{};
 
   @visibleForTesting
   static void clearExistenceCache() {
-    _existingCovers.clear();
-    _missingCovers.clear();
     _resolvedPaths.clear();
   }
 
   const AlbumArtImage({
     super.key,
-    required this.filePath,
-    this.artistName,
+    this.thumbnailHash,
     this.quality = ThumbnailQuality.low,
     this.width,
     this.height,
@@ -42,22 +37,38 @@ class AlbumArtImage extends StatelessWidget {
     this.fallback,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    TachyonBackendClient? backendClient;
-    try {
-      backendClient = Provider.of<TachyonBackendClient>(context, listen: false);
-    } catch (_) {
-      try {
-        backendClient = Provider.of<TachyonBackendClient?>(
-          context,
-          listen: false,
-        );
-      } catch (_) {
-        backendClient = null;
+  /// UI utility: validates that the thumbnail file exists on disk and has length > 0.
+  /// Returns the path if valid, or null otherwise.
+  static Future<String?> getThumbnail(
+    String? coverHash, {
+    ThumbnailQuality quality = ThumbnailQuality.low,
+  }) async {
+    if (coverHash == null || coverHash.trim().isEmpty) return null;
+    final cleanHash = coverHash.trim();
+    final lookupKey = '${quality.name}:$cleanHash';
+
+    final cached = _resolvedPaths[lookupKey];
+    if (cached != null) {
+      final f = File(cached);
+      if (f.existsSync() && f.lengthSync() > 0) {
+        return cached;
       }
+      _resolvedPaths.remove(lookupKey);
     }
 
+    try {
+      final f = CoverUtils.getCoverFile(cleanHash, quality: quality);
+      if (await f.exists() && await f.length() > 0) {
+        _resolvedPaths[lookupKey] = f.path;
+        return f.path;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     final defaultFallback = Container(
@@ -66,9 +77,7 @@ class AlbumArtImage extends StatelessWidget {
       color: colorScheme.surfaceContainerHighest,
       child: Center(
         child: Icon(
-          artistName != null && filePath.isEmpty
-              ? Icons.person_rounded
-              : Icons.album_rounded,
+          Icons.album_rounded,
           size: (width != null && height != null)
               ? (width! < height! ? width! * 0.5 : height! * 0.5)
               : (width != null ? width! * 0.5 : 24),
@@ -78,17 +87,9 @@ class AlbumArtImage extends StatelessWidget {
     );
     final effectiveFallback = fallback ?? defaultFallback;
 
-    if (filePath.isEmpty &&
-        (artistName == null || artistName!.trim().isEmpty)) {
-      if (borderRadius != null) {
-        return ClipRRect(borderRadius: borderRadius!, child: effectiveFallback);
-      }
-      return effectiveFallback;
-    }
-
-    final String lookupKey = '${quality.name}:$filePath:${artistName ?? ''}';
-
-    if (_missingCovers.contains(lookupKey)) {
+    // If thumbnailHash is null or empty, synchronously return fallback!
+    final hash = thumbnailHash?.trim();
+    if (hash == null || hash.isEmpty) {
       if (borderRadius != null) {
         return ClipRRect(borderRadius: borderRadius!, child: effectiveFallback);
       }
@@ -97,19 +98,25 @@ class AlbumArtImage extends StatelessWidget {
 
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
     final int defaultBound = switch (quality) {
-      ThumbnailQuality.high => 800,
-      ThumbnailQuality.medium => 250,
-      ThumbnailQuality.low => 50,
+      ThumbnailQuality.high => AppDefaults.highQualityResolution,
+      ThumbnailQuality.medium => AppDefaults.mediumQualityResolution,
+      ThumbnailQuality.low => AppDefaults.lowQualityResolution,
     };
     final int targetCacheWidth =
         cacheWidth ??
         (width != null
-            ? (width! * dpr).round().clamp(50, 800)
+            ? (width! * dpr).round().clamp(
+                AppDefaults.lowQualityResolution,
+                AppDefaults.highQualityResolution,
+              )
             : defaultBound);
     final int targetCacheHeight =
         cacheHeight ??
         (height != null
-            ? (height! * dpr).round().clamp(50, 800)
+            ? (height! * dpr).round().clamp(
+                AppDefaults.lowQualityResolution,
+                AppDefaults.highQualityResolution,
+              )
             : defaultBound);
 
     Widget buildImage(File file) {
@@ -131,6 +138,7 @@ class AlbumArtImage extends StatelessWidget {
       );
     }
 
+    final lookupKey = '${quality.name}:$hash';
     if (_resolvedPaths.containsKey(lookupKey)) {
       final cachedPath = _resolvedPaths[lookupKey]!;
       final image = buildImage(File(cachedPath));
@@ -140,47 +148,12 @@ class AlbumArtImage extends StatelessWidget {
       return image;
     }
 
-    Future<File?> resolveCoverFile() async {
-      if (backendClient != null) {
-        try {
-          String? path;
-          if (artistName != null &&
-              artistName!.trim().isNotEmpty &&
-              filePath.isEmpty) {
-            path = await backendClient.getArtistCover(
-              artistName!,
-              quality: quality,
-            );
-          } else if (filePath.isNotEmpty) {
-            path = await backendClient.getThumbnail(
-              filePath,
-              quality: quality,
-            );
-          }
-          if (path != null) {
-            final f = File(path);
-            if (await f.exists() && await f.length() > 0) {
-              _resolvedPaths[lookupKey] = path;
-              _existingCovers.add(f.path);
-              return f;
-            }
-          }
-        } catch (_) {}
-      }
-      _missingCovers.add(lookupKey);
-      return null;
-    }
-
-    final Widget imageWidget = FutureBuilder<File?>(
-      future: resolveCoverFile(),
+    final Widget imageWidget = FutureBuilder<String?>(
+      future: getThumbnail(hash, quality: quality),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done) {
-          final file = snapshot.data;
-          if (file != null) {
-            return buildImage(file);
-          } else {
-            return effectiveFallback;
-          }
+        if (snapshot.connectionState == ConnectionState.done &&
+            snapshot.data != null) {
+          return buildImage(File(snapshot.data!));
         }
         return effectiveFallback;
       },

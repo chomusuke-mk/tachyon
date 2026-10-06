@@ -6,7 +6,7 @@ import 'package:tachyon/core/backend/backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
-import 'package:tachyon/core/backend/services/cover_cache_service.dart';
+import 'package:tachyon/shared/utils/cover_utils.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/features/library/domain/album.dart';
@@ -30,7 +30,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   final AudioEngineService? audioEngine;
   final AppDatabase? database;
   final MetadataService? metadataService;
-  final CoverCacheService? coverCacheService;
+  final CoverUtils? coverCacheService;
   final LyricsService? lyricsService;
 
   final StreamController<List<AudioDevice>> _devicesController =
@@ -301,55 +301,6 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
       return await metadataService!.getMetadata(filePath);
     }
     return null;
-  }
-
-  @override
-  Future<String?> getThumbnail(
-    String filePath, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  }) async {
-    if (metadataService != null) {
-      return await metadataService!.getThumbnail(filePath, quality: quality);
-    }
-    if (coverCacheService != null) {
-      if (coverCacheService!.hasCachedCover(filePath, quality: quality)) {
-        return coverCacheService!.getCoverFile(filePath, quality: quality).path;
-      }
-    }
-    return null;
-  }
-
-  @override
-  Future<String?> getArtistCover(
-    String artistName, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  }) async {
-    if (metadataService != null) {
-      return await metadataService!.getArtistCover(
-        artistName,
-        quality: quality,
-      );
-    }
-    if (coverCacheService != null) {
-      if (coverCacheService!.hasCachedArtistCover(
-        artistName,
-        quality: quality,
-      )) {
-        return coverCacheService!
-            .getArtistCoverFile(artistName, quality: quality)
-            .path;
-      }
-    }
-    return null;
-  }
-
-  @override
-  Future<void> clearCoverCache() async {
-    if (metadataService != null) {
-      await metadataService!.clearCoverCache();
-    } else if (coverCacheService != null) {
-      await coverCacheService!.clearCache();
-    }
   }
 
   @override

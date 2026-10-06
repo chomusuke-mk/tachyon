@@ -9,7 +9,7 @@ import 'package:tachyon/core/backend/backend_protocol.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
-import 'package:tachyon/core/backend/services/cover_cache_service.dart';
+import 'package:tachyon/shared/utils/cover_utils.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/backend/services/queue_manager.dart';
@@ -53,7 +53,6 @@ class TachyonBackendHost {
 
   late final ReceivePort _hostReceivePort;
   late final AppDatabase _database;
-  late final CoverCacheService _coverCache;
   late final MetadataService _metadataService;
   late final QueueManager _queueManager;
   late final AudioEngineService _audioEngine;
@@ -77,12 +76,11 @@ class TachyonBackendHost {
     await _database.init(config.dbPath);
 
     // 3. Initialize cover cache and metadata service
-    _coverCache = CoverCacheService(
-      cacheDirectory: Directory(config.cacheDirPath),
-    );
+    CoverUtils.init(Directory(config.cacheDirPath));
+
     _metadataService = MetadataService(
       database: _database,
-      coverCacheService: _coverCache,
+      cacheDirPath: config.cacheDirPath,
     );
 
     // 4. Initialize playback engine
@@ -415,27 +413,15 @@ class TachyonBackendHost {
         return await _metadataService.getMetadata(filePath);
 
       case BackendMethods.metadataGetThumbnail:
-        final filePath = params['filePath'] as String;
+      case BackendMethods.metadataGetCover:
+        final thumbnailHash =
+            (params['thumbnailHash'] ?? params['coverHash']) as String?;
+        if (thumbnailHash == null || thumbnailHash.isEmpty) return null;
         final qualityStr = params['quality'] as String?;
         final quality = qualityStr != null
             ? ThumbnailQuality.values.byName(qualityStr)
             : ThumbnailQuality.low;
-        return await _metadataService.getThumbnail(filePath, quality: quality);
-
-      case BackendMethods.metadataGetArtistCover:
-        final artistName = params['artistName'] as String;
-        final qualityStr = params['quality'] as String?;
-        final quality = qualityStr != null
-            ? ThumbnailQuality.values.byName(qualityStr)
-            : ThumbnailQuality.low;
-        return await _metadataService.getArtistCover(
-          artistName,
-          quality: quality,
-        );
-
-      case BackendMethods.metadataClearCoverCache:
-        await _metadataService.clearCoverCache();
-        return null;
+        return CoverUtils.getCoverFile(thumbnailHash, quality: quality);
 
       // =======================================================================
       // PLAYLISTS
