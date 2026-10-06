@@ -14,6 +14,7 @@ import 'package:tachyon/features/library/data/library_store.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
+import 'package:tachyon/features/library/presentation/genre_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
@@ -47,7 +48,9 @@ CatalogSnapshot _createSampleSnapshot() {
     albums: [
       RawAlbumDto(id: 10, name: 'A Night at the Opera', year: 1975, artistId: 1),
     ],
-    genres: [],
+    genres: [
+      RawGenreDto(id: 5, name: 'Rock'),
+    ],
     tracks: [
       RawTrackDto(
         id: 100,
@@ -64,7 +67,9 @@ CatalogSnapshot _createSampleSnapshot() {
     trackArtists: [
       TrackArtistPair(trackId: 100, artistId: 1),
     ],
-    trackGenres: [],
+    trackGenres: [
+      TrackGenrePair(trackId: 100, genreId: 5),
+    ],
   );
 }
 
@@ -296,6 +301,31 @@ void main() {
       expect(find.byType(TachyonShell), findsOneWidget);
     });
 
+    testWidgets('ESC pops GenreDetailScreen', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      final genre = libraryStore.allGenres.first;
+      navigatorKey.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => GenreDetailScreen(genre: genre),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GenreDetailScreen), findsOneWidget);
+
+      // Press ESC
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GenreDetailScreen), findsNothing);
+      expect(find.byType(TachyonShell), findsOneWidget);
+    });
+
     testWidgets('ESC minimizes NowPlayingScreen', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1000, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -411,6 +441,30 @@ void main() {
       expect(find.byType(TachyonShell), findsOneWidget);
     });
 
+    testWidgets('Mouse back button pops GenreDetailScreen', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      final genre = libraryStore.allGenres.first;
+      navigatorKey.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => GenreDetailScreen(genre: genre),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GenreDetailScreen), findsOneWidget);
+
+      // Click mouse back button
+      await clickMouseBackButton(tester);
+
+      expect(find.byType(GenreDetailScreen), findsNothing);
+      expect(find.byType(TachyonShell), findsOneWidget);
+    });
+
     testWidgets('Mouse back button minimizes NowPlayingScreen', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1000, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -459,6 +513,33 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(SearchScreen), findsNothing);
+      expect(find.byType(TachyonShell), findsOneWidget);
+    });
+
+    testWidgets('Alt+Left Arrow pops GenreDetailScreen', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      final genre = libraryStore.allGenres.first;
+      navigatorKey.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => GenreDetailScreen(genre: genre),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GenreDetailScreen), findsOneWidget);
+
+      // Press Alt+Left
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GenreDetailScreen), findsNothing);
       expect(find.byType(TachyonShell), findsOneWidget);
     });
 

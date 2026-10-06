@@ -1,82 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
-import 'package:tachyon/features/library/domain/genre.dart';
-import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
 
+import 'genre_detail_screen.dart';
 import 'library_controller.dart';
 
-class GenresScreen extends StatefulWidget {
+export 'genre_detail_screen.dart';
+
+class GenresScreen extends StatelessWidget {
   const GenresScreen({super.key});
-
-  @override
-  State<GenresScreen> createState() => _GenresScreenState();
-}
-
-class _GenresScreenState extends State<GenresScreen> {
-  Genre? _selectedGenre;
 
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrack = context.select<PlaybackController, Track?>(
-      (c) => c.currentTrack,
-    );
-    final playback = context.read<PlaybackController>();
-
-    if (_selectedGenre != null) {
-      final currentGenre = (_selectedGenre!.id != null
-              ? library.store.getGenreById(_selectedGenre!.id!)
-              : null) ??
-          _selectedGenre!;
-      final genreTracks = currentGenre.tracks;
-
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(_selectedGenre!.name),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: () => setState(() => _selectedGenre = null),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.play_arrow_rounded),
-              tooltip: strings.gPlayAll,
-              onPressed: genreTracks.isNotEmpty
-                  ? () => playback.playAll(genreTracks, startIndex: 0)
-                  : null,
-            ),
-            IconButton(
-              icon: const Icon(Icons.shuffle_rounded),
-              tooltip: strings.gShuffleAll,
-              onPressed: genreTracks.isNotEmpty
-                  ? () => playback.playAll(genreTracks, shuffle: true)
-                  : null,
-            ),
-          ],
-        ),
-        body: ListView.builder(
-          itemExtent: 72.0,
-          itemCount: genreTracks.length,
-          itemBuilder: (context, index) {
-            final track = genreTracks[index];
-            final isPlaying =
-                currentTrack == track || playback.isCurrentTrack(track);
-
-            return TrackTile(
-              key: ValueKey(track.filePath),
-              track: track,
-              isPlaying: isPlaying,
-              onTap: () =>
-                  playback.playTrack(track, contextTracks: genreTracks),
-            );
-          },
-        ),
-      );
-    }
 
     final genres = library.genres;
 
@@ -120,43 +58,110 @@ class _GenresScreenState extends State<GenresScreen> {
               itemBuilder: (context, index) {
                 final genre = genres[index];
                 final colorScheme = Theme.of(context).colorScheme;
+                final coverHash = findGenreCoverHash(genre);
 
                 return Card(
+                  clipBehavior: Clip.antiAlias,
                   color: colorScheme.surfaceContainer,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(12.0),
-                    onTap: () => setState(() => _selectedGenre = genre),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.music_note_rounded,
-                            color: colorScheme.primary,
-                          ),
-                          const Spacer(),
-                          Text(
-                            genre.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => GenreDetailScreen(genre: genre),
+                        ),
+                      );
+                    },
+                    child: coverHash != null
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              AlbumArtImage(
+                                thumbnailHash: coverHash,
+                                quality: ThumbnailQuality.medium,
+                                fit: BoxFit.cover,
+                              ),
+                              Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.black.withValues(alpha: 0.2),
+                                      Colors.black.withValues(alpha: 0.75),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      genre.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      strings.gTracksCountFormatted(
+                                        genre.trackCount,
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.85,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.music_note_rounded,
+                                  color: colorScheme.primary,
+                                ),
+                                const Spacer(),
+                                Text(
+                                  genre.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  strings.gTracksCountFormatted(
+                                    genre.trackCount,
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            strings.gTracksCountFormatted(genre.trackCount),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 );
               },

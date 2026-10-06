@@ -13,10 +13,12 @@ import 'package:tachyon/features/library/data/library_store.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
+import 'package:tachyon/features/library/domain/genre.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
+import 'package:tachyon/features/library/presentation/genres_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
@@ -952,6 +954,166 @@ void main() {
 
       libraryCtrl.dispose();
       playlistsCtrl.dispose();
+      playbackCtrl.dispose();
+      await backend.dispose();
+      await db.close();
+    });
+
+    test('findGenreCoverHash searches internal tracks and picks first non-empty thumbnailHash', () {
+      const trackWithoutCover = Track(
+        id: 1,
+        filePath: '/music/track1.mp3',
+        title: 'Track 1',
+        durationMs: 120000,
+        fileSize: 1000,
+        modifiedAt: 1000,
+      );
+
+      const trackWithCover = Track(
+        id: 2,
+        filePath: '/music/track2.mp3',
+        title: 'Track 2',
+        durationMs: 150000,
+        fileSize: 1000,
+        modifiedAt: 1000,
+        thumbnailHash: 'genre_track_cover_hash',
+      );
+
+      const emptyGenre = Genre(id: 1, name: 'Empty Genre', tracks: []);
+      expect(findGenreCoverHash(emptyGenre), isNull);
+
+      const genreWithCover = Genre(
+        id: 2,
+        name: 'Rock',
+        tracks: [trackWithoutCover, trackWithCover],
+      );
+      expect(findGenreCoverHash(genreWithCover), 'genre_track_cover_hash');
+    });
+
+    testWidgets('GenresScreen renders cover with ThumbnailQuality.medium on genre card', (tester) async {
+      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final db = AppDatabase.inMemory();
+      final backend = DirectTachyonBackendClient(database: db);
+
+      final rawTracks = [
+        const RawTrackDto(
+          id: 301,
+          filePath: '/music/synth.mp3',
+          title: 'Synth Beat',
+          durationMs: 200000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+          thumbnailHash: 'synth_cover_hash',
+        ),
+      ];
+
+      final snapshot = CatalogSnapshot(
+        tracks: rawTracks,
+        albums: const [],
+        artists: const [],
+        genres: [
+          const RawGenreDto(id: 30, name: 'Synthwave'),
+        ],
+        playlists: const [],
+        playlistEntries: const [],
+        trackArtists: const [],
+        trackGenres: [
+          TrackGenrePair(trackId: 301, genreId: 30),
+        ],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final libraryCtrl = LibraryController(
+        backend: backend,
+        store: store,
+        settingsRepository: settingsRepository,
+      );
+
+      await tester.pumpWidget(
+        createTestHarness(
+          child: const GenresScreen(),
+          libraryController: libraryCtrl,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Synthwave'), findsOneWidget);
+
+      final albumArt = tester.widget<AlbumArtImage>(find.byType(AlbumArtImage));
+      expect(albumArt.thumbnailHash, 'synth_cover_hash');
+      expect(albumArt.quality, ThumbnailQuality.medium);
+
+      libraryCtrl.dispose();
+      await backend.dispose();
+      await db.close();
+    });
+
+    testWidgets('GenreDetailScreen renders AmbientBackdrop and HQ cover of genre', (tester) async {
+      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final db = AppDatabase.inMemory();
+      final backend = DirectTachyonBackendClient(database: db);
+
+      final rawTracks = [
+        const RawTrackDto(
+          id: 401,
+          filePath: '/music/ambient.mp3',
+          title: 'Deep Space',
+          durationMs: 300000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+          thumbnailHash: 'ambient_hash_99',
+        ),
+      ];
+
+      final snapshot = CatalogSnapshot(
+        tracks: rawTracks,
+        albums: const [],
+        artists: const [],
+        genres: [
+          const RawGenreDto(id: 40, name: 'Ambient'),
+        ],
+        playlists: const [],
+        playlistEntries: const [],
+        trackArtists: const [],
+        trackGenres: [
+          TrackGenrePair(trackId: 401, genreId: 40),
+        ],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final genre = store.getGenreById(40)!;
+
+      final playbackCtrl = PlaybackController(
+        backend: backend,
+        settingsRepository: settingsRepository,
+      );
+
+      await tester.pumpWidget(
+        createTestHarness(
+          child: GenreDetailScreen(genre: genre),
+          playbackController: playbackCtrl,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ambient'), findsWidgets);
+      expect(find.text('Deep Space'), findsOneWidget);
+
+      final backdrop = tester.widget<AmbientBackdrop>(find.byType(AmbientBackdrop));
+      expect(backdrop.thumbnailHash, 'ambient_hash_99');
+
+      final albumArtImages = tester.widgetList<AlbumArtImage>(find.byType(AlbumArtImage));
+      final headerArt = albumArtImages.firstWhere(
+        (img) => img.quality == ThumbnailQuality.high,
+      );
+      expect(headerArt.thumbnailHash, 'ambient_hash_99');
+
       playbackCtrl.dispose();
       await backend.dispose();
       await db.close();
