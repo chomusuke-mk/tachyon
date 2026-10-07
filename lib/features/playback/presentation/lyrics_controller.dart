@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -23,6 +22,7 @@ class LyricsController extends ChangeNotifier {
   final PlaybackController playbackController;
   final LyricsCooldownManager cooldownManager;
   final SettingsRepository settingsRepository;
+  final String Function()? localeSupplier;
 
   final ScrollController scrollController = ScrollController();
 
@@ -67,6 +67,7 @@ class LyricsController extends ChangeNotifier {
     required this.backendClient,
     required this.playbackController,
     required this.settingsRepository,
+    this.localeSupplier,
     LyricsCooldownManager? cooldownManager,
   }) : cooldownManager = cooldownManager ?? LyricsCooldownManager() {
     final initialMode = settingsRepository.getLyricsDisplayMode();
@@ -216,12 +217,13 @@ class LyricsController extends ChangeNotifier {
       _safeNotifyListeners();
       // 4. View opened: ensure lyrics are loaded on-demand for active track
       if (playbackController.currentTrack != null) {
-        if (_lyrics == null) {
+        if (_lyrics == null && !_isLoading) {
           ensureLyricsLoaded();
         } else {
           // Re-evaluate active line for current playback position and center immediately
           if (_lyrics!.isSynced && lines.isNotEmpty) {
-            final effectivePos = playbackController.position +
+            final effectivePos =
+                playbackController.position +
                 Duration(milliseconds: _userOffsetMs);
             final resolvedIndex = _lyrics!.activeIndexAt(effectivePos);
             if (resolvedIndex >= 0) {
@@ -257,7 +259,9 @@ class LyricsController extends ChangeNotifier {
           _scrollToIndex(_currentIndex, animated: false);
         }
       });
-    } else if (playbackController.currentTrack != null && _lyrics == null) {
+    } else if (playbackController.currentTrack != null &&
+        _lyrics == null &&
+        !_isLoading) {
       ensureLyricsLoaded();
     }
   }
@@ -346,8 +350,8 @@ class LyricsController extends ChangeNotifier {
             final currentOffset = scrollController.offset;
             final viewportHeight =
                 scrollController.position.hasViewportDimension
-                    ? scrollController.position.viewportDimension
-                    : 600.0;
+                ? scrollController.position.viewportDimension
+                : 600.0;
             if ((currentOffset - targetOffset).abs() > (viewportHeight * 0.5)) {
               needsJump = true;
             }
@@ -370,8 +374,7 @@ class LyricsController extends ChangeNotifier {
 
     if (!forceRefresh &&
         _currentTrackFilePath == track.filePath &&
-        _lyrics != null &&
-        _lyrics!.isNotEmpty) {
+        (_isLoading || (_lyrics != null && _lyrics!.isNotEmpty))) {
       return;
     }
 
@@ -428,8 +431,9 @@ class LyricsController extends ChangeNotifier {
             onAutoRetry: () async {
               if (_isDisposed || !_isLyricsViewVisible) return;
               if (_currentTrackFilePath == track.filePath &&
-                  _generationTracker
-                      .isCurrent(_generationTracker.activeToken)) {
+                  _generationTracker.isCurrent(
+                    _generationTracker.activeToken,
+                  )) {
                 final retryToken = _generationTracker.nextGeneration();
                 _currentCancellationToken = retryToken;
                 await _loadLyricsForTrack(track, retryToken);
@@ -560,28 +564,15 @@ class LyricsController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Translation
   // ---------------------------------------------------------------------------
-  String getEffectiveTargetLanguage() {
-    final saved = settingsRepository.getLyricsTranslationTargetLang();
-    if (saved != 'defaultOption') return saved;
-    final appLang = settingsRepository.getSettings().appLanguage;
-    if (appLang != 'defaultOption') return appLang;
-    return ui.PlatformDispatcher.instance.locale.languageCode;
-  }
-
-  String getEffectiveSourceLanguage() {
-    return settingsRepository.getLyricsTranslationSourceLang();
-  }
-
   Future<void> translateLyrics({
     String? targetLanguage,
     String? sourceLanguage,
     bool force = false,
-  }) =>
-      _loadOrFetchTranslation(
-        targetLanguage: targetLanguage,
-        sourceLanguage: sourceLanguage,
-        force: force,
-      );
+  }) => _loadOrFetchTranslation(
+    targetLanguage: targetLanguage,
+    sourceLanguage: sourceLanguage,
+    force: force,
+  );
 
   Future<void> _loadOrFetchTranslation({
     String? targetLanguage,
@@ -597,14 +588,29 @@ class LyricsController extends ChangeNotifier {
     final lyricsId = _currentLyricsId;
     if (lyricsId == null) return;
 
-    final targetLang = targetLanguage ?? getEffectiveTargetLanguage();
-    final sourceLang = sourceLanguage ?? getEffectiveSourceLanguage();
-    final callToken = token ?? _currentCancellationToken ?? _generationTracker.nextGeneration();
+    final String targetLang;
+    if (targetLanguage != null) {
+      targetLang = targetLanguage == 'defaultOption'
+          ? (localeSupplier?.call() ?? 'en')
+          : targetLanguage;
+    } else {
+      final savedTarget = settingsRepository.getLyricsTranslationTargetLang();
+      targetLang = savedTarget == 'defaultOption'
+          ? (localeSupplier?.call() ?? 'en')
+          : savedTarget;
+    }
+    final sourceLang =
+        sourceLanguage ?? settingsRepository.getLyricsTranslationSourceLang();
+    final callToken =
+        token ??
+        _currentCancellationToken ??
+        _generationTracker.nextGeneration();
     _currentCancellationToken = callToken;
 
     // Short-circuit if lyrics are already in target language
-    final isSameLanguage = (_currentLyricsLang != null && _currentLyricsLang == targetLang) ||
-        (sourceLang != 'auto' && sourceLang != 'autodetect' && sourceLang == targetLang);
+    final isSameLanguage =
+        (_currentLyricsLang != null && _currentLyricsLang == targetLang) ||
+        (sourceLang != 'autodetect' && sourceLang == targetLang);
 
     if (isSameLanguage && !force) {
       _translatedLines = lines.map((l) => l.text).toList();
@@ -619,12 +625,14 @@ class LyricsController extends ChangeNotifier {
 
     try {
       final rawLines = lines.map((l) => l.text).toList();
-      final res = await backendClient.translateLyrics(
-        lyricsId: lyricsId,
-        targetLang: targetLang,
-        sourceLang: sourceLang,
-        rawLines: rawLines,
-      ).timeout(const Duration(seconds: 8));
+      final res = await backendClient
+          .translateLyrics(
+            lyricsId: lyricsId,
+            targetLang: targetLang,
+            sourceLang: sourceLang,
+            rawLines: rawLines,
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (_isDisposed) return;
       if (callToken.isCancelled) {
@@ -635,7 +643,10 @@ class LyricsController extends ChangeNotifier {
         _translatedLines = res;
         _translationError = null;
         if (res.length == rawLines.length &&
-            List.generate(res.length, (i) => res[i] == rawLines[i]).every((b) => b)) {
+            List.generate(
+              res.length,
+              (i) => res[i] == rawLines[i],
+            ).every((b) => b)) {
           _currentLyricsLang = targetLang;
         }
       } else {
@@ -676,14 +687,20 @@ class LyricsController extends ChangeNotifier {
       case LyricsDisplayMode.translated:
         _isTranslated = true;
         _isInterleaved = false;
-        if (_translatedLines.isEmpty && !_isTranslating && hasLyrics && _currentLyricsId != null) {
+        if (_translatedLines.isEmpty &&
+            !_isTranslating &&
+            hasLyrics &&
+            _currentLyricsId != null) {
           _loadOrFetchTranslation();
         }
         break;
       case LyricsDisplayMode.interleaved:
         _isTranslated = true;
         _isInterleaved = true;
-        if (_translatedLines.isEmpty && !_isTranslating && hasLyrics && _currentLyricsId != null) {
+        if (_translatedLines.isEmpty &&
+            !_isTranslating &&
+            hasLyrics &&
+            _currentLyricsId != null) {
           _loadOrFetchTranslation();
         }
         break;

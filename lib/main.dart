@@ -10,6 +10,7 @@ import 'package:tachyon/app.dart';
 import 'package:tachyon/shared/utils/cover_utils.dart';
 
 import 'core/backend/backend.dart';
+import 'core/constants/languages.dart';
 import 'features/library/presentation/library_controller.dart';
 import 'features/locales/data/locale_repository.dart';
 import 'features/locales/presentation/locale_controller.dart';
@@ -51,15 +52,21 @@ Future<void> main() async {
   );
   await settingsController.init();
 
+  String resolveDefaultLanguage() {
+    final systemCode =
+        ui.PlatformDispatcher.instance.locale.languageCode.toLowerCase();
+    return languagesEndonyms.containsKey(systemCode) ? systemCode : 'en';
+  }
+
   String initialLang = settingsController.appLanguage;
-  if (initialLang == "defaultOption" || initialLang == "default") {
-    initialLang = ui.PlatformDispatcher.instance.locale.languageCode;
+  if (initialLang == "defaultOption") {
+    initialLang = resolveDefaultLanguage();
   }
   final localeController = LocaleController(localeRepository, initialLang);
   settingsController.addListener(() {
     final lang = settingsController.appLanguage;
-    final effective = (lang == "defaultOption" || lang == "default")
-        ? ui.PlatformDispatcher.instance.locale.languageCode
+    final effective = (lang == "defaultOption")
+        ? resolveDefaultLanguage()
         : lang;
     if (localeController.currentLocaleCode != effective) {
       localeController.setLocale(effective);
@@ -94,7 +101,38 @@ Future<void> main() async {
     backendClient: backendClient,
     playbackController: playbackController,
     settingsRepository: settingsRepository,
+    localeSupplier: () => localeController.currentLocaleCode,
   );
+
+  localeController.addListener(() {
+    if (lyricsController.isTranslated && lyricsController.hasLyrics) {
+      final savedTarget = settingsRepository.getLyricsTranslationTargetLang();
+      if (savedTarget == 'defaultOption') {
+        lyricsController.translateLyrics(
+          targetLanguage: localeController.currentLocaleCode,
+          force: true,
+        );
+      }
+    }
+  });
+
+  String lastTargetLang = settingsRepository.getLyricsTranslationTargetLang();
+  settingsController.addListener(() {
+    final currentTargetLang =
+        settingsRepository.getLyricsTranslationTargetLang();
+    if (currentTargetLang != lastTargetLang) {
+      lastTargetLang = currentTargetLang;
+      if (lyricsController.isTranslated && lyricsController.hasLyrics) {
+        final effectiveTarget = currentTargetLang == 'defaultOption'
+            ? localeController.currentLocaleCode
+            : currentTargetLang;
+        lyricsController.translateLyrics(
+          targetLanguage: effectiveTarget,
+          force: true,
+        );
+      }
+    }
+  });
 
   runApp(
     MultiProvider(

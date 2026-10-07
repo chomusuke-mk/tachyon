@@ -211,12 +211,7 @@ class LyricsTranslationClient {
       );
     }
 
-    final src =
-        (sourceLanguage == null ||
-            sourceLanguage == 'auto' ||
-            sourceLanguage == 'autodetect')
-        ? 'autodetect'
-        : sourceLanguage;
+    final src = sourceLanguage ?? 'autodetect';
 
     if (src != 'autodetect' && src == targetLanguage) {
       return TranslationResult(
@@ -295,12 +290,7 @@ class LyricsTranslationClient {
       return (lines: List<String>.from(batch), isSameLanguage: false);
     }
 
-    final src =
-        (sourceLanguage == null ||
-            sourceLanguage == 'auto' ||
-            sourceLanguage == 'autodetect')
-        ? 'autodetect'
-        : sourceLanguage;
+    final src = sourceLanguage ?? 'autodetect';
 
     if (src != 'autodetect' && src == targetLanguage) {
       return (lines: List<String>.from(batch), isSameLanguage: true);

@@ -88,6 +88,8 @@ class LyricsService {
   final LyricsCooldownManager cooldownManager;
   final LyricsTranslationClient translationClient;
 
+  final Map<String, Future<LyricsResult?>> _inFlightResolutions = {};
+
   LyricsService({
     required this.database,
     LrclibClient? lrclibClient,
@@ -114,6 +116,55 @@ class LyricsService {
     int? durationMs,
     bool allowRemote = true,
     bool bypassCache = false,
+    Set<LyricsSource>? allowedSources,
+    LyricsCancellationToken? cancellationToken,
+    void Function(int seconds)? onThresholdCountdown,
+  }) async {
+    bool cancelled() => cancellationToken?.isCancelled ?? false;
+    if (trackId <= 0 || cancelled()) return null;
+
+    final flightKey = '$trackId-$allowRemote';
+    if (!bypassCache && _inFlightResolutions.containsKey(flightKey)) {
+      final res = await _inFlightResolutions[flightKey];
+      if (cancelled()) return null;
+      return res;
+    }
+
+    final future = _resolveLyricsInternal(
+      trackId: trackId,
+      filePath: filePath,
+      title: title,
+      artist: artist,
+      album: album,
+      durationMs: durationMs,
+      allowRemote: allowRemote,
+      bypassCache: bypassCache,
+      allowedSources: allowedSources,
+      cancellationToken: cancellationToken,
+      onThresholdCountdown: onThresholdCountdown,
+    );
+
+    if (!bypassCache) {
+      _inFlightResolutions[flightKey] = future;
+      future.whenComplete(() {
+        _inFlightResolutions.remove(flightKey);
+      });
+    }
+
+    final res = await future;
+    if (cancelled()) return null;
+    return res;
+  }
+
+  Future<LyricsResult?> _resolveLyricsInternal({
+    required int trackId,
+    required String filePath,
+    String? title,
+    String? artist,
+    String? album,
+    int? durationMs,
+    required bool allowRemote,
+    required bool bypassCache,
     Set<LyricsSource>? allowedSources,
     LyricsCancellationToken? cancellationToken,
     void Function(int seconds)? onThresholdCountdown,
@@ -215,17 +266,14 @@ class LyricsService {
   }) async {
     if (kDebugMode) {
       debugPrint(
-        'Translating lyrics $lyricsId from ${sourceLang ?? 'auto'} into $targetLang...',
+        'Translating lyrics $lyricsId from ${sourceLang ?? 'autodetect'} into $targetLang...',
       );
     }
     if (rawLines.isEmpty) return const [];
 
     final storedLang = database.getLyricsLang(lyricsId);
     final isExplicitSame =
-        sourceLang != null &&
-        sourceLang != 'auto' &&
-        sourceLang != 'autodetect' &&
-        sourceLang == targetLang;
+        sourceLang != null && sourceLang != 'autodetect' && sourceLang == targetLang;
 
     // If lyrics are already known to be in targetLang, or if source and target match:
     if (storedLang == targetLang || isExplicitSame) {
@@ -272,9 +320,7 @@ class LyricsService {
 
     if (result.isSameLanguage) {
       database.updateLyricsLang(lyricsId, targetLang);
-    } else if (sourceLang != null &&
-        sourceLang != 'auto' &&
-        sourceLang != 'autodetect') {
+    } else if (sourceLang != null && sourceLang != 'autodetect') {
       database.updateLyricsLang(lyricsId, sourceLang);
     }
 
@@ -356,7 +402,9 @@ class LyricsService {
         finalLang = existing['lang'] as String?;
       }
     } catch (e) {
-      debugPrint('[LyricsService] Error storing found lyrics for track $trackId: $e');
+      debugPrint(
+        '[LyricsService] Error storing found lyrics for track $trackId: $e',
+      );
     }
     return LyricsResult(
       lyricsId: lyricsId,
@@ -383,7 +431,9 @@ class LyricsService {
         state: LyricsSourceState.notFound.dbValue,
       );
     } catch (e) {
-      debugPrint('[LyricsService] Error storing not-found for track $trackId: $e');
+      debugPrint(
+        '[LyricsService] Error storing not-found for track $trackId: $e',
+      );
     }
   }
 
@@ -399,9 +449,16 @@ class LyricsService {
         if (existing != null) database.deleteLyrics(existing['id'] as int);
         return;
       }
-      _storeFound(trackId, LyricsSource.file, raw, LrcParser.parse(raw).isSynced);
+      _storeFound(
+        trackId,
+        LyricsSource.file,
+        raw,
+        LrcParser.parse(raw).isSynced,
+      );
     } catch (e) {
-      debugPrint('[LyricsService] Error in _syncFileLyrics for track $trackId: $e');
+      debugPrint(
+        '[LyricsService] Error in _syncFileLyrics for track $trackId: $e',
+      );
     }
   }
 

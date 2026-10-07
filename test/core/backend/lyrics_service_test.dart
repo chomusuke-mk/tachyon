@@ -234,6 +234,21 @@ void main() {
       expect((await resolve(id))!.source, LyricsSource.lyricsOvh);
       expect(service.cooldownManager.isCooldownActive, isTrue);
     });
+
+    test('concurrent resolveLyrics calls for the same trackId deduplicate into a single remote fetch', () async {
+      final id = scan();
+      lrclib.next = const LrclibSuccess(syncedLyrics: '[00:01.00] Concurrent');
+
+      final results = await Future.wait([
+        resolve(id),
+        resolve(id),
+      ]);
+
+      expect(results[0], isNotNull);
+      expect(results[1], isNotNull);
+      expect(results[0]!.lyricsId, equals(results[1]!.lyricsId));
+      expect(lrclib.calls, 1, reason: 'Must deduplicate in-flight resolutions into a single fetch');
+    });
   });
 
   group('Forced re-search', () {

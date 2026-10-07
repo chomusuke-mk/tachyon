@@ -91,6 +91,8 @@ class AppStringKey {
       _cadenasLocalizadas['np_lyrics_target_lang'] ?? '';
   String get npLyricsLangAuto =>
       _cadenasLocalizadas['np_lyrics_lang_auto'] ?? '';
+  String get npLyricsLangAutoTarget =>
+      _cadenasLocalizadas['np_lyrics_lang_auto_target'] ?? '';
   String get npLyricsRateLimitError =>
       _cadenasLocalizadas['np_lyrics_rate_limit_error'] ?? '';
   String get npLyricsThresholdWaiting =>

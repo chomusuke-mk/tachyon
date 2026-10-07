@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'lyrics_rate_limiter.dart';
@@ -334,6 +335,9 @@ class LrclibClient {
 
     final headers = {'User-Agent': _userAgent, 'Accept': 'application/json'};
 
+    debugPrint(
+      'Dispatching request to $requestUri at ${now.toIso8601String()}',
+    );
     // 6. Execute HTTP request
     try {
       final response = await _httpClient.get(requestUri, headers: headers);

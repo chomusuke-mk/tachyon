@@ -124,6 +124,9 @@ class LyricsOvhClient {
     final uri = Uri.parse(url);
 
     try {
+      debugPrint(
+        'Fetching lyrics from $url at ${DateTime.now().toIso8601String()}',
+      );
       final response = await _httpClient
           .get(
             uri,

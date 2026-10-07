@@ -146,6 +146,12 @@ class SettingsScreen extends StatelessWidget {
                             final isSelected =
                                 settings.lyricsTranslationTargetLang ==
                                 'defaultOption';
+                            final effectiveLocale = context
+                                .read<LocaleController>()
+                                .currentLocaleCode;
+                            final resolvedName =
+                                languagesEndonyms[effectiveLocale] ??
+                                effectiveLocale;
                             return ListTile(
                               leading: Icon(
                                 Icons.auto_awesome_rounded,
@@ -161,6 +167,7 @@ class SettingsScreen extends StatelessWidget {
                                       : FontWeight.normal,
                                 ),
                               ),
+                              subtitle: Text(resolvedName),
                               trailing: isSelected
                                   ? Icon(
                                       Icons.check_rounded,
@@ -274,9 +281,14 @@ class SettingsScreen extends StatelessWidget {
                             : filteredEntries.length,
                         itemBuilder: (context, index) {
                           if (searchQuery.isEmpty && index == 0) {
-                            final isSelected = settings.appLanguage == 'default' ||
-                                settings.appLanguage == 'defaultOption' ||
-                                settings.appLanguage.isEmpty;
+                            final isSelected =
+                                settings.appLanguage == 'defaultOption';
+                            final effectiveLocale = context
+                                .read<LocaleController>()
+                                .currentLocaleCode;
+                            final resolvedName =
+                                languagesEndonyms[effectiveLocale] ??
+                                effectiveLocale;
                             return ListTile(
                               leading: Icon(
                                 Icons.auto_awesome_rounded,
@@ -292,21 +304,26 @@ class SettingsScreen extends StatelessWidget {
                                       : FontWeight.normal,
                                 ),
                               ),
+                              subtitle: Text(resolvedName),
                               trailing: isSelected
                                   ? Icon(
                                       Icons.check_rounded,
-                                      color: Theme.of(context).colorScheme.primary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary,
                                     )
                                   : null,
                               onTap: () {
-                                settings.setAppLanguage('default');
+                                settings.setAppLanguage('defaultOption');
                                 Navigator.of(dialogCtx).pop();
                               },
                             );
                           }
 
-                          final item = filteredEntries[
-                              searchQuery.isEmpty ? index - 1 : index];
+                          final item =
+                              filteredEntries[searchQuery.isEmpty
+                                  ? index - 1
+                                  : index];
                           final isSelected = settings.appLanguage == item.key;
 
                           return ListTile(
@@ -322,7 +339,9 @@ class SettingsScreen extends StatelessWidget {
                             trailing: isSelected
                                 ? Icon(
                                     Icons.check_rounded,
-                                    color: Theme.of(context).colorScheme.primary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary,
                                   )
                                 : null,
                             onTap: () {
@@ -351,7 +370,9 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final strings = context.watch<LocaleController>().localeStrings;
+    final localeController = context.watch<LocaleController>();
+    final strings = localeController.localeStrings;
+    final currentLocale = localeController.currentLocaleCode;
     final settings = context.watch<SettingsController>();
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -404,12 +425,14 @@ class SettingsScreen extends StatelessWidget {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.35),
+                          color: colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.35,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: colorScheme.outlineVariant
-                                .withValues(alpha: 0.25),
+                            color: colorScheme.outlineVariant.withValues(
+                              alpha: 0.25,
+                            ),
                           ),
                         ),
                         child: Row(
@@ -547,9 +570,8 @@ class SettingsScreen extends StatelessWidget {
                         ],
                         selected: {settings.crossfadeCurve},
                         onSelectionChanged: settings.crossfadeEnabled
-                            ? (newSelection) => settings.setCrossfadeCurve(
-                                newSelection.first,
-                              )
+                            ? (newSelection) =>
+                                  settings.setCrossfadeCurve(newSelection.first)
                             : null,
                       ),
                     ),
@@ -559,10 +581,7 @@ class SettingsScreen extends StatelessWidget {
                     title: strings.sGaplessPlayback,
                     description: strings.sGaplessPlaybackDesc,
                     type: ControllerType.switchCtrl,
-                    child: Switch(
-                      value: true,
-                      onChanged: null,
-                    ),
+                    child: Switch(value: true, onChanged: null),
                   ),
                 ],
               ),
@@ -606,7 +625,9 @@ class SettingsScreen extends StatelessWidget {
                                 label: showLabels
                                     ? Text(strings.sThemeSystem)
                                     : null,
-                                tooltip: showLabels ? null : strings.sThemeSystem,
+                                tooltip: showLabels
+                                    ? null
+                                    : strings.sThemeSystem,
                               ),
                               ButtonSegment<ThemeMode>(
                                 value: ThemeMode.light,
@@ -617,7 +638,9 @@ class SettingsScreen extends StatelessWidget {
                                 label: showLabels
                                     ? Text(strings.sThemeLight)
                                     : null,
-                                tooltip: showLabels ? null : strings.sThemeLight,
+                                tooltip: showLabels
+                                    ? null
+                                    : strings.sThemeLight,
                               ),
                               ButtonSegment<ThemeMode>(
                                 value: ThemeMode.dark,
@@ -664,13 +687,15 @@ class SettingsScreen extends StatelessWidget {
                         spacing: 12,
                         runSpacing: 12,
                         children: [
-                          for (final color in TachyonColors.predefinedAccentColors)
+                          for (final color
+                              in TachyonColors.predefinedAccentColors)
                             _buildColorCircle(
                               context: context,
                               color: color,
                               isSelected:
                                   settings.accentColorValue == color.toARGB32(),
-                              onTap: () => settings.setAccentColor(color.toARGB32()),
+                              onTap: () =>
+                                  settings.setAccentColor(color.toARGB32()),
                             ),
                         ],
                       ),
@@ -691,12 +716,14 @@ class SettingsScreen extends StatelessWidget {
                               icon: const Icon(Icons.image_outlined),
                               label: Text(strings.sSelectBackgroundImage),
                               onPressed: () async {
-                                final picked = await FilePickerService.pickImage(
-                                  dialogTitle: strings.sSelectBackgroundImage,
-                                );
+                                final picked =
+                                    await FilePickerService.pickImage(
+                                      dialogTitle:
+                                          strings.sSelectBackgroundImage,
+                                    );
                                 if (picked != null) {
-                                  final success =
-                                      await settings.setCustomBackground(picked);
+                                  final success = await settings
+                                      .setCustomBackground(picked);
                                   if (!success && context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
@@ -736,7 +763,9 @@ class SettingsScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 12),
                                 FilledButton.tonalIcon(
-                                  icon: const Icon(Icons.photo_library_outlined),
+                                  icon: const Icon(
+                                    Icons.photo_library_outlined,
+                                  ),
                                   label: Text(strings.sChangeBackgroundImage),
                                   onPressed: () async {
                                     final picked =
@@ -745,13 +774,17 @@ class SettingsScreen extends StatelessWidget {
                                               strings.sChangeBackgroundImage,
                                         );
                                     if (picked != null) {
-                                      await settings.setCustomBackground(picked);
+                                      await settings.setCustomBackground(
+                                        picked,
+                                      );
                                     }
                                   },
                                 ),
                                 const SizedBox(width: 8),
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline_rounded),
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                  ),
                                   tooltip: strings.sRemoveBackgroundImage,
                                   color: colorScheme.error,
                                   onPressed: () =>
@@ -825,23 +858,22 @@ class SettingsScreen extends StatelessWidget {
                     type: ControllerType.dropdown,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(12),
-                      onTap: () => _showAppLanguageDialog(
-                        context,
-                        settings,
-                        strings,
-                      ),
+                      onTap: () =>
+                          _showAppLanguageDialog(context, settings, strings),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.45),
+                          color: colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.45,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: colorScheme.outlineVariant
-                                .withValues(alpha: 0.35),
+                            color: colorScheme.outlineVariant.withValues(
+                              alpha: 0.35,
+                            ),
                           ),
                         ),
                         child: Row(
@@ -849,12 +881,11 @@ class SettingsScreen extends StatelessWidget {
                           children: [
                             Flexible(
                               child: Text(
-                                (settings.appLanguage == 'default' ||
-                                        settings.appLanguage == 'defaultOption' ||
-                                        settings.appLanguage.isEmpty)
-                                    ? strings.sTranslationLangDefault
-                                    : (languagesEndonyms[settings.appLanguage] ??
-                                        settings.appLanguage),
+                                (settings.appLanguage == 'defaultOption')
+                                    ? '${strings.sTranslationLangDefault} (${languagesEndonyms[currentLocale] ?? currentLocale})'
+                                    : (languagesEndonyms[settings
+                                              .appLanguage] ??
+                                          settings.appLanguage),
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w500,
@@ -886,12 +917,14 @@ class SettingsScreen extends StatelessWidget {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.45),
+                          color: colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.45,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: colorScheme.outlineVariant
-                                .withValues(alpha: 0.35),
+                            color: colorScheme.outlineVariant.withValues(
+                              alpha: 0.35,
+                            ),
                           ),
                         ),
                         child: Row(
@@ -901,7 +934,7 @@ class SettingsScreen extends StatelessWidget {
                               child: Text(
                                 settings.lyricsTranslationTargetLang ==
                                         'defaultOption'
-                                    ? strings.sTranslationLangDefault
+                                    ? '${strings.sTranslationLangDefault} (${languagesEndonyms[currentLocale] ?? currentLocale})'
                                     : (languagesEndonyms[settings
                                               .lyricsTranslationTargetLang] ??
                                           settings.lyricsTranslationTargetLang),
@@ -1010,11 +1043,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           child: isSelected
               ? Center(
-                  child: Icon(
-                    Icons.check_rounded,
-                    size: 20,
-                    color: checkColor,
-                  ),
+                  child: Icon(Icons.check_rounded, size: 20, color: checkColor),
                 )
               : null,
         ),

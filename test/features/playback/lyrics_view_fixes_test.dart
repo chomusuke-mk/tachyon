@@ -86,6 +86,7 @@ Line 10 plain
   }
 
   bool returnSynced = true;
+  int resolveLyricsCallCount = 0;
 
   @override
   Future<LyricsResult?> resolveLyrics({
@@ -101,6 +102,7 @@ Line 10 plain
     LyricsCancellationToken? cancellationToken,
     void Function(int seconds)? onThresholdCountdown,
   }) async {
+    resolveLyricsCallCount++;
     final text = filePath.contains('track2')
         ? generate50Lines()
         : (returnSynced ? syncedLrcText : unsyncedLrcText);
@@ -618,6 +620,39 @@ void main() {
 
     expect(lyrics.currentIndex, equals(35)); // Line 36
     expect(find.text('Track 2 Line 36'), findsOneWidget);
+
+    lyrics.dispose();
+    playback.dispose();
+  });
+
+  testWidgets('ensureLyricsLoaded does not duplicate backend resolve calls while loading', (tester) async {
+    final client = FakeBackendClient(db);
+    final cooldown = LyricsCooldownManager();
+    final playback = MockPlaybackController();
+    playback.currentTrack = const Track(
+      id: 999,
+      filePath: '/music/track_test.mp3',
+      title: 'Track Test',
+      durationMs: 180000,
+      fileSize: 1000,
+      modifiedAt: 1000,
+      artists: [Artist(name: 'Artist Test')],
+    );
+
+    final lyrics = LyricsController(
+      backendClient: client,
+      playbackController: playback,
+      cooldownManager: cooldown,
+      settingsRepository: settingsRepo,
+    );
+    lyrics.setLyricsViewVisible(true);
+
+    // Call ensureLyricsLoaded twice concurrently
+    final f1 = lyrics.ensureLyricsLoaded();
+    final f2 = lyrics.ensureLyricsLoaded();
+    await Future.wait([f1, f2]);
+
+    expect(client.resolveLyricsCallCount, equals(1));
 
     lyrics.dispose();
     playback.dispose();
