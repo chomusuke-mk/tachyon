@@ -458,6 +458,27 @@ class LibraryStore {
     _allPlaylists.removeWhere((p) => p.id == playlistId);
   }
 
+  void renamePlaylist(int playlistId, String newName) {
+    final playlist = _playlistsById[playlistId];
+    if (playlist == null) return;
+    final updated = Playlist(
+      id: playlist.id,
+      name: newName,
+      createdAt: playlist.createdAt,
+      type: playlist.type,
+      entries: playlist.entries,
+    );
+    _playlistsById[playlistId] = updated;
+    final index = _allPlaylists.indexWhere((p) => p.id == playlistId);
+    if (index != -1) {
+      _allPlaylists[index] = updated;
+    }
+  }
+
+  void clearHistory() {
+    historyPlaylist?.entries.clear();
+  }
+
   void removeTrack(int trackId) {
     final track = _tracksById.remove(trackId);
     if (track == null) return;

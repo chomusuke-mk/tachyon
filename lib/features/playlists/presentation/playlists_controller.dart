@@ -12,20 +12,15 @@ class PlaylistsController extends ChangeNotifier {
   final TachyonBackendClient backend;
   TachyonBackendClient get _backend => backend;
 
-  LibraryStore? store;
-  LibraryStore? get _store => store;
-  set _store(LibraryStore? val) => store = val;
+  LibraryStore store;
+  LibraryStore get _store => store;
+  set _store(LibraryStore val) => store = val;
   StreamSubscription<void>? _catalogSubscription;
   bool _isDisposed = false;
 
-  PlaylistsController({required this.backend, this.store}) {
-    _catalogSubscription = _backend.catalogUpdatedStream.listen((_) {
-      loadPlaylists();
-    });
-
-    if (_store != null) {
-      _syncFromStore();
-    }
+  PlaylistsController({required this.backend, LibraryStore? store})
+      : store = store ?? LibraryStore() {
+    _syncFromStore();
   }
 
   // ---------------------------------------------------------------------------
@@ -59,8 +54,7 @@ class PlaylistsController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  bool isTrackLiked(int trackId) =>
-      _store?.isTrackLiked(trackId) ?? _likedTrackIds.contains(trackId);
+  bool isTrackLiked(int trackId) => _store.isTrackLiked(trackId);
 
   // ---------------------------------------------------------------------------
   // Store Integration
@@ -73,7 +67,6 @@ class PlaylistsController extends ChangeNotifier {
 
   void _syncFromStore() {
     final s = _store;
-    if (s == null) return;
     _playlists = s.playlists;
     _likedTrackIds.clear();
     _likedTrackIds.addAll(s.likedTrackIds);
@@ -97,18 +90,9 @@ class PlaylistsController extends ChangeNotifier {
   // Operations
   // ---------------------------------------------------------------------------
   Future<void> loadPlaylists() async {
-    _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
-
     try {
-      if (_store != null) {
-        _syncFromStore();
-      } else {
-        final snapshot = await _backend.getCatalogSnapshot();
-        _store = LibraryStore.fromSnapshot(snapshot);
-        _syncFromStore();
-      }
+      _syncFromStore();
     } catch (e, st) {
       _errorMessage = 'Failed to load playlists: $e';
       debugPrint('$_errorMessage\n$st');
@@ -119,13 +103,10 @@ class PlaylistsController extends ChangeNotifier {
   }
 
   Future<void> selectPlaylist(Playlist playlist) async {
-    _selectedPlaylist = playlist;
-    _isLoading = true;
-    notifyListeners();
-
+    _errorMessage = null;
     try {
-      if (playlist.id != null && _store != null) {
-        final found = _store!.getPlaylistById(playlist.id!);
+      if (playlist.id != null) {
+        final found = _store.getPlaylistById(playlist.id!);
         if (found != null) {
           _selectedPlaylist = found;
           _selectedPlaylistTracks = found.entries
@@ -137,17 +118,9 @@ class PlaylistsController extends ChangeNotifier {
       }
 
       // Resolve directly from memory pointers in playlist entries
+      _selectedPlaylist = playlist;
       _selectedPlaylistTracks = playlist.entries
-          .map((e) {
-            final t = e.track;
-            if (t == null) return null;
-            if (_store != null) {
-              return (t.id != null ? _store!.getTrackById(t.id!) : null) ??
-                  _store!.getTrackByPath(t.filePath) ??
-                  t;
-            }
-            return t;
-          })
+          .map((e) => e.track)
           .whereType<Track>()
           .toList();
     } catch (e) {
@@ -164,7 +137,17 @@ class PlaylistsController extends ChangeNotifier {
 
     try {
       final id = await _backend.createPlaylist(clean);
-      await loadPlaylists();
+      if (id != -1) {
+        _store.addPlaylist(Playlist(
+          id: id,
+          name: clean,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          type: PlaylistType.user,
+          entries: const [],
+        ));
+        _syncFromStore();
+        notifyListeners();
+      }
       return id;
     } catch (e) {
       debugPrint('[PlaylistsController] createPlaylist error: $e');
@@ -181,8 +164,10 @@ class PlaylistsController extends ChangeNotifier {
     }
 
     try {
+      _store.renamePlaylist(playlistId, clean);
+      _syncFromStore();
+      notifyListeners();
       await _backend.renamePlaylist(playlistId, clean);
-      await loadPlaylists();
     } catch (e) {
       debugPrint('[PlaylistsController] renamePlaylist error: $e');
     }
@@ -195,19 +180,21 @@ class PlaylistsController extends ChangeNotifier {
     }
 
     try {
-      await _backend.deletePlaylist(playlistId);
+      _store.removePlaylist(playlistId);
       if (_selectedPlaylist?.id == playlistId) {
         _selectedPlaylist = null;
         _selectedPlaylistTracks.clear();
       }
-      await loadPlaylists();
+      _syncFromStore();
+      notifyListeners();
+      await _backend.deletePlaylist(playlistId);
     } catch (e) {
       debugPrint('[PlaylistsController] deletePlaylist error: $e');
     }
   }
 
   Future<void> addTrackToPlaylist(int playlistId, int trackId) async {
-    _store?.addTrackToPlaylist(playlistId, trackId);
+    _store.addTrackToPlaylist(playlistId, trackId);
     if (playlistId == AppDatabase.likedSongsPlaylistId) {
       _likedTrackIds.add(trackId);
     }
@@ -216,14 +203,13 @@ class PlaylistsController extends ChangeNotifier {
 
     try {
       await _backend.addTracksToPlaylist(playlistId, [trackId]);
-      await loadPlaylists();
     } catch (e) {
       debugPrint('[PlaylistsController] addTrackToPlaylist error: $e');
     }
   }
 
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) async {
-    _store?.removeTrackFromPlaylist(playlistId, trackId);
+    _store.removeTrackFromPlaylist(playlistId, trackId);
     if (playlistId == AppDatabase.likedSongsPlaylistId) {
       _likedTrackIds.remove(trackId);
     }
@@ -232,7 +218,6 @@ class PlaylistsController extends ChangeNotifier {
 
     try {
       await _backend.removeTrackFromPlaylist(playlistId, trackId);
-      await loadPlaylists();
     } catch (e) {
       debugPrint('[PlaylistsController] removeTrackFromPlaylist error: $e');
     }
@@ -247,7 +232,7 @@ class PlaylistsController extends ChangeNotifier {
     if (toIndex < 0 || toIndex >= _selectedPlaylistTracks.length) return;
 
     // Optimistic UI update on store and in-memory track list
-    _store?.reorderPlaylistEntries(playlistId, fromIndex, toIndex);
+    _store.reorderPlaylistEntries(playlistId, fromIndex, toIndex);
     final item = _selectedPlaylistTracks.removeAt(fromIndex);
     _selectedPlaylistTracks.insert(toIndex, item);
     notifyListeners();
@@ -268,7 +253,7 @@ class PlaylistsController extends ChangeNotifier {
     } else {
       _likedTrackIds.remove(trackId);
     }
-    _store?.setTrackLiked(trackId, nowLiked);
+    _store.setTrackLiked(trackId, nowLiked);
     _syncFromStore();
     notifyListeners();
 
@@ -280,7 +265,7 @@ class PlaylistsController extends ChangeNotifier {
         } else {
           _likedTrackIds.remove(trackId);
         }
-        _store?.setTrackLiked(trackId, isLiked);
+        _store.setTrackLiked(trackId, isLiked);
         _syncFromStore();
         notifyListeners();
       }
@@ -291,7 +276,7 @@ class PlaylistsController extends ChangeNotifier {
       } else {
         _likedTrackIds.remove(trackId);
       }
-      _store?.setTrackLiked(trackId, wasLiked);
+      _store.setTrackLiked(trackId, wasLiked);
       _syncFromStore();
       notifyListeners();
       debugPrint('[PlaylistsController] toggleLike error: $e');
@@ -306,11 +291,13 @@ class PlaylistsController extends ChangeNotifier {
 
   Future<void> clearHistory() async {
     try {
-      await _backend.clearHistory();
+      _store.clearHistory();
       if (_selectedPlaylist?.id == AppDatabase.historyPlaylistId) {
         _selectedPlaylistTracks.clear();
       }
-      await loadPlaylists();
+      _syncFromStore();
+      notifyListeners();
+      await _backend.clearHistory();
     } catch (e) {
       debugPrint('[PlaylistsController] clearHistory error: $e');
     }

@@ -507,5 +507,58 @@ void main() {
       await backend.dispose();
       await db.close();
     });
+
+    test('LibraryStore renamePlaylist and clearHistory work in-memory', () {
+      final snapshot = _createSampleSnapshot();
+      final store = LibraryStore.fromSnapshot(snapshot);
+
+      expect(store.getPlaylistById(50)?.name, equals('My Favorites'));
+      store.renamePlaylist(50, 'Classic Rock Hits');
+      expect(store.getPlaylistById(50)?.name, equals('Classic Rock Hits'));
+      expect(store.playlists.firstWhere((p) => p.id == 50).name, equals('Classic Rock Hits'));
+
+      final historyPl = store.historyPlaylist;
+      expect(historyPl, isNotNull);
+      store.addTrackToPlaylist(2, 1001);
+      expect(historyPl!.entries.length, equals(1));
+      store.clearHistory();
+      expect(historyPl.entries, isEmpty);
+    });
+
+    test('PlaylistsController performs in-memory playlist mutations cleanly', () async {
+      final snapshot = _createSampleSnapshot();
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final db = AppDatabase.inMemory();
+      final backend = DirectTachyonBackendClient(database: db);
+
+      final playlistsController = PlaylistsController(
+        backend: backend,
+        store: store,
+      );
+
+      // Create playlist
+      final newId = await playlistsController.createPlaylist('New In-Memory Playlist');
+      expect(newId, isPositive);
+      expect(playlistsController.playlists.any((p) => p.name == 'New In-Memory Playlist'), isTrue);
+      expect(store.getPlaylistById(newId)?.name, equals('New In-Memory Playlist'));
+
+      // Rename playlist
+      await playlistsController.renamePlaylist(newId, 'Renamed Playlist');
+      expect(playlistsController.playlists.any((p) => p.name == 'Renamed Playlist'), isTrue);
+      expect(store.getPlaylistById(newId)?.name, equals('Renamed Playlist'));
+
+      // Delete playlist
+      await playlistsController.deletePlaylist(newId);
+      expect(playlistsController.playlists.any((p) => p.id == newId), isFalse);
+      expect(store.getPlaylistById(newId), isNull);
+
+      // Clear history
+      await playlistsController.clearHistory();
+      expect(playlistsController.historyPlaylist?.entries, isEmpty);
+
+      playlistsController.dispose();
+      await backend.dispose();
+      await db.close();
+    });
   });
 }
