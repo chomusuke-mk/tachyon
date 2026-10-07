@@ -4,6 +4,7 @@ import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
@@ -731,13 +732,35 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   void _openAudioControls(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    showModalBottomSheet(
-      useSafeArea: true,
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: colorScheme.surfaceContainerHigh,
-      builder: (context) => const AudioEffectsSheet(),
-    );
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
+
+    if (isDesktop) {
+      showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
+          backgroundColor: colorScheme.surfaceContainerHigh,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 540, maxHeight: 680),
+            child: const AudioEffectsSheet(isDialog: true),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet<void>(
+        useSafeArea: true,
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: colorScheme.surfaceContainerHigh,
+        constraints: const BoxConstraints(maxWidth: 540),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        builder: (context) => const AudioEffectsSheet(),
+      );
+    }
   }
 
   void _showAudioDevicesDialog(BuildContext context) async {
@@ -751,22 +774,92 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     if (!context.mounted) return;
 
     final currentDeviceId = settings.audioOutputDeviceId;
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
-    showModalBottomSheet(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: colorScheme.surfaceContainerHigh,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    Widget buildDeviceTile({
+      required IconData icon,
+      required String title,
+      required bool isSelected,
+      required VoidCallback onTap,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8.0),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? colorScheme.primaryContainer.withValues(alpha: 0.35)
+                  : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected
+                    ? colorScheme.primary
+                    : colorScheme.outlineVariant.withValues(alpha: 0.35),
+                width: isSelected ? 1.8 : 1.0,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? colorScheme.primary.withValues(alpha: 0.15)
+                        : colorScheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: isSelected
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.w500,
+                      color: isSelected
+                          ? colorScheme.onSurface
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  isSelected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 20,
+                  color: isSelected
+                      ? colorScheme.primary
+                      : colorScheme.outline.withValues(alpha: 0.6),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget buildContent({required bool isSheet}) {
+      return Container(
+        padding: EdgeInsets.fromLTRB(20, isSheet ? 12 : 20, 20, isSheet ? 28 : 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isSheet) ...[
               Center(
                 child: Container(
                   width: 36,
@@ -777,43 +870,49 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(Icons.speaker_group_rounded, color: colorScheme.primary),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      strings.npAudioDevices,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+              const SizedBox(height: 14),
+            ],
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.speaker_group_rounded,
+                    color: colorScheme.primary,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    strings.npAudioDevices,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    ListTile(
-                      leading: const Icon(Icons.settings_suggest_rounded),
-                      title: Text(strings.npAudioDeviceDefault),
-                      trailing:
-                          (currentDeviceId == null || currentDeviceId.isEmpty)
-                          ? Icon(
-                              Icons.check_rounded,
-                              color: colorScheme.primary,
-                            )
-                          : null,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                    buildDeviceTile(
+                      icon: Icons.settings_suggest_rounded,
+                      title: strings.npAudioDeviceDefault,
+                      isSelected:
+                          currentDeviceId == null || currentDeviceId.isEmpty,
                       onTap: () async {
                         await settings.setAudioOutputDeviceId(null);
                         if (devices.isNotEmpty) {
@@ -826,29 +925,24 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                         if (context.mounted) Navigator.of(context).pop();
                       },
                     ),
-                    const Divider(),
                     ...devices.map((device) {
                       final isSelected =
                           currentDeviceId == device.id ||
                           ((currentDeviceId == null ||
                                   currentDeviceId.isEmpty) &&
                               device.isDefault);
-                      return ListTile(
-                        leading: Icon(
-                          device.name.toLowerCase().contains('headphone')
+                      final devName = device.name.toLowerCase();
+                      final icon = devName.contains('bluetooth')
+                          ? Icons.bluetooth_audio_rounded
+                          : (devName.contains('headphone') ||
+                                  devName.contains('headset')
                               ? Icons.headphones_rounded
-                              : Icons.speaker_rounded,
-                        ),
-                        title: Text(device.name),
-                        trailing: isSelected
-                            ? Icon(
-                                Icons.check_rounded,
-                                color: colorScheme.primary,
-                              )
-                            : null,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                              : Icons.speaker_rounded);
+
+                      return buildDeviceTile(
+                        icon: icon,
+                        title: device.name,
+                        isSelected: isSelected,
                         onTap: () async {
                           await settings.setAudioOutputDeviceId(device.id);
                           await playback.setAudioDevice(device);
@@ -859,11 +953,39 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   ],
                 ),
               ),
-            ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isDesktop) {
+      showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
           ),
-        );
-      },
-    );
+          backgroundColor: colorScheme.surfaceContainerHigh,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460, maxHeight: 580),
+            child: buildContent(isSheet: false),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet<void>(
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
+        backgroundColor: colorScheme.surfaceContainerHigh,
+        constraints: const BoxConstraints(maxWidth: 500),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        builder: (context) => buildContent(isSheet: true),
+      );
+    }
   }
 }
 

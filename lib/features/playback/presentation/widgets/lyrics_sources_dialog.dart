@@ -109,40 +109,67 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
                 child: Column(
                   children: [
                     TextField(
-                      autofocus: false,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        hintText: strings.srHint,
-                        isDense: true,
-                        border: const OutlineInputBorder(),
+                        autofocus: false,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          hintText: strings.srHint,
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                        ),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            searchQuery = val;
+                          });
+                        },
                       ),
-                      onChanged: (val) {
-                        setDialogState(() {
-                          searchQuery = val;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: itemCount,
-                        itemBuilder: (context, index) {
-                          if (showAuto && index == 0) {
-                            final isSelected = currentCode == 'auto' ||
-                                currentCode == 'autodetect';
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: itemCount,
+                          itemBuilder: (context, index) {
+                            if (showAuto && index == 0) {
+                              final isSelected = currentCode == 'auto' ||
+                                  currentCode == 'autodetect';
+                              return ListTile(
+                                leading: Icon(
+                                  Icons.auto_awesome_rounded,
+                                  color: isSelected ? colorScheme.primary : null,
+                                ),
+                                title: Text(
+                                  strings.npLyricsLangAuto,
+                                  style: TextStyle(
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                trailing: isSelected
+                                    ? Icon(
+                                        Icons.check_rounded,
+                                        color: colorScheme.primary,
+                                      )
+                                    : null,
+                                onTap: () {
+                                  onSelected('auto');
+                                  Navigator.of(dialogCtx).pop();
+                                },
+                              );
+                            }
+
+                            final itemIndex = showAuto ? index - 1 : index;
+                            final item = filteredEntries[itemIndex];
+                            final isSelected = currentCode == item.key;
+
                             return ListTile(
-                              leading: Icon(
-                                Icons.auto_awesome_rounded,
-                                color: isSelected ? colorScheme.primary : null,
-                              ),
                               title: Text(
-                                strings.npLyricsLangAuto,
+                                item.value,
                                 style: TextStyle(
                                   fontWeight: isSelected
                                       ? FontWeight.bold
                                       : FontWeight.normal,
                                 ),
                               ),
+                              subtitle: Text(item.key),
                               trailing: isSelected
                                   ? Icon(
                                       Icons.check_rounded,
@@ -150,43 +177,16 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
                                     )
                                   : null,
                               onTap: () {
-                                onSelected('auto');
+                                onSelected(item.key);
                                 Navigator.of(dialogCtx).pop();
                               },
                             );
-                          }
-
-                          final itemIndex = showAuto ? index - 1 : index;
-                          final item = filteredEntries[itemIndex];
-                          final isSelected = currentCode == item.key;
-
-                          return ListTile(
-                            title: Text(
-                              item.value,
-                              style: TextStyle(
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            subtitle: Text(item.key),
-                            trailing: isSelected
-                                ? Icon(
-                                    Icons.check_rounded,
-                                    color: colorScheme.primary,
-                                  )
-                                : null,
-                            onTap: () {
-                              onSelected(item.key);
-                              Navigator.of(dialogCtx).pop();
-                            },
-                          );
-                        },
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogCtx).pop(),
@@ -227,224 +227,275 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      title: Center(
-        child: SegmentedButton<LyricsDialogTab>(
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment<LyricsDialogTab>(
-              value: LyricsDialogTab.sources,
-              label: Text(strings.npLyricsTabSources),
-              icon: const Icon(Icons.tune_rounded, size: 18),
-            ),
-            ButtonSegment<LyricsDialogTab>(
-              value: LyricsDialogTab.translation,
-              label: Text(strings.npLyricsTabTranslation),
-              icon: const Icon(Icons.translate_rounded, size: 18),
-            ),
-          ],
-          selected: {_selectedTab},
-          onSelectionChanged: (newSelection) {
-            setState(() => _selectedTab = newSelection.first);
-          },
+      title: SizedBox(
+        width: double.infinity,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: SegmentedButton<LyricsDialogTab>(
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment<LyricsDialogTab>(
+                value: LyricsDialogTab.sources,
+                label: Text(strings.npLyricsTabSources),
+                icon: const Icon(Icons.tune_rounded, size: 18),
+              ),
+              ButtonSegment<LyricsDialogTab>(
+                value: LyricsDialogTab.translation,
+                label: Text(strings.npLyricsTabTranslation),
+                icon: const Icon(Icons.translate_rounded, size: 18),
+              ),
+            ],
+            selected: {_selectedTab},
+            onSelectionChanged: (newSelection) {
+              setState(() => _selectedTab = newSelection.first);
+            },
+          ),
         ),
       ),
-      contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      content: SingleChildScrollView(
-        child: _selectedTab == LyricsDialogTab.sources
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 1. Local Sources Switch
-                  SwitchListTile.adaptive(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    secondary: Icon(
-                      Icons.audio_file_outlined,
-                      color: _enableLocal
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                    ),
-                    title: Text(
-                      strings.npLyricsSourceLocal,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    subtitle: Text(
-                      strings.npLyricsSourceLocalDesc,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    value: _enableLocal,
-                    onChanged: _updateLocal,
-                  ),
-                  const Divider(height: 8, indent: 16, endIndent: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 420,
+        ),
+        child: SingleChildScrollView(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _selectedTab == LyricsDialogTab.sources
+                  ? Column(
+                      key: const ValueKey('sources_tab'),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 1. Local Sources Switch
+                        SwitchListTile.adaptive(
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 0,
+                          ),
+                          secondary: Icon(
+                            Icons.audio_file_outlined,
+                            size: 22,
+                            color: _enableLocal
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                          title: Text(
+                            strings.npLyricsSourceLocal,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            strings.npLyricsSourceLocalDesc,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          value: _enableLocal,
+                          onChanged: _updateLocal,
+                        ),
+                        const Divider(height: 8, indent: 8, endIndent: 8),
 
-                  // 2. Primary Remote API (lrclib.net) Switch
-                  SwitchListTile.adaptive(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    secondary: Icon(
-                      Icons.cloud_sync_outlined,
-                      color: _enableLrclib
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                    ),
-                    title: Text(
-                      strings.npLyricsSourceLrclib,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    subtitle: Text(
-                      strings.npLyricsSourceLrclibDesc,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    value: _enableLrclib,
-                    onChanged: _updateLrclib,
-                  ),
-                  const Divider(height: 8, indent: 16, endIndent: 16),
+                        // 2. Primary Remote API (lrclib.net) Switch
+                        SwitchListTile.adaptive(
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 0,
+                          ),
+                          secondary: Icon(
+                            Icons.cloud_sync_outlined,
+                            size: 22,
+                            color: _enableLrclib
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                          title: Text(
+                            strings.npLyricsSourceLrclib,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            strings.npLyricsSourceLrclibDesc,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          value: _enableLrclib,
+                          onChanged: _updateLrclib,
+                        ),
+                        const Divider(height: 8, indent: 8, endIndent: 8),
 
-                  // 3. Fallback Remote API (lyrics.ovh) Switch
-                  SwitchListTile.adaptive(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    secondary: Icon(
-                      Icons.cloud_outlined,
-                      color: _enableLyricsOvh
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                    ),
-                    title: Text(
-                      strings.npLyricsSourceOvh,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    subtitle: Text(
-                      strings.npLyricsSourceOvhDesc,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    value: _enableLyricsOvh,
-                    onChanged: _updateLyricsOvh,
-                  ),
-                ],
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Source Language Tile
-                  ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    leading: Icon(
-                      Icons.language_rounded,
-                      color: colorScheme.primary,
-                    ),
-                    title: Text(
-                      strings.npLyricsSourceLang,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    subtitle: Text(
-                      sourceLangDisplay,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    trailing: const Icon(Icons.arrow_drop_down_rounded),
-                    onTap: () => _showLanguagePicker(
-                      context: context,
-                      title: strings.npLyricsSourceLang,
-                      currentCode: sourceCode,
-                      includeAuto: true,
-                      onSelected: (code) async {
-                        await settings.setLyricsTranslationSourceLang(code);
-                        if (lyricsController.isTranslated &&
-                            lyricsController.hasLyrics) {
-                          await lyricsController.translateLyrics(
-                            sourceLanguage: code,
-                            force: true,
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                  const Divider(height: 8, indent: 16, endIndent: 16),
+                        // 3. Fallback Remote API (lyrics.ovh) Switch
+                        SwitchListTile.adaptive(
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 0,
+                          ),
+                          secondary: Icon(
+                            Icons.cloud_outlined,
+                            size: 22,
+                            color: _enableLyricsOvh
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                          title: Text(
+                            strings.npLyricsSourceOvh,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            strings.npLyricsSourceOvhDesc,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          value: _enableLyricsOvh,
+                          onChanged: _updateLyricsOvh,
+                        ),
+                      ],
+                    )
+                  : Column(
+                      key: const ValueKey('translation_tab'),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(height: 4),
+                        // Source Language Tile
+                        ListTile(
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          tileColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 2,
+                          ),
+                          leading: Icon(
+                            Icons.language_rounded,
+                            size: 20,
+                            color: colorScheme.primary,
+                          ),
+                          title: Text(
+                            strings.npLyricsSourceLang,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            sourceLangDisplay,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.arrow_drop_down_rounded),
+                          onTap: () => _showLanguagePicker(
+                            context: context,
+                            title: strings.npLyricsSourceLang,
+                            currentCode: sourceCode,
+                            includeAuto: true,
+                            onSelected: (code) async {
+                              await settings.setLyricsTranslationSourceLang(code);
+                              if (lyricsController.isTranslated &&
+                                  lyricsController.hasLyrics) {
+                                await lyricsController.translateLyrics(
+                                  sourceLanguage: code,
+                                  force: true,
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 8),
 
-                  // Target Language Tile
-                  ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                        // Target Language Tile
+                        ListTile(
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          tileColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 2,
+                          ),
+                          leading: Icon(
+                            Icons.translate_rounded,
+                            size: 20,
+                            color: colorScheme.primary,
+                          ),
+                          title: Text(
+                            strings.npLyricsTargetLang,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            targetLangDisplay,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.arrow_drop_down_rounded),
+                          onTap: () => _showLanguagePicker(
+                            context: context,
+                            title: strings.npLyricsTargetLang,
+                            currentCode: targetCode,
+                            includeAuto: false,
+                            onSelected: (code) async {
+                              await settings.setLyricsTranslationTargetLang(code);
+                              if (lyricsController.isTranslated &&
+                                  lyricsController.hasLyrics) {
+                                await lyricsController.translateLyrics(
+                                  targetLanguage: code,
+                                  force: true,
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    leading: Icon(
-                      Icons.translate_rounded,
-                      color: colorScheme.primary,
-                    ),
-                    title: Text(
-                      strings.npLyricsTargetLang,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    subtitle: Text(
-                      targetLangDisplay,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    trailing: const Icon(Icons.arrow_drop_down_rounded),
-                    onTap: () => _showLanguagePicker(
-                      context: context,
-                      title: strings.npLyricsTargetLang,
-                      currentCode: targetCode,
-                      includeAuto: false,
-                      onSelected: (code) async {
-                        await settings.setLyricsTranslationTargetLang(code);
-                        if (lyricsController.isTranslated &&
-                            lyricsController.hasLyrics) {
-                          await lyricsController.translateLyrics(
-                            targetLanguage: code,
-                            force: true,
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-      ),
+            ),
+          ),
+        ),
       actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      actionsOverflowButtonSpacing: 8,
+      actionsOverflowAlignment: OverflowBarAlignment.end,
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),

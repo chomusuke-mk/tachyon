@@ -22,7 +22,7 @@
   "np_duration": "Duración",
   "np_seek_forward": "Adelantar 10 segundos",
   "np_seek_backward": "Retroceder 10 segundos",
-  "np_queue": "Cola de reproducción",
+  "np_queue": "Cola",
   "np_queue_clear": "Limpiar cola",
   "np_queue_empty": "La cola de reproducción está vacía",
   "np_queue_reorder": "Arrastra para reordenar",

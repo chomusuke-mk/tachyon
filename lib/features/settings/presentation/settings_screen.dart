@@ -227,6 +227,128 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  void _showAppLanguageDialog(
+    BuildContext context,
+    SettingsController settings,
+    AppStringKey strings,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final query = searchQuery.toLowerCase().trim();
+            final filteredEntries = languagesEndonyms.entries.where((e) {
+              if (query.isEmpty) return true;
+              return e.key.toLowerCase().contains(query) ||
+                  e.value.toLowerCase().contains(query);
+            }).toList();
+
+            return AlertDialog(
+              title: Text(strings.sLanguage),
+              content: SizedBox(
+                width: 400,
+                height: 450,
+                child: Column(
+                  children: [
+                    TextField(
+                      autofocus: false,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        hintText: strings.srHint,
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          searchQuery = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: searchQuery.isEmpty
+                            ? filteredEntries.length + 1
+                            : filteredEntries.length,
+                        itemBuilder: (context, index) {
+                          if (searchQuery.isEmpty && index == 0) {
+                            final isSelected = settings.appLanguage == 'default' ||
+                                settings.appLanguage == 'defaultOption' ||
+                                settings.appLanguage.isEmpty;
+                            return ListTile(
+                              leading: Icon(
+                                Icons.auto_awesome_rounded,
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                              ),
+                              title: Text(
+                                strings.sTranslationLangDefault,
+                                style: TextStyle(
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                              trailing: isSelected
+                                  ? Icon(
+                                      Icons.check_rounded,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    )
+                                  : null,
+                              onTap: () {
+                                settings.setAppLanguage('default');
+                                Navigator.of(dialogCtx).pop();
+                              },
+                            );
+                          }
+
+                          final item = filteredEntries[
+                              searchQuery.isEmpty ? index - 1 : index];
+                          final isSelected = settings.appLanguage == item.key;
+
+                          return ListTile(
+                            title: Text(
+                              item.value,
+                              style: TextStyle(
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: Text(item.key),
+                            trailing: isSelected
+                                ? Icon(
+                                    Icons.check_rounded,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  )
+                                : null,
+                            onTap: () {
+                              settings.setAppLanguage(item.key);
+                              Navigator.of(dialogCtx).pop();
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: Text(strings.sCancel),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
@@ -241,6 +363,14 @@ class SettingsScreen extends StatelessWidget {
           // Section: Music Folders
           _buildSectionHeader(context, strings.sMusicFolders),
           Card(
+            elevation: 0,
+            color: colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -267,37 +397,63 @@ class SettingsScreen extends StatelessWidget {
                     )
                   else
                     ...settings.musicDirectories.map((dir) {
-                      return ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.folder_rounded),
-                        title: Text(
-                          dir,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
                         ),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            size: 20,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: colorScheme.outlineVariant
+                                .withValues(alpha: 0.25),
                           ),
-                          tooltip: strings.sRemoveFolder,
-                          onPressed: () {
-                            settings.removeMusicDirectory(dir);
-                            context.read<LibraryController>().startScan(
-                              settings.musicDirectories,
-                            );
-                          },
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.folder_rounded,
+                              color: colorScheme.primary,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                dir,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 20,
+                              ),
+                              tooltip: strings.sRemoveFolder,
+                              onPressed: () {
+                                settings.removeMusicDirectory(dir);
+                                context.read<LibraryController>().startScan(
+                                  settings.musicDirectories,
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       );
                     }),
                   const SizedBox(height: 12),
                   Wrap(
-                    spacing: 8,
+                    spacing: 12,
                     runSpacing: 10,
                     alignment: WrapAlignment.start,
                     children: [
-                      OutlinedButton.icon(
+                      FilledButton.tonalIcon(
                         icon: const Icon(Icons.add_rounded),
                         label: Text(strings.sAddFolder),
                         onPressed: () => _showAddFolderDialog(context),
@@ -322,6 +478,14 @@ class SettingsScreen extends StatelessWidget {
           // Section: Audio Playback
           _buildSectionHeader(context, strings.sAudioSection),
           Card(
+            elevation: 0,
+            color: colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -360,25 +524,34 @@ class SettingsScreen extends StatelessWidget {
                   SettingRow(
                     title: strings.sCrossfadeCurve,
                     description: strings.sCrossfadeCurveDesc,
-                    type: ControllerType.dropdown,
-                    child: DropdownButton<CrossfadeCurve>(
-                      isExpanded: true,
-                      value: settings.crossfadeCurve,
-                      items: [
-                        DropdownMenuItem(
-                          value: CrossfadeCurve.equalPower,
-                          child: Text(strings.sCrossfadeCurveEqualPower),
-                        ),
-                        DropdownMenuItem(
-                          value: CrossfadeCurve.linear,
-                          child: Text(strings.sCrossfadeCurveLinear),
-                        ),
-                      ],
-                      onChanged: settings.crossfadeEnabled
-                          ? (val) {
-                              if (val != null) settings.setCrossfadeCurve(val);
-                            }
-                          : null,
+                    type: ControllerType.complex,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: SegmentedButton<CrossfadeCurve>(
+                        showSelectedIcon: false,
+                        segments: [
+                          ButtonSegment<CrossfadeCurve>(
+                            value: CrossfadeCurve.equalPower,
+                            label: Text(
+                              strings.sCrossfadeCurveEqualPower,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          ButtonSegment<CrossfadeCurve>(
+                            value: CrossfadeCurve.linear,
+                            label: Text(
+                              strings.sCrossfadeCurveLinear,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                        selected: {settings.crossfadeCurve},
+                        onSelectionChanged: settings.crossfadeEnabled
+                            ? (newSelection) => settings.setCrossfadeCurve(
+                                newSelection.first,
+                              )
+                            : null,
+                      ),
                     ),
                   ),
                   const Divider(),
@@ -388,11 +561,9 @@ class SettingsScreen extends StatelessWidget {
                     type: ControllerType.switchCtrl,
                     child: Switch(
                       value: true,
-                      onChanged:
-                          null, // Gapless is always active in Tachyon engine
+                      onChanged: null,
                     ),
                   ),
-                  const Divider(),
                 ],
               ),
             ),
@@ -402,6 +573,14 @@ class SettingsScreen extends StatelessWidget {
           // Section: Appearance
           _buildSectionHeader(context, strings.sAppearanceSection),
           Card(
+            elevation: 0,
+            color: colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -409,27 +588,56 @@ class SettingsScreen extends StatelessWidget {
                   SettingRow(
                     title: strings.sThemeMode,
                     description: strings.sThemeModeDesc,
-                    type: ControllerType.dropdown,
-                    child: DropdownButton<ThemeMode>(
-                      isExpanded: true,
-                      value: settings.themeMode,
-                      items: [
-                        DropdownMenuItem(
-                          value: ThemeMode.system,
-                          child: Text(strings.sThemeSystem),
-                        ),
-                        DropdownMenuItem(
-                          value: ThemeMode.light,
-                          child: Text(strings.sThemeLight),
-                        ),
-                        DropdownMenuItem(
-                          value: ThemeMode.dark,
-                          child: Text(strings.sThemeDark),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) settings.setThemeMode(val);
-                      },
+                    type: ControllerType.complex,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final showLabels = constraints.maxWidth >= 360;
+                          return SegmentedButton<ThemeMode>(
+                            showSelectedIcon: false,
+                            segments: [
+                              ButtonSegment<ThemeMode>(
+                                value: ThemeMode.system,
+                                icon: const Icon(
+                                  Icons.brightness_auto_rounded,
+                                  size: 18,
+                                ),
+                                label: showLabels
+                                    ? Text(strings.sThemeSystem)
+                                    : null,
+                                tooltip: showLabels ? null : strings.sThemeSystem,
+                              ),
+                              ButtonSegment<ThemeMode>(
+                                value: ThemeMode.light,
+                                icon: const Icon(
+                                  Icons.light_mode_rounded,
+                                  size: 18,
+                                ),
+                                label: showLabels
+                                    ? Text(strings.sThemeLight)
+                                    : null,
+                                tooltip: showLabels ? null : strings.sThemeLight,
+                              ),
+                              ButtonSegment<ThemeMode>(
+                                value: ThemeMode.dark,
+                                icon: const Icon(
+                                  Icons.dark_mode_rounded,
+                                  size: 18,
+                                ),
+                                label: showLabels
+                                    ? Text(strings.sThemeDark)
+                                    : null,
+                                tooltip: showLabels ? null : strings.sThemeDark,
+                              ),
+                            ],
+                            selected: {settings.themeMode},
+                            onSelectionChanged: (newSelection) {
+                              settings.setThemeMode(newSelection.first);
+                            },
+                          );
+                        },
+                      ),
                     ),
                   ),
                   const Divider(),
@@ -479,7 +687,7 @@ class SettingsScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (settings.customBackgroundPath == null) ...[
-                            OutlinedButton.icon(
+                            FilledButton.tonalIcon(
                               icon: const Icon(Icons.image_outlined),
                               label: Text(strings.sSelectBackgroundImage),
                               onPressed: () async {
@@ -505,20 +713,29 @@ class SettingsScreen extends StatelessWidget {
                             Row(
                               children: [
                                 ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(
-                                    File(settings.customBackgroundPath!),
-                                    width: 52,
-                                    height: 52,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) => const Icon(
-                                      Icons.broken_image_rounded,
-                                      size: 32,
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: colorScheme.outlineVariant
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Image.file(
+                                      File(settings.customBackgroundPath!),
+                                      width: 52,
+                                      height: 52,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) => const Icon(
+                                        Icons.broken_image_rounded,
+                                        size: 32,
+                                      ),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
-                                OutlinedButton.icon(
+                                FilledButton.tonalIcon(
                                   icon: const Icon(Icons.photo_library_outlined),
                                   label: Text(strings.sChangeBackgroundImage),
                                   onPressed: () async {
@@ -536,6 +753,7 @@ class SettingsScreen extends StatelessWidget {
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline_rounded),
                                   tooltip: strings.sRemoveBackgroundImage,
+                                  color: colorScheme.error,
                                   onPressed: () =>
                                       settings.setCustomBackground(null),
                                 ),
@@ -589,6 +807,14 @@ class SettingsScreen extends StatelessWidget {
           // Section: Language
           _buildSectionHeader(context, strings.sLanguageSection),
           Card(
+            elevation: 0,
+            color: colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -597,30 +823,49 @@ class SettingsScreen extends StatelessWidget {
                     title: strings.sLanguage,
                     description: strings.sLanguageDesc,
                     type: ControllerType.dropdown,
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value:
-                          (settings.appLanguage == 'en' ||
-                              settings.appLanguage == 'es')
-                          ? settings.appLanguage
-                          : 'default',
-                      items: [
-                        DropdownMenuItem(
-                          value: 'default',
-                          child: Text(strings.sTranslationLangDefault),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => _showAppLanguageDialog(
+                        context,
+                        settings,
+                        strings,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
                         ),
-                        const DropdownMenuItem(
-                          value: 'en',
-                          child: Text('English'),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: colorScheme.outlineVariant
+                                .withValues(alpha: 0.35),
+                          ),
                         ),
-                        const DropdownMenuItem(
-                          value: 'es',
-                          child: Text('Español'),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                (settings.appLanguage == 'default' ||
+                                        settings.appLanguage == 'defaultOption' ||
+                                        settings.appLanguage.isEmpty)
+                                    ? strings.sTranslationLangDefault
+                                    : (languagesEndonyms[settings.appLanguage] ??
+                                        settings.appLanguage),
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.arrow_drop_down_rounded),
+                          ],
                         ),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) settings.setAppLanguage(val);
-                      },
+                      ),
                     ),
                   ),
                   const Divider(),
@@ -628,31 +873,47 @@ class SettingsScreen extends StatelessWidget {
                     title: strings.sTranslationTargetLang,
                     description: strings.sTranslationTargetLangDesc,
                     type: ControllerType.dropdown,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        alignment: Alignment.centerLeft,
-                      ),
-                      onPressed: () => _showTranslationLanguageDialog(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => _showTranslationLanguageDialog(
                         context,
                         settings,
                         strings,
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              settings.lyricsTranslationTargetLang ==
-                                      'defaultOption'
-                                  ? strings.sTranslationLangDefault
-                                  : (languagesEndonyms[settings
-                                            .lyricsTranslationTargetLang] ??
-                                        settings.lyricsTranslationTargetLang),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: colorScheme.outlineVariant
+                                .withValues(alpha: 0.35),
                           ),
-                          const Icon(Icons.arrow_drop_down_rounded),
-                        ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                settings.lyricsTranslationTargetLang ==
+                                        'defaultOption'
+                                    ? strings.sTranslationLangDefault
+                                    : (languagesEndonyms[settings
+                                              .lyricsTranslationTargetLang] ??
+                                          settings.lyricsTranslationTargetLang),
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.arrow_drop_down_rounded),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -665,6 +926,14 @@ class SettingsScreen extends StatelessWidget {
           // Section: About & Maintenance
           _buildSectionHeader(context, strings.sAboutSection),
           Card(
+            elevation: 0,
+            color: colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(

@@ -22,7 +22,7 @@
   "np_duration": "Duration",
   "np_seek_forward": "Seek forward 10 seconds",
   "np_seek_backward": "Seek backward 10 seconds",
-  "np_queue": "Playback Queue",
+  "np_queue": "Queue",
   "np_queue_clear": "Clear queue",
   "np_queue_empty": "Playback queue is empty",
   "np_queue_reorder": "Drag to reorder",

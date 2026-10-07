@@ -138,7 +138,7 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
                   padding: const EdgeInsets.all(16.0),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 180,
-                    childAspectRatio: 0.8,
+                childAspectRatio: 0.78,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
                   ),

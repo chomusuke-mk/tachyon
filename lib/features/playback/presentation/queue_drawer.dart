@@ -149,6 +149,7 @@ class _QueueViewState extends State<QueueView> {
                 count: queue.length,
                 backgroundColor: colorScheme.primaryContainer,
                 textColor: colorScheme.onPrimaryContainer,
+                maxCount: 9999,
               ),
               const Spacer(),
 

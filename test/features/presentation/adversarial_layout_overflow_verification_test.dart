@@ -21,13 +21,18 @@ import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/presentation/audio_effects_sheet.dart';
+import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/playback/presentation/widgets/lyrics_sources_dialog.dart';
 import 'package:tachyon/features/playlists/presentation/playlist_detail_screen.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_screen.dart';
 import 'package:tachyon/features/search/presentation/search_screen.dart';
 import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/settings_screen.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 
 class _FileSystemLocaleRepository extends LocaleRepository {
@@ -533,6 +538,241 @@ void main() {
         searchCtrl.dispose();
         libraryCtrl.dispose();
         playback.dispose();
+        await db.close();
+      }
+    });
+
+    testWidgets('ADV-7: AudioEffectsSheet renders with 0 overflows at 320px in Spanish with 10 bands and equalizer enabled', (tester) async {
+      final db = AppDatabase.inMemory();
+      final backend = DirectTachyonBackendClient(database: db);
+      final playback = PlaybackController(
+        backend: backend,
+        settingsRepository: settingsRepository,
+      );
+      final settingsCtrl = SettingsController(
+        repository: settingsRepository,
+        backend: backend,
+      );
+      await settingsCtrl.setEqualizerEnabled(true);
+      await settingsCtrl.setEqualizerPreset('bassBoost');
+
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      FlutterErrorDetails? caughtOverflowError;
+      final originalOnError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        if (details.exceptionAsString().contains('A RenderFlex overflowed')) {
+          caughtOverflowError = details;
+        } else {
+          originalOnError?.call(details);
+        }
+      };
+
+      try {
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<LocaleController>.value(value: esLocaleController),
+              ChangeNotifierProvider<PlaybackController>.value(value: playback),
+              ChangeNotifierProvider<SettingsController>.value(value: settingsCtrl),
+            ],
+            child: const MaterialApp(
+              home: Scaffold(
+                body: AudioEffectsSheet(),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(caughtOverflowError, isNull,
+            reason: 'AudioEffectsSheet must not overflow at 320px width');
+        expect(tester.takeException(), isNull);
+        expect(find.byType(Slider), findsWidgets);
+      } finally {
+        FlutterError.onError = originalOnError;
+        settingsCtrl.dispose();
+        playback.dispose();
+        await db.close();
+      }
+    });
+
+    testWidgets('ADV-8: LyricsSourcesDialog renders with 0 overflows at 320px in Spanish and switches tabs cleanly', (tester) async {
+      final db = AppDatabase.inMemory();
+      final backend = DirectTachyonBackendClient(database: db);
+      final playback = PlaybackController(
+        backend: backend,
+        settingsRepository: settingsRepository,
+      );
+      final lyricsCtrl = LyricsController(
+        backendClient: backend,
+        playbackController: playback,
+        settingsRepository: settingsRepository,
+      );
+      final settingsCtrl = SettingsController(
+        repository: settingsRepository,
+        backend: backend,
+      );
+
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      FlutterErrorDetails? caughtOverflowError;
+      final originalOnError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        if (details.exceptionAsString().contains('A RenderFlex overflowed')) {
+          caughtOverflowError = details;
+        } else {
+          originalOnError?.call(details);
+        }
+      };
+
+      try {
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<LocaleController>.value(value: esLocaleController),
+              ChangeNotifierProvider<LyricsController>.value(value: lyricsCtrl),
+              ChangeNotifierProvider<SettingsController>.value(value: settingsCtrl),
+            ],
+            child: const MaterialApp(
+              home: Scaffold(
+                body: LyricsSourcesDialog(),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(caughtOverflowError, isNull,
+            reason: 'LyricsSourcesDialog sources tab must not overflow at 320px width');
+
+        // Switch to Translation tab
+        await tester.tap(find.byIcon(Icons.translate_rounded));
+        await tester.pumpAndSettle();
+
+        expect(caughtOverflowError, isNull,
+            reason: 'LyricsSourcesDialog translation tab must not overflow at 320px width');
+        expect(tester.takeException(), isNull);
+
+        // Open Source Language Picker and verify NO intrinsic dimension RenderViewport crash
+        final sourceLangTile = find.text(esLocaleController.localeStrings.npLyricsSourceLang);
+        expect(sourceLangTile, findsOneWidget);
+        await tester.tap(sourceLangTile);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TextField), findsOneWidget);
+        await tester.enterText(find.byType(TextField), 'Español');
+        await tester.pumpAndSettle();
+        expect(find.text('Español'), findsWidgets);
+        expect(tester.takeException(), isNull);
+
+        final spanishOption = find.descendant(
+          of: find.byType(AlertDialog).last,
+          matching: find.widgetWithText(ListTile, 'Español'),
+        );
+        expect(spanishOption, findsOneWidget);
+        await tester.tap(spanishOption);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // Open Target Language Picker and verify NO intrinsic dimension RenderViewport crash
+        final targetLangTile = find.text(esLocaleController.localeStrings.npLyricsTargetLang);
+        expect(targetLangTile, findsOneWidget);
+        await tester.tap(targetLangTile);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TextField), findsOneWidget);
+        await tester.enterText(find.byType(TextField), 'English');
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        final englishOption = find.descendant(
+          of: find.byType(AlertDialog).last,
+          matching: find.widgetWithText(ListTile, 'English'),
+        );
+        expect(englishOption, findsOneWidget);
+        await tester.tap(englishOption);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      } finally {
+        FlutterError.onError = originalOnError;
+        settingsCtrl.dispose();
+        lyricsCtrl.dispose();
+        playback.dispose();
+        await db.close();
+      }
+    });
+
+    testWidgets('ADV-9: SettingsScreen renders adaptive ThemeMode and searchable language picker at 320px in Spanish', (tester) async {
+      final db = AppDatabase.inMemory();
+      final backend = DirectTachyonBackendClient(database: db);
+      final store = LibraryStore();
+      final libraryCtrl = LibraryController(
+        backend: backend,
+        settingsRepository: settingsRepository,
+        store: store,
+      );
+      final settingsCtrl = SettingsController(
+        repository: settingsRepository,
+        backend: backend,
+      );
+
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      FlutterErrorDetails? caughtOverflowError;
+      final originalOnError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        if (details.exceptionAsString().contains('A RenderFlex overflowed')) {
+          caughtOverflowError = details;
+        } else {
+          originalOnError?.call(details);
+        }
+      };
+
+      try {
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<LocaleController>.value(value: esLocaleController),
+              ChangeNotifierProvider<LibraryController>.value(value: libraryCtrl),
+              ChangeNotifierProvider<SettingsController>.value(value: settingsCtrl),
+            ],
+            child: const MaterialApp(
+              home: SettingsScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(caughtOverflowError, isNull,
+            reason: 'SettingsScreen must not overflow at 320px width');
+        expect(tester.takeException(), isNull);
+
+        // Find and tap the app language row dropdown to open searchable picker
+        final languageSection = find.text(esLocaleController.localeStrings.sLanguageSection);
+        await tester.scrollUntilVisible(languageSection, 100.0);
+        await tester.pumpAndSettle();
+        expect(languageSection, findsOneWidget);
+        await tester.tap(find.byIcon(Icons.arrow_drop_down_rounded).first);
+        await tester.pumpAndSettle();
+
+        // Search in dialog
+        expect(find.byType(TextField), findsOneWidget);
+        await tester.enterText(find.byType(TextField), 'Español');
+        await tester.pumpAndSettle();
+
+        expect(find.text('Español'), findsWidgets);
+        expect(caughtOverflowError, isNull);
+      } finally {
+        FlutterError.onError = originalOnError;
+        settingsCtrl.dispose();
+        libraryCtrl.dispose();
         await db.close();
       }
     });
