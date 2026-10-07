@@ -69,7 +69,6 @@ void main() {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
         const CrossfadeConfig(
-          enabled: true,
           duration: Duration(milliseconds: 300),
           manualDuration: Duration(milliseconds: 200),
           curve: CrossfadeCurve.linear,
@@ -101,7 +100,6 @@ void main() {
       await service.open(testItems, index: 4, play: true); // Start at track 5
       await service.setCrossfadeConfig(
         const CrossfadeConfig(
-          enabled: true,
           duration: Duration(milliseconds: 100),
           manualDuration: Duration(milliseconds: 100),
         ),
@@ -139,7 +137,6 @@ void main() {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
         const CrossfadeConfig(
-          enabled: true,
           manualDuration: Duration(milliseconds: 300),
         ),
       );
@@ -161,7 +158,6 @@ void main() {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
         const CrossfadeConfig(
-          enabled: true,
           manualDuration: Duration(milliseconds: 400),
         ),
       );
@@ -183,7 +179,6 @@ void main() {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
         const CrossfadeConfig(
-          enabled: true,
           duration: Duration(milliseconds: 500),
           manualDuration: Duration(milliseconds: 200),
         ),
@@ -239,7 +234,6 @@ void main() {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
         const CrossfadeConfig(
-          enabled: true,
           duration: Duration(milliseconds: 500),
           manualDuration: Duration(milliseconds: 200),
           curve: CrossfadeCurve.linear,
@@ -280,7 +274,6 @@ void main() {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
         const CrossfadeConfig(
-          enabled: true,
           duration: Duration(milliseconds: 500),
           manualDuration: Duration(milliseconds: 200),
           curve: CrossfadeCurve.linear,
@@ -338,7 +331,6 @@ void main() {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
         const CrossfadeConfig(
-          enabled: true,
           duration: Duration(milliseconds: 300),
           manualDuration: Duration(milliseconds: 200),
         ),
@@ -357,7 +349,7 @@ void main() {
     test('Position ticks during auto-crossfade preparation start only ONE crossfade', () async {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
-        const CrossfadeConfig(enabled: true, duration: Duration(milliseconds: 500)),
+        const CrossfadeConfig(duration: Duration(milliseconds: 500)),
       );
       final activeMock = service.activePlayer as MockAudioPlayerAdapter;
       final standbyMock = service.standbyPlayer as MockAudioPlayerAdapter;
@@ -374,7 +366,7 @@ void main() {
     test('Previous at index 0 (Loop.off) restarts instead of crossfading into itself', () async {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
-        const CrossfadeConfig(enabled: true, manualDuration: Duration(milliseconds: 300)),
+        const CrossfadeConfig(manualDuration: Duration(milliseconds: 300)),
       );
       final activeBefore = service.activePlayer;
 
@@ -388,7 +380,7 @@ void main() {
     test('Pressing next during auto-crossfade commits the running fade', () async {
       await service.open(testItems, index: 0, play: true);
       await service.setCrossfadeConfig(
-        const CrossfadeConfig(enabled: true, duration: Duration(milliseconds: 500)),
+        const CrossfadeConfig(duration: Duration(milliseconds: 500)),
       );
       final activeMock = service.activePlayer as MockAudioPlayerAdapter;
       final incoming = service.standbyPlayer as MockAudioPlayerAdapter;
@@ -511,7 +503,6 @@ void main() {
       await svc.open(testItems, index: 0, play: true);
       await svc.setCrossfadeConfig(
         const CrossfadeConfig(
-          enabled: true,
           duration: Duration(milliseconds: 500),
           manualDuration: Duration(milliseconds: 200),
           curve: CrossfadeCurve.linear,
@@ -710,6 +701,47 @@ void main() {
       expect(service.currentState.completed, isFalse);
 
       await sub.cancel();
+    });
+
+    test('Crossfade duration 0 advances queue automatically upon track completion with 0-overlap crossfade', () async {
+      // Start on track 0 of testItems (queue length 6)
+      await service.open(testItems, index: 0, play: true);
+      await service.setCrossfadeConfig(
+        const CrossfadeConfig(
+          duration: Duration.zero,
+          manualDuration: Duration.zero,
+        ),
+      );
+
+      expect(service.queueManager.currentIndex, equals(0));
+      expect(service.activePlayer.isPlaying, isTrue);
+      expect(service.currentState.completed, isFalse);
+
+      final initialActive = service.activePlayer as MockAudioPlayerAdapter;
+      final initialStandby = service.standbyPlayer as MockAudioPlayerAdapter;
+
+      // Track 0 reaches its end: miniaudio stops playback and emits completed
+      initialActive.currentPosition = const Duration(seconds: 180);
+      initialActive.isPlayingState = false; // native playback stopped at EOF
+      initialActive.emitCompleted(true);
+
+      // Allow serialized queue lane to process the crossfade of duration 0
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      // Queue must advance to track 1
+      expect(service.queueManager.currentIndex, equals(1));
+      expect(service.queueManager.currentTrack?.track?.title, equals('Track 2'));
+
+      // Player roles swapped via 0-duration crossfade direct cut
+      expect(identical(service.activePlayer, initialStandby), isTrue);
+      expect(identical(service.standbyPlayer, initialActive), isTrue);
+
+      // The new active player is now playing Track 2 at full volume
+      expect(service.activePlayer.isPlaying, isTrue);
+      expect(service.currentState.completed, isFalse);
+      expect(initialActive.isStopped, isTrue);
+      expect(initialActive.currentVolume, equals(0.0));
+      expect(initialStandby.currentVolume, equals(100.0));
     });
   });
 }

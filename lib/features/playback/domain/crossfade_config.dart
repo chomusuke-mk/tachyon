@@ -19,13 +19,11 @@ class CrossfadeConfig {
     seconds: 3,
   );
 
-  final bool enabled;
   final Duration duration;
   final Duration manualDuration;
   final CrossfadeCurve curve;
 
   const CrossfadeConfig({
-    this.enabled = true,
     this.duration = defaultDuration,
     this.manualDuration = defaultManualDuration,
     this.curve = CrossfadeCurve.equalPower,
@@ -40,7 +38,7 @@ class CrossfadeConfig {
 
   /// Handles edge cases where track is shorter than crossfade duration
   Duration effectiveDuration(Duration trackDuration) {
-    if (!enabled || duration == Duration.zero) return Duration.zero;
+    if (duration == Duration.zero) return Duration.zero;
     if (trackDuration <= Duration.zero) return Duration.zero;
     final halfTrack = Duration(milliseconds: trackDuration.inMilliseconds ~/ 2);
     if (clampedDuration > halfTrack) {
@@ -74,13 +72,11 @@ class CrossfadeConfig {
   }
 
   CrossfadeConfig copyWith({
-    bool? enabled,
     Duration? duration,
     Duration? manualDuration,
     CrossfadeCurve? curve,
   }) {
     return CrossfadeConfig(
-      enabled: enabled ?? this.enabled,
       duration: duration ?? this.duration,
       manualDuration: manualDuration ?? this.manualDuration,
       curve: curve ?? this.curve,
@@ -89,7 +85,6 @@ class CrossfadeConfig {
 
   Map<String, dynamic> toJson() {
     return {
-      'enabled': enabled,
       'durationMs': duration.inMilliseconds,
       'manualDurationMs': manualDuration.inMilliseconds,
       'curve': curve.name,
@@ -98,7 +93,6 @@ class CrossfadeConfig {
 
   factory CrossfadeConfig.fromJson(Map<String, dynamic> json) {
     return CrossfadeConfig(
-      enabled: json['enabled'] as bool? ?? true,
       duration: Duration(
         milliseconds:
             ((json['durationMs'] ?? json['duration']) as num?)?.toInt() ??
@@ -118,11 +112,10 @@ class CrossfadeConfig {
       identical(this, other) ||
       other is CrossfadeConfig &&
           runtimeType == other.runtimeType &&
-          enabled == other.enabled &&
           duration == other.duration &&
           manualDuration == other.manualDuration &&
           curve == other.curve;
 
   @override
-  int get hashCode => Object.hash(enabled, duration, manualDuration, curve);
+  int get hashCode => Object.hash(duration, manualDuration, curve);
 }

@@ -29,7 +29,6 @@ class SettingsController extends ChangeNotifier {
   AppSettings get settings => _settings;
 
   List<String> get musicDirectories => _settings.musicDirectories;
-  bool get crossfadeEnabled => _settings.crossfadeEnabled;
   int get crossfadeDuration => _settings.crossfadeDuration;
   int get crossfadeManualDuration => _settings.crossfadeManualDuration;
   CrossfadeCurve get crossfadeCurve => _settings.crossfadeCurve;
@@ -64,7 +63,6 @@ class SettingsController extends ChangeNotifier {
     // Sync loaded settings with AudioEngineService
     await _backend.setCrossfadeConfig(
       CrossfadeConfig(
-        enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
         manualDuration: Duration(seconds: _settings.crossfadeManualDuration),
         curve: _settings.crossfadeCurve,
@@ -121,25 +119,13 @@ class SettingsController extends ChangeNotifier {
       AppDefaults.crossfadeMinDuration,
       AppDefaults.crossfadeMaxDuration,
     );
-    _settings = _settings.copyWith(crossfadeDuration: clamped);
+    _settings = _settings.copyWith(
+      crossfadeDuration: clamped,
+    );
     await _repository.setCrossfadeDuration(clamped);
     await _backend.setCrossfadeConfig(
       CrossfadeConfig(
-        enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: clamped),
-        curve: _settings.crossfadeCurve,
-      ),
-    );
-    notifyListeners();
-  }
-
-  Future<void> setCrossfadeEnabled(bool enabled) async {
-    _settings = _settings.copyWith(crossfadeEnabled: enabled);
-    await _repository.setCrossfadeEnabled(enabled);
-    await _backend.setCrossfadeConfig(
-      CrossfadeConfig(
-        enabled: enabled,
-        duration: Duration(seconds: _settings.crossfadeDuration),
         manualDuration: Duration(seconds: _settings.crossfadeManualDuration),
         curve: _settings.crossfadeCurve,
       ),
@@ -152,7 +138,6 @@ class SettingsController extends ChangeNotifier {
     await _repository.setCrossfadeManualDuration(durationSeconds);
     await _backend.setCrossfadeConfig(
       CrossfadeConfig(
-        enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
         manualDuration: Duration(seconds: durationSeconds),
         curve: _settings.crossfadeCurve,
@@ -166,7 +151,6 @@ class SettingsController extends ChangeNotifier {
     await _repository.setCrossfadeCurve(curve);
     await _backend.setCrossfadeConfig(
       CrossfadeConfig(
-        enabled: _settings.crossfadeEnabled,
         duration: Duration(seconds: _settings.crossfadeDuration),
         manualDuration: Duration(seconds: _settings.crossfadeManualDuration),
         curve: curve,

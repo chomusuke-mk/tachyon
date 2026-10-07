@@ -13,8 +13,7 @@ class AppSettings {
   final List<String> musicDirectories;
 
   // Audio Playback
-  final bool crossfadeEnabled;
-  final int crossfadeDuration; // 2 to 30 seconds (default 5)
+  final int crossfadeDuration; // 0 to 30 seconds (default 5)
   final int crossfadeManualDuration; // 0 to 30 seconds (default 3)
   final CrossfadeCurve crossfadeCurve; // 'equal_power' or 'linear'
   final double volume; // 0.0 to 100.0 (default 100.0)
@@ -58,7 +57,6 @@ class AppSettings {
 
   const AppSettings({
     this.musicDirectories = const [],
-    this.crossfadeEnabled = true,
     this.crossfadeDuration = 5,
     this.crossfadeManualDuration = 3,
     this.crossfadeCurve = CrossfadeCurve.equalPower,
@@ -111,7 +109,6 @@ class AppSettings {
       other is AppSettings &&
           runtimeType == other.runtimeType &&
           listEquals(musicDirectories, other.musicDirectories) &&
-          crossfadeEnabled == other.crossfadeEnabled &&
           crossfadeDuration == other.crossfadeDuration &&
           crossfadeManualDuration == other.crossfadeManualDuration &&
           crossfadeCurve == other.crossfadeCurve &&
@@ -146,7 +143,6 @@ class AppSettings {
 
   AppSettings copyWith({
     List<String>? musicDirectories,
-    bool? crossfadeEnabled,
     int? crossfadeDuration,
     int? crossfadeManualDuration,
     CrossfadeCurve? crossfadeCurve,
@@ -182,7 +178,6 @@ class AppSettings {
   }) {
     return AppSettings(
       musicDirectories: musicDirectories ?? this.musicDirectories,
-      crossfadeEnabled: crossfadeEnabled ?? this.crossfadeEnabled,
       crossfadeDuration: crossfadeDuration ?? this.crossfadeDuration,
       crossfadeManualDuration:
           crossfadeManualDuration ?? this.crossfadeManualDuration,
@@ -225,7 +220,6 @@ class AppSettings {
   @override
   int get hashCode => Object.hashAll([
     Object.hashAll(musicDirectories),
-    crossfadeEnabled,
     crossfadeDuration,
     crossfadeManualDuration,
     crossfadeCurve,

@@ -27,7 +27,6 @@ class SettingsRepository {
   SettingsRepository(this._prefs);
 
   static const _keyMusicDirectories = 's_music_directories';
-  static const _keyCrossfadeEnabled = 's_crossfade_enabled';
   static const _keyCrossfadeDuration = 's_crossfade_duration';
   static const _keyCrossfadeManualDuration = 's_crossfade_manual_duration';
   static const _keyCrossfadeCurve = 's_crossfade_curve';
@@ -78,7 +77,6 @@ class SettingsRepository {
   AppSettings getSettings() {
     return AppSettings(
       musicDirectories: _prefs.getStringList(_keyMusicDirectories) ?? [],
-      crossfadeEnabled: _prefs.getBool(_keyCrossfadeEnabled) ?? true,
       crossfadeDuration: _prefs.getInt(_keyCrossfadeDuration) ?? 5,
       crossfadeManualDuration: _prefs.getInt(_keyCrossfadeManualDuration) ?? 3,
       crossfadeCurve: CrossfadeCurve.fromString(
@@ -124,7 +122,6 @@ class SettingsRepository {
   Future<void> saveSettings(AppSettings settings) async {
     final futures = <Future<bool>>[
       _prefs.setStringList(_keyMusicDirectories, settings.musicDirectories),
-      _prefs.setBool(_keyCrossfadeEnabled, settings.crossfadeEnabled),
       _prefs.setInt(_keyCrossfadeDuration, settings.crossfadeDuration),
       _prefs.setInt(
         _keyCrossfadeManualDuration,
@@ -260,13 +257,10 @@ class SettingsRepository {
       _prefs.setStringList(_keyMusicDirectories, dirs);
 
   Future<void> setCrossfadeDuration(int durationSeconds) =>
-      _prefs.setInt(_keyCrossfadeDuration, durationSeconds.clamp(2, 30));
+      _prefs.setInt(_keyCrossfadeDuration, durationSeconds.clamp(0, 30));
 
   Future<void> setCrossfadeManualDuration(int durationSeconds) =>
       _prefs.setInt(_keyCrossfadeManualDuration, durationSeconds.clamp(0, 30));
-
-  Future<void> setCrossfadeEnabled(bool enabled) =>
-      _prefs.setBool(_keyCrossfadeEnabled, enabled);
 
   Future<void> setCrossfadeCurve(CrossfadeCurve curve) =>
       _prefs.setString(_keyCrossfadeCurve, curve.jsonValue);

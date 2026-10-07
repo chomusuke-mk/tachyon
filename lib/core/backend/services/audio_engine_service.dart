@@ -102,6 +102,7 @@ class AudioEngineService {
   /// Player events captured under an older session are ignored.
   int _playbackSession = 0;
 
+  int? _scheduledCompletionSession;
   bool _autoStartScheduled = false;
   PlaylistEntry? _failedAutoTarget;
   bool _queueEnded = false;
@@ -235,7 +236,7 @@ class AudioEngineService {
     } else if (identical(target, before)) {
       await _restartCurrent(play: true);
     } else {
-      await _playTarget(target, play: true, crossfade: true);
+      await _playTarget(target, play: true, isManual: true);
     }
   });
 
@@ -250,7 +251,7 @@ class AudioEngineService {
     if (target == null) {
       await _restartCurrent(play: wasPlaying);
     } else {
-      await _playTarget(target, play: wasPlaying, crossfade: true);
+      await _playTarget(target, play: wasPlaying, isManual: true);
     }
   });
 
@@ -265,7 +266,7 @@ class AudioEngineService {
     if (identical(target, before)) {
       await _restartCurrent(play: shouldPlay);
     } else {
-      await _playTarget(target, play: shouldPlay, crossfade: true);
+      await _playTarget(target, play: shouldPlay, isManual: true);
     }
   });
 
@@ -341,8 +342,12 @@ class AudioEngineService {
     final after = _queueManager.currentTrack;
     if (after != null && !identical(after, before)) {
       // The current item was removed: the queue already selected the
-      // replacement, the engine just loads it (no crossfade).
-      await _playTarget(after, play: wasPlaying, crossfade: false);
+      // replacement, the engine transitions to it.
+      await _playTarget(
+        after,
+        play: wasPlaying,
+        isManual: false,
+      );
       return;
     }
     _emitState();
@@ -505,27 +510,11 @@ class AudioEngineService {
       _emitState();
       return;
     }
-    await _playTarget(target, play: play, crossfade: false);
-  }
-
-  /// Loads [target] (hard cut or manual crossfade). If a track cannot be
-  /// opened, the queue is asked for the next one, bounded by the queue length
-  /// so a fully broken queue cannot loop forever.
-  Future<void> _playTarget(
-    PlaylistEntry target, {
-    required bool play,
-    required bool crossfade,
-  }) async {
-    await _abortTransition();
-    _queueEnded = false;
 
     var candidate = target;
     final maxAttempts = math.max(1, _queueManager.length);
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      final useCrossfade = crossfade && play && _canManualCrossfade();
-      final ok = useCrossfade
-          ? await _crossfadeTo(candidate)
-          : await _hardLoad(candidate, play: play);
+      final ok = await _hardLoad(candidate, play: play);
       if (ok) return;
 
       debugPrint(
@@ -539,10 +528,35 @@ class AudioEngineService {
     await _endOfQueue();
   }
 
-  bool _canManualCrossfade() =>
-      _crossfadeConfig.enabled &&
-      _crossfadeConfig.manualDuration > Duration.zero &&
-      _activePlayer.isPlaying;
+  /// Loads [target] via crossfade (or hard load if paused). If a track cannot be
+  /// opened, the queue is asked for the next one, bounded by the queue length
+  /// so a fully broken queue cannot loop forever.
+  Future<void> _playTarget(
+    PlaylistEntry target, {
+    required bool play,
+    bool isManual = true,
+  }) async {
+    await _abortTransition();
+    _queueEnded = false;
+
+    var candidate = target;
+    final maxAttempts = math.max(1, _queueManager.length);
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      final ok = play
+          ? await _crossfadeTo(candidate, isManual: isManual)
+          : await _hardLoad(candidate, play: false);
+      if (ok) return;
+
+      debugPrint(
+        '[AudioEngine] Skipping unplayable track: ${candidate.track?.filePath}',
+      );
+      final skipped = await _queueManager.next(isManual: true);
+      if (skipped == null || identical(skipped, candidate)) break;
+      candidate = skipped;
+    }
+
+    await _endOfQueue();
+  }
 
   Future<bool> _hardLoad(PlaylistEntry item, {required bool play}) async {
     _bumpSession();
@@ -556,7 +570,10 @@ class AudioEngineService {
     return ok;
   }
 
-  Future<bool> _crossfadeTo(PlaylistEntry item) async {
+  Future<bool> _crossfadeTo(
+    PlaylistEntry item, {
+    required bool isManual,
+  }) async {
     final outgoing = _activePlayer;
     final incoming = _standbyPlayer;
 
@@ -565,7 +582,7 @@ class AudioEngineService {
       return false;
     }
 
-    // Manual transitions are committed immediately: the queue already points
+    // Transitions are committed immediately: the queue already points
     // at [item], so the UI and the streams follow the incoming player.
     final transition = _Transition(
       kind: _TransitionKind.manual,
@@ -579,10 +596,12 @@ class AudioEngineService {
     _bumpSession();
     _bindActivePlayer();
 
+    final targetDur =
+        isManual ? _crossfadeConfig.manualDuration : _crossfadeConfig.duration;
     final duration = _clampCrossfadeDuration(
       outgoingDuration: outgoing.duration,
       outgoingRemaining: outgoing.duration - outgoing.position,
-      targetDuration: _crossfadeConfig.manualDuration,
+      targetDuration: targetDur,
       incomingDuration: incoming.duration > Duration.zero
           ? incoming.duration
           : (item.track?.duration ?? Duration.zero),
@@ -637,7 +656,11 @@ class AudioEngineService {
       // Loop.one / single-track Loop.all: the queue asks to repeat.
       await _restartCurrent(play: true);
     } else {
-      await _playTarget(target, play: true, crossfade: false);
+      await _playTarget(
+        target,
+        play: true,
+        isManual: false,
+      );
     }
   }
 
@@ -681,8 +704,7 @@ class AudioEngineService {
   }
 
   Future<void> _abortAutoTransitionIfDisabled() async {
-    final enabled =
-        _crossfadeConfig.enabled && _crossfadeConfig.duration > Duration.zero;
+    final enabled = _crossfadeConfig.duration > Duration.zero;
     if (!enabled && _transition?.kind == _TransitionKind.auto) {
       await _abortTransition();
     }
@@ -751,8 +773,7 @@ class AudioEngineService {
   ({PlaylistEntry next, Duration duration})? _planAutoCrossfade(
     Duration position,
   ) {
-    if (!_crossfadeConfig.enabled ||
-        _crossfadeConfig.duration <= Duration.zero) {
+    if (_crossfadeConfig.duration <= Duration.zero) {
       return null;
     }
     if (!_activePlayer.isPlaying) return null;
@@ -840,6 +861,11 @@ class AudioEngineService {
     required Duration targetDuration,
     required Duration incomingDuration,
   }) {
+    if (targetDuration <= Duration.zero) return Duration.zero;
+    if (outgoingDuration > Duration.zero &&
+        outgoingRemaining <= Duration.zero) {
+      return Duration.zero;
+    }
     var dur = targetDuration;
     if (outgoingRemaining > Duration.zero && outgoingRemaining < dur) {
       dur = outgoingRemaining;
@@ -869,6 +895,8 @@ class AudioEngineService {
 
   void _scheduleCompletion({bool verifyPosition = true}) {
     if (_queueEnded) return;
+    if (_scheduledCompletionSession == _playbackSession) return;
+    _scheduledCompletionSession = _playbackSession;
     final session = _playbackSession;
     final player = _activePlayer;
     _schedule(() async {
@@ -877,12 +905,16 @@ class AudioEngineService {
         return;
       }
       if (_transition?.kind == _TransitionKind.auto) return;
-      if (verifyPosition && !_isAtEnd(player)) return; // stale event
+      if (verifyPosition && !_isAtEnd(player)) {
+        _scheduledCompletionSession = null;
+        return; // stale event
+      }
       await _advanceAfterCompletion();
     });
   }
 
   bool _isAtEnd(AudioPlayerAdapter player) {
+    if (player.isCompleted) return true;
     final total = player.duration;
     if (total <= Duration.zero) return true;
     return player.position >= total - _completionTolerance;
@@ -946,6 +978,7 @@ class AudioEngineService {
   void _bumpSession() {
     _playbackSession++;
     _failedAutoTarget = null;
+    _scheduledCompletionSession = null;
   }
 
   // --------------------------------------------------------------------------
@@ -1011,7 +1044,6 @@ class AudioEngineService {
           }
           return;
         }
-        if (!player.isPlaying && !currentState.playing) return;
         // During an auto crossfade the outgoing track is expected to end; the
         // crossfade completion commits the transition instead.
         if (_transition?.kind == _TransitionKind.auto) return;

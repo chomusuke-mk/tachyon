@@ -514,16 +514,6 @@ class SettingsScreen extends StatelessWidget {
               child: Column(
                 children: [
                   SettingRow(
-                    title: strings.sCrossfadeEnable,
-                    description: strings.sCrossfadeEnableDesc,
-                    type: ControllerType.switchCtrl,
-                    child: Switch(
-                      value: settings.crossfadeEnabled,
-                      onChanged: (val) => settings.setCrossfadeEnabled(val),
-                    ),
-                  ),
-                  const Divider(),
-                  SettingRow(
                     title: strings.sCrossfadeDuration,
                     description: '${settings.crossfadeDuration}s',
                     type: ControllerType.slider,
@@ -538,9 +528,8 @@ class SettingsScreen extends StatelessWidget {
                           AppDefaults.crossfadeMaxDuration -
                           AppDefaults.crossfadeMinDuration,
                       label: '${settings.crossfadeDuration}s',
-                      onChanged: settings.crossfadeEnabled
-                          ? (val) => settings.setCrossfadeDuration(val.round())
-                          : null,
+                      onChanged: (val) =>
+                          settings.setCrossfadeDuration(val.round()),
                     ),
                   ),
                   const Divider(),
@@ -569,10 +558,8 @@ class SettingsScreen extends StatelessWidget {
                           ),
                         ],
                         selected: {settings.crossfadeCurve},
-                        onSelectionChanged: settings.crossfadeEnabled
-                            ? (newSelection) =>
-                                  settings.setCrossfadeCurve(newSelection.first)
-                            : null,
+                        onSelectionChanged: (newSelection) =>
+                            settings.setCrossfadeCurve(newSelection.first),
                       ),
                     ),
                   ),
