@@ -76,7 +76,7 @@ Future<void> main() async {
   final libraryController = LibraryController(
     backend: backendClient,
     settingsRepository: settingsRepository,
-  )..loadLibrary();
+  )..loadLibrary(autoScan: true);
 
   final playlistsController = PlaylistsController(
     backend: backendClient,

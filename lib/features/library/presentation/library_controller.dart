@@ -129,7 +129,7 @@ class LibraryController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Library Loading & Sorting
   // ---------------------------------------------------------------------------
-  Future<void> loadLibrary() async {
+  Future<void> loadLibrary({bool autoScan = false}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -148,6 +148,13 @@ class LibraryController extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+
+    if (autoScan) {
+      final musicDirs = _settingsRepository.getSettings().musicDirectories;
+      if (musicDirs.isNotEmpty) {
+        unawaited(startScan(musicDirs));
+      }
     }
   }
 

@@ -104,6 +104,44 @@ void main() {
 
       controller.dispose();
     });
+
+    test('loadLibrary(autoScan: true) triggers scan when musicDirectories are configured', () async {
+      await settingsRepo.saveSettings(
+        settingsRepo.getSettings().copyWith(musicDirectories: ['/fake/music']),
+      );
+
+      final controller = LibraryController(
+        backend: backend,
+        settingsRepository: settingsRepo,
+      );
+
+      expect(controller.isScanning, isFalse);
+
+      await controller.loadLibrary(autoScan: true);
+
+      expect(controller.isScanning, isTrue);
+
+      controller.dispose();
+    });
+
+    test('loadLibrary(autoScan: true) does not trigger scan when musicDirectories is empty', () async {
+      await settingsRepo.saveSettings(
+        settingsRepo.getSettings().copyWith(musicDirectories: []),
+      );
+
+      final controller = LibraryController(
+        backend: backend,
+        settingsRepository: settingsRepo,
+      );
+
+      expect(controller.isScanning, isFalse);
+
+      await controller.loadLibrary(autoScan: true);
+
+      expect(controller.isScanning, isFalse);
+
+      controller.dispose();
+    });
   });
 
   group('TracksScreen Loading UI Presentation', () {

@@ -131,7 +131,7 @@ class SettingsRepository {
       _prefs.setDouble(_keyVolume, settings.volume),
       _prefs.setDouble(_keyPlaybackRate, settings.playbackRate),
       _prefs.setDouble(_keyPlaybackPitch, settings.playbackPitch),
-      _prefs.setInt(_keyLoopMode, settings.loopMode.index),
+      _prefs.setString(_keyLoopMode, settings.loopMode.repr),
       _prefs.setBool(_keyShuffle, settings.shuffle),
       _prefs.setBool(_keySkipSilence, settings.skipSilence),
       _prefs.setDouble(_keyVolumeBoost, settings.volumeBoost),
