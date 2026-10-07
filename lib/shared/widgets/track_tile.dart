@@ -104,9 +104,11 @@ class TrackTile extends StatelessWidget {
 
     return SizedBox(
       height: 72.0,
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-        leading: leadingWidget,
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+          leading: leadingWidget,
         title: Text(
           track.title,
           maxLines: 1,
@@ -289,6 +291,7 @@ class TrackTile extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress,
       ),
-    );
+    ),
+  );
   }
 }

@@ -366,11 +366,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 icon: AnimatedSwitcher(
                   // 1. Duración rápida y con energía
                   duration: const Duration(milliseconds: 400),
-
+              
                   // 2. Curvas de animación: easeOutBack da ese efecto de "rebote" al inflarse
                   switchInCurve: Curves.easeOutBack,
                   switchOutCurve: Curves.easeIn,
-
+              
                   // 3. Constructor de la transición: Escala el ícono desde el centro
                   transitionBuilder:
                       (Widget child, Animation<double> animation) {
@@ -379,16 +379,16 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                           child: child, // Opcional: puedes envolver 'child' en FadeTransition si también quieres que se desvanezca
                         );
                       },
-
+              
                   // 4. El contenido: El ícono en sí
                   child: Icon(
                     isCurrentTrackLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-
+              
                     // ¡EL KEY ES OBLIGATORIO! Le dice al Switcher que son dos widgets diferentes.
                     key: ValueKey<bool>(isCurrentTrackLiked),
-
+              
                     size: 28,
                     color: isCurrentTrackLiked
                         ? colorScheme.primary
@@ -396,7 +396,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   ),
                 ),
               ),
-
+          
               IconButton(
                 onPressed: _toggleQueue,
                 icon: const Icon(Icons.add_rounded, size: 28),
@@ -1159,21 +1159,23 @@ class _PopupVolumeControlState extends State<_PopupVolumeControl>
 
   @override
   Widget build(BuildContext context) {
-    // Este es el botón que se queda anclado en la App Bar
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: IconButton(
-        icon: Icon(
-          widget.playback.volume == 0.0
-              ? Icons.volume_off_rounded
-              : (widget.playback.volume > 50.0
-                    ? Icons.volume_up_rounded
-                    : Icons.volume_down_rounded),
-          size: 28,
+    // Este es el botón que se queda anclado en la barra de controles
+    return RepaintBoundary(
+      child: CompositedTransformTarget(
+        link: _layerLink,
+        child: IconButton(
+          icon: Icon(
+            widget.playback.volume == 0.0
+                ? Icons.volume_off_rounded
+                : (widget.playback.volume > 50.0
+                      ? Icons.volume_up_rounded
+                      : Icons.volume_down_rounded),
+            size: 28,
+          ),
+          tooltip: widget.tooltip,
+          color: Theme.of(context).colorScheme.onSurface,
+          onPressed: _togglePopup,
         ),
-        tooltip: widget.tooltip,
-        color: Theme.of(context).colorScheme.onSurface,
-        onPressed: _togglePopup,
       ),
     );
   }

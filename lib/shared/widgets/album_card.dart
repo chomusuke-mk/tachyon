@@ -146,12 +146,16 @@ class _AlbumCardState extends State<AlbumCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: InkWell(
+      child: Material(
+        type: MaterialType.transparency,
         borderRadius: BorderRadius.circular(12.0),
-        onTap: widget.onTap,
-        child: widget.width != null
-            ? SizedBox(width: widget.width, child: content)
-            : content,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12.0),
+          onTap: widget.onTap,
+          child: widget.width != null
+              ? SizedBox(width: widget.width, child: content)
+              : content,
+        ),
       ),
     );
   }
@@ -197,56 +201,59 @@ class _AlbumListTileState extends State<AlbumListTile> {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: ListTile(
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(8.0),
-          child: SizedBox(
-            width: 48,
-            height: 48,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                AlbumArtImage(
-                  thumbnailHash: widget.album.thumbnailHash,
-                  quality: ThumbnailQuality.low,
-                  fit: BoxFit.cover,
-                ),
-                if (_isHovered)
-                  Container(
-                    color: Colors.black38,
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      color: colorScheme.primary,
-                      size: 26,
-                    ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(8.0),
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AlbumArtImage(
+                    thumbnailHash: widget.album.thumbnailHash,
+                    quality: ThumbnailQuality.low,
+                    fit: BoxFit.cover,
                   ),
-              ],
+                  if (_isHovered)
+                    Container(
+                      color: Colors.black38,
+                      child: Icon(
+                        Icons.play_arrow_rounded,
+                        color: colorScheme.primary,
+                        size: 26,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
+          title: Text(
+            widget.album.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            '${widget.album.artist?.name ?? strings.trUnknownArtist} • ${strings.alTracksCountFormatted(widget.album.trackCount)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: _isHovered
+              ? IconButton(
+                  icon: Icon(
+                    Icons.play_arrow_rounded,
+                    color: colorScheme.primary,
+                    size: 26,
+                  ),
+                  tooltip: strings.alPlayAll,
+                  onPressed: effectiveOnPlay,
+                )
+              : const Icon(Icons.chevron_right_rounded),
+          onTap: widget.onTap,
         ),
-        title: Text(
-          widget.album.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          '${widget.album.artist?.name ?? strings.trUnknownArtist} • ${strings.alTracksCountFormatted(widget.album.trackCount)}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: _isHovered
-            ? IconButton(
-                icon: Icon(
-                  Icons.play_arrow_rounded,
-                  color: colorScheme.primary,
-                  size: 26,
-                ),
-                tooltip: strings.alPlayAll,
-                onPressed: effectiveOnPlay,
-              )
-            : const Icon(Icons.chevron_right_rounded),
-        onTap: widget.onTap,
       ),
     );
   }

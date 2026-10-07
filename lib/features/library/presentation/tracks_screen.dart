@@ -452,8 +452,11 @@ class _TracksScreenState extends State<TracksScreen> {
                 final isSelected =
                     track.id != null && _selectedTrackIds.contains(track.id!);
 
-                return InkWell(
+                return Material(
+                  type: MaterialType.transparency,
                   borderRadius: BorderRadius.circular(12.0),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12.0),
                   onTap: () {
                     if (_isSelectionMode && track.id != null) {
                       _toggleTrackSelection(track.id!);
@@ -564,7 +567,8 @@ class _TracksScreenState extends State<TracksScreen> {
                       ),
                     ],
                   ),
-                );
+                ),
+              );
               },
             )
           : ListView.builder(

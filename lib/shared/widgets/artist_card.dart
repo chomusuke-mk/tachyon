@@ -51,12 +51,15 @@ class _ArtistCardState extends State<ArtistCard> {
 
     final avatarSize = widget.radius * 2;
 
-    final card = InkWell(
+    final card = Material(
+      type: MaterialType.transparency,
       borderRadius: BorderRadius.circular(12.0),
-      onTap: widget.onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12.0),
+        onTap: widget.onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
           SizedBox(
             width: avatarSize,
             height: avatarSize,
@@ -141,7 +144,8 @@ class _ArtistCardState extends State<ArtistCard> {
           ],
         ],
       ),
-    );
+    ),
+  );
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -193,70 +197,73 @@ class _ArtistListTileState extends State<ArtistListTile> {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: ListTile(
-        leading: SizedBox(
-          width: 48,
-          height: 48,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: colorScheme.surfaceContainerHighest,
-                child: ClipOval(
-                  child: SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: AlbumArtImage(
-                      thumbnailHash: widget.artist.thumbnailHash,
-                      quality: ThumbnailQuality.low,
-                      fit: BoxFit.cover,
-                      fallback: Icon(
-                        Icons.person_rounded,
-                        size: 24,
-                        color: colorScheme.onSurfaceVariant,
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          leading: SizedBox(
+            width: 48,
+            height: 48,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  child: ClipOval(
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: AlbumArtImage(
+                        thumbnailHash: widget.artist.thumbnailHash,
+                        quality: ThumbnailQuality.low,
+                        fit: BoxFit.cover,
+                        fallback: Icon(
+                          Icons.person_rounded,
+                          size: 24,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              if (_isHovered)
-                ClipOval(
-                  child: Container(
-                    color: Colors.black38,
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      color: colorScheme.primary,
-                      size: 26,
+                if (_isHovered)
+                  ClipOval(
+                    child: Container(
+                      color: Colors.black38,
+                      child: Icon(
+                        Icons.play_arrow_rounded,
+                        color: colorScheme.primary,
+                        size: 26,
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
+          title: Text(
+            widget.artist.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            '${strings.arAlbumsCountFormatted(widget.artist.albumCount)} • ${strings.arTracksCountFormatted(widget.artist.trackCount)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: _isHovered
+              ? IconButton(
+                  icon: Icon(
+                    Icons.play_arrow_rounded,
+                    color: colorScheme.primary,
+                    size: 26,
+                  ),
+                  tooltip: strings.arPlayAll,
+                  onPressed: effectiveOnPlay,
+                )
+              : const Icon(Icons.chevron_right_rounded),
+          onTap: widget.onTap,
         ),
-        title: Text(
-          widget.artist.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          '${strings.arAlbumsCountFormatted(widget.artist.albumCount)} • ${strings.arTracksCountFormatted(widget.artist.trackCount)}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: _isHovered
-            ? IconButton(
-                icon: Icon(
-                  Icons.play_arrow_rounded,
-                  color: colorScheme.primary,
-                  size: 26,
-                ),
-                tooltip: strings.arPlayAll,
-                onPressed: effectiveOnPlay,
-              )
-            : const Icon(Icons.chevron_right_rounded),
-        onTap: widget.onTap,
       ),
     );
   }
