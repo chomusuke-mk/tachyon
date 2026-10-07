@@ -514,7 +514,7 @@ class SettingsScreen extends StatelessWidget {
               child: Column(
                 children: [
                   SettingRow(
-                    title: strings.sCrossfadeDuration,
+                    title: strings.npCrossfadeAuto,
                     description: '${settings.crossfadeDuration}s',
                     type: ControllerType.slider,
                     child: Slider(
@@ -530,6 +530,26 @@ class SettingsScreen extends StatelessWidget {
                       label: '${settings.crossfadeDuration}s',
                       onChanged: (val) =>
                           settings.setCrossfadeDuration(val.round()),
+                    ),
+                  ),
+                  const Divider(),
+                  SettingRow(
+                    title: strings.npCrossfadeManual,
+                    description: '${settings.crossfadeManualDuration}s',
+                    type: ControllerType.slider,
+                    child: Slider(
+                      value: settings.crossfadeManualDuration.toDouble().clamp(
+                        AppDefaults.crossfadeManualMinDuration.toDouble(),
+                        AppDefaults.crossfadeManualMaxDuration.toDouble(),
+                      ),
+                      min: AppDefaults.crossfadeManualMinDuration.toDouble(),
+                      max: AppDefaults.crossfadeManualMaxDuration.toDouble(),
+                      divisions:
+                          AppDefaults.crossfadeManualMaxDuration -
+                          AppDefaults.crossfadeManualMinDuration,
+                      label: '${settings.crossfadeManualDuration}s',
+                      onChanged: (val) =>
+                          settings.setCrossfadeManualDuration(val.round()),
                     ),
                   ),
                   const Divider(),

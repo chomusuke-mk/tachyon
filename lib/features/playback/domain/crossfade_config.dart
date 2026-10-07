@@ -16,7 +16,7 @@ class CrossfadeConfig {
     seconds: AppDefaults.crossfadeDefaultDuration,
   );
   static const Duration defaultManualDuration = Duration(
-    seconds: 3,
+    seconds: AppDefaults.crossfadeManualDefaultDuration,
   );
 
   final Duration duration;

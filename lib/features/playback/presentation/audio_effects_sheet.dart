@@ -442,9 +442,12 @@ class AudioEffectsSheet extends StatelessWidget {
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.restore_rounded),
-                                tooltip: '3s',
+                                tooltip:
+                                    '${AppDefaults.crossfadeManualDefaultDuration}s',
                                 onPressed: () =>
-                                    settings.setCrossfadeManualDuration(3),
+                                    settings.setCrossfadeManualDuration(
+                                      AppDefaults.crossfadeManualDefaultDuration,
+                                    ),
                                 iconSize: 20,
                                 color: colorScheme.onSurfaceVariant,
                               ),
@@ -452,10 +455,19 @@ class AudioEffectsSheet extends StatelessWidget {
                                 child: Slider(
                                   value: settings.crossfadeManualDuration
                                       .toDouble()
-                                      .clamp(0.0, 10.0),
-                                  min: 0.0,
-                                  max: 10.0,
-                                  divisions: 10,
+                                      .clamp(
+                                        AppDefaults.crossfadeManualMinDuration
+                                            .toDouble(),
+                                        AppDefaults.crossfadeManualMaxDuration
+                                            .toDouble(),
+                                      ),
+                                  min: AppDefaults.crossfadeManualMinDuration
+                                      .toDouble(),
+                                  max: AppDefaults.crossfadeManualMaxDuration
+                                      .toDouble(),
+                                  divisions:
+                                      AppDefaults.crossfadeManualMaxDuration -
+                                      AppDefaults.crossfadeManualMinDuration,
                                   onChanged: (val) => settings
                                       .setCrossfadeManualDuration(val.round()),
                                 ),

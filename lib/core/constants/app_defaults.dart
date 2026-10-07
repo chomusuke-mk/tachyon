@@ -11,6 +11,10 @@ class AppDefaults {
   static const int crossfadeMaxDuration = 30;
   static const int crossfadeDefaultDuration = 5;
 
+  static const int crossfadeManualMinDuration = 0;
+  static const int crossfadeManualMaxDuration = 10;
+  static const int crossfadeManualDefaultDuration = 3;
+
   static const double playbackRateMin = 0.5;
   static const double playbackRateMax = 1.5;
   static const double playbackRateDefault = 1.0;
