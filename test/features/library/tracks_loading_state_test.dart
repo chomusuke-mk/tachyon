@@ -254,5 +254,105 @@ void main() {
 
       libraryCtrl.dispose();
     });
+
+    testWidgets(
+        'displays centered loading indicator when metadata scan is running and tracks are empty',
+        (tester) async {
+      final store = LibraryStore();
+      final libraryCtrl = LibraryController(
+        backend: backend,
+        settingsRepository: settingsRepo,
+        store: store,
+      );
+
+      // Verify initial state: not loading, no tracks, not scanning
+      expect(libraryCtrl.isLoading, isFalse);
+      expect(libraryCtrl.tracks, isEmpty);
+      expect(libraryCtrl.isScanning, isFalse);
+
+      await tester.pumpWidget(
+        buildTestScreen(
+          libraryCtrl: libraryCtrl,
+          localeCtrl: localeControllerEn,
+        ),
+      );
+
+      // Initially shows empty state because not loading and not scanning
+      expect(find.text(localeControllerEn.localeStrings.trNoTracks), findsOneWidget);
+      expect(find.byKey(const Key('tracks_loading_indicator')), findsNothing);
+
+      // Start scan -> isScanning becomes true
+      await libraryCtrl.startScan([]);
+      expect(libraryCtrl.isScanning, isTrue);
+      await tester.pump();
+
+      // Now it should show the loader and hide the empty state
+      expect(find.text(localeControllerEn.localeStrings.trLoadingTracks), findsOneWidget);
+      expect(find.byKey(const Key('tracks_loading_indicator')), findsOneWidget);
+      expect(find.text(localeControllerEn.localeStrings.trNoTracks), findsNothing);
+
+      // Cancel scan -> returns to empty state
+      libraryCtrl.cancelScan();
+      expect(libraryCtrl.isScanning, isFalse);
+      await tester.pump();
+
+      expect(find.text(localeControllerEn.localeStrings.trLoadingTracks), findsNothing);
+      expect(find.byKey(const Key('tracks_loading_indicator')), findsNothing);
+      expect(find.text(localeControllerEn.localeStrings.trNoTracks), findsOneWidget);
+
+      libraryCtrl.dispose();
+    });
+
+    testWidgets(
+        'displays tracks and NOT loading indicator when metadata scan is running but tracks are already present',
+        (tester) async {
+      const snapshot = CatalogSnapshot(
+        tracks: [
+          RawTrackDto(
+            id: 1,
+            filePath: '/music/song1.mp3',
+            title: 'Sample Track',
+            durationMs: 180000,
+            fileSize: 4000000,
+            modifiedAt: 123456,
+          ),
+        ],
+        albums: [],
+        artists: [],
+        genres: [],
+        playlists: [],
+        playlistEntries: [],
+        trackArtists: [],
+        trackGenres: [],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final libraryCtrl = LibraryController(
+        backend: backend,
+        settingsRepository: settingsRepo,
+        store: store,
+      );
+
+      await tester.pumpWidget(
+        buildTestScreen(
+          libraryCtrl: libraryCtrl,
+          localeCtrl: localeControllerEn,
+        ),
+      );
+
+      // Start scan
+      await libraryCtrl.startScan([]);
+      expect(libraryCtrl.isScanning, isTrue);
+      expect(libraryCtrl.tracks.isNotEmpty, isTrue);
+      await tester.pump();
+
+      // With tracks present, loader should NOT show, empty state should NOT show, tracks should show
+      expect(find.text(localeControllerEn.localeStrings.trLoadingTracks), findsNothing);
+      expect(find.byKey(const Key('tracks_loading_indicator')), findsNothing);
+      expect(find.text(localeControllerEn.localeStrings.trNoTracks), findsNothing);
+      expect(find.text('Sample Track'), findsOneWidget);
+
+      libraryCtrl.dispose();
+    });
   });
 }

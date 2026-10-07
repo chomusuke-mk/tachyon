@@ -131,7 +131,7 @@ void main() {
       }
     });
 
-    test('isScanning prevents concurrent scan requests', () async {
+    test('concurrent scan requests are queued and executed sequentially', () async {
       expect(metadataService.isScanning, isFalse);
 
       final stream1 = metadataService.scanDirectories([]);
@@ -139,12 +139,15 @@ void main() {
 
       // Attempt second scan while first is in progress
       final stream2 = metadataService.scanDirectories([]);
-      final stream2Events = await stream2.toList();
-      // Second scan stream is closed immediately without running
-      expect(stream2Events, isEmpty);
 
-      // Wait for first scan to complete
-      await stream1.toList();
+      // First scan completes
+      final stream1Events = await stream1.toList();
+      expect(stream1Events.last.stage, ScanStage.completed);
+
+      // Second scan was queued and completes sequentially
+      final stream2Events = await stream2.toList();
+      expect(stream2Events.last.stage, ScanStage.completed);
+
       expect(metadataService.isScanning, isFalse);
     });
 

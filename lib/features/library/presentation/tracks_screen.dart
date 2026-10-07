@@ -381,7 +381,7 @@ class _TracksScreenState extends State<TracksScreen> {
           ],
         ],
       ),
-      body: (library.isLoading && tracks.isEmpty)
+      body: ((library.isLoading || library.isScanning) && tracks.isEmpty)
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 48.0),

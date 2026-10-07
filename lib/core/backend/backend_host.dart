@@ -59,7 +59,6 @@ class TachyonBackendHost {
   late final LyricsService _lyricsService;
 
   final List<StreamSubscription> _subscriptions = [];
-  StreamSubscription<ScanProgress>? _scanSubscription;
   int _lastEmittedPositionMs = -1;
   int _lastPositionEmitTimestamp = 0;
 
@@ -115,6 +114,22 @@ class TachyonBackendHost {
               topic: BackendTopics.playbackPosition,
               payload: pos.inMilliseconds,
             ),
+          );
+        }
+      }),
+    );
+
+    _subscriptions.add(
+      _metadataService.progressStream.listen((progress) {
+        config.uiSendPort.send(
+          BackendEvent(
+            topic: BackendTopics.libraryScanProgress,
+            payload: progress,
+          ),
+        );
+        if (progress.stage == ScanStage.completed) {
+          config.uiSendPort.send(
+            const BackendEvent(topic: BackendTopics.catalogUpdated),
           );
         }
       }),
@@ -363,32 +378,13 @@ class TachyonBackendHost {
         return const <Track>[];
 
       case BackendMethods.libraryStartScan:
-        if (_metadataService.isScanning) {
-          return null;
-        }
         final directories = params['directories'] != null
             ? (params['directories'] as List).cast<String>()
             : [params['directoryPath'] as String];
-        await _scanSubscription?.cancel();
-        _scanSubscription = _metadataService
-            .scanDirectories(directories)
-            .listen((progress) {
-              config.uiSendPort.send(
-                BackendEvent(
-                  topic: BackendTopics.libraryScanProgress,
-                  payload: progress,
-                ),
-              );
-              if (progress.stage == ScanStage.completed) {
-                config.uiSendPort.send(
-                  const BackendEvent(topic: BackendTopics.catalogUpdated),
-                );
-              }
-            });
+        _metadataService.scanDirectories(directories);
         return null;
 
       case BackendMethods.libraryCancelScan:
-        await _scanSubscription?.cancel();
         _metadataService.cancelScan();
         return null;
 
@@ -562,8 +558,7 @@ class TachyonBackendHost {
       await sub.cancel();
     }
     _subscriptions.clear();
-    await _scanSubscription?.cancel();
-    _metadataService.cancelScan();
+    _metadataService.dispose();
     _hostReceivePort.close();
     await _audioEngine.dispose();
     _queueManager.dispose();

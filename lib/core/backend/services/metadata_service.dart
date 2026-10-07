@@ -130,6 +130,18 @@ class DiscoveredAudioFile {
   String toString() => 'DiscoveredAudioFile($path, $size bytes)';
 }
 
+class _QueuedScan {
+  final List<String> directories;
+  final StreamController<ScanProgress> controller;
+  final CancellationToken? cancellationToken;
+
+  const _QueuedScan({
+    required this.directories,
+    required this.controller,
+    this.cancellationToken,
+  });
+}
+
 /// Service running in the Core Backend Host Isolate responsible for metadata
 /// orchestration, single-file tag extraction, thumbnail resolution, and full library scanning.
 ///
@@ -228,29 +240,83 @@ class MetadataService {
     );
   }
 
+  final List<_QueuedScan> _scanQueue = [];
+  final StreamController<ScanProgress> _progressController =
+      StreamController<ScanProgress>.broadcast();
+
+  /// Stream of all scan progress events across all running and queued scans.
+  Stream<ScanProgress> get progressStream => _progressController.stream;
+
   /// Whether a scan is currently running.
   bool get isScanning =>
       _currentScanToken != null && !_currentScanToken!.isCancelled;
 
   /// Starts the scan pipeline using a pool of [Isolate.run] workers proportional
   /// to CPU cores and returns a [Stream<ScanProgress>].
+  ///
+  /// If a scan is already running, the request is queued and executed
+  /// automatically once the active scan completes.
   Stream<ScanProgress> scanDirectories(
     List<String> directories, {
     CancellationToken? cancellationToken,
   }) {
     final controller = StreamController<ScanProgress>();
     if (isScanning) {
-      controller.close();
+      final queued = _QueuedScan(
+        directories: directories,
+        controller: controller,
+        cancellationToken: cancellationToken,
+      );
+      _scanQueue.add(queued);
+      controller.onCancel = () {
+        _scanQueue.remove(queued);
+      };
       return controller.stream;
     }
     _runScanPipeline(directories, controller, cancellationToken);
     return controller.stream;
   }
 
-  /// Cancels any active library scan.
+  /// Cancels any active library scan and cancels all queued scan requests.
   void cancelScan() {
     _currentScanToken?.cancel();
     _currentScanToken = null;
+    for (final item in _scanQueue) {
+      if (!item.controller.isClosed) {
+        item.controller.add(const ScanProgress(stage: ScanStage.cancelled));
+        item.controller.close();
+      }
+    }
+    _scanQueue.clear();
+    if (!_progressController.isClosed) {
+      _progressController.add(const ScanProgress(stage: ScanStage.cancelled));
+    }
+  }
+
+  /// Disposes resources, cancels any pending or active scans, and closes the progress stream.
+  void dispose() {
+    cancelScan();
+    _progressController.close();
+  }
+
+  void _processNextQueuedScan() {
+    if (_scanQueue.isEmpty) return;
+    while (_scanQueue.isNotEmpty) {
+      final next = _scanQueue.removeAt(0);
+      if (next.cancellationToken?.isCancelled == true) {
+        if (!next.controller.isClosed) {
+          next.controller.add(const ScanProgress(stage: ScanStage.cancelled));
+          next.controller.close();
+        }
+        continue;
+      }
+      _runScanPipeline(
+        next.directories,
+        next.controller,
+        next.cancellationToken,
+      );
+      break;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -285,6 +351,9 @@ class MetadataService {
         controller.add(const ScanProgress(stage: ScanStage.cancelled));
         controller.close();
       }
+      if (!_progressController.isClosed) {
+        _progressController.add(const ScanProgress(stage: ScanStage.cancelled));
+      }
       return;
     }
 
@@ -298,6 +367,7 @@ class MetadataService {
       if (force || now - lastEmitMs >= 50) {
         lastEmitMs = now;
         if (!controller.isClosed) controller.add(current);
+        if (!_progressController.isClosed) _progressController.add(current);
       }
     }
 
@@ -493,22 +563,22 @@ class MetadataService {
 
       try {
         final activeHashes = database.getAllThumbnailHashes();
-        await CoverUtils.clearTemp();
 
         final coverFiles = CoverUtils.listCachedCoverFiles();
 
-        final remainingFiles = List<File>.from(coverFiles);
         final validHashes = activeHashes
             .where((h) => h.trim().isNotEmpty)
             .toSet();
 
-        for (final hash in validHashes) {
-          remainingFiles.removeWhere(
-            (file) => p.basename(file.path).contains(hash),
-          );
+        final orphanedFiles = <File>[];
+        for (final file in coverFiles) {
+          final hash = CoverUtils.extractHashFromCoverPath(file.path);
+          if (!validHashes.contains(hash)) {
+            orphanedFiles.add(file);
+          }
         }
 
-        for (final file in remainingFiles) {
+        for (final file in orphanedFiles) {
           try {
             file.deleteSync();
           } catch (_) {}
@@ -539,6 +609,7 @@ class MetadataService {
         _currentScanToken = null;
       }
       await CoverUtils.clearTemp();
+      _processNextQueuedScan();
     }
   }
 }

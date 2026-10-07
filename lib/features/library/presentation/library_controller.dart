@@ -39,6 +39,19 @@ class LibraryController extends ChangeNotifier {
       loadLibrary();
     });
 
+    _scanSubscription = _backend.scanProgressStream.listen((progress) {
+      final wasRunning = _scanProgressNotifier.value.isRunning;
+      _scanProgressNotifier.value = progress;
+
+      if (wasRunning != progress.isRunning) {
+        notifyListeners();
+      }
+
+      if (progress.stage == ScanStage.completed) {
+        loadLibrary();
+      }
+    });
+
     if (store != null) {
       _syncFromStore();
     }
@@ -299,49 +312,17 @@ class LibraryController extends ChangeNotifier {
   // Scanning Operations
   // ---------------------------------------------------------------------------
   Future<void> startScan(List<String> directories) async {
-    if (isScanning) return;
-
     _scanProgressNotifier.value =
         const ScanProgress(stage: ScanStage.gettingDatabase);
     notifyListeners();
-
-    _scanSubscription = _backend.scanProgressStream.listen(
-      (progress) {
-        final wasRunning = _scanProgressNotifier.value.isRunning;
-        _scanProgressNotifier.value = progress;
-
-        if (wasRunning != progress.isRunning) {
-          notifyListeners();
-        }
-
-        if (progress.stage == ScanStage.completed) {
-          loadLibrary();
-        }
-      },
-      onError: (Object err) {
-        _scanProgressNotifier.value = _scanProgressNotifier.value.copyWith(
-          stage: ScanStage.failed,
-          errorMessage: err.toString(),
-        );
-        notifyListeners();
-      },
-      onDone: () {
-        _scanSubscription = null;
-      },
-    );
-
     await _backend.startScanDirectories(directories);
   }
 
   void cancelScan() {
+    _scanProgressNotifier.value =
+        _scanProgressNotifier.value.copyWith(stage: ScanStage.cancelled);
+    notifyListeners();
     _backend.cancelScan();
-    _scanSubscription?.cancel();
-    _scanSubscription = null;
-    if (_scanProgressNotifier.value.isRunning) {
-      _scanProgressNotifier.value =
-          _scanProgressNotifier.value.copyWith(stage: ScanStage.cancelled);
-      notifyListeners();
-    }
   }
 
   Future<void> deleteTrack(Track track) async {
@@ -367,7 +348,8 @@ class LibraryController extends ChangeNotifier {
     _isDisposed = true;
     _catalogSubscription?.cancel();
     _catalogSubscription = null;
-    cancelScan();
+    _scanSubscription?.cancel();
+    _scanSubscription = null;
     _scanProgressNotifier.dispose();
     super.dispose();
   }

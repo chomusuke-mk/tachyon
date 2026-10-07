@@ -34,7 +34,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   final StreamController<List<AudioDevice>> _devicesController =
       StreamController<List<AudioDevice>>.broadcast();
   final StreamController<ScanProgress> _scanProgressController =
-      StreamController<ScanProgress>.broadcast();
+      StreamController<ScanProgress>.broadcast(sync: true);
   final StreamController<void> _catalogUpdatedController =
       StreamController<void>.broadcast();
   StreamSubscription<ScanProgress>? _scanSubscription;
@@ -44,7 +44,20 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     this.database,
     this.metadataService,
     this.lyricsService,
-  });
+  }) {
+    if (metadataService != null) {
+      _scanSubscription = metadataService!.progressStream.listen((progress) {
+        if (!_scanProgressController.isClosed) {
+          _scanProgressController.add(progress);
+        }
+        if (progress.stage == ScanStage.completed) {
+          if (!_catalogUpdatedController.isClosed) {
+            _catalogUpdatedController.add(null);
+          }
+        }
+      });
+    }
+  }
 
   @override
   Stream<PlaybackState> get playbackStateStream {
@@ -269,20 +282,23 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<void> startScanDirectories(List<String> directories) async {
     final scanner = metadataService;
-    if (scanner == null || scanner.isScanning) return;
-    await _scanSubscription?.cancel();
-    _scanSubscription = scanner.scanDirectories(directories).listen((progress) {
-      _scanProgressController.add(progress);
-      if (progress.stage == ScanStage.completed) {
-        _catalogUpdatedController.add(null);
+    if (scanner == null) {
+      if (!_scanProgressController.isClosed) {
+        _scanProgressController
+            .add(const ScanProgress(stage: ScanStage.gettingDatabase));
       }
-    });
+      return;
+    }
+    scanner.scanDirectories(directories);
   }
 
   @override
   Future<void> cancelScan() async {
-    await _scanSubscription?.cancel();
     metadataService?.cancelScan();
+    if (metadataService == null && !_scanProgressController.isClosed) {
+      _scanProgressController
+          .add(const ScanProgress(stage: ScanStage.cancelled));
+    }
   }
 
   @override
@@ -427,6 +443,8 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<void> dispose() async {
     await _scanSubscription?.cancel();
+    _scanSubscription = null;
+    metadataService?.dispose();
     await _devicesController.close();
     await _scanProgressController.close();
     await _catalogUpdatedController.close();

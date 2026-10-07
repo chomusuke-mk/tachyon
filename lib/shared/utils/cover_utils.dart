@@ -115,6 +115,20 @@ abstract final class CoverUtils {
   // File Resolution
   // ---------------------------------------------------------------------------
 
+  /// Extracts the base content hash from a cached cover file path or filename.
+  /// Standard cover filenames follow the format `${hash}_${quality}.jpg`.
+  static String extractHashFromCoverPath(String filePath) {
+    final filename = p.basename(filePath);
+    final dotIdx = filename.lastIndexOf('.');
+    final nameWithoutExt =
+        dotIdx != -1 ? filename.substring(0, dotIdx) : filename;
+    final lastUnderscore = nameWithoutExt.lastIndexOf('_');
+    if (lastUnderscore != -1) {
+      return nameWithoutExt.substring(0, lastUnderscore);
+    }
+    return nameWithoutExt;
+  }
+
   static CoverFileSet getFilesForHash(String hash) {
     if (!_isInitialized) {
       throw Exception(

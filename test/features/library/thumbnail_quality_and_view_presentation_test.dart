@@ -301,6 +301,29 @@ void main() {
       expect(artistHash, CoverUtils.hashArtist('QUEEN '));
     });
 
+    test('extractHashFromCoverPath extracts content hash from cover filenames', () {
+      expect(
+        CoverUtils.extractHashFromCoverPath('/path/to/covers/a1b2c3d4_lq.jpg'),
+        'a1b2c3d4',
+      );
+      expect(
+        CoverUtils.extractHashFromCoverPath('/path/to/covers/a1b2c3d4_mq.jpg'),
+        'a1b2c3d4',
+      );
+      expect(
+        CoverUtils.extractHashFromCoverPath('/path/to/covers/a1b2c3d4_hq.jpg'),
+        'a1b2c3d4',
+      );
+      expect(
+        CoverUtils.extractHashFromCoverPath('a1b2c3d4_hq.jpg'),
+        'a1b2c3d4',
+      );
+      expect(
+        CoverUtils.extractHashFromCoverPath('/path/to/covers/a1b2c3d4.jpg'),
+        'a1b2c3d4',
+      );
+    });
+
     test('CoverFileSet provides unified access across qualities and existence checks', () {
       final files = CoverUtils.getTrackFiles('/music/song.mp3');
       expect(files.lq.path.endsWith('_lq.jpg'), isTrue);
