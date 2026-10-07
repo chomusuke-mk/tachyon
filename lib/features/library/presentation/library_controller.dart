@@ -151,10 +151,7 @@ class LibraryController extends ChangeNotifier {
     }
 
     if (autoScan) {
-      final musicDirs = _settingsRepository.getSettings().musicDirectories;
-      if (musicDirs.isNotEmpty) {
-        unawaited(startScan(musicDirs));
-      }
+      unawaited(scanDirectories());
     }
   }
 
@@ -318,6 +315,13 @@ class LibraryController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Scanning Operations
   // ---------------------------------------------------------------------------
+  /// Scans the user's configured music directories from [SettingsRepository].
+  /// When all directories have been removed, scans with an empty list to purge removed tracks.
+  Future<void> scanDirectories() async {
+    final directories = _settingsRepository.getSettings().musicDirectories;
+    await startScan(directories);
+  }
+
   Future<void> startScan(List<String> directories) async {
     _scanProgressNotifier.value =
         const ScanProgress(stage: ScanStage.gettingDatabase);

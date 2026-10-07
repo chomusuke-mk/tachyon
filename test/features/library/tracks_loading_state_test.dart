@@ -124,7 +124,7 @@ void main() {
       controller.dispose();
     });
 
-    test('loadLibrary(autoScan: true) does not trigger scan when musicDirectories is empty', () async {
+    test('loadLibrary(autoScan: true) triggers scan even when musicDirectories is empty', () async {
       await settingsRepo.saveSettings(
         settingsRepo.getSettings().copyWith(musicDirectories: []),
       );
@@ -138,7 +138,7 @@ void main() {
 
       await controller.loadLibrary(autoScan: true);
 
-      expect(controller.isScanning, isFalse);
+      expect(controller.isScanning, isTrue);
 
       controller.dispose();
     });

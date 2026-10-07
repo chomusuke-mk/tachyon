@@ -40,7 +40,7 @@ class FoldersScreen extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.sync_rounded),
               tooltip: strings.fScanFolder,
-              onPressed: () => library.startScan([currentFolder]),
+              onPressed: library.scanDirectories,
             ),
           ],
         ],
@@ -96,9 +96,9 @@ class FoldersScreen extends StatelessWidget {
                                     ),
                                   );
                                 } else {
-                                  context.read<LibraryController>().startScan(
-                                    settings.musicDirectories,
-                                  );
+                                  context
+                                      .read<LibraryController>()
+                                      .scanDirectories();
                                 }
                               }
                             }

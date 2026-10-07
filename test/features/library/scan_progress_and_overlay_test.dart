@@ -246,6 +246,41 @@ void main() {
 
       await completer.future;
     });
+
+    test('scanDirectories() triggers scan using settings.musicDirectories', () async {
+      await settingsRepository.saveSettings(
+        settingsRepository.getSettings().copyWith(musicDirectories: ['/configured/folder']),
+      );
+
+      expect(libraryController.isScanning, isFalse);
+
+      unawaited(libraryController.scanDirectories());
+      expect(libraryController.isScanning, isTrue);
+    });
+
+    test('scanDirectories() executes scan with empty list when musicDirectories is empty to purge library', () async {
+      database.upsertTracks([
+        ExtractedTrackData(
+          filePath: '/fake/music/song.mp3',
+          title: 'Song',
+          artistNames: ['Artist'],
+          durationMs: 120000,
+          fileSize: 1024,
+          modifiedAt: 100,
+        ),
+      ]);
+      expect(database.getCatalogSnapshot().tracks.length, 1);
+
+      await settingsRepository.saveSettings(
+        settingsRepository.getSettings().copyWith(musicDirectories: []),
+      );
+
+      await libraryController.scanDirectories();
+
+      // Wait for completion
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(database.getCatalogSnapshot().tracks, isEmpty);
+    });
   });
 
   group('ScanProgressOverlay Widget Tests', () {

@@ -81,9 +81,7 @@ class SettingsScreen extends StatelessWidget {
                         SnackBar(content: Text(strings.sFolderErrorInvalid)),
                       );
                     } else if (added && context.mounted) {
-                      context.read<LibraryController>().startScan(
-                        settings.musicDirectories,
-                      );
+                      context.read<LibraryController>().scanDirectories();
                     }
                   }
                 }
@@ -461,9 +459,9 @@ class SettingsScreen extends StatelessWidget {
                               tooltip: strings.sRemoveFolder,
                               onPressed: () {
                                 settings.removeMusicDirectory(dir);
-                                context.read<LibraryController>().startScan(
-                                  settings.musicDirectories,
-                                );
+                                context
+                                    .read<LibraryController>()
+                                    .scanDirectories();
                               },
                             ),
                           ],
@@ -485,9 +483,7 @@ class SettingsScreen extends StatelessWidget {
                         icon: const Icon(Icons.sync_rounded),
                         label: Text(strings.sRescanLibrary),
                         onPressed: () {
-                          context.read<LibraryController>().startScan(
-                            settings.musicDirectories,
-                          );
+                          context.read<LibraryController>().scanDirectories();
                         },
                       ),
                     ],
