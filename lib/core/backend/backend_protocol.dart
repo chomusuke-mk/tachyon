@@ -86,17 +86,13 @@ abstract final class BackendMethods {
   static const String metadataGetMetadata = 'metadata.getMetadata';
 
   // Playlists
-  static const String playlistsGetAll = 'playlists.getAll';
   static const String playlistsCreate = 'playlists.create';
   static const String playlistsDelete = 'playlists.delete';
   static const String playlistsRename = 'playlists.rename';
-  static const String playlistsGetTracks = 'playlists.getTracks';
-  static const String playlistsGetTrackIds = 'playlists.getTrackIds';
   static const String playlistsAddTracks = 'playlists.addTracks';
   static const String playlistsRemoveTrack = 'playlists.removeTrack';
   static const String playlistsReorderTracks = 'playlists.reorderTracks';
   static const String playlistsToggleLike = 'playlists.toggleLike';
-  static const String playlistsIsLiked = 'playlists.isLiked';
   static const String playlistsClearHistory = 'playlists.clearHistory';
 
   // Lyrics

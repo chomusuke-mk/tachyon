@@ -560,5 +560,81 @@ void main() {
       await backend.dispose();
       await db.close();
     });
+
+    test('Zero-Jank: toggleLike does NOT emit catalogUpdated or trigger LibraryController reload', () async {
+      final db = AppDatabase.inMemory();
+      db.upsertTracks([
+        ExtractedTrackData(
+          filePath: '/music/rock/song1.mp3',
+          title: 'Song 1',
+          artistNames: ['Artist 1'],
+          albumName: 'Album 1',
+          genreNames: ['Rock'],
+          durationMs: 180000,
+          fileSize: 4000000,
+          modifiedAt: 1000,
+        ),
+      ]);
+      final snapshot = db.getCatalogSnapshot();
+      final trackId = snapshot.tracks.first.id;
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final backend = DirectTachyonBackendClient(database: db);
+
+      final libraryController = LibraryController(
+        backend: backend,
+        settingsRepository: settingsRepository,
+        store: store,
+      );
+
+      final playlistsController = PlaylistsController(
+        backend: backend,
+        store: store,
+      );
+
+      var catalogUpdateCount = 0;
+      final sub = backend.catalogUpdatedStream.listen((_) {
+        catalogUpdateCount++;
+      });
+
+      var libraryReloadCount = 0;
+      libraryController.addListener(() {
+        libraryReloadCount++;
+      });
+
+      // Track is not liked initially
+      expect(playlistsController.isTrackLiked(trackId), isFalse);
+
+      // 1. Toggle like (add to liked)
+      final likedResult = await playlistsController.toggleLike(trackId);
+      expect(likedResult, isTrue);
+      expect(playlistsController.isTrackLiked(trackId), isTrue);
+      expect(store.isTrackLiked(trackId), isTrue);
+      expect(db.isTrackLiked(trackId), isTrue);
+
+      // Wait a tick to guarantee any asynchronous stream events would have fired
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // Assert that catalogUpdated was NOT emitted and LibraryController was NOT reloaded
+      expect(catalogUpdateCount, equals(0));
+      expect(libraryReloadCount, equals(0));
+
+      // 2. Toggle like again (remove from liked)
+      final unlikedResult = await playlistsController.toggleLike(trackId);
+      expect(unlikedResult, isFalse);
+      expect(playlistsController.isTrackLiked(trackId), isFalse);
+      expect(store.isTrackLiked(trackId), isFalse);
+      expect(db.isTrackLiked(trackId), isFalse);
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(catalogUpdateCount, equals(0));
+      expect(libraryReloadCount, equals(0));
+
+      await sub.cancel();
+      playlistsController.dispose();
+      libraryController.dispose();
+      await backend.dispose();
+      await db.close();
+    });
   });
 }

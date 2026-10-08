@@ -324,8 +324,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Playlist Orphan'), findsOneWidget);
-      // Subtitle should be 'Great Hits' alone without dangling bullets
-      expect(find.text('Great Hits'), findsOneWidget);
+      final strings = localeController.localeStrings;
+      expect(find.text('${strings.trUnknownArtist} • Great Hits'), findsOneWidget);
 
       playlistsCtrl.dispose();
       playbackCtrl.dispose();

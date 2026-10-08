@@ -316,34 +316,18 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   }
 
   @override
-  Future<List<Playlist>> getPlaylists() async => const [];
-
-  @override
   Future<int> createPlaylist(String name) async {
-    final id = database?.createPlaylist(name) ?? -1;
-    _catalogUpdatedController.add(null);
-    return id;
+    return database?.createPlaylist(name) ?? -1;
   }
 
   @override
   Future<void> deletePlaylist(int playlistId) async {
     database?.deletePlaylist(playlistId);
-    _catalogUpdatedController.add(null);
   }
 
   @override
   Future<void> renamePlaylist(int playlistId, String name) async {
     database?.renamePlaylist(playlistId, name);
-    _catalogUpdatedController.add(null);
-  }
-
-  @override
-  Future<List<Track>> getPlaylistTracks(int playlistId) async => const [];
-
-  @override
-  Future<List<int>> getPlaylistTrackIds(int playlistId) async {
-    final ids = database?.getTrackIdsForPlaylist(playlistId);
-    return ids?.toList() ?? const [];
   }
 
   @override
@@ -358,13 +342,11 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
         } catch (_) {}
       }
     }
-    _catalogUpdatedController.add(null);
   }
 
   @override
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) async {
     database?.removeTrackFromPlaylist(playlistId, trackId);
-    _catalogUpdatedController.add(null);
   }
 
   @override
@@ -374,26 +356,18 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     int newIndex,
   ) async {
     database?.reorderPlaylistEntries(playlistId, oldIndex, newIndex);
-    _catalogUpdatedController.add(null);
   }
 
   @override
   Future<bool> toggleLikeTrack(int trackId, [String? filePath]) async {
     if (database == null) return false;
     database!.toggleLikeTrack(trackId, filePath);
-    _catalogUpdatedController.add(null);
     return database!.isTrackLiked(trackId);
-  }
-
-  @override
-  Future<bool> isTrackLiked(int trackId) async {
-    return database?.isTrackLiked(trackId) ?? false;
   }
 
   @override
   Future<void> clearHistory() async {
     database?.clearHistory();
-    _catalogUpdatedController.add(null);
   }
 
   @override

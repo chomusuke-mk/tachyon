@@ -15,7 +15,6 @@ import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/domain/track_sort_option.dart';
@@ -93,12 +92,9 @@ abstract class TachyonBackendClient {
   Future<ExtractedTrackData?> getMetadata(String filePath);
 
   // --- Playlists ---
-  Future<List<Playlist>> getPlaylists();
   Future<int> createPlaylist(String name);
   Future<void> deletePlaylist(int playlistId);
   Future<void> renamePlaylist(int playlistId, String name);
-  Future<List<Track>> getPlaylistTracks(int playlistId);
-  Future<List<int>> getPlaylistTrackIds(int playlistId);
   Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds);
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId);
   Future<void> reorderPlaylistTracks(
@@ -107,7 +103,6 @@ abstract class TachyonBackendClient {
     int newIndex,
   );
   Future<bool> toggleLikeTrack(int trackId, [String? filePath]);
-  Future<bool> isTrackLiked(int trackId);
   Future<void> clearHistory();
 
   // --- Lyrics ---
@@ -511,12 +506,6 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   // PLAYLISTS
   // ===========================================================================
   @override
-  Future<List<Playlist>> getPlaylists() async {
-    final result = await _send<List<dynamic>>(BackendMethods.playlistsGetAll);
-    return result.cast<Playlist>();
-  }
-
-  @override
   Future<int> createPlaylist(String name) =>
       _send<int>(BackendMethods.playlistsCreate, {'name': name});
 
@@ -529,15 +518,6 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
     BackendMethods.playlistsRename,
     {'playlistId': playlistId, 'name': name},
   );
-
-  @override
-  Future<List<Track>> getPlaylistTracks(int playlistId) async {
-    final result = await _send<List<dynamic>>(
-      BackendMethods.playlistsGetTracks,
-      {'playlistId': playlistId},
-    );
-    return result.cast<Track>();
-  }
 
   @override
   Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) => _send(
@@ -563,29 +543,10 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   });
 
   @override
-  Future<List<int>> getPlaylistTrackIds(int playlistId) async {
-    final res = await _send<dynamic>(BackendMethods.playlistsGetTrackIds, {
-      'playlistId': playlistId,
-    });
-    if (res is Iterable) {
-      return res.map((e) => e as int).toList();
-    }
-    return const [];
-  }
-
-  @override
   Future<bool> toggleLikeTrack(int trackId, [String? filePath]) async {
     final res = await _send<dynamic>(BackendMethods.playlistsToggleLike, {
       'trackId': trackId,
       'filePath': filePath,
-    });
-    return res as bool? ?? false;
-  }
-
-  @override
-  Future<bool> isTrackLiked(int trackId) async {
-    final res = await _send<dynamic>(BackendMethods.playlistsIsLiked, {
-      'trackId': trackId,
     });
     return res as bool? ?? false;
   }

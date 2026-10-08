@@ -126,6 +126,7 @@
   "tr_file_size": "File Size",
   "tr_unknown_artist": "Unknown Artist",
   "tr_added_to_playlist": "Added to {name}",
+  "tr_more_actions": "More actions",
   // --- al_: Albums Screen & Detail View ------------------------------------
   "al_title": "Albums",
   "al_search_hint": "Search albums...",

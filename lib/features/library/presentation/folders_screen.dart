@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
+import 'package:tachyon/shared/utils/toast_utils.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
@@ -105,9 +106,7 @@ class FoldersScreen extends StatelessWidget {
                   final added = await settings.addMusicDirectory(picked);
                   if (context.mounted) {
                     if (!added) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(strings.sFolderErrorInvalid)),
-                      );
+                      ToastUtils.showError(strings.sFolderErrorInvalid);
                     } else {
                       context.read<LibraryController>().scanDirectories();
                     }
@@ -371,17 +370,10 @@ class FoldersScreen extends StatelessWidget {
                       SliverList(
                         delegate: SliverChildBuilderDelegate((context, index) {
                           final track = library.currentFolderTracks[index];
-                          final isPlaying =
-                              currentTrack == track ||
-                              playback.isCurrentTrack(track);
                           return TrackTile(
                             key: ValueKey(track.filePath),
                             track: track,
-                            isPlaying: isPlaying,
-                            onTap: () => playback.playTrack(
-                              track,
-                              contextTracks: library.currentFolderTracks,
-                            ),
+                            contextTracks: library.currentFolderTracks,
                           );
                         }, childCount: library.currentFolderTracks.length),
                       ),

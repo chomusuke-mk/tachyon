@@ -7,6 +7,7 @@ import 'package:tachyon/features/library/domain/track.dart';
 
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
+import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
@@ -41,13 +42,6 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       return '${hours}h ${minutes}m';
     }
     return '${minutes}m';
-  }
-
-  String _formatTrackDuration(int durationMs) {
-    final duration = Duration(milliseconds: durationMs);
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
   }
 
   Widget _buildHeaderCover(
@@ -132,47 +126,10 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     );
   }
 
-  Widget _buildTrackLeading(BuildContext context, Track track, bool isPlaying) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8.0),
-          child: SizedBox(
-            width: 48,
-            height: 48,
-            child: AlbumArtImage(
-              thumbnailHash: track.thumbnailHash ?? track.album?.thumbnailHash,
-              quality: ThumbnailQuality.low,
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-        if (isPlaying)
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-            child: Icon(
-              Icons.equalizer_rounded,
-              color: Theme.of(context).colorScheme.primary,
-              size: 24,
-            ),
-          ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final playlists = context.watch<PlaylistsController>();
-    final currentTrack = context.select<PlaybackController, Track?>(
-      (c) => c.currentTrack,
-    );
     final playback = context.read<PlaybackController>();
 
     final isSelected = playlists.selectedPlaylist?.id == widget.playlist.id;
@@ -290,83 +247,34 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                   },
                   itemBuilder: (context, index) {
                     final track = tracks[index];
-                    final isPlaying =
-                        currentTrack == track || playback.isCurrentTrack(track);
-
-                    final artistNames = track.artists
-                        .map((a) => a.name)
-                        .join(', ');
-                    final albumName = track.album?.name ?? '';
-                    final subtitleParts = [
-                      if (artistNames.isNotEmpty) artistNames,
-                      if (albumName.isNotEmpty) albumName,
-                    ];
-
-                    return ListTile(
+                    return TrackTile(
                       key: ValueKey('${track.id ?? track.filePath}_$index'),
-                      leading: _buildTrackLeading(context, track, isPlaying),
-                      title: Text(
-                        track.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: isPlaying
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.onSurface,
+                      track: track,
+                      contextTracks: tracks,
+                      additionalActions: [
+                        if (track.id != null && currentPlaylist.id != null)
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(
+                              Icons.remove_circle_outline_rounded,
+                              size: 20,
                             ),
-                      ),
-                      subtitle: subtitleParts.isNotEmpty
-                          ? Text(
-                              subtitleParts.join(' • '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                            )
-                          : null,
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _formatTrackDuration(track.durationMs),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
+                            tooltip: strings.plRemoveTrack,
+                            onPressed: () {
+                              playlists.removeTrackFromPlaylist(
+                                currentPlaylist.id!,
+                                track.id!,
+                              );
+                            },
                           ),
-                          if (track.id != null && currentPlaylist.id != null)
-                            IconButton(
-                              icon: const Icon(
-                                Icons.remove_circle_outline_rounded,
-                                size: 20,
-                              ),
-                              tooltip: strings.plRemoveTrack,
-                              onPressed: () {
-                                playlists.removeTrackFromPlaylist(
-                                  currentPlaylist.id!,
-                                  track.id!,
-                                );
-                              },
-                            ),
-                          ReorderableDragStartListener(
-                            index: index,
-                            child: const Padding(
-                              padding: EdgeInsets.only(left: 8.0),
-                              child: Icon(Icons.drag_handle_rounded),
-                            ),
+                        ReorderableDragStartListener(
+                          index: index,
+                          child: const Padding(
+                            padding: EdgeInsets.only(left: 4.0),
+                            child: Icon(Icons.drag_handle_rounded),
                           ),
-                        ],
-                      ),
-                      onTap: () =>
-                          playback.playTrack(track, contextTracks: tracks),
+                        ),
+                      ],
                     );
                   },
                 )
@@ -375,55 +283,10 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                   itemCount: tracks.length,
                   itemBuilder: (context, index) {
                     final track = tracks[index];
-                    final isPlaying =
-                        currentTrack == track || playback.isCurrentTrack(track);
-
-                    final artistNames = track.artists
-                        .map((a) => a.name)
-                        .join(', ');
-                    final albumName = track.album?.name ?? '';
-                    final subtitleParts = [
-                      if (artistNames.isNotEmpty) artistNames,
-                      if (albumName.isNotEmpty) albumName,
-                    ];
-
-                    return ListTile(
+                    return TrackTile(
                       key: ValueKey('${track.id ?? track.filePath}_$index'),
-                      leading: _buildTrackLeading(context, track, isPlaying),
-                      title: Text(
-                        track.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: isPlaying
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.onSurface,
-                            ),
-                      ),
-                      subtitle: subtitleParts.isNotEmpty
-                          ? Text(
-                              subtitleParts.join(' • '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                            )
-                          : null,
-                      trailing: Text(
-                        _formatTrackDuration(track.durationMs),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      onTap: () =>
-                          playback.playTrack(track, contextTracks: tracks),
+                      track: track,
+                      contextTracks: tracks,
                     );
                   },
                 ),

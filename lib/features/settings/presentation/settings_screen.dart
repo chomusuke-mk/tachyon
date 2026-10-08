@@ -10,6 +10,7 @@ import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/shared/utils/file_picker_service.dart';
+import 'package:tachyon/shared/utils/toast_utils.dart';
 import 'package:tachyon/shared/widgets/setting_row.dart';
 
 import 'settings_controller.dart';
@@ -30,8 +31,7 @@ class SettingsScreen extends StatelessWidget {
 
     final added = await settings.addMusicDirectory(picked);
     if (!added && context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(strings.sFolderErrorInvalid)));
+      ToastUtils.showError(strings.sFolderErrorInvalid);
     } else if (added && context.mounted) {
       context.read<LibraryController>().scanDirectories();
     }
@@ -671,12 +671,8 @@ class SettingsScreen extends StatelessWidget {
                                   final success = await settings
                                       .setCustomBackground(picked);
                                   if (!success && context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          strings.sCustomBackgroundFileError,
-                                        ),
-                                      ),
+                                    ToastUtils.showError(
+                                      strings.sCustomBackgroundFileError,
                                     );
                                   }
                                 }

@@ -2,44 +2,52 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 
 import 'album_art_image.dart';
+import 'track_action_helper.dart';
 
-enum TrackAction {
-  play,
-  playNext,
-  addToQueue,
-  addToPlaylist,
-  viewAlbum,
-  viewArtist,
-  fileInfo,
-  delete,
-}
+export 'track_action_helper.dart';
 
 class TrackTile extends StatelessWidget {
   final Track track;
-  final bool isPlaying;
+  final bool? isPlaying;
   final bool isSelected;
   final bool isSelectionMode;
-  final bool isLiked;
+  final bool? isLiked;
+  final bool showLikeButton;
+  final bool showActions;
+  final bool enableDelete;
+  final Set<TrackAction>? allowedActions;
+  final List<Track>? contextTracks;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final ValueChanged<bool?>? onSelectChanged;
   final VoidCallback? onToggleLike;
   final void Function(TrackAction action)? onActionSelected;
+  final List<Widget>? additionalActions;
+  final Widget? additionalTrailing;
 
   const TrackTile({
     super.key,
     required this.track,
-    this.isPlaying = false,
+    this.isPlaying,
     this.isSelected = false,
     this.isSelectionMode = false,
-    this.isLiked = false,
+    this.isLiked,
+    this.showLikeButton = false,
+    this.showActions = true,
+    this.enableDelete = true,
+    this.allowedActions,
+    this.contextTracks,
     this.onTap,
     this.onLongPress,
     this.onSelectChanged,
     this.onToggleLike,
     this.onActionSelected,
+    this.additionalActions,
+    this.additionalTrailing,
   });
 
   String _formatDuration(int durationMs) {
@@ -53,11 +61,47 @@ class TrackTile extends StatelessWidget {
     return '$minutes:$seconds';
   }
 
+  bool _resolveIsPlaying(BuildContext context) {
+    try {
+      return context.select<PlaybackController, bool>(
+        (c) => c.isCurrentTrack(track),
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _resolveIsLiked(BuildContext context, int trackId) {
+    try {
+      return context.select<PlaylistsController, bool>(
+        (p) => p.isTrackLiked(trackId),
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final strings = context.watch<LocaleController>().localeStrings;
+
+    final effectiveIsPlaying = isPlaying ?? _resolveIsPlaying(context);
+
+    final effectiveIsLiked = isLiked ??
+        (showLikeButton && track.id != null
+            ? _resolveIsLiked(context, track.id!)
+            : false);
+
+    final effectiveOnToggleLike = onToggleLike ??
+        (showLikeButton && track.id != null
+            ? () {
+                try {
+                  context.read<PlaylistsController>().toggleLikeTrack(track);
+                } catch (_) {}
+              }
+            : null);
 
     final artistText = track.artists.isNotEmpty
         ? track.artists.map((a) => a.name).join(', ')
@@ -86,7 +130,7 @@ class TrackTile extends StatelessWidget {
                   ),
                 ),
               ),
-              if (isPlaying)
+              if (effectiveIsPlaying)
                 Container(
                   width: 48,
                   height: 48,
@@ -103,6 +147,15 @@ class TrackTile extends StatelessWidget {
             ],
           );
 
+    final effectiveOnTap = onTap ??
+        () {
+          try {
+            context
+                .read<PlaybackController>()
+                .playTrack(track, contextTracks: contextTracks);
+          } catch (_) {}
+        };
+
     return SizedBox(
       height: 72.0,
       child: Material(
@@ -116,7 +169,9 @@ class TrackTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w600,
-              color: isPlaying ? colorScheme.primary : colorScheme.onSurface,
+              color: effectiveIsPlaying
+                  ? colorScheme.primary
+                  : colorScheme.onSurface,
             ),
           ),
           subtitle: Text(
@@ -136,161 +191,35 @@ class TrackTile extends StatelessWidget {
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
-              if (onToggleLike != null)
+              if (showLikeButton || onToggleLike != null)
                 IconButton(
+                  visualDensity: VisualDensity.compact,
                   icon: Icon(
-                    isLiked
+                    effectiveIsLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-                    color: isLiked
+                    color: effectiveIsLiked
                         ? colorScheme.primary
                         : colorScheme.onSurfaceVariant,
                     size: 20,
                   ),
-                  tooltip: isLiked ? strings.npUnlike : strings.npLike,
-                  onPressed: onToggleLike,
+                  tooltip:
+                      effectiveIsLiked ? strings.npUnlike : strings.npLike,
+                  onPressed: effectiveOnToggleLike,
                 ),
-              if (onActionSelected != null)
-                PopupMenuButton<TrackAction>(
-                  icon: Icon(
-                    Icons.more_vert_rounded,
-                    color: colorScheme.onSurfaceVariant,
-                    size: 20,
-                  ),
-                  onSelected: onActionSelected,
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: TrackAction.play,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.play_arrow_rounded, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              strings.trPlay,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: TrackAction.playNext,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.playlist_play_rounded, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              strings.trPlayNext,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: TrackAction.addToQueue,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.queue_music_rounded, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              strings.trAddQueue,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: TrackAction.addToPlaylist,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.add_to_photos_rounded, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              strings.trAddPlaylist,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: TrackAction.viewAlbum,
-                      enabled: track.album != null,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.album_rounded, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              strings.trViewAlbum,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: TrackAction.viewArtist,
-                      enabled: track.artists.isNotEmpty,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.person_rounded, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              strings.trViewArtist,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: TrackAction.fileInfo,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline_rounded, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              strings.trFileInfo,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: TrackAction.delete,
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.delete_outline_rounded,
-                            size: 20,
-                            color: Colors.redAccent,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              strings.trDelete,
-                              style: const TextStyle(color: Colors.redAccent),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+              if (showActions)
+                TrackPopupMenuButton(
+                  track: track,
+                  contextTracks: contextTracks,
+                  enableDelete: enableDelete,
+                  allowedActions: allowedActions,
+                  onActionSelected: onActionSelected,
                 ),
+              ...?additionalActions,
+              ?additionalTrailing,
             ],
           ),
-          onTap: onTap,
+          onTap: effectiveOnTap,
           onLongPress: onLongPress,
         ),
       ),

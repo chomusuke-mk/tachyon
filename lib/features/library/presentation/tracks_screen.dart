@@ -10,8 +10,6 @@ import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/search/presentation/search_screen.dart';
 import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
 
-import 'album_detail_screen.dart';
-import 'artist_detail_screen.dart';
 import 'library_controller.dart';
 
 class TracksScreen extends StatefulWidget {
@@ -46,152 +44,6 @@ class _TracksScreenState extends State<TracksScreen> {
         _selectedTrackIds.add(trackId);
       }
     });
-  }
-
-  void _showFileInfoDialog(BuildContext context, Track track) {
-    final strings = context.read<LocaleController>().localeStrings;
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(track.title),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: [
-                _infoRow(strings.trFilePath, track.filePath),
-                if (track.artists.isNotEmpty)
-                  _infoRow(
-                    strings.trSortArtist,
-                    track.artists.map((a) => a.name).join(', '),
-                  ),
-                if (track.album != null && track.album!.name.isNotEmpty)
-                  _infoRow(strings.trSortAlbum, track.album!.name),
-                if (track.codec != null)
-                  _infoRow(strings.trCodec, track.codec!.toUpperCase()),
-                if (track.bitrate != null)
-                  _infoRow(strings.npBitrate, '${track.bitrate! ~/ 1000} kbps'),
-                if (track.sampleRate != null)
-                  _infoRow(strings.npSampleRate, '${track.sampleRate} Hz'),
-                if (track.channels != null)
-                  _infoRow(strings.npChannels, track.channels.toString()),
-                if (track.year != null)
-                  _infoRow(strings.alReleaseYear, track.year.toString()),
-                _infoRow(
-                  strings.trSortDuration,
-                  '${(track.durationMs / 1000).toStringAsFixed(1)} s',
-                ),
-                _infoRow(
-                  strings.trFileSize,
-                  '${(track.fileSize / (1024 * 1024)).toStringAsFixed(2)} MB',
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(strings.clClose),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          SelectableText(value, style: const TextStyle(fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
-  void _showAddToPlaylistDialog(BuildContext context, Track track) {
-    final strings = context.read<LocaleController>().localeStrings;
-    final playlistsCtrl = context.read<PlaylistsController>();
-    final playlists = playlistsCtrl.userPlaylists;
-
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(strings.trAddPlaylist),
-          content: playlists.isEmpty
-              ? Text(strings.plEmpty)
-              : SizedBox(
-                  width: 300,
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: playlists.length,
-                    itemBuilder: (context, index) {
-                      final pl = playlists[index];
-                      return ListTile(
-                        leading: const Icon(Icons.playlist_add_rounded),
-                        title: Text(pl.name),
-                        onTap: () {
-                          if (track.id != null && pl.id != null) {
-                            playlistsCtrl.addTrackToPlaylist(pl.id!, track.id!);
-                          }
-                          Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                strings.trAddedToPlaylistFormatted(pl.name),
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(strings.selCancel),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showDeleteConfirmation(BuildContext context, Track track) {
-    final strings = context.read<LocaleController>().localeStrings;
-    final libraryCtrl = context.read<LibraryController>();
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(strings.trDelete),
-          content: Text(strings.trDeleteConfirm),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(strings.selCancel),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-              ),
-              onPressed: () {
-                libraryCtrl.deleteTrack(track);
-                Navigator.of(context).pop();
-              },
-              child: Text(strings.trDelete),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   @override
@@ -632,44 +484,12 @@ class _TracksScreenState extends State<TracksScreen> {
     TrackAction action,
     PlaybackController playback,
   ) {
-    switch (action) {
-      case TrackAction.play:
-        playback.playTrack(track, contextTracks: tracks);
-        break;
-      case TrackAction.playNext:
-        playback.playNext(track);
-        break;
-      case TrackAction.addToQueue:
-        playback.addToQueue(track);
-        break;
-      case TrackAction.addToPlaylist:
-        _showAddToPlaylistDialog(context, track);
-        break;
-      case TrackAction.viewAlbum:
-        if (track.album != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => AlbumDetailScreen(album: track.album!),
-            ),
-          );
-        }
-        break;
-      case TrackAction.viewArtist:
-        final artist = track.artists.firstOrNull;
-        if (artist != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => ArtistDetailScreen(artist: artist),
-            ),
-          );
-        }
-        break;
-      case TrackAction.fileInfo:
-        _showFileInfoDialog(context, track);
-        break;
-      case TrackAction.delete:
-        _showDeleteConfirmation(context, track);
-        break;
-    }
+    TrackActionHelper.handleTrackAction(
+      context,
+      track,
+      action,
+      contextTracks: tracks,
+      enableDelete: true,
+    );
   }
 }

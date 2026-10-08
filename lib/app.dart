@@ -5,14 +5,12 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/features/shell/tachyon_shell.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/shared/utils/toast_utils.dart';
 import 'package:tachyon/shared/widgets/app_background.dart';
 import 'package:tachyon/shared/widgets/desktop_shortcuts_handler.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
-
-  static final GlobalKey<NavigatorState> navigatorKey =
-      GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +33,7 @@ class App extends StatelessWidget {
           );
 
     return MaterialApp(
-      navigatorKey: navigatorKey,
+      navigatorKey: ToastUtils.navigatorKey,
       title: 'Tachyon',
       debugShowCheckedModeBanner: false,
       themeMode: settings.themeMode,
@@ -43,7 +41,7 @@ class App extends StatelessWidget {
       darkTheme: darkTheme,
       builder: (context, child) {
         return DesktopShortcutsHandler(
-          navigatorKey: navigatorKey,
+          navigatorKey: ToastUtils.navigatorKey,
           child: Stack(
             fit: StackFit.expand,
             children: [

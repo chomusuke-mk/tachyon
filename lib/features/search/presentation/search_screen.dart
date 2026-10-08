@@ -6,11 +6,9 @@ import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
-import 'package:tachyon/features/library/domain/track.dart';
 
 import 'tachyon_search_controller.dart';
 
@@ -53,10 +51,6 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final searchCtrl = context.watch<TachyonSearchController>();
-    final currentTrack = context.select<PlaybackController, Track?>(
-      (c) => c.currentTrack,
-    );
-    final playback = context.read<PlaybackController>();
     final colorScheme = Theme.of(context).colorScheme;
 
     final matchedTracks = searchCtrl.matchedTracks;
@@ -239,16 +233,10 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ),
                               ),
                               ...matchedTracks.map((track) {
-                                final isPlaying =
-                                    currentTrack == track || playback.isCurrentTrack(track);
                                 return TrackTile(
                                   key: ValueKey('search_${track.filePath}'),
                                   track: track,
-                                  isPlaying: isPlaying,
-                                  onTap: () => playback.playTrack(
-                                    track,
-                                    contextTracks: matchedTracks,
-                                  ),
+                                  contextTracks: matchedTracks,
                                 );
                               }),
                             ],

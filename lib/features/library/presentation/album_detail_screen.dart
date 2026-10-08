@@ -32,9 +32,6 @@ class AlbumDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController?>();
-    final currentTrack = context.select<PlaybackController, Track?>(
-      (c) => c.currentTrack,
-    );
     final playback = context.read<PlaybackController>();
 
     final currentAlbum = (album.id != null && library != null
@@ -140,15 +137,18 @@ class AlbumDetailScreen extends StatelessWidget {
                 itemCount: albumTracks.length,
                 itemBuilder: (context, index) {
                   final track = albumTracks[index];
-                  final isPlaying =
-                      currentTrack == track || playback.isCurrentTrack(track);
-
                   return TrackTile(
                     key: ValueKey(track.filePath),
                     track: track,
-                    isPlaying: isPlaying,
-                    onTap: () =>
-                        playback.playTrack(track, contextTracks: albumTracks),
+                    contextTracks: albumTracks,
+                    allowedActions: const {
+                      TrackAction.play,
+                      TrackAction.playNext,
+                      TrackAction.addToQueue,
+                      TrackAction.addToPlaylist,
+                      TrackAction.viewArtist,
+                      TrackAction.fileInfo,
+                    },
                   );
                 },
               ),

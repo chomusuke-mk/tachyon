@@ -126,6 +126,7 @@
   "tr_file_size": "Tamaño del archivo",
   "tr_unknown_artist": "Artista desconocido",
   "tr_added_to_playlist": "Añadido a {name}",
+  "tr_more_actions": "Más acciones",
   // --- al_: Pantalla de Álbumes y Detalle ----------------------------------
   "al_title": "Álbumes",
   "al_search_hint": "Buscar álbumes...",

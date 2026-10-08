@@ -44,9 +44,6 @@ class GenreDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController?>();
-    final currentTrack = context.select<PlaybackController, Track?>(
-      (c) => c.currentTrack,
-    );
     final playback = context.read<PlaybackController>();
 
     final currentGenre = (genre.id != null && library != null
@@ -189,17 +186,10 @@ class GenreDetailScreen extends StatelessWidget {
                   itemCount: genreTracks.length,
                   itemBuilder: (context, index) {
                     final track = genreTracks[index];
-                    final isPlaying =
-                        currentTrack == track || playback.isCurrentTrack(track);
-
                     return TrackTile(
                       key: ValueKey(track.filePath),
                       track: track,
-                      isPlaying: isPlaying,
-                      onTap: () => playback.playTrack(
-                        track,
-                        contextTracks: genreTracks,
-                      ),
+                      contextTracks: genreTracks,
                     );
                   },
                 ),

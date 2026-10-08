@@ -7,7 +7,6 @@ import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
@@ -24,9 +23,6 @@ class ArtistDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrack = context.select<PlaybackController, Track?>(
-      (c) => c.currentTrack,
-    );
     final playback = context.read<PlaybackController>();
 
     final currentArtist =
@@ -185,17 +181,18 @@ class ArtistDetailScreen extends StatelessWidget {
                   itemCount: artistTracks.length,
                   itemBuilder: (context, index) {
                     final track = artistTracks[index];
-                    final isPlaying =
-                        currentTrack == track || playback.isCurrentTrack(track);
-
                     return TrackTile(
                       key: ValueKey(track.filePath),
                       track: track,
-                      isPlaying: isPlaying,
-                      onTap: () => playback.playTrack(
-                        track,
-                        contextTracks: artistTracks,
-                      ),
+                      contextTracks: artistTracks,
+                      allowedActions: const {
+                        TrackAction.play,
+                        TrackAction.playNext,
+                        TrackAction.addToQueue,
+                        TrackAction.addToPlaylist,
+                        TrackAction.viewAlbum,
+                        TrackAction.fileInfo,
+                      },
                     );
                   },
                 ),
