@@ -289,7 +289,7 @@ class _TracksScreenState extends State<TracksScreen> {
             )
           : _isCardView
           ? GridView.builder(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 200,
                 childAspectRatio: 0.72,
@@ -424,6 +424,7 @@ class _TracksScreenState extends State<TracksScreen> {
               },
             )
           : ListView.builder(
+              padding: const EdgeInsets.only(bottom: 80.0),
               itemExtent: 72.0,
               scrollCacheExtent: const ScrollCacheExtent.pixels(720.0),
               addAutomaticKeepAlives: false,
@@ -474,6 +475,13 @@ class _TracksScreenState extends State<TracksScreen> {
                 );
               },
             ),
+      floatingActionButton: (tracks.isNotEmpty && !_isSelectionMode)
+          ? FloatingActionButton(
+              tooltip: strings.trShuffleAll,
+              onPressed: () => playback.playAll(tracks, shuffle: true),
+              child: const Icon(Icons.shuffle_rounded),
+            )
+          : null,
     );
   }
 

@@ -187,6 +187,7 @@ class AppStringKey {
   String get trAddedToPlaylist =>
       _cadenasLocalizadas['tr_added_to_playlist'] ?? '';
   String get trMoreActions => _cadenasLocalizadas['tr_more_actions'] ?? '';
+  String get trShuffleAll => _cadenasLocalizadas['tr_shuffle_all'] ?? '';
 
   // ---------------------------------------------------------------------------
   // al_: Albums Screen & Detail
@@ -670,6 +671,7 @@ class AppStringKey {
     'tr_sort_date_added', 'tr_sort_duration', 'tr_sort_ascending',
     'tr_sort_descending', 'tr_file_path', 'tr_codec', 'tr_file_size',
     'tr_unknown_artist', 'tr_added_to_playlist','tr_more_actions',
+    'tr_shuffle_all',
     // al_
     'al_title', 'al_search_hint', 'al_tracks_count', 'al_release_year',
     'al_play_all', 'al_shuffle_all', 'al_add_queue', 'al_add_playlist',

@@ -392,5 +392,79 @@ void main() {
 
       libraryCtrl.dispose();
     });
+
+    testWidgets('shuffle FAB does not appear when tracks are empty', (tester) async {
+      final libraryCtrl = LibraryController(
+        backend: backend,
+        settingsRepository: settingsRepo,
+        store: LibraryStore(),
+      );
+
+      await tester.pumpWidget(
+        buildTestScreen(
+          libraryCtrl: libraryCtrl,
+          localeCtrl: localeControllerEn,
+        ),
+      );
+
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.byIcon(Icons.shuffle_rounded), findsNothing);
+
+      libraryCtrl.dispose();
+    });
+
+    testWidgets('shuffle FAB appears when tracks are present and is hidden in selection mode', (tester) async {
+      const snapshot = CatalogSnapshot(
+        tracks: [
+          RawTrackDto(
+            id: 1,
+            filePath: '/music/song1.mp3',
+            title: 'Sample Track',
+            durationMs: 180000,
+            fileSize: 4000000,
+            modifiedAt: 123456,
+          ),
+        ],
+        albums: [],
+        artists: [],
+        genres: [],
+        playlists: [],
+        playlistEntries: [],
+        trackArtists: [],
+        trackGenres: [],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final libraryCtrl = LibraryController(
+        backend: backend,
+        settingsRepository: settingsRepo,
+        store: store,
+      );
+
+      await tester.pumpWidget(
+        buildTestScreen(
+          libraryCtrl: libraryCtrl,
+          localeCtrl: localeControllerEn,
+        ),
+      );
+
+      // FAB is present with shuffle icon and localized tooltip
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+      expect(find.byIcon(Icons.shuffle_rounded), findsOneWidget);
+
+      // Enter selection mode -> FAB should be hidden
+      await tester.tap(find.byIcon(Icons.checklist_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FloatingActionButton), findsNothing);
+
+      // Cancel selection mode -> FAB returns
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+
+      libraryCtrl.dispose();
+    });
   });
 }

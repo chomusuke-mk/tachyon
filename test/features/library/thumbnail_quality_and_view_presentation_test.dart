@@ -573,6 +573,7 @@ void main() {
       expect(keys.contains('scan_stage_idle'), isTrue);
       expect(keys.contains('scan_stage_extracting'), isTrue);
       expect(keys.contains('scan_cancel_tooltip'), isTrue);
+      expect(keys.contains('tr_shuffle_all'), isTrue);
     });
   });
 }
