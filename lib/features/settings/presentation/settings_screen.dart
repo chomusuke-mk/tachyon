@@ -17,81 +17,24 @@ import 'settings_controller.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  void _showAddFolderDialog(BuildContext context) {
-    final controller = TextEditingController();
+  void _showAddFolderDialog(BuildContext context) async {
     final settings = context.read<SettingsController>();
     final strings = context.read<LocaleController>().localeStrings;
 
-    showDialog<void>(
-      context: context,
-      builder: (dialogCtx) {
-        return AlertDialog(
-          title: Text(strings.sAddFolderTitle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  hintText: strings.sFolderPathHint,
-                  labelText: strings.sFolderPathLabel,
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.folder_open_rounded),
-                    tooltip: strings.sBrowseFolder,
-                    onPressed: () async {
-                      final picked = await FilePickerService.pickDirectory(
-                        dialogTitle: strings.sAddFolderTitle,
-                      );
-                      if (picked != null) {
-                        controller.text = picked;
-                      }
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.folder_open_rounded),
-                label: Text(strings.sBrowseFolder),
-                onPressed: () async {
-                  final picked = await FilePickerService.pickDirectory(
-                    dialogTitle: strings.sAddFolderTitle,
-                  );
-                  if (picked != null) {
-                    controller.text = picked;
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: Text(strings.sCancel),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final path = controller.text.trim();
-                if (path.isNotEmpty) {
-                  final added = await settings.addMusicDirectory(path);
-                  if (dialogCtx.mounted) {
-                    Navigator.of(dialogCtx).pop();
-                    if (!added && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(strings.sFolderErrorInvalid)),
-                      );
-                    } else if (added && context.mounted) {
-                      context.read<LibraryController>().scanDirectories();
-                    }
-                  }
-                }
-              },
-              child: Text(strings.sAdd),
-            ),
-          ],
-        );
-      },
+    final picked = await FilePickerService.pickDirectory(
+      dialogTitle: strings.sAddFolderTitle,
     );
+    if (picked == null) {
+      return;
+    }
+
+    final added = await settings.addMusicDirectory(picked);
+    if (!added && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.sFolderErrorInvalid)));
+    } else if (added && context.mounted) {
+      context.read<LibraryController>().scanDirectories();
+    }
   }
 
   void _showTranslationLanguageDialog(

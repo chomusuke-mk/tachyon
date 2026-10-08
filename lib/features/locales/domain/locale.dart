@@ -51,8 +51,7 @@ class AppStringKey {
       _cadenasLocalizadas['np_lyrics_translated'] ?? '';
   String get npLyricsInterleaved =>
       _cadenasLocalizadas['np_lyrics_interleaved'] ?? '';
-  String get npLyricsSources =>
-      _cadenasLocalizadas['np_lyrics_sources'] ?? '';
+  String get npLyricsSources => _cadenasLocalizadas['np_lyrics_sources'] ?? '';
   String get npLyricsResearch =>
       _cadenasLocalizadas['np_lyrics_research'] ?? '';
   String get npLyricsResumeSync =>
@@ -105,10 +104,8 @@ class AppStringKey {
       _cadenasLocalizadas['np_lyrics_source_file'] ?? '';
   String get npLyricsSourceNone =>
       _cadenasLocalizadas['np_lyrics_source_none'] ?? '';
-  String get npLyricsLoading =>
-      _cadenasLocalizadas['np_lyrics_loading'] ?? '';
-  String get npLyricsError =>
-      _cadenasLocalizadas['np_lyrics_error'] ?? '';
+  String get npLyricsLoading => _cadenasLocalizadas['np_lyrics_loading'] ?? '';
+  String get npLyricsError => _cadenasLocalizadas['np_lyrics_error'] ?? '';
   String get npLyricsTranslateError =>
       _cadenasLocalizadas['np_lyrics_translate_error'] ?? '';
   String get npAudioControls => _cadenasLocalizadas['np_audio_controls'] ?? '';
@@ -281,6 +278,9 @@ class AppStringKey {
   String get fInaccessibleDesc =>
       _cadenasLocalizadas['f_inaccessible_desc'] ?? '';
   String get fBreadcrumbRoot => _cadenasLocalizadas['f_breadcrumb_root'] ?? '';
+  String get fViewAsGrid => _cadenasLocalizadas['f_view_as_grid'] ?? '';
+  String get fViewAsList => _cadenasLocalizadas['f_view_as_list'] ?? '';
+  String get fRescanAll => _cadenasLocalizadas['f_rescan_all'] ?? '';
 
   // ---------------------------------------------------------------------------
   // sr_: Global Search
@@ -311,7 +311,8 @@ class AppStringKey {
   String get sAddFolder => _cadenasLocalizadas['s_add_folder'] ?? '';
   String get sAddFolderTitle => _cadenasLocalizadas['s_add_folder_title'] ?? '';
   String get sFolderPathHint => _cadenasLocalizadas['s_folder_path_hint'] ?? '';
-  String get sFolderPathLabel => _cadenasLocalizadas['s_folder_path_label'] ?? '';
+  String get sFolderPathLabel =>
+      _cadenasLocalizadas['s_folder_path_label'] ?? '';
   String get sBrowseFolder => _cadenasLocalizadas['s_browse_folder'] ?? '';
   String get sFolderErrorInvalid =>
       _cadenasLocalizadas['s_folder_error_invalid'] ?? '';
@@ -497,10 +498,8 @@ class AppStringKey {
       _cadenasLocalizadas['common_view_as_cards'] ?? '';
   String get commonViewAsList =>
       _cadenasLocalizadas['common_view_as_list'] ?? '';
-  String get commonBack =>
-      _cadenasLocalizadas['common_back'] ?? '';
-  String get commonMinimize =>
-      _cadenasLocalizadas['common_minimize'] ?? '';
+  String get commonBack => _cadenasLocalizadas['common_back'] ?? '';
+  String get commonMinimize => _cadenasLocalizadas['common_minimize'] ?? '';
 
   // ---------------------------------------------------------------------------
   // scan_: Scan Progress Overlay
@@ -610,10 +609,14 @@ class AppStringKey {
     'np_remaining', 'np_duration', 'np_seek_forward', 'np_seek_backward',
     'np_queue', 'np_queue_clear', 'np_queue_empty', 'np_queue_reorder',
     'np_lyrics', 'np_lyrics_empty', 'np_lyrics_sync', 'np_lyrics_unsync',
-    'np_lyrics_translate', 'np_lyrics_translating', 'np_lyrics_translation_mode',
+    'np_lyrics_translate',
+    'np_lyrics_translating',
+    'np_lyrics_translation_mode',
     'np_lyrics_original', 'np_lyrics_translated', 'np_lyrics_interleaved',
     'np_lyrics_sources', 'np_lyrics_research', 'np_lyrics_resume_sync',
-    'np_lyrics_sources_title', 'np_lyrics_source_local', 'np_lyrics_source_local_desc',
+    'np_lyrics_sources_title',
+    'np_lyrics_source_local',
+    'np_lyrics_source_local_desc',
     'np_lyrics_source_lrclib', 'np_lyrics_source_lrclib_desc',
     'np_lyrics_source_ovh', 'np_lyrics_source_ovh_desc',
     'np_lyrics_sources_research', 'np_lyrics_sources_research_btn',
@@ -623,7 +626,9 @@ class AppStringKey {
     'np_lyrics_source_lang', 'np_lyrics_target_lang',
     'np_lyrics_lang_auto', 'np_lyrics_rate_limit_error',
     'np_lyrics_threshold_waiting', 'np_lyrics_banner_dismiss',
-    'np_lyrics_source_embedded', 'np_lyrics_source_file', 'np_lyrics_source_none',
+    'np_lyrics_source_embedded',
+    'np_lyrics_source_file',
+    'np_lyrics_source_none',
     'np_lyrics_loading', 'np_lyrics_error', 'np_lyrics_translate_error',
     'np_audio_controls', 'np_speed', 'np_pitch', 'np_volume_boost',
     'np_replay_gain', 'np_replay_gain_off', 'np_replay_gain_track',
@@ -650,7 +655,11 @@ class AppStringKey {
     'tr_title', 'tr_search_hint', 'tr_play', 'tr_play_next', 'tr_add_queue',
     'tr_add_playlist', 'tr_view_album', 'tr_view_artist', 'tr_edit_tags',
     'tr_file_info', 'tr_share', 'tr_delete', 'tr_delete_confirm',
-    'tr_deleted_success', 'tr_no_tracks', 'tr_no_tracks_desc', 'tr_loading_tracks', 'tr_count',
+    'tr_deleted_success',
+    'tr_no_tracks',
+    'tr_no_tracks_desc',
+    'tr_loading_tracks',
+    'tr_count',
     'tr_sort', 'tr_sort_title', 'tr_sort_artist', 'tr_sort_album',
     'tr_sort_date_added', 'tr_sort_duration', 'tr_sort_ascending',
     'tr_sort_descending', 'tr_file_path', 'tr_codec', 'tr_file_size',
@@ -681,7 +690,8 @@ class AppStringKey {
     // f_
     'f_title', 'f_navigate_up', 'f_current_folder', 'f_empty_folder',
     'f_scan_folder', 'f_add_to_library', 'f_items_count', 'f_inaccessible',
-    'f_inaccessible_desc', 'f_breadcrumb_root',
+    'f_inaccessible_desc', 'f_breadcrumb_root', 'f_view_as_grid',
+    'f_view_as_list', 'f_rescan_all',
     // sr_
     'sr_title',
     'sr_hint',

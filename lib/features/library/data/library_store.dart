@@ -1,3 +1,4 @@
+import 'package:path/path.dart' as p;
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
@@ -18,6 +19,7 @@ class LibraryStore {
   // Primary indices for O(1) lookups
   final Map<int, Track> _tracksById = {};
   final Map<String, Track> _tracksByPath = {};
+  final Map<String, List<Track>> _tracksByDirectory = {};
   final Map<int, Album> _albumsById = {};
   final Map<int, Artist> _artistsById = {};
   final Map<int, Genre> _genresById = {};
@@ -76,6 +78,10 @@ class LibraryStore {
   // ---------------------------------------------------------------------------
   Track? getTrackById(int id) => _tracksById[id];
   Track? getTrackByPath(String path) => _tracksByPath[path];
+  List<Track> getTracksInDirectory(String directoryPath) {
+    final normalized = p.normalize(directoryPath);
+    return List.unmodifiable(_tracksByDirectory[normalized] ?? const []);
+  }
   Album? getAlbumById(int id) => _albumsById[id];
   Artist? getArtistById(int id) => _artistsById[id];
   Genre? getGenreById(int id) => _genresById[id];
@@ -89,6 +95,7 @@ class LibraryStore {
   void hydrateFromSnapshot(CatalogSnapshot snapshot) {
     _tracksById.clear();
     _tracksByPath.clear();
+    _tracksByDirectory.clear();
     _albumsById.clear();
     _artistsById.clear();
     _genresById.clear();
@@ -227,6 +234,8 @@ class LibraryStore {
 
       _tracksById[rawTrack.id] = track;
       _tracksByPath[rawTrack.filePath] = track;
+      final trackDir = p.normalize(p.dirname(rawTrack.filePath));
+      _tracksByDirectory.putIfAbsent(trackDir, () => []).add(track);
       _allTracks.add(track);
 
       // Back-link track to Album

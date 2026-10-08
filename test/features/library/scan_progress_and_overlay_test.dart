@@ -214,7 +214,7 @@ void main() {
       }
     });
 
-    test('startScan([]) does not return early and executes scan', () async {
+    test('scanDirectories() with empty settings does not return early and executes scan', () async {
       database.upsertTracks([
         ExtractedTrackData(
           filePath: '/fake/music/song.mp3',
@@ -227,21 +227,24 @@ void main() {
       ]);
       expect(database.getCatalogSnapshot().tracks.length, 1);
 
-      await libraryController.startScan([]);
+      await settingsRepository.saveSettings(
+        settingsRepository.getSettings().copyWith(musicDirectories: []),
+      );
+      await libraryController.scanDirectories();
 
       // Wait for completion
       await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(database.getCatalogSnapshot().tracks, isEmpty);
     });
 
-    test('startScan ignores subsequent calls while scanning', () async {
+    test('scanDirectories ignores subsequent calls while scanning', () async {
       final completer = Completer<void>();
       // Trigger scan
-      unawaited(libraryController.startScan([]).then((_) => completer.complete()));
+      unawaited(libraryController.scanDirectories().then((_) => completer.complete()));
       expect(libraryController.isScanning, isTrue);
 
       // Second call while scanning should be ignored
-      await libraryController.startScan(['/another/dir']);
+      await libraryController.scanDirectories();
       expect(libraryController.isScanning, isTrue);
 
       await completer.future;
@@ -357,7 +360,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
 
       // Start scan
-      unawaited(libraryController.startScan(['/dummy']));
+      unawaited(libraryController.scanDirectories());
       await tester.pump();
 
       // Simulate scan progress event

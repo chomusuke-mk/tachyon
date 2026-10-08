@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:tachyon/core/backend/backend.dart';
-import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/library/data/library_store.dart';
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
@@ -30,8 +29,8 @@ class LibraryController extends ChangeNotifier {
     required this.backend,
     required this.settingsRepository,
     LibraryStore? store,
-  })  : _store = store ?? LibraryStore(),
-        _isLoading = store == null {
+  }) : _store = store ?? LibraryStore(),
+       _isLoading = store == null {
     _sortOption = _settingsRepository.getTrackSortOption();
     _sortAscending = _settingsRepository.getTrackSortAscending();
 
@@ -77,11 +76,12 @@ class LibraryController extends ChangeNotifier {
   Album? _selectedAlbum;
   List<Track> _filteredTracks = [];
 
-  // Folder Explorer State
-  String? _currentFolderPath;
+  // Folder Navigation State
+  final List<String> _folderNavigationStack = [];
   List<String> _currentFolderSubdirectories = [];
   List<Track> _currentFolderTracks = [];
-  List<String> _folderBreadcrumbs = [];
+  bool _isFolderLoading = false;
+  bool _isFolderGridView = false;
 
   // Scanning State
   final ValueNotifier<ScanProgress> _scanProgressNotifier =
@@ -115,14 +115,19 @@ class LibraryController extends ChangeNotifier {
   Artist? get selectedArtist => _selectedArtist;
   Album? get selectedAlbum => _selectedAlbum;
 
-  String? get currentFolderPath => _currentFolderPath;
+  String? get currentFolderPath => _folderNavigationStack.lastOrNull;
   List<String> get currentFolderSubdirectories =>
       List.unmodifiable(_currentFolderSubdirectories);
   List<Track> get currentFolderTracks =>
       List.unmodifiable(_currentFolderTracks);
-  List<String> get folderBreadcrumbs => List.unmodifiable(_folderBreadcrumbs);
+  List<String> get folderBreadcrumbs =>
+      List.unmodifiable(_folderNavigationStack);
+  bool get isFolderLoading => _isFolderLoading;
+  bool get isFolderGridView => _isFolderGridView;
+  bool get isAtFolderRoot => _folderNavigationStack.isEmpty;
 
-  ValueListenable<ScanProgress> get scanProgressListenable => _scanProgressNotifier;
+  ValueListenable<ScanProgress> get scanProgressListenable =>
+      _scanProgressNotifier;
   ScanProgress get scanProgress => _scanProgressNotifier.value;
   bool get isScanning => _scanProgressNotifier.value.isRunning;
 
@@ -139,8 +144,8 @@ class LibraryController extends ChangeNotifier {
       _store = LibraryStore.fromSnapshot(snapshot);
       _syncFromStore();
 
-      if (_currentFolderPath != null) {
-        await navigateToFolder(_currentFolderPath!);
+      if (_folderNavigationStack.isNotEmpty) {
+        await _loadCurrentFolderContent();
       }
     } catch (e, st) {
       _errorMessage = 'Failed to load library: $e';
@@ -256,60 +261,179 @@ class LibraryController extends ChangeNotifier {
   List<Artist> searchArtists(String query) => _store.searchArtists(query);
 
   // ---------------------------------------------------------------------------
-  // Folder Explorer & Breadcrumbs
   // ---------------------------------------------------------------------------
+  // Folder Explorer & Navigation Stack
+  // ---------------------------------------------------------------------------
+  void toggleFolderGridView() {
+    _isFolderGridView = !_isFolderGridView;
+    notifyListeners();
+  }
+
   Future<void> navigateToFolder(String folderPath) async {
-    final dir = Directory(folderPath);
+    final normalized = p.normalize(folderPath);
+    final dir = Directory(normalized);
     if (!dir.existsSync()) return;
 
-    _currentFolderPath = folderPath;
-    _folderBreadcrumbs = p.split(folderPath);
+    final existingIndex = _folderNavigationStack.indexOf(normalized);
+    if (existingIndex != -1) {
+      _folderNavigationStack.removeRange(
+        existingIndex + 1,
+        _folderNavigationStack.length,
+      );
+    } else {
+      if (_folderNavigationStack.isEmpty) {
+        final musicDirs = _settingsRepository.getSettings().musicDirectories;
+        String? matchingRoot;
+        for (final root in musicDirs) {
+          final normRoot = p.normalize(root);
+          if (normalized == normRoot || p.isWithin(normRoot, normalized)) {
+            matchingRoot = normRoot;
+            break;
+          }
+        }
 
+        if (matchingRoot != null) {
+          if (matchingRoot != normalized) {
+            final rel = p.relative(normalized, from: matchingRoot);
+            final parts = p.split(rel);
+            var currentAcc = matchingRoot;
+            _folderNavigationStack.add(currentAcc);
+            for (final part in parts) {
+              currentAcc = p.normalize(p.join(currentAcc, part));
+              _folderNavigationStack.add(currentAcc);
+            }
+          } else {
+            _folderNavigationStack.add(matchingRoot);
+          }
+        } else {
+          final parent = p.dirname(normalized);
+          if (parent != normalized && Directory(parent).existsSync()) {
+            _folderNavigationStack.add(parent);
+          }
+          _folderNavigationStack.add(normalized);
+        }
+      } else {
+        _folderNavigationStack.add(normalized);
+      }
+    }
+
+    await _loadCurrentFolderContent();
+  }
+
+  Future<void> navigateUpFolder() async {
+    if (_folderNavigationStack.isEmpty) return;
+
+    _folderNavigationStack.removeLast();
+    if (_folderNavigationStack.isEmpty) {
+      _currentFolderSubdirectories = [];
+      _currentFolderTracks = [];
+      _isFolderLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    await _loadCurrentFolderContent();
+  }
+
+  Future<void> navigateToBreadcrumbIndex(int index) async {
+    if (index < 0 || index >= _folderNavigationStack.length) {
+      await resetFolderNavigation();
+      return;
+    }
+    if (index == _folderNavigationStack.length - 1) return;
+
+    _folderNavigationStack.removeRange(
+      index + 1,
+      _folderNavigationStack.length,
+    );
+    await _loadCurrentFolderContent();
+  }
+
+  Future<void> resetFolderNavigation() async {
+    _folderNavigationStack.clear();
+    _currentFolderSubdirectories = [];
+    _currentFolderTracks = [];
+    _isFolderLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> _loadCurrentFolderContent() async {
+    final current = _folderNavigationStack.lastOrNull;
+    if (current == null) {
+      _isFolderLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    final dir = Directory(current);
+    if (!dir.existsSync()) {
+      _folderNavigationStack.removeLast();
+      if (_folderNavigationStack.isEmpty) {
+        _currentFolderSubdirectories = [];
+        _currentFolderTracks = [];
+        _isFolderLoading = false;
+        notifyListeners();
+      } else {
+        await _loadCurrentFolderContent();
+      }
+      return;
+    }
+
+    // Boundary check: ensure folder is within configured musicDirectories
+    final musicDirs = _settingsRepository.getSettings().musicDirectories;
+    final root = _folderNavigationStack.firstOrNull;
+    if (root != null && musicDirs.isNotEmpty) {
+      final normRoot = p.normalize(root);
+      final isAllowed = musicDirs.any((d) {
+        final nd = p.normalize(d);
+        return normRoot == nd || p.isWithin(nd, normRoot);
+      });
+      if (!isAllowed) {
+        await resetFolderNavigation();
+        return;
+      }
+    }
+
+    // 1. Immediate: show breadcrumb and trigger loader
+    _isFolderLoading = true;
+    _currentFolderSubdirectories = [];
+    _currentFolderTracks = [];
+    notifyListeners();
+
+    // 2. Subdirectories listing
+    final subDirs = <String>[];
     try {
       final entities = dir.listSync(followLinks: false);
-      final subDirs = <String>[];
-      final currentDirPaths = <String>{};
-
       for (final entity in entities) {
         if (entity is Directory) {
           final base = p.basename(entity.path);
           if (!base.startsWith('.')) {
-            subDirs.add(entity.path);
-          }
-        } else if (entity is File) {
-          final ext = p
-              .extension(entity.path)
-              .toLowerCase()
-              .replaceAll('.', '');
-          if (AppDefaults.supportedAudioExtensions.contains(ext)) {
-            currentDirPaths.add(entity.path);
+            subDirs.add(p.normalize(entity.path));
           }
         }
       }
-
       subDirs.sort(
         (a, b) =>
             p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()),
       );
-      _currentFolderSubdirectories = subDirs;
-
-      // Cross-reference with indexed tracks from store in O(1)
-      _currentFolderTracks = currentDirPaths
-          .map((path) => _store.getTrackByPath(path))
-          .whereType<Track>()
-          .toList();
     } catch (e) {
-      debugPrint('Error navigating folder $folderPath: $e');
+      debugPrint('Error listing subdirectories in $current: $e');
     }
 
-    notifyListeners();
-  }
+    // 3. Resolve tracks from in-memory _store in O(1)
+    final tracks = List<Track>.from(_store.getTracksInDirectory(current));
+    tracks.sort((a, b) {
+      final discComp = (a.discNumber ?? 1).compareTo(b.discNumber ?? 1);
+      if (discComp != 0) return discComp;
+      final trackComp = (a.trackNumber ?? 0).compareTo(b.trackNumber ?? 0);
+      if (trackComp != 0) return trackComp;
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    });
 
-  Future<void> navigateUpFolder() async {
-    if (_currentFolderPath == null) return;
-    final parent = p.dirname(_currentFolderPath!);
-    if (parent == _currentFolderPath) return;
-    await navigateToFolder(parent);
+    _currentFolderSubdirectories = subDirs;
+    _currentFolderTracks = tracks;
+    _isFolderLoading = false;
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
@@ -319,19 +443,17 @@ class LibraryController extends ChangeNotifier {
   /// When all directories have been removed, scans with an empty list to purge removed tracks.
   Future<void> scanDirectories() async {
     final directories = _settingsRepository.getSettings().musicDirectories;
-    await startScan(directories);
-  }
-
-  Future<void> startScan(List<String> directories) async {
-    _scanProgressNotifier.value =
-        const ScanProgress(stage: ScanStage.gettingDatabase);
+    _scanProgressNotifier.value = const ScanProgress(
+      stage: ScanStage.gettingDatabase,
+    );
     notifyListeners();
     await _backend.startScanDirectories(directories);
   }
 
   void cancelScan() {
-    _scanProgressNotifier.value =
-        _scanProgressNotifier.value.copyWith(stage: ScanStage.cancelled);
+    _scanProgressNotifier.value = _scanProgressNotifier.value.copyWith(
+      stage: ScanStage.cancelled,
+    );
     notifyListeners();
     _backend.cancelScan();
   }

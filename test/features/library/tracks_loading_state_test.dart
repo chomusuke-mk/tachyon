@@ -320,7 +320,7 @@ void main() {
       expect(find.byKey(const Key('tracks_loading_indicator')), findsNothing);
 
       // Start scan -> isScanning becomes true
-      await libraryCtrl.startScan([]);
+      await libraryCtrl.scanDirectories();
       expect(libraryCtrl.isScanning, isTrue);
       await tester.pump();
 
@@ -379,7 +379,7 @@ void main() {
       );
 
       // Start scan
-      await libraryCtrl.startScan([]);
+      await libraryCtrl.scanDirectories();
       expect(libraryCtrl.isScanning, isTrue);
       expect(libraryCtrl.tracks.isNotEmpty, isTrue);
       await tester.pump();

@@ -203,6 +203,9 @@
   "f_inaccessible": "Directorio inaccesible",
   "f_inaccessible_desc": "No se pudo acceder a este directorio. Puede haber sido movido o desmontado.",
   "f_breadcrumb_root": "Raíz de música",
+  "f_view_as_grid": "Cambiar a vista de cuadrícula",
+  "f_view_as_list": "Cambiar a vista de lista",
+  "f_rescan_all": "Reescanear todos los archivos",
   // --- sr_: Pantalla de Búsqueda Global ------------------------------------
   "sr_title": "Búsqueda",
   "sr_hint": "Buscar por pista, artista, álbum, género...",

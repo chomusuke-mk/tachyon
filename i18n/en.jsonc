@@ -203,6 +203,9 @@
   "f_inaccessible": "Inaccessible directory",
   "f_inaccessible_desc": "This directory could not be reached. It may have been moved or unmounted.",
   "f_breadcrumb_root": "Music Root",
+  "f_view_as_grid": "Switch to grid view",
+  "f_view_as_list": "Switch to list view",
+  "f_rescan_all": "Rescan all files",
   // --- sr_: Search Screen --------------------------------------------------
   "sr_title": "Search",
   "sr_hint": "Search by track, artist, album, genre...",
