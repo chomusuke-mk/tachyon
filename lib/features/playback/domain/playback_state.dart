@@ -24,6 +24,7 @@ class PlaybackState {
   final Loop loop;
   final Duration crossfadeDuration;
   final bool skipSilence;
+  final bool isInfiniteMixEnabled;
   final double? audioBitrate;
   final int? audioSampleRate;
   final int? audioChannels;
@@ -43,6 +44,7 @@ class PlaybackState {
     this.loop = Loop.off,
     this.crossfadeDuration = const Duration(seconds: 5),
     this.skipSilence = false,
+    this.isInfiniteMixEnabled = false,
     this.audioBitrate,
     this.audioSampleRate,
     this.audioChannels,
@@ -56,7 +58,10 @@ class PlaybackState {
   Track? get currentTrack => currentEntry?.track;
 
   bool get hasNext =>
-      loop == Loop.all || loop == Loop.one || index < playables.length - 1;
+      loop == Loop.all ||
+      loop == Loop.one ||
+      index < playables.length - 1 ||
+      (isInfiniteMixEnabled && playables.isNotEmpty);
   bool get hasPrevious =>
       loop == Loop.all || index > 0 || position.inSeconds > 3;
 
@@ -102,6 +107,7 @@ class PlaybackState {
     Duration? crossfadeDuration,
     CrossfadeConfig? crossfadeConfig,
     bool? skipSilence,
+    bool? isInfiniteMixEnabled,
     double? audioBitrate,
     int? audioSampleRate,
     int? audioChannels,
@@ -124,6 +130,7 @@ class PlaybackState {
           crossfadeDuration ??
           this.crossfadeDuration,
       skipSilence: skipSilence ?? this.skipSilence,
+      isInfiniteMixEnabled: isInfiniteMixEnabled ?? this.isInfiniteMixEnabled,
       audioBitrate: audioBitrate ?? this.audioBitrate,
       audioSampleRate: audioSampleRate ?? this.audioSampleRate,
       audioChannels: audioChannels ?? this.audioChannels,
@@ -149,6 +156,7 @@ class PlaybackState {
           loop == other.loop &&
           crossfadeDuration == other.crossfadeDuration &&
           skipSilence == other.skipSilence &&
+          isInfiniteMixEnabled == other.isInfiniteMixEnabled &&
           audioBitrate == other.audioBitrate &&
           audioSampleRate == other.audioSampleRate &&
           audioChannels == other.audioChannels;
@@ -169,6 +177,7 @@ class PlaybackState {
     loop,
     crossfadeDuration,
     skipSilence,
+    isInfiniteMixEnabled,
     audioBitrate,
     audioSampleRate,
     audioChannels,

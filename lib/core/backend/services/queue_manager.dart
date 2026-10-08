@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show VoidCallback, debugPrint;
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/loop_mode.dart';
@@ -37,6 +37,13 @@ class QueueManager {
   bool _isShuffled = false;
   Loop _loopMode = Loop.off;
   bool _infiniteMixEnabled = false;
+  bool _prefetchExhausted = false;
+  Future<void>? _pendingPrefetch;
+
+  /// Callback notified whenever queue items are mutated in the background
+  /// (e.g. by infinite mix proactive prefetch).
+  VoidCallback? onQueueMutated;
+
   final LibraryTrackProvider? libraryTrackProvider;
   final math.Random _random;
 
@@ -104,11 +111,12 @@ class QueueManager {
       ? _activeQueue[_currentIndex]
       : null;
 
-  /// Whether there is a subsequent track available according to [loopMode].
+  /// Whether there is a subsequent track available according to [loopMode] and infinite mix.
   bool get hasNext =>
       _loopMode == Loop.all ||
       _loopMode == Loop.one ||
-      _currentIndex < _activeQueue.length - 1;
+      _currentIndex < _activeQueue.length - 1 ||
+      (_infiniteMixEnabled && !_prefetchExhausted && _activeQueue.isNotEmpty);
 
   /// Whether there is a subsequent track available that is different from the current track.
   bool get hasNextDifferent => peekNext(distinct: true) != null;
@@ -167,6 +175,7 @@ class QueueManager {
     _currentIndex = idx;
     _touch();
     _notifyNextTrack();
+    _maybePrefetchInfiniteMix();
     return currentTrack;
   }
 
@@ -206,9 +215,92 @@ class QueueManager {
     );
   }
 
+  /// Whether Infinite Library Mix should proactively prefetch tracks ahead of time.
+  bool get _shouldPrefetchInfiniteMix =>
+      _infiniteMixEnabled &&
+      _loopMode == Loop.off &&
+      !_prefetchExhausted &&
+      _pendingPrefetch == null &&
+      libraryTrackProvider != null &&
+      _activeQueue.isNotEmpty &&
+      _currentIndex >= _activeQueue.length - 1;
+
+  /// Proactively requests and appends library tracks if nearing the end of the queue.
+  Future<void> _maybePrefetchInfiniteMix() async {
+    if (!_shouldPrefetchInfiniteMix) return;
+
+    final provider = libraryTrackProvider!;
+    final versionBeforeFetch = _version;
+    final fetchFuture = () async {
+      List<Track> rawTracks;
+      try {
+        rawTracks = await provider(25);
+      } catch (e) {
+        debugPrint('[QueueManager] Infinite mix provider failed: $e');
+        rawTracks = const [];
+      }
+
+      if (!_infiniteMixEnabled || _loopMode != Loop.off) {
+        return;
+      }
+      if (versionBeforeFetch != _version) {
+        unawaited(_maybePrefetchInfiniteMix());
+        return;
+      }
+
+      if (rawTracks.isEmpty) {
+        _prefetchExhausted = true;
+        _notifyNextTrack();
+        return;
+      }
+
+      final existingFilePaths = _activeQueue
+          .map((it) => it.track?.filePath)
+          .whereType<String>()
+          .toSet();
+      var candidateTracks = rawTracks
+          .where((t) => !existingFilePaths.contains(t.filePath))
+          .toList();
+
+      if (candidateTracks.isEmpty) {
+        candidateTracks = rawTracks;
+      }
+
+      if (candidateTracks.isNotEmpty) {
+        _touch();
+        final mixEntries = [
+          for (int i = 0; i < candidateTracks.length; i++)
+            PlaylistEntry.forQueue(
+              id: _nextEntryId++,
+              position: _activeQueue.length + i,
+              track: candidateTracks[i],
+            ),
+        ];
+        _activeQueue.addAll(mixEntries);
+        if (_isShuffled) {
+          _originalQueue.addAll(mixEntries);
+        } else {
+          _syncOriginalIfUnshuffled();
+        }
+        _notifyNextTrack();
+        onQueueMutated?.call();
+      }
+    }();
+
+    _pendingPrefetch = fetchFuture;
+    try {
+      await fetchFuture;
+    } finally {
+      if (identical(_pendingPrefetch, fetchFuture)) {
+        _pendingPrefetch = null;
+      }
+    }
+  }
+
   /// Disposes the queue manager resources and closes reactive streams.
   void dispose() {
     _nextTrackController.close();
+    onQueueMutated = null;
   }
 
   // --------------------------------------------------------------------------
@@ -247,6 +339,7 @@ class QueueManager {
     bool shuffle = false,
   }) {
     _touch();
+    _prefetchExhausted = false;
     _nextEntryId = 0;
     if (items.isEmpty) {
       _activeQueue = [];
@@ -286,6 +379,7 @@ class QueueManager {
       _currentIndex = 0;
     }
     _notifyNextTrack();
+    _maybePrefetchInfiniteMix();
   }
 
   /// Finds the first element in [remaining] with a different filePath than [current]
@@ -369,6 +463,7 @@ class QueueManager {
       _isShuffled = false;
     }
     _notifyNextTrack();
+    _maybePrefetchInfiniteMix();
   }
 
   // --------------------------------------------------------------------------
@@ -379,12 +474,18 @@ class QueueManager {
   void setLoopMode(Loop loop) {
     if (_loopMode == loop) return;
     _loopMode = loop;
+    if (loop == Loop.off) {
+      _maybePrefetchInfiniteMix();
+    }
     _notifyNextTrack();
   }
 
   /// Cycles repeat mode in order: off -> all -> one -> off.
   Loop cycleLoopMode() {
     _loopMode = _loopMode.next();
+    if (_loopMode == Loop.off) {
+      _maybePrefetchInfiniteMix();
+    }
     _notifyNextTrack();
     return _loopMode;
   }
@@ -393,6 +494,10 @@ class QueueManager {
   void setInfiniteMix(bool enabled) {
     if (_infiniteMixEnabled == enabled) return;
     _infiniteMixEnabled = enabled;
+    if (enabled) {
+      _prefetchExhausted = false;
+      _maybePrefetchInfiniteMix();
+    }
     _notifyNextTrack();
   }
 
@@ -405,12 +510,14 @@ class QueueManager {
   /// Updates both [_activeQueue] and [_originalQueue] (inserted after current).
   void insertNext(PlaylistEntry item) {
     _touch();
+    _prefetchExhausted = false;
     final entry = item.copyWith(id: _nextEntryId++);
     if (_activeQueue.isEmpty) {
       _activeQueue = [entry];
       _originalQueue = [entry];
       _currentIndex = 0;
       _notifyNextTrack();
+      _maybePrefetchInfiniteMix();
       return;
     }
 
@@ -428,6 +535,7 @@ class QueueManager {
       _syncOriginalIfUnshuffled();
     }
     _notifyNextTrack();
+    _maybePrefetchInfiniteMix();
   }
 
   /// Appends tracks to the end of the queue.
@@ -447,6 +555,7 @@ class QueueManager {
       return;
     }
     _touch();
+    _prefetchExhausted = false;
 
     _activeQueue.addAll(normalized);
 
@@ -456,6 +565,7 @@ class QueueManager {
       _syncOriginalIfUnshuffled();
     }
     _notifyNextTrack();
+    _maybePrefetchInfiniteMix();
   }
 
   /// Removes the track at [index] from the active queue and original queue.
@@ -466,6 +576,7 @@ class QueueManager {
   PlaylistEntry? remove(int index) {
     if (index < 0 || index >= _activeQueue.length) return null;
     _touch();
+    _prefetchExhausted = false;
 
     final removedItem = _activeQueue.removeAt(index);
     if (_isShuffled) {
@@ -492,6 +603,7 @@ class QueueManager {
     }
 
     _notifyNextTrack();
+    _maybePrefetchInfiniteMix();
     return removedItem;
   }
 
@@ -523,6 +635,7 @@ class QueueManager {
 
     _syncOriginalIfUnshuffled();
     _notifyNextTrack();
+    _maybePrefetchInfiniteMix();
   }
 
   /// Jumps directly to the specified [index] in the active queue.
@@ -531,6 +644,7 @@ class QueueManager {
       _currentIndex = index;
       _touch();
       _notifyNextTrack();
+      _maybePrefetchInfiniteMix();
       return currentTrack;
     }
     return null;
@@ -543,6 +657,7 @@ class QueueManager {
   /// Otherwise, the entire queue is emptied.
   void clear({bool keepCurrent = false}) {
     _touch();
+    _prefetchExhausted = false;
     final current = keepCurrent ? currentTrack : null;
     if (current != null) {
       final entry = current.copyWith(position: 0);
@@ -559,6 +674,9 @@ class QueueManager {
       _isShuffled = false;
     }
     _notifyNextTrack();
+    if (keepCurrent) {
+      _maybePrefetchInfiniteMix();
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -582,64 +700,30 @@ class QueueManager {
       return currentTrack;
     }
 
+    if (_pendingPrefetch != null) {
+      await _pendingPrefetch;
+    }
+
     if (_currentIndex < _activeQueue.length - 1) {
       _currentIndex++;
       _touch();
       _notifyNextTrack();
+      _maybePrefetchInfiniteMix();
       return currentTrack;
     }
 
     // At end of queue: check Infinite Library Mix
-    final provider = libraryTrackProvider;
-    if (_loopMode == Loop.off && _infiniteMixEnabled && provider != null) {
-      final versionBeforeFetch = _version;
-      List<Track> rawTracks;
-      try {
-        rawTracks = await provider(25);
-      } catch (e) {
-        debugPrint('[QueueManager] Infinite mix provider failed: $e');
-        rawTracks = const [];
-      }
-
-      // The queue may have been mutated while awaiting the provider. Never
-      // apply a stale decision: re-evaluate against the current state.
-      if (versionBeforeFetch != _version) {
-        return next(isManual: isManual);
-      }
-
-      if (rawTracks.isNotEmpty) {
-        final existingFilePaths = _activeQueue
-            .map((it) => it.track?.filePath)
-            .whereType<String>()
-            .toSet();
-        var candidateTracks = rawTracks
-            .where((t) => !existingFilePaths.contains(t.filePath))
-            .toList();
-
-        if (candidateTracks.isEmpty) {
-          candidateTracks = rawTracks;
-        }
-
-        if (candidateTracks.isNotEmpty) {
-          _touch();
-          final mixEntries = [
-            for (int i = 0; i < candidateTracks.length; i++)
-              PlaylistEntry.forQueue(
-                id: _nextEntryId++,
-                position: _activeQueue.length + i,
-                track: candidateTracks[i],
-              ),
-          ];
-          _activeQueue.addAll(mixEntries);
-          if (_isShuffled) {
-            _originalQueue.addAll(mixEntries);
-          } else {
-            _syncOriginalIfUnshuffled();
-          }
-          _currentIndex++;
-          _notifyNextTrack();
-          return currentTrack;
-        }
+    if (_loopMode == Loop.off &&
+        _infiniteMixEnabled &&
+        !_prefetchExhausted &&
+        libraryTrackProvider != null) {
+      await _maybePrefetchInfiniteMix();
+      if (_currentIndex < _activeQueue.length - 1) {
+        _currentIndex++;
+        _touch();
+        _notifyNextTrack();
+        _maybePrefetchInfiniteMix();
+        return currentTrack;
       }
     }
 

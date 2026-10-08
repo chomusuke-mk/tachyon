@@ -138,6 +138,7 @@ class AudioEngineService {
     _queueSubscription = _queueManager.nextTrackStream.listen(
       _onNextCandidateChanged,
     );
+    _queueManager.onQueueMutated = _onQueueMutated;
   }
 
   // --------------------------------------------------------------------------
@@ -733,6 +734,12 @@ class AudioEngineService {
     unawaited(_abortTransition());
   }
 
+  void _onQueueMutated() {
+    if (_disposed) return;
+    _emitState();
+    _maybeScheduleAutoCrossfade(_activePlayer.position);
+  }
+
   /// Turns a running auto crossfade into a committed (manual) one.
   bool _promoteAutoTransition() {
     final transition = _transition;
@@ -1107,6 +1114,7 @@ class AudioEngineService {
         loop: _queueManager.loopMode,
         crossfadeDuration: _crossfadeConfig.duration,
         skipSilence: _skipSilence,
+        isInfiniteMixEnabled: _queueManager.infiniteMixEnabled,
         audioBitrate: previous.audioBitrate,
         audioSampleRate: previous.audioSampleRate,
         audioChannels: previous.audioChannels,
@@ -1124,6 +1132,7 @@ class AudioEngineService {
     _transition = null;
     _crossfadeManager.dispose();
 
+    _queueManager.onQueueMutated = null;
     await _queueSubscription?.cancel();
     _queueSubscription = null;
     for (final sub in _playerSubscriptions) {

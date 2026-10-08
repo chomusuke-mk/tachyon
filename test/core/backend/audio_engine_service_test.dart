@@ -623,10 +623,14 @@ void main() {
         await infiniteService.setLoopMode(Loop.off);
         await infiniteService.setInfiniteMix(true);
 
+        // Proactive Lookahead Prefetch: entering end of queue with Infinite Mix enabled
+        // immediately prefetches tracks so peekNext and hasNext are ready for crossfade.
         expect(infiniteService.queueManager.currentIndex, equals(1));
-        expect(infiniteService.queueManager.length, equals(2));
+        expect(infiniteService.queueManager.length, equals(4));
+        expect(infiniteService.queueManager.peekNext(distinct: true)?.track?.filePath, equals('/music/mix_1.mp3'));
+        expect(infiniteService.currentState.hasNext, isTrue);
 
-        // When current track at end of queue completes, infinite mix fetches new tracks
+        // When current track at end of queue completes, it advances to the prefetched mix track
         final activeMock = infiniteService.activePlayer as MockAudioPlayerAdapter;
         activeMock.currentPosition = const Duration(seconds: 180);
         activeMock.emitCompleted();

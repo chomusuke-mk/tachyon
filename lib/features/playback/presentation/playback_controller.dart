@@ -61,6 +61,7 @@ class PlaybackController extends ChangeNotifier {
     _backend.getPlaybackState().then((s) {
       if (!_isDisposed) {
         _state = _resolveStateTracks(s);
+        _isInfiniteMixEnabled = _state.isInfiniteMixEnabled;
         _positionNotifier.value = _state.position;
         notifyListeners();
       }
@@ -72,6 +73,7 @@ class PlaybackController extends ChangeNotifier {
       final oldState = _state;
       final resolvedState = _resolveStateTracks(newState);
       _state = resolvedState;
+      _isInfiniteMixEnabled = resolvedState.isInfiniteMixEnabled;
 
       // 1. Update high-frequency position notifier
       if (_positionNotifier.value != resolvedState.position) {
@@ -506,6 +508,8 @@ class PlaybackController extends ChangeNotifier {
         prev.audioSampleRate != next.audioSampleRate ||
         prev.audioChannels != next.audioChannels ||
         prev.hasPrevious != next.hasPrevious ||
+        prev.hasNext != next.hasNext ||
+        prev.isInfiniteMixEnabled != next.isInfiniteMixEnabled ||
         prev.currentTrack?.filePath != next.currentTrack?.filePath ||
         !listEquals(prev.playables, next.playables);
   }
