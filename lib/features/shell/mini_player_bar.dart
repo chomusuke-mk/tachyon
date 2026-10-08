@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/text_link.dart';
 
 /// Service responsible for extracting and caching a harmonized background color
 /// from a track's low-quality thumbnail image.
@@ -282,16 +284,50 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              Text(
-                                currentTrack.artists
-                                    .map((a) => a.name)
-                                    .join(', '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
+                              if (widget.isDesktop && currentTrack.artists.isNotEmpty)
+                                SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      for (int i = 0; i < currentTrack.artists.length; i++) ...[
+                                        if (i > 0)
+                                          Text(
+                                            ', ',
+                                            style: theme.textTheme.bodySmall?.copyWith(
+                                              color: colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        TextLink(
+                                          text: currentTrack.artists[i].name,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                          hoverColor: colorScheme.primary,
+                                          defaultColor: colorScheme.onSurfaceVariant,
+                                          onTap: () => Navigator.of(context).push(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) => ArtistDetailScreen(
+                                                artist: currentTrack.artists[i],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                )
+                              else
+                                Text(
+                                  currentTrack.artists
+                                      .map((a) => a.name)
+                                      .join(', '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
                         ),

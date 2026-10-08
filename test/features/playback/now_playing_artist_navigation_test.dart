@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -256,6 +257,65 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ArtistDetailScreen), findsOneWidget);
+    });
+
+    testWidgets('Returning from ArtistDetailScreen resets artist link hover/underline state', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final track = libraryStore.getTrackById(100)!;
+      playbackController.setMockTrack(track);
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      navigatorKey.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const NowPlayingScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final queenFinder = find.text('Queen').first;
+      expect(queenFinder, findsOneWidget);
+
+      // Verify initial state: not underlined
+      Text queenText = tester.widget<Text>(queenFinder);
+      expect(queenText.style?.decoration, isNot(TextDecoration.underline));
+
+      // Simulate mouse hovering on Queen
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      await gesture.moveTo(tester.getCenter(queenFinder));
+      await tester.pumpAndSettle();
+
+      // When hovered, it should be underlined
+      queenText = tester.widget<Text>(queenFinder);
+      expect(queenText.style?.decoration, equals(TextDecoration.underline));
+
+      // Click to navigate
+      await gesture.down(tester.getCenter(queenFinder));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ArtistDetailScreen), findsOneWidget);
+
+      // Move mouse away to top-left (e.g. where the back button was clicked)
+      await gesture.moveTo(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      // Pop back (e.g. via ESC or back button)
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ArtistDetailScreen), findsNothing);
+      expect(find.byType(NowPlayingScreen), findsOneWidget);
+
+      // Once back on NowPlayingScreen, the text must NOT remain underlined
+      queenText = tester.widget<Text>(find.text('Queen').first);
+      expect(queenText.style?.decoration, isNot(TextDecoration.underline));
     });
   });
 }

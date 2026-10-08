@@ -389,6 +389,69 @@ void main() {
       expect(find.text('00:00 / 03:00'), findsOneWidget);
     });
 
+    testWidgets('MiniPlayerBar desktop mode clicking artist navigates to ArtistDetailScreen', (tester) async {
+      final artist = Artist(
+        id: 3,
+        name: 'Clickable Desktop Artist',
+        tracks: const [],
+      );
+      final track = Track(
+        id: 30,
+        filePath: '/music/desktop_artist_song.mp3',
+        title: 'Desktop Artist Song',
+        durationMs: 140000,
+        fileSize: 1000,
+        modifiedAt: 0,
+        artists: [artist],
+      );
+      playback.setMockTrack(track);
+
+      final snapshot = CatalogSnapshot(
+        tracks: [
+          const RawTrackDto(
+            id: 30,
+            filePath: '/music/desktop_artist_song.mp3',
+            title: 'Desktop Artist Song',
+            durationMs: 140000,
+            fileSize: 1000,
+            modifiedAt: 0,
+          ),
+        ],
+        albums: const [],
+        artists: [const RawArtistDto(id: 3, name: 'Clickable Desktop Artist')],
+        genres: const [],
+        playlists: const [],
+        playlistEntries: const [],
+        trackArtists: const [TrackArtistPair(trackId: 30, artistId: 3)],
+        trackGenres: const [],
+      );
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final library = LibraryController(backend: backend, settingsRepository: settingsRepo, store: store);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: localeController),
+            ChangeNotifierProvider<PlaybackController>.value(value: playback),
+            ChangeNotifierProvider<LibraryController>.value(value: library),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: MiniPlayerBar(isDesktop: true),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Clickable Desktop Artist'), findsOneWidget);
+
+      await tester.tap(find.text('Clickable Desktop Artist'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ArtistDetailScreen), findsOneWidget);
+    });
+
     testWidgets('AlbumDetailScreen renders MiniPlayerBar in bottomNavigationBar when track is playing', (tester) async {
       final track = Track(
         id: 10,

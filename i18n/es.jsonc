@@ -301,6 +301,7 @@
   "s_language_section": "Idioma",
   "s_language": "Idioma de la aplicación",
   "s_language_desc": "Cambia el idioma de la interfaz en tiempo real sin reiniciar la aplicación.",
+  "s_language_search_hint": "Buscar idioma...",
   "s_integrations_section": "Integraciones",
   "s_discord_rpc": "Discord Rich Presence",
   "s_discord_rpc_desc": "Muestra la canción y artista que escuchas en tu perfil de Discord.",

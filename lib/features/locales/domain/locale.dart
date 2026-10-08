@@ -428,6 +428,8 @@ class AppStringKey {
       _cadenasLocalizadas['s_language_section'] ?? '';
   String get sLanguage => _cadenasLocalizadas['s_language'] ?? '';
   String get sLanguageDesc => _cadenasLocalizadas['s_language_desc'] ?? '';
+  String get sLanguageSearchHint =>
+      _cadenasLocalizadas['s_language_search_hint'] ?? '';
   String get sIntegrationsSection =>
       _cadenasLocalizadas['s_integrations_section'] ?? '';
   String get sDiscordRpc => _cadenasLocalizadas['s_discord_rpc'] ?? '';
@@ -746,6 +748,7 @@ class AppStringKey {
     's_language_section',
     's_language',
     's_language_desc',
+    's_language_search_hint',
     's_integrations_section',
     's_discord_rpc', 's_discord_rpc_desc', 's_media_notifications',
     's_media_notifications_desc', 's_about_section', 's_app_version',

@@ -121,7 +121,7 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
                       autofocus: false,
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.search_rounded),
-                        hintText: strings.srHint,
+                        hintText: strings.sLanguageSearchHint,
                         isDense: true,
                         border: const OutlineInputBorder(),
                       ),

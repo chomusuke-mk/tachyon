@@ -7,6 +7,7 @@ import 'package:tachyon/features/settings/presentation/settings_controller.dart'
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
+import 'package:tachyon/shared/widgets/text_link.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
@@ -1212,10 +1213,16 @@ class _ClickableArtistNames extends StatelessWidget {
           children: [
             for (int i = 0; i < artists.length; i++) ...[
               if (i > 0) Text(', ', style: effectiveStyle),
-              _ArtistLink(
-                artist: artists[i],
+              TextLink(
+                text: artists[i].name,
                 style: effectiveStyle,
-                colorScheme: colorScheme,
+                hoverColor: colorScheme.primary,
+                defaultColor: colorScheme.onSurfaceVariant,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ArtistDetailScreen(artist: artists[i]),
+                  ),
+                ),
               ),
             ],
           ],
@@ -1225,56 +1232,3 @@ class _ClickableArtistNames extends StatelessWidget {
   }
 }
 
-class _ArtistLink extends StatefulWidget {
-  final Artist artist;
-  final TextStyle? style;
-  final ColorScheme colorScheme;
-
-  const _ArtistLink({
-    required this.artist,
-    required this.style,
-    required this.colorScheme,
-  });
-
-  @override
-  State<_ArtistLink> createState() => _ArtistLinkState();
-}
-
-class _ArtistLinkState extends State<_ArtistLink> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(4),
-      onHover: (hovering) {
-        if (_isHovered != hovering) {
-          setState(() => _isHovered = hovering);
-        }
-      },
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => ArtistDetailScreen(artist: widget.artist),
-          ),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 1.0),
-        child: Text(
-          widget.artist.name,
-          maxLines: 1,
-          style: widget.style?.copyWith(
-            color: _isHovered
-                ? widget.colorScheme.primary
-                : widget.colorScheme.onSurfaceVariant,
-            decoration: _isHovered
-                ? TextDecoration.underline
-                : TextDecoration.none,
-            decorationColor: widget.colorScheme.primary,
-          ),
-        ),
-      ),
-    );
-  }
-}

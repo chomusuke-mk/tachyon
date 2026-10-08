@@ -301,6 +301,7 @@
   "s_language_section": "Language",
   "s_language": "App Language",
   "s_language_desc": "Switch interface language in real time without restarting the app.",
+  "s_language_search_hint": "Search language...",
   "s_integrations_section": "Integrations",
   "s_discord_rpc": "Discord Rich Presence",
   "s_discord_rpc_desc": "Show currently playing music title and artist on your Discord profile.",
