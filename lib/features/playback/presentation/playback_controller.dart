@@ -192,7 +192,7 @@ class PlaybackController extends ChangeNotifier {
   Future<void> playAll(
     List<Track> tracks, {
     bool shuffle = false,
-    int startIndex = 0,
+    int? startIndex,
   }) async {
     if (tracks.isEmpty) return;
     try {

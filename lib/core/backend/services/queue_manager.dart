@@ -218,7 +218,7 @@ class QueueManager {
   /// Sets or replaces the entire queue using [Track] objects.
   void setTracks(
     List<Track> tracks, {
-    int startIndex = 0,
+    int? startIndex,
     bool shuffle = false,
   }) {
     _nextEntryId = 0;
@@ -236,11 +236,14 @@ class QueueManager {
   /// Sets or replaces the entire queue.
   ///
   /// Resets `_nextEntryId = 0` to assign monotonically increasing IDs.
-  /// If [shuffle] is true, the item at [startIndex] is pinned to index 0,
-  /// and the remaining items are shuffled via Fisher-Yates without immediate repetitions.
+  /// If [shuffle] is true:
+  /// - If [startIndex] is provided, the item at [startIndex] is pinned to index 0,
+  ///   and the remaining items are shuffled via Fisher-Yates without immediate repetitions.
+  /// - If [startIndex] is null, an item is chosen uniformly at random to start at index 0,
+  ///   and the remaining items are shuffled via Fisher-Yates.
   void setQueue(
     List<PlaylistEntry> items, {
-    int startIndex = 0,
+    int? startIndex,
     bool shuffle = false,
   }) {
     _touch();
@@ -259,18 +262,20 @@ class QueueManager {
         items[i].copyWith(id: _nextEntryId++, position: i),
     ];
 
-    final clampedIndex = startIndex.clamp(0, normalized.length - 1);
     _originalQueue = List<PlaylistEntry>.from(normalized);
 
     if (!shuffle) {
       _activeQueue = List<PlaylistEntry>.from(normalized);
-      _currentIndex = clampedIndex;
+      _currentIndex = (startIndex ?? 0).clamp(0, normalized.length - 1);
       _isShuffled = false;
     } else {
       _isShuffled = true;
-      final current = normalized[clampedIndex];
+      final int chosenIndex = startIndex != null
+          ? startIndex.clamp(0, normalized.length - 1)
+          : _random.nextInt(normalized.length);
+      final current = normalized[chosenIndex];
       final remaining = List<PlaylistEntry>.from(normalized)
-        ..removeAt(clampedIndex);
+        ..removeAt(chosenIndex);
 
       _fisherYatesShuffle(remaining);
 

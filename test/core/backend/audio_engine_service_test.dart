@@ -813,5 +813,51 @@ void main() {
       expect(service.activePlayer.isPlaying, isFalse);
       expect(service.currentState.playables, isEmpty);
     });
+
+    test('QueueManager.setQueue with shuffle: true and startIndex: null chooses initial track randomly', () {
+      final qm = QueueManager();
+      final initialTrackIds = <int>{};
+
+      // Run multiple times to verify distribution (with 6 items, probability of always getting the same track 40 times is ~ (1/6)^40 = 0)
+      for (int i = 0; i < 40; i++) {
+        qm.setQueue(testItems, shuffle: true);
+        expect(qm.isShuffled, isTrue);
+        expect(qm.length, equals(6));
+        expect(qm.currentIndex, equals(0));
+        initialTrackIds.add(qm.currentTrack!.track!.id!);
+      }
+
+      // Must have selected more than one different initial track (not pinned to track 1)
+      expect(initialTrackIds.length, greaterThan(1));
+    });
+
+    test('QueueManager.setQueue with shuffle: true and explicit startIndex pins that specific track', () {
+      final qm = QueueManager();
+      for (int i = 0; i < 10; i++) {
+        qm.setQueue(testItems, startIndex: 3, shuffle: true);
+        expect(qm.isShuffled, isTrue);
+        expect(qm.length, equals(6));
+        expect(qm.currentIndex, equals(0));
+        // id 4 corresponds to index 3
+        expect(qm.currentTrack!.track!.id, equals(4));
+      }
+    });
+
+    test('QueueManager un-shuffle restores original order after random shuffle start', () {
+      final qm = QueueManager();
+      qm.setQueue(testItems, shuffle: true);
+      final playingTrack = qm.currentTrack;
+      expect(playingTrack, isNotNull);
+
+      // Disable shuffle
+      qm.setShuffle(false);
+      expect(qm.isShuffled, isFalse);
+      expect(qm.currentTrack?.track?.id, equals(playingTrack!.track!.id));
+
+      // Active queue matches original order
+      for (int i = 0; i < testItems.length; i++) {
+        expect(qm.activeQueue[i].track?.id, equals(testItems[i].track?.id));
+      }
+    });
   });
 }

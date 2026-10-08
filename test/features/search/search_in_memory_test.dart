@@ -119,7 +119,7 @@ class _TestBackendClient extends DirectTachyonBackendClient {
   @override
   Future<void> open(
     List<int> trackIds, {
-    int index = 0,
+    int? index,
     bool play = true,
     bool shuffle = false,
   }) async {
@@ -136,10 +136,10 @@ class _TestBackendClient extends DirectTachyonBackendClient {
     }).whereType<PlaylistEntry>().toList();
 
     openedItems = resolvedItems;
-    openedIndex = index;
+    openedIndex = index ?? 0;
     final state = PlaybackState(
       playables: resolvedItems,
-      index: index,
+      index: index ?? 0,
       playing: true,
     );
     _stateCtrl.add(state);
@@ -148,7 +148,7 @@ class _TestBackendClient extends DirectTachyonBackendClient {
   @override
   Future<void> playQueue(
     List<int> trackIds, {
-    int startIndex = 0,
+    int? startIndex,
     bool play = true,
     bool shuffle = false,
   }) async {
@@ -162,10 +162,10 @@ class _TestBackendClient extends DirectTachyonBackendClient {
         .map((t) => PlaylistEntry.forQueue(id: pos, position: pos++, track: t))
         .toList();
     openedItems = items;
-    openedIndex = startIndex;
+    openedIndex = startIndex ?? 0;
     final state = PlaybackState(
       playables: items,
-      index: startIndex,
+      index: startIndex ?? 0,
       playing: play,
     );
     _stateCtrl.add(state);

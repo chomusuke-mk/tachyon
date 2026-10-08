@@ -169,7 +169,7 @@ class AudioEngineService {
 
   Future<void> open(
     List<PlaylistEntry> playables, {
-    int index = 0,
+    int? index,
     bool play = true,
     bool shuffle = false,
   }) => _serialize(
@@ -503,7 +503,7 @@ class AudioEngineService {
 
   Future<void> _openImpl(
     List<PlaylistEntry> playables, {
-    int index = 0,
+    int? index,
     bool play = true,
     bool shuffle = false,
   }) async {

@@ -224,7 +224,7 @@ class TachyonBackendHost {
 
       case BackendMethods.playbackPlayQueue:
         final trackIds = (params['trackIds'] as List).cast<int>();
-        final startIndex = params['startIndex'] as int? ?? 0;
+        final startIndex = params['startIndex'] as int?;
         final autoPlay = params['play'] as bool? ?? true;
         final shuffle = params['shuffle'] as bool? ?? false;
         final tracks = _database.getTracksByIds(trackIds);
@@ -283,7 +283,7 @@ class TachyonBackendHost {
       case BackendMethods.playbackOpen:
         final rawTrackIds = (params['trackIds'] ?? params['items']) as List;
         final trackIds = rawTrackIds.cast<int>();
-        final index = params['index'] as int? ?? 0;
+        final index = params['index'] as int?;
         final autoPlay = params['play'] as bool? ?? true;
         final shuffle = params['shuffle'] as bool? ?? false;
         final tracks = _database.getTracksByIds(trackIds);

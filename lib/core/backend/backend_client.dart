@@ -51,13 +51,13 @@ abstract class TachyonBackendClient {
   Future<void> playTrack(int trackId, {bool play = true});
   Future<void> playQueue(
     List<int> trackIds, {
-    int startIndex = 0,
+    int? startIndex,
     bool play = true,
     bool shuffle = false,
   });
   Future<void> open(
     List<int> trackIds, {
-    int index = 0,
+    int? index,
     bool play = true,
     bool shuffle = false,
   });
@@ -341,7 +341,7 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   @override
   Future<void> playQueue(
     List<int> trackIds, {
-    int startIndex = 0,
+    int? startIndex,
     bool play = true,
     bool shuffle = false,
   }) => _send(BackendMethods.playbackPlayQueue, {
@@ -354,7 +354,7 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   @override
   Future<void> open(
     List<int> trackIds, {
-    int index = 0,
+    int? index,
     bool play = true,
     bool shuffle = false,
   }) => _send(BackendMethods.playbackOpen, {

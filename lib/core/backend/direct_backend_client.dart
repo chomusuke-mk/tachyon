@@ -149,7 +149,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<void> playQueue(
     List<int> trackIds, {
-    int startIndex = 0,
+    int? startIndex,
     bool play = true,
     bool shuffle = false,
   }) async {
@@ -169,7 +169,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<void> open(
     List<int> trackIds, {
-    int index = 0,
+    int? index,
     bool play = true,
     bool shuffle = false,
   }) async {
