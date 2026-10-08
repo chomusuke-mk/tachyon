@@ -505,7 +505,6 @@ class PlaybackController extends ChangeNotifier {
         prev.audioBitrate != next.audioBitrate ||
         prev.audioSampleRate != next.audioSampleRate ||
         prev.audioChannels != next.audioChannels ||
-        prev.mixOffset != next.mixOffset ||
         prev.hasPrevious != next.hasPrevious ||
         prev.currentTrack?.filePath != next.currentTrack?.filePath ||
         !listEquals(prev.playables, next.playables);

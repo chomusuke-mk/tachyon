@@ -1087,13 +1087,10 @@ class AudioEngineService {
     final previous = currentState;
     final active = _activePlayer;
     _lastStateEmit = DateTime.now();
-    // Built from scratch (not copyWith) so nullable fields such as
-    // mixOffset can be cleared.
     _stateSubject.add(
       PlaybackState(
         index: math.max(0, _queueManager.currentIndex),
         playables: _queueManager.activeQueue,
-        mixOffset: _queueManager.mixOffset,
         playing: active.isPlaying,
         buffering: active.isBuffering,
         completed: _queueEnded || (!active.isPlaying && active.isCompleted),

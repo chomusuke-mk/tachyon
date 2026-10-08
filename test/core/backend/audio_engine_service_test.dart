@@ -625,7 +625,6 @@ void main() {
 
         expect(infiniteService.queueManager.currentIndex, equals(1));
         expect(infiniteService.queueManager.length, equals(2));
-        expect(infiniteService.currentState.mixOffset, isNull);
 
         // When current track at end of queue completes, infinite mix fetches new tracks
         final activeMock = infiniteService.activePlayer as MockAudioPlayerAdapter;
@@ -638,9 +637,29 @@ void main() {
         expect(infiniteService.queueManager.currentIndex, equals(2));
         expect(infiniteService.queueManager.length, equals(4));
         expect(infiniteService.queueManager.currentTrack?.track?.filePath, equals('/music/mix_1.mp3'));
-        expect(infiniteService.currentState.mixOffset, equals(2));
         expect(infiniteService.activePlayer.isPlaying, isTrue);
         expect(infiniteService.currentState.completed, isFalse);
+
+        // Option A test: appending tracks adds to the absolute end of the queue (after infinite mix tracks)
+        infiniteService.queueManager.append([
+          PlaylistEntry.forQueue(
+            id: 99,
+            position: 99,
+            track: Track(
+              id: 999,
+              filePath: '/music/appended_track.mp3',
+              title: 'Appended Track',
+              durationMs: 120000,
+              fileSize: 1000,
+              modifiedAt: 1000,
+            ),
+          ),
+        ]);
+        expect(infiniteService.queueManager.length, equals(5));
+        expect(
+          infiniteService.queueManager.activeQueue.last.track?.filePath,
+          equals('/music/appended_track.mp3'),
+        );
       } finally {
         await infiniteService.dispose();
       }

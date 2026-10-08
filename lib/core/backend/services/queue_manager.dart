@@ -37,7 +37,6 @@ class QueueManager {
   bool _isShuffled = false;
   Loop _loopMode = Loop.off;
   bool _infiniteMixEnabled = false;
-  int? _mixOffset;
   final LibraryTrackProvider? libraryTrackProvider;
   final math.Random _random;
 
@@ -98,9 +97,6 @@ class QueueManager {
 
   /// Whether Infinite Library Mix is enabled.
   bool get infiniteMixEnabled => _infiniteMixEnabled;
-
-  /// Index where dynamically appended infinite mix tracks begin, or null.
-  int? get mixOffset => _mixOffset;
 
   /// The currently active [PlaylistEntry], or null if queue is empty.
   PlaylistEntry? get currentTrack =>
@@ -254,7 +250,6 @@ class QueueManager {
       _originalQueue = [];
       _currentIndex = -1;
       _isShuffled = false;
-      _mixOffset = null;
       _notifyNextTrack();
       return;
     }
@@ -266,7 +261,6 @@ class QueueManager {
 
     final clampedIndex = startIndex.clamp(0, normalized.length - 1);
     _originalQueue = List<PlaylistEntry>.from(normalized);
-    _mixOffset = null;
 
     if (!shuffle) {
       _activeQueue = List<PlaylistEntry>.from(normalized);
@@ -411,7 +405,6 @@ class QueueManager {
       _activeQueue = [entry];
       _originalQueue = [entry];
       _currentIndex = 0;
-      _mixOffset = null;
       _notifyNextTrack();
       return;
     }
@@ -429,16 +422,10 @@ class QueueManager {
     } else {
       _syncOriginalIfUnshuffled();
     }
-
-    if (_mixOffset != null && insertIdx <= _mixOffset!) {
-      _mixOffset = _mixOffset! + 1;
-    }
     _notifyNextTrack();
   }
 
   /// Appends tracks to the end of the queue.
-  ///
-  /// If Infinite Library Mix is active, items are inserted prior to the mix tracks.
   void append(List<PlaylistEntry> items) {
     if (items.isEmpty) return;
 
@@ -456,16 +443,7 @@ class QueueManager {
     }
     _touch();
 
-    final currentMixOffset = _mixOffset;
-    if (currentMixOffset != null) {
-      _activeQueue.insertAll(currentMixOffset, normalized);
-      _mixOffset = currentMixOffset + normalized.length;
-      if (_currentIndex >= currentMixOffset) {
-        _currentIndex += normalized.length;
-      }
-    } else {
-      _activeQueue.addAll(normalized);
-    }
+    _activeQueue.addAll(normalized);
 
     if (_isShuffled) {
       _originalQueue.addAll(normalized);
@@ -492,16 +470,6 @@ class QueueManager {
       }
     } else {
       _syncOriginalIfUnshuffled();
-    }
-
-    final currentMixOffset = _mixOffset;
-    if (currentMixOffset != null) {
-      if (index < currentMixOffset) {
-        _mixOffset = currentMixOffset - 1;
-      }
-      if (_mixOffset! >= _activeQueue.length) {
-        _mixOffset = null;
-      }
     }
 
     if (_activeQueue.isEmpty) {
@@ -577,7 +545,6 @@ class QueueManager {
       _originalQueue = [entry];
       _currentIndex = 0;
       _isShuffled = false;
-      _mixOffset = null;
       _nextEntryId = math.max(_nextEntryId, (entry.id ?? 0) + 1);
     } else {
       _nextEntryId = 0;
@@ -585,7 +552,6 @@ class QueueManager {
       _originalQueue = [];
       _currentIndex = -1;
       _isShuffled = false;
-      _mixOffset = null;
     }
     _notifyNextTrack();
   }
@@ -651,7 +617,6 @@ class QueueManager {
 
         if (candidateTracks.isNotEmpty) {
           _touch();
-          _mixOffset ??= _activeQueue.length;
           final mixEntries = [
             for (int i = 0; i < candidateTracks.length; i++)
               PlaylistEntry.forQueue(

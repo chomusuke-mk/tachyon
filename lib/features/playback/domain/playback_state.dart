@@ -12,7 +12,6 @@ enum PlaybackStatus { idle, loading, playing, paused, completed }
 class PlaybackState {
   final int index;
   final List<PlaylistEntry> playables;
-  final int? mixOffset;
   final bool playing;
   final bool buffering;
   final bool completed;
@@ -32,7 +31,6 @@ class PlaybackState {
   const PlaybackState({
     this.index = 0,
     this.playables = const [],
-    this.mixOffset,
     this.playing = false,
     this.buffering = false,
     this.completed = false,
@@ -91,7 +89,6 @@ class PlaybackState {
   PlaybackState copyWith({
     int? index,
     List<PlaylistEntry>? playables,
-    int? mixOffset,
     bool? playing,
     bool? buffering,
     bool? completed,
@@ -112,7 +109,6 @@ class PlaybackState {
     return PlaybackState(
       index: index ?? this.index,
       playables: playables ?? this.playables,
-      mixOffset: mixOffset ?? this.mixOffset,
       playing: playing ?? this.playing,
       buffering: buffering ?? this.buffering,
       completed: completed ?? this.completed,
@@ -141,7 +137,6 @@ class PlaybackState {
           runtimeType == other.runtimeType &&
           index == other.index &&
           listEquals(playables, other.playables) &&
-          mixOffset == other.mixOffset &&
           playing == other.playing &&
           buffering == other.buffering &&
           completed == other.completed &&
@@ -162,7 +157,6 @@ class PlaybackState {
   int get hashCode => Object.hashAll([
     index,
     Object.hashAll(playables),
-    mixOffset,
     playing,
     buffering,
     completed,
