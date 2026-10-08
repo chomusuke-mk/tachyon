@@ -169,9 +169,11 @@ class _QueueViewState extends State<QueueView> {
               IconButton(
                 icon: const Icon(Icons.delete_sweep_rounded),
                 tooltip: strings.npQueueClear,
-                onPressed: queue.isNotEmpty
-                    ? () => _confirmClearQueue(context, playback, strings)
-                    : null,
+                onPressed:
+                    (queue.length > 1 ||
+                            (queue.length == 1 && currentIndex == -1))
+                        ? () => _confirmClearQueue(context, playback, strings)
+                        : null,
               ),
             ],
           ),
@@ -333,9 +335,7 @@ class _QueueViewState extends State<QueueView> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(strings.npQueueClear),
-        content: const Text(
-          'Are you sure you want to clear the entire playback queue?',
-        ),
+        content: Text(strings.npQueueClearConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),

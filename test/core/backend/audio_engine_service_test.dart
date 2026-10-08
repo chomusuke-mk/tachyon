@@ -743,5 +743,56 @@ void main() {
       expect(initialActive.currentVolume, equals(0.0));
       expect(initialStandby.currentVolume, equals(100.0));
     });
+
+    test('QueueManager.clear(keepCurrent: true) retains active track as sole entry at index 0', () {
+      final qm = QueueManager();
+      qm.setQueue(testItems, startIndex: 2);
+      expect(qm.currentIndex, equals(2));
+      expect(qm.length, equals(6));
+      expect(qm.currentTrack?.track?.id, equals(3));
+
+      qm.clear(keepCurrent: true);
+      expect(qm.length, equals(1));
+      expect(qm.currentIndex, equals(0));
+      expect(qm.currentTrack?.track?.id, equals(3));
+      expect(qm.currentTrack?.position, equals(0));
+      expect(qm.peekNext(), isNull);
+      expect(qm.isShuffled, isFalse);
+    });
+
+    test('QueueManager.clear(keepCurrent: false) empties entire queue', () {
+      final qm = QueueManager();
+      qm.setQueue(testItems, startIndex: 2);
+      qm.clear(keepCurrent: false);
+      expect(qm.isEmpty, isTrue);
+      expect(qm.currentIndex, equals(-1));
+      expect(qm.currentTrack, isNull);
+    });
+
+    test('AudioEngineService.clearQueue preserves currently playing track without stopping playback', () async {
+      await service.open(testItems, index: 2, play: true);
+      expect(service.queueManager.currentIndex, equals(2));
+      expect(service.activePlayer.isPlaying, isTrue);
+      expect(service.currentState.currentTrack?.id, equals(3));
+      expect(service.currentState.playables.length, equals(6));
+
+      await service.clearQueue();
+
+      // Current track must still be playing seamlessly
+      expect(service.activePlayer.isPlaying, isTrue);
+      expect(service.queueManager.currentIndex, equals(0));
+      expect(service.queueManager.length, equals(1));
+      expect(service.currentState.currentTrack?.id, equals(3));
+      expect(service.currentState.playables.length, equals(1));
+      expect(service.currentState.playing, isTrue);
+    });
+
+    test('AudioEngineService.clearQueue on empty queue stops players and leaves empty queue', () async {
+      expect(service.queueManager.isEmpty, isTrue);
+      await service.clearQueue();
+      expect(service.queueManager.isEmpty, isTrue);
+      expect(service.activePlayer.isPlaying, isFalse);
+      expect(service.currentState.playables, isEmpty);
+    });
   });
 }

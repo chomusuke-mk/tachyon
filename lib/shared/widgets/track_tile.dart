@@ -89,12 +89,14 @@ class TrackTile extends StatelessWidget {
 
     final effectiveIsPlaying = isPlaying ?? _resolveIsPlaying(context);
 
-    final effectiveIsLiked = isLiked ??
+    final effectiveIsLiked =
+        isLiked ??
         (showLikeButton && track.id != null
             ? _resolveIsLiked(context, track.id!)
             : false);
 
-    final effectiveOnToggleLike = onToggleLike ??
+    final effectiveOnToggleLike =
+        onToggleLike ??
         (showLikeButton && track.id != null
             ? () {
                 try {
@@ -147,12 +149,14 @@ class TrackTile extends StatelessWidget {
             ],
           );
 
-    final effectiveOnTap = onTap ??
+    final effectiveOnTap =
+        onTap ??
         () {
           try {
-            context
-                .read<PlaybackController>()
-                .playTrack(track, contextTracks: contextTracks);
+            context.read<PlaybackController>().playTrack(
+              track,
+              contextTracks: contextTracks,
+            );
           } catch (_) {}
         };
 
@@ -194,17 +198,39 @@ class TrackTile extends StatelessWidget {
               if (showLikeButton || onToggleLike != null)
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    effectiveIsLiked
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    color: effectiveIsLiked
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant,
-                    size: 20,
+                  icon: AnimatedSwitcher(
+                    // 1. Duración rápida y con energía
+                    duration: const Duration(milliseconds: 400),
+
+                    // 2. Curvas de animación: easeOutBack da ese efecto de "rebote" al inflarse
+                    switchInCurve: Curves.easeOutBack,
+                    switchOutCurve: Curves.easeIn,
+
+                    // 3. Constructor de la transición: Escala el ícono desde el centro
+                    transitionBuilder:
+                        (Widget child, Animation<double> animation) {
+                          return ScaleTransition(
+                            scale: animation,
+                            child: child, // Opcional: puedes envolver 'child' en FadeTransition si también quieres que se desvanezca
+                          );
+                        },
+
+                    // 4. El contenido: El ícono en sí
+                    child: Icon(
+                      effectiveIsLiked
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+
+                      // ¡EL KEY ES OBLIGATORIO! Le dice al Switcher que son dos widgets diferentes.
+                      key: ValueKey<bool>(effectiveIsLiked),
+
+                      size: 20,
+                      color: effectiveIsLiked
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  tooltip:
-                      effectiveIsLiked ? strings.npUnlike : strings.npLike,
+                  tooltip: effectiveIsLiked ? strings.npUnlike : strings.npLike,
                   onPressed: effectiveOnToggleLike,
                 ),
               if (showActions)

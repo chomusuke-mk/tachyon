@@ -563,15 +563,30 @@ class QueueManager {
     return null;
   }
 
-  /// Clears the entire queue.
-  void clear() {
+  /// Clears the queue.
+  ///
+  /// If [keepCurrent] is true and there is an active current track,
+  /// that track is retained as the sole entry at index 0.
+  /// Otherwise, the entire queue is emptied.
+  void clear({bool keepCurrent = false}) {
     _touch();
-    _nextEntryId = 0;
-    _activeQueue = [];
-    _originalQueue = [];
-    _currentIndex = -1;
-    _isShuffled = false;
-    _mixOffset = null;
+    final current = keepCurrent ? currentTrack : null;
+    if (current != null) {
+      final entry = current.copyWith(position: 0);
+      _activeQueue = [entry];
+      _originalQueue = [entry];
+      _currentIndex = 0;
+      _isShuffled = false;
+      _mixOffset = null;
+      _nextEntryId = math.max(_nextEntryId, (entry.id ?? 0) + 1);
+    } else {
+      _nextEntryId = 0;
+      _activeQueue = [];
+      _originalQueue = [];
+      _currentIndex = -1;
+      _isShuffled = false;
+      _mixOffset = null;
+    }
     _notifyNextTrack();
   }
 

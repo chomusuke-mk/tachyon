@@ -24,6 +24,7 @@
   "np_seek_backward": "Seek backward 10 seconds",
   "np_queue": "Queue",
   "np_queue_clear": "Clear queue",
+  "np_queue_clear_confirm": "Are you sure you want to clear the playback queue?",
   "np_queue_empty": "Playback queue is empty",
   "np_queue_reorder": "Drag to reorder",
   "np_lyrics": "Lyrics",

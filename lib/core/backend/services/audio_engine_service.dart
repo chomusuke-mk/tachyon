@@ -270,7 +270,22 @@ class AudioEngineService {
     }
   });
 
-  Future<void> clearQueue() => open(const []);
+  Future<void> clearQueue() => _serialize(() async {
+    await _abortTransition();
+    await _silence(_standbyPlayer);
+
+    final current = _queueManager.currentTrack;
+    if (current == null) {
+      _queueManager.clear();
+      _queueEnded = true;
+      await _stopPlayers();
+    } else {
+      _queueManager.clear(keepCurrent: true);
+      _queueEnded = false;
+    }
+    await _settle();
+    _emitState();
+  });
 
   // --------------------------------------------------------------------------
   // Queue Mutation Commands (serialized)

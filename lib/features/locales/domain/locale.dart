@@ -33,6 +33,8 @@ class AppStringKey {
   String get npSeekBackward => _cadenasLocalizadas['np_seek_backward'] ?? '';
   String get npQueue => _cadenasLocalizadas['np_queue'] ?? '';
   String get npQueueClear => _cadenasLocalizadas['np_queue_clear'] ?? '';
+  String get npQueueClearConfirm =>
+      _cadenasLocalizadas['np_queue_clear_confirm'] ?? '';
   String get npQueueEmpty => _cadenasLocalizadas['np_queue_empty'] ?? '';
   String get npQueueReorder => _cadenasLocalizadas['np_queue_reorder'] ?? '';
   String get npLyrics => _cadenasLocalizadas['np_lyrics'] ?? '';
@@ -610,7 +612,8 @@ class AppStringKey {
     'np_mute', 'np_unmute', 'np_volume', 'np_shuffle_off', 'np_shuffle_on',
     'np_repeat_off', 'np_repeat_all', 'np_repeat_one', 'np_elapsed',
     'np_remaining', 'np_duration', 'np_seek_forward', 'np_seek_backward',
-    'np_queue', 'np_queue_clear', 'np_queue_empty', 'np_queue_reorder',
+    'np_queue', 'np_queue_clear', 'np_queue_clear_confirm',
+    'np_queue_empty', 'np_queue_reorder',
     'np_lyrics', 'np_lyrics_empty', 'np_lyrics_sync', 'np_lyrics_unsync',
     'np_lyrics_translate',
     'np_lyrics_translating',
