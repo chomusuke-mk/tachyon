@@ -139,8 +139,8 @@ class AppStringKey {
   String get npBackgroundGradient =>
       _cadenasLocalizadas['np_background_gradient'] ?? '';
   String get npAddToPlaylist => _cadenasLocalizadas['np_add_to_playlist'] ?? '';
-  String get npLiked => _cadenasLocalizadas['np_liked'] ?? '';
-  String get npUnliked => _cadenasLocalizadas['np_unliked'] ?? '';
+  String get npLike => _cadenasLocalizadas['np_like'] ?? '';
+  String get npUnlike => _cadenasLocalizadas['np_unlike'] ?? '';
   String get npTechnicalInfo => _cadenasLocalizadas['np_technical_info'] ?? '';
   String get npBitrate => _cadenasLocalizadas['np_bitrate'] ?? '';
   String get npSampleRate => _cadenasLocalizadas['np_sample_rate'] ?? '';
@@ -647,8 +647,8 @@ class AppStringKey {
     'np_exit_fullscreen',
     'np_visualizer',
     'np_background_artwork', 'np_background_gradient', 'np_add_to_playlist',
-    'np_liked',
-    'np_unliked',
+    'np_like',
+    'np_unlike',
     'np_technical_info',
     'np_bitrate',
     'np_sample_rate',

@@ -361,8 +361,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               ),
               IconButton(
                 tooltip: isCurrentTrackLiked
-                    ? strings.npLiked
-                    : strings.npUnliked,
+                    ? strings.npUnlike
+                    : strings.npLike,
                 onPressed: _toggleLike,
                 icon: AnimatedSwitcher(
                   // 1. Duración rápida y con energía
