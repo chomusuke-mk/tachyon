@@ -88,10 +88,81 @@ class AudioPlayerAdapter {
     }
   }
 
-  Future<List<AudioDevice>> getAudioDevices({bool includeAuto = true}) =>
-      MiniaudioPlayer.getAudioDevices(includeAuto: includeAuto);
+  Future<List<AudioDevice>> getAudioDevices() =>
+      MiniaudioPlayer.getAudioDevices();
 
-  Future<void> setSkipSilence(bool enabled) => Future.value();
+  List<AudioDevice> getAudioDevicesSync() =>
+      MiniaudioPlayer.getAudioDevicesSync();
+
+  Stream<List<AudioDevice>> get devicesStream =>
+      MiniaudioPlayer.getAudioDevicesStream();
+
+  Future<void> setSkipSilence(bool enabled) async {
+    try {
+      await _player.action.setSkipSilence(enabled, mode: SilenceSkipMode.all);
+    } catch (_) {}
+  }
+
+  Future<void> setReplayGain({
+    double? gainDb,
+    double? peak,
+    double? preampDb,
+    bool? preventClipping,
+  }) async {
+    try {
+      await _player.action.setReplayGain(
+        gainDb: gainDb ?? 0.0,
+        peak: peak ?? 0.0,
+        preampDb: preampDb ?? 0.0,
+        preventClipping: preventClipping ?? true,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> clearReplayGain() async {
+    try {
+      await _player.action.clearReplayGain();
+    } catch (_) {}
+  }
+
+  Future<void> setPreamp(double preampDb) async {
+    try {
+      await _player.action.setPreamp(preampDb);
+    } catch (_) {}
+  }
+
+  Future<void> setBalance(double balance) async {
+    try {
+      await _player.action.setBalance(balance);
+    } catch (_) {}
+  }
+
+  Future<void> setMono(bool enabled) async {
+    try {
+      await _player.action.setMono(enabled);
+    } catch (_) {}
+  }
+
+  Future<void> setCrossfeed(CrossfeedMode mode) async {
+    try {
+      await _player.action.setCrossfeed(mode);
+    } catch (_) {}
+  }
+
+  Future<void> setSpatializer(double width) async {
+    try {
+      await _player.action.setSpatializer(
+        enabled: (width - 1.0).abs() > 0.01,
+        width: width,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> setLimiter(bool enabled) async {
+    try {
+      await _player.action.setLimiter(enabled);
+    } catch (_) {}
+  }
 
   Future<void> dispose() async {
     _isDisposed = true;
@@ -119,7 +190,11 @@ class AudioPlayerAdapter {
 
   Stream<AudioDevice> get audioDeviceStream => _player.stream.audioDevice;
 
-  Stream<bool> get skipSilenceStream => Stream.value(false);
+  Stream<bool> get skipSilenceStream => _player.stream.skipSilence;
+
+  Stream<int> get audioBitrateStream => _player.stream.audioBitrate;
+
+  Stream<VisualizerData> get visualizerStream => _player.stream.visualizer;
 
   Duration get position => _player.state.position;
 
@@ -141,7 +216,31 @@ class AudioPlayerAdapter {
 
   AudioDevice get audioDevice => _player.state.audioDevice;
 
-  bool get skipSilence => false;
+  bool get skipSilence => _player.state.skipSilence;
+
+  int get audioBitrate => _player.state.audioBitrate;
+
+  VisualizerData get visualizer => _player.state.visualizer;
+
+  ReplayGainConfig get replayGain => _player.state.replayGain;
+
+  double get preampDb => _player.state.preampDb;
+
+  double get balance => _player.state.balance;
+
+  bool get mono => _player.state.mono;
+
+  CrossfeedMode get crossfeed => _player.state.crossfeed;
+
+  double get spatializerWidth => _player.state.spatializerWidth;
+
+  bool get limiterEnabled => _player.state.limiterEnabled;
 
   bool get isDisposed => _isDisposed;
+
+  void setVisualizerEnabled(bool enabled) {
+    if (!_isDisposed) {
+      _player.setManualVisualizerEnabled(enabled);
+    }
+  }
 }

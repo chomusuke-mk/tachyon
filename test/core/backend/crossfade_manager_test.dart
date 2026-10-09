@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:miniaudio_player/miniaudio_player.dart' show AudioDevice, Equalizer;
+import 'package:miniaudio_player/miniaudio_player.dart'
+    show AudioDevice, CrossfeedMode, Equalizer, ReplayGainConfig, VisualizerData;
 import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
 import 'package:tachyon/core/backend/services/crossfade_manager.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
@@ -88,7 +89,93 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
   Future<bool> setDevice(AudioDevice device) async => true;
 
   @override
-  Future<List<AudioDevice>> getAudioDevices({bool includeAuto = true}) async => [];
+  Future<List<AudioDevice>> getAudioDevices() async => [];
+
+  @override
+  List<AudioDevice> getAudioDevicesSync() => [];
+
+  @override
+  Stream<List<AudioDevice>> get devicesStream => const Stream.empty();
+
+  ReplayGainConfig currentReplayGain = const ReplayGainConfig();
+  double currentPreamp = 0.0;
+  double currentBalance = 0.0;
+  bool currentMono = false;
+  CrossfeedMode currentCrossfeed = CrossfeedMode.off;
+  double currentSpatializerWidth = 1.0;
+  bool currentLimiterEnabled = true;
+
+  @override
+  Future<void> setReplayGain({
+    double? gainDb,
+    double? peak,
+    double? preampDb,
+    bool? preventClipping,
+  }) async {
+    currentReplayGain = ReplayGainConfig(
+      enabled: true,
+      gainDb: gainDb ?? 0.0,
+      peak: peak ?? 0.0,
+      preampDb: preampDb ?? 0.0,
+      preventClipping: preventClipping ?? true,
+    );
+  }
+
+  @override
+  Future<void> clearReplayGain() async {
+    currentReplayGain = const ReplayGainConfig();
+  }
+
+  @override
+  Future<void> setPreamp(double preampDb) async {
+    currentPreamp = preampDb;
+  }
+
+  @override
+  Future<void> setBalance(double balance) async {
+    currentBalance = balance;
+  }
+
+  @override
+  Future<void> setMono(bool enabled) async {
+    currentMono = enabled;
+  }
+
+  @override
+  Future<void> setCrossfeed(CrossfeedMode mode) async {
+    currentCrossfeed = mode;
+  }
+
+  @override
+  Future<void> setSpatializer(double width) async {
+    currentSpatializerWidth = width;
+  }
+
+  @override
+  Future<void> setLimiter(bool enabled) async {
+    currentLimiterEnabled = enabled;
+  }
+
+  @override
+  ReplayGainConfig get replayGain => currentReplayGain;
+
+  @override
+  double get preampDb => currentPreamp;
+
+  @override
+  double get balance => currentBalance;
+
+  @override
+  bool get mono => currentMono;
+
+  @override
+  CrossfeedMode get crossfeed => currentCrossfeed;
+
+  @override
+  double get spatializerWidth => currentSpatializerWidth;
+
+  @override
+  bool get limiterEnabled => currentLimiterEnabled;
 
   @override
   Future<void> setSkipSilence(bool enabled) async {}
@@ -130,10 +217,16 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
   Equalizer get equalizer => Equalizer.flat;
 
   @override
-  AudioDevice get audioDevice => const AudioDevice(id: 'default', name: 'Default', isDefault: true);
+  AudioDevice get audioDevice => const AudioDevice(id: 'default', name: 'Default');
 
   @override
   bool get skipSilence => false;
+
+  @override
+  int get audioBitrate => 0;
+
+  @override
+  Stream<int> get audioBitrateStream => const Stream.empty();
 
   @override
   bool get isDisposed => false;
@@ -170,6 +263,15 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
 
   @override
   Stream<bool> get skipSilenceStream => Stream.value(false);
+
+  @override
+  Stream<VisualizerData> get visualizerStream => const Stream.empty();
+
+  @override
+  VisualizerData get visualizer => VisualizerData.empty();
+
+  @override
+  void setVisualizerEnabled(bool enabled) {}
 }
 
 void main() {

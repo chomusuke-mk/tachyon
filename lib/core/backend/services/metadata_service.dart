@@ -5,8 +5,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:haudiotagger/haudiotagger.dart';
+import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:path/path.dart' as p;
 import 'package:tachyon/shared/utils/cover_utils.dart';
+import 'package:tachyon/shared/utils/waveform_codec.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
@@ -82,6 +84,7 @@ class ExtractedTrackData {
   final int modifiedAt;
   final double? replayGainTrackGain;
   final double? replayGainTrackPeak;
+  final String? waveformData;
   final List<String> genreNames;
   final String? embeddedLyrics;
   final String? thumbnailHash;
@@ -106,6 +109,7 @@ class ExtractedTrackData {
     required this.modifiedAt,
     this.replayGainTrackGain,
     this.replayGainTrackPeak,
+    this.waveformData,
     this.genreNames = const [],
     this.embeddedLyrics,
     this.thumbnailHash,
@@ -629,15 +633,22 @@ ExtractedTrackData _buildFallbackTrackData({
   required String filePath,
   required int size,
   required int modifiedAt,
+  double? replayGainTrackGain,
+  double? replayGainTrackPeak,
+  String? waveformData,
+  int durationMs = 0,
 }) {
   final extClean = p.extension(filePath).replaceAll('.', '').toUpperCase();
   return ExtractedTrackData(
     filePath: filePath,
     title: p.basenameWithoutExtension(filePath),
-    durationMs: 0,
+    durationMs: durationMs,
     codec: extClean.isNotEmpty ? extClean : null,
     fileSize: size,
     modifiedAt: modifiedAt,
+    replayGainTrackGain: replayGainTrackGain,
+    replayGainTrackPeak: replayGainTrackPeak,
+    waveformData: waveformData,
   );
 }
 
@@ -670,6 +681,10 @@ ExtractedTrackData _buildExtractedTrackData({
   required int modifiedAt,
   Tag? tag,
   AudioProperties? properties,
+  AudioAnalysisResult? analysis,
+  double? replayGainTrackGain,
+  double? replayGainTrackPeak,
+  String? waveformData,
   String? thumbnailHash,
   String? albumThumbnailHash,
   String? artistThumbnailHash,
@@ -677,10 +692,20 @@ ExtractedTrackData _buildExtractedTrackData({
   final ext = p.extension(filePath).toLowerCase();
   final extClean = ext.replaceAll('.', '').toUpperCase();
 
+  final effectiveBitrate = properties?.bitrate ??
+      (analysis != null && analysis.bitrate > 0 ? analysis.bitrate : null);
+  final effectiveSampleRate = properties?.sampleRate ??
+      (analysis != null && analysis.sampleRate > 0 ? analysis.sampleRate : null);
+  final effectiveChannels = properties?.channels ??
+      (analysis != null && analysis.channels > 0 ? analysis.channels : null);
+
   if (tag != null) {
-    final durationMs = properties?.durationMicros != null
+    var durationMs = properties?.durationMicros != null
         ? (properties!.durationMicros!.toInt() / 1000).round()
         : (tag.duration != null ? tag.duration! * 1000 : 0);
+    if (durationMs <= 0 && analysis != null) {
+      durationMs = analysis.duration.inMilliseconds;
+    }
 
     final artists = MetadataService.parseArtistNames(tag.trackArtist);
     final resolvedArtists = artists.isNotEmpty
@@ -706,38 +731,42 @@ ExtractedTrackData _buildExtractedTrackData({
       discNumber: tag.discNumber ?? 1,
       year: tag.year,
       durationMs: durationMs,
-      bitrate: properties?.bitrate,
-      sampleRate: properties?.sampleRate,
-      channels: properties?.channels,
+      bitrate: effectiveBitrate,
+      sampleRate: effectiveSampleRate,
+      channels: effectiveChannels,
       codec: properties?.codec ?? (extClean.isNotEmpty ? extClean : null),
       fileSize: fileSize,
       modifiedAt: modifiedAt,
       embeddedLyrics: tag.lyrics,
-      replayGainTrackGain: _parseReplayGain(tag.replayGainTrackGain),
-      replayGainTrackPeak: _parseReplayGain(tag.replayGainTrackPeak),
+      replayGainTrackGain: replayGainTrackGain ?? _parseReplayGain(tag.replayGainTrackGain),
+      replayGainTrackPeak: replayGainTrackPeak ?? _parseReplayGain(tag.replayGainTrackPeak),
+      waveformData: waveformData,
       thumbnailHash: thumbnailHash,
       albumThumbnailHash: albumThumbnailHash,
       artistThumbnailHash: artistThumbnailHash,
     );
   }
 
-  if (properties != null) {
-    final durationMs = properties.durationMicros != null
-        ? (properties.durationMicros!.toInt() / 1000).round()
-        : 0;
+  if (properties != null || analysis != null) {
+    final durationMs = properties?.durationMicros != null
+        ? (properties!.durationMicros!.toInt() / 1000).round()
+        : (analysis?.duration.inMilliseconds ?? 0);
 
     return ExtractedTrackData(
       filePath: filePath,
       title: p.basenameWithoutExtension(filePath),
       durationMs: durationMs,
-      bitrate: properties.bitrate,
-      sampleRate: properties.sampleRate,
-      channels: properties.channels,
-      codec: properties.codec.isNotEmpty
-          ? properties.codec
+      bitrate: effectiveBitrate,
+      sampleRate: effectiveSampleRate,
+      channels: effectiveChannels,
+      codec: properties?.codec.isNotEmpty == true
+          ? properties!.codec
           : (extClean.isNotEmpty ? extClean : null),
       fileSize: fileSize,
       modifiedAt: modifiedAt,
+      replayGainTrackGain: replayGainTrackGain,
+      replayGainTrackPeak: replayGainTrackPeak,
+      waveformData: waveformData,
       thumbnailHash: thumbnailHash,
       albumThumbnailHash: albumThumbnailHash,
       artistThumbnailHash: artistThumbnailHash,
@@ -748,6 +777,9 @@ ExtractedTrackData _buildExtractedTrackData({
     filePath: filePath,
     size: fileSize,
     modifiedAt: modifiedAt,
+    replayGainTrackGain: replayGainTrackGain,
+    replayGainTrackPeak: replayGainTrackPeak,
+    waveformData: waveformData,
   );
 }
 
@@ -784,6 +816,25 @@ Future<ExtractedTrackData?> extractAndCacheTrackWorker({
 
   try {
     final (tag, properties) = await _readTagsAndProperties(filePath);
+
+    final tagGain = _parseReplayGain(tag?.replayGainTrackGain);
+    final tagPeak = _parseReplayGain(tag?.replayGainTrackPeak);
+
+    AudioAnalysisResult? analysis;
+    try {
+      analysis = MiniaudioPlayer.analyzeAudioSync(
+        filePath,
+        replayGain: tagGain == null,
+        waveform: true,
+        waveformPoints: 100,
+      );
+    } catch (e) {
+      debugPrint('[MetadataService] analyzeAudioSync error for $filePath: $e');
+    }
+
+    final resolvedGain = tagGain ?? analysis?.replayGain?.gainDb;
+    final resolvedPeak = tagPeak ?? analysis?.replayGain?.peak;
+    final waveformData = WaveformCodec.encode(analysis?.waveform?.points);
 
     Uint8List? coverBytes;
     Uint8List? artistBytes;
@@ -844,6 +895,10 @@ Future<ExtractedTrackData?> extractAndCacheTrackWorker({
       modifiedAt: modifiedAt,
       tag: tag,
       properties: properties,
+      analysis: analysis,
+      replayGainTrackGain: resolvedGain,
+      replayGainTrackPeak: resolvedPeak,
+      waveformData: waveformData,
       thumbnailHash: thumbnailHash,
       albumThumbnailHash: albumThumbnailHash,
       artistThumbnailHash: artistThumbnailHash,

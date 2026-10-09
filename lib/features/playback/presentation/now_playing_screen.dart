@@ -5,7 +5,6 @@ import 'package:tachyon/features/playlists/presentation/playlists_controller.dar
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
-import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
 import 'package:tachyon/shared/widgets/text_link.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
@@ -19,6 +18,7 @@ import 'playback_controller.dart';
 import 'lyrics_controller.dart';
 import 'queue_drawer.dart';
 import 'waveform_slider.dart';
+import 'widgets/now_playing_cover_art.dart';
 
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
@@ -367,11 +367,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 icon: AnimatedSwitcher(
                   // 1. Duración rápida y con energía
                   duration: const Duration(milliseconds: 400),
-              
+
                   // 2. Curvas de animación: easeOutBack da ese efecto de "rebote" al inflarse
                   switchInCurve: Curves.easeOutBack,
                   switchOutCurve: Curves.easeIn,
-              
+
                   // 3. Constructor de la transición: Escala el ícono desde el centro
                   transitionBuilder:
                       (Widget child, Animation<double> animation) {
@@ -380,16 +380,16 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                           child: child, // Opcional: puedes envolver 'child' en FadeTransition si también quieres que se desvanezca
                         );
                       },
-              
+
                   // 4. El contenido: El ícono en sí
                   child: Icon(
                     isCurrentTrackLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-              
+
                     // ¡EL KEY ES OBLIGATORIO! Le dice al Switcher que son dos widgets diferentes.
                     key: ValueKey<bool>(isCurrentTrackLiked),
-              
+
                     size: 28,
                     color: isCurrentTrackLiked
                         ? colorScheme.primary
@@ -397,7 +397,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   ),
                 ),
               ),
-          
+
               IconButton(
                 onPressed: _toggleQueue,
                 icon: const Icon(Icons.add_rounded, size: 28),
@@ -412,6 +412,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               duration: playback.duration,
               isBuffering: playback.isBuffering,
               onSeek: playback.seek,
+              waveform: currentTrack.waveform,
               currentIndex: playback.currentIndex + 1,
               totalCount: playback.queue.length,
               playlistPosition: () =>
@@ -483,9 +484,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       icon: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: AnimatedSwitcher(
-                          duration: const Duration(
-                            milliseconds: 150,
-                          ),
+                          duration: const Duration(milliseconds: 150),
                           transitionBuilder:
                               (Widget child, Animation<double> animation) {
                                 return ScaleTransition(
@@ -619,13 +618,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                           filePath: currentTrack.filePath,
                           onSeek: playback.seek,
                         )
-                      : _buildHeroCoverArt(
-                          currentTrack.filePath,
-                          context,
-                          thumbnailHash:
-                              currentTrack.thumbnailHash ??
-                              currentTrack.album?.thumbnailHash,
-                          key: const ValueKey('cover_art_view'),
+                      : const NowPlayingCoverArt(
+                          key: ValueKey('cover_art_view'),
                         ),
                 ),
               ),
@@ -649,13 +643,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                           filePath: currentTrack.filePath,
                           onSeek: playback.seek,
                         )
-                      : _buildHeroCoverArt(
-                          currentTrack.filePath,
-                          context,
-                          thumbnailHash:
-                              currentTrack.thumbnailHash ??
-                              currentTrack.album?.thumbnailHash,
-                          key: const ValueKey('cover_art_view'),
+                      : const NowPlayingCoverArt(
+                          key: ValueKey('cover_art_view'),
                         ),
                 ),
               ),
@@ -683,50 +672,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 ),
         );
       },
-    );
-  }
-
-  Widget _buildHeroCoverArt(
-    String filePath,
-    BuildContext context, {
-    String? thumbnailHash,
-    Key? key,
-  }) {
-    return RepaintBoundary(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final size = constraints.maxWidth < constraints.maxHeight
-              ? constraints.maxWidth * 0.8
-              : constraints.maxHeight * 0.8;
-
-          return Hero(
-            key: key,
-            tag: 'now_playing_art_$filePath',
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 28,
-                    offset: const Offset(0, 14),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24.0),
-                child: AlbumArtImage(
-                  thumbnailHash: thumbnailHash,
-                  quality: ThumbnailQuality.high,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 
@@ -764,17 +709,16 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     }
   }
 
-  void _showAudioDevicesDialog(BuildContext context) async {
+  void _showAudioDevicesDialog(BuildContext context) {
     final playback = context.read<PlaybackController>();
     final settings = context.read<SettingsController>();
     final strings = context.read<LocaleController>().localeStrings;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final devices = await playback.getAudioDevices();
-    if (!context.mounted) return;
+    // Refresh devices in background if needed
+    playback.getAudioDevices();
 
-    final currentDeviceId = settings.audioOutputDeviceId;
     final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     Widget buildDeviceTile({
@@ -828,8 +772,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w500,
                       color: isSelected
                           ? colorScheme.onSurface
                           : colorScheme.onSurfaceVariant,
@@ -855,7 +800,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
     Widget buildContent({required bool isSheet}) {
       return Container(
-        padding: EdgeInsets.fromLTRB(20, isSheet ? 12 : 20, 20, isSheet ? 28 : 20),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          isSheet ? 12 : 20,
+          20,
+          isSheet ? 28 : 20,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -906,52 +856,53 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             const SizedBox(height: 16),
             Flexible(
               child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    buildDeviceTile(
-                      icon: Icons.settings_suggest_rounded,
-                      title: strings.npAudioDeviceDefault,
-                      isSelected:
-                          currentDeviceId == null || currentDeviceId.isEmpty,
-                      onTap: () async {
-                        await settings.setAudioOutputDeviceId(null);
-                        if (devices.isNotEmpty) {
-                          final defaultDev = devices.firstWhere(
-                            (d) => d.isDefault,
-                            orElse: () => devices.first,
-                          );
-                          await playback.setAudioDevice(defaultDev);
-                        }
-                        if (context.mounted) Navigator.of(context).pop();
-                      },
-                    ),
-                    ...devices.map((device) {
-                      final isSelected =
-                          currentDeviceId == device.id ||
-                          ((currentDeviceId == null ||
-                                  currentDeviceId.isEmpty) &&
-                              device.isDefault);
-                      final devName = device.name.toLowerCase();
-                      final icon = devName.contains('bluetooth')
-                          ? Icons.bluetooth_audio_rounded
-                          : (devName.contains('headphone') ||
-                                  devName.contains('headset')
-                              ? Icons.headphones_rounded
-                              : Icons.speaker_rounded);
+                child: ListenableBuilder(
+                  listenable: playback,
+                  builder: (context, _) {
+                    final devices = playback.audioDevices;
+                    final currentDeviceId = settings.audioOutputDeviceId;
 
+                    if (devices.isEmpty) {
                       return buildDeviceTile(
-                        icon: icon,
-                        title: device.name,
-                        isSelected: isSelected,
+                        icon: Icons.settings_suggest_rounded,
+                        title: strings.npAudioDeviceDefault,
+                        isSelected:
+                            currentDeviceId == null || currentDeviceId.isEmpty,
                         onTap: () async {
-                          await settings.setAudioOutputDeviceId(device.id);
-                          await playback.setAudioDevice(device);
+                          await settings.setAudioOutputDeviceId(null);
+                          await playback.setAudioDevice(AudioDevice.auto);
                           if (context.mounted) Navigator.of(context).pop();
                         },
                       );
-                    }),
-                  ],
+                    }
+
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: devices.map((device) {
+                        final isSelected = currentDeviceId == device.id;
+
+                        final String title = device.displayName;
+                        final devName = device.name.toLowerCase();
+                        final IconData icon = devName.contains('bluetooth')
+                            ? Icons.bluetooth_audio_rounded
+                            : (devName.contains('headphone') ||
+                                      devName.contains('headset')
+                                  ? Icons.headphones_rounded
+                                  : Icons.speaker_rounded);
+
+                        return buildDeviceTile(
+                          icon: icon,
+                          title: title,
+                          isSelected: isSelected,
+                          onTap: () async {
+                            await settings.setAudioOutputDeviceId(device.id);
+                            await playback.setAudioDevice(device);
+                            if (context.mounted) Navigator.of(context).pop();
+                          },
+                        );
+                      }).toList(),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1231,4 +1182,3 @@ class _ClickableArtistNames extends StatelessWidget {
     );
   }
 }
-

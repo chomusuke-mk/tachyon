@@ -6,6 +6,7 @@ import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/loop_mode.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
 
 import 'crossfade_manager_test.dart';
@@ -863,5 +864,117 @@ void main() {
         expect(qm.activeQueue[i].track?.id, equals(testItems[i].track?.id));
       }
     });
+
+    test('ReplayGain sets native gain accurately on open without corrupting master volume', () async {
+      final trackWithGain = PlaylistEntry.forQueue(
+        id: 101,
+        position: 0,
+        track: Track(
+          id: 101,
+          filePath: '/music/gain_track.mp3',
+          title: 'Gain Track',
+          durationMs: 180000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+          replayGainTrackGain: -6.0,
+        ),
+      );
+
+      await service.open([trackWithGain], index: 0, play: true);
+      // Master volume stays 100.0 (uncorrupted)
+      expect(playerA.volumeHistory.last, equals(100.0));
+      // Native ReplayGain is configured
+      expect(playerA.currentReplayGain.enabled, isTrue);
+      expect(playerA.currentReplayGain.gainDb, equals(-6.0));
+    });
+
+    test('ReplayGain passes peak and preventClipping to native player', () async {
+      final trackWithPeak = PlaylistEntry.forQueue(
+        id: 102,
+        position: 0,
+        track: Track(
+          id: 102,
+          filePath: '/music/peak_track.mp3',
+          title: 'Peak Track',
+          durationMs: 180000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+          replayGainTrackGain: 6.0,
+          replayGainTrackPeak: 0.8,
+        ),
+      );
+
+      await service.open([trackWithPeak], index: 0, play: true);
+      expect(playerA.volumeHistory.last, equals(100.0));
+      expect(playerA.currentReplayGain.enabled, isTrue);
+      expect(playerA.currentReplayGain.gainDb, equals(6.0));
+      expect(playerA.currentReplayGain.peak, equals(0.8));
+      expect(playerA.currentReplayGain.preventClipping, isTrue);
+    });
+
+    test('ReplayGain toggle: disabling volume normalization clears ReplayGain without volume jumps', () async {
+      final trackWithGain = PlaylistEntry.forQueue(
+        id: 103,
+        position: 0,
+        track: Track(
+          id: 103,
+          filePath: '/music/gain_track_2.mp3',
+          title: 'Gain Track 2',
+          durationMs: 180000,
+          fileSize: 1000,
+          modifiedAt: 1000,
+          replayGainTrackGain: -6.0,
+        ),
+      );
+
+      await service.open([trackWithGain], index: 0, play: true);
+      expect(playerA.currentReplayGain.enabled, isTrue);
+      expect(playerA.volumeHistory.last, equals(100.0));
+
+      // Disable volume normalization
+      await service.setVolumeNormalization(false);
+      expect(service.volumeNormalization, isFalse);
+      expect(playerA.currentReplayGain.enabled, isFalse);
+      expect(playerA.volumeHistory.last, equals(100.0));
+
+      // Re-enable volume normalization
+      await service.setVolumeNormalization(true);
+      expect(service.volumeNormalization, isTrue);
+      expect(playerA.currentReplayGain.enabled, isTrue);
+      expect(playerA.currentReplayGain.gainDb, equals(-6.0));
+    });
+
+    test('DSP audio effects controls: preamp, balance, mono, crossfeed, spatializer, limiter update players and state', () async {
+      await service.setPreamp(2.5);
+      expect(service.preampDb, equals(2.5));
+      expect(playerA.currentPreamp, equals(2.5));
+      expect(playerB.currentPreamp, equals(2.5));
+
+      await service.setBalance(-0.4);
+      expect(service.balance, equals(-0.4));
+      expect(playerA.currentBalance, equals(-0.4));
+      expect(playerB.currentBalance, equals(-0.4));
+
+      await service.setMono(true);
+      expect(service.mono, isTrue);
+      expect(playerA.currentMono, isTrue);
+      expect(playerB.currentMono, isTrue);
+
+      await service.setCrossfeed(CrossfeedMode.moffatBauer);
+      expect(service.crossfeedMode, equals(CrossfeedMode.moffatBauer));
+      expect(playerA.currentCrossfeed, equals(CrossfeedMode.moffatBauer));
+      expect(playerB.currentCrossfeed, equals(CrossfeedMode.moffatBauer));
+
+      await service.setSpatializer(1.5);
+      expect(service.spatializerWidth, equals(1.5));
+      expect(playerA.currentSpatializerWidth, equals(1.5));
+      expect(playerB.currentSpatializerWidth, equals(1.5));
+
+      await service.setLimiter(false);
+      expect(service.limiterEnabled, isFalse);
+      expect(playerA.currentLimiterEnabled, isFalse);
+      expect(playerB.currentLimiterEnabled, isFalse);
+    });
   });
 }
+

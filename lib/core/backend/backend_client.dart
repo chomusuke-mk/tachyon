@@ -30,6 +30,7 @@ abstract class TachyonBackendClient {
   // --- Streams (Pushed from Core Isolate) ---
   Stream<PlaybackState> get playbackStateStream;
   Stream<Duration> get positionStream;
+  Stream<List<double>> get visualizerStream;
   Stream<List<AudioDevice>> get devicesStream;
   Stream<ScanProgress> get scanProgressStream;
   Stream<void> get catalogUpdatedStream;
@@ -45,8 +46,16 @@ abstract class TachyonBackendClient {
   Future<void> setRate(double rate);
   Future<void> setPitch(double pitch);
   Future<void> setSkipSilence(bool enabled);
+  Future<void> setVolumeNormalization(bool enabled);
+  Future<void> setPreamp(double preampDb);
+  Future<void> setBalance(double balance);
+  Future<void> setMono(bool enabled);
+  Future<void> setCrossfeed(CrossfeedMode mode);
+  Future<void> setSpatializer(double width);
+  Future<void> setLimiter(bool enabled);
   Future<void> setEqualizer(Equalizer equalizer);
   Future<void> setOutputDevice(AudioDevice device);
+  Future<void> setVisualizerEnabled(bool enabled);
   Future<List<AudioDevice>> getAudioDevices();
   Future<void> playTrack(int trackId, {bool play = true});
   Future<void> playQueue(
@@ -144,6 +153,8 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
       StreamController<PlaybackState>.broadcast();
   final StreamController<Duration> _positionController =
       StreamController<Duration>.broadcast();
+  final StreamController<List<double>> _visualizerController =
+      StreamController<List<double>>.broadcast();
   final StreamController<List<AudioDevice>> _devicesController =
       StreamController<List<AudioDevice>>.broadcast();
   final StreamController<ScanProgress> _scanProgressController =
@@ -157,6 +168,9 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
 
   @override
   Stream<Duration> get positionStream => _positionController.stream;
+
+  @override
+  Stream<List<double>> get visualizerStream => _visualizerController.stream;
 
   @override
   Stream<List<AudioDevice>> get devicesStream => _devicesController.stream;
@@ -227,6 +241,13 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
       case BackendTopics.playbackPosition:
         if (event.payload is int) {
           _positionController.add(Duration(milliseconds: event.payload as int));
+        }
+        break;
+
+      case BackendTopics.playbackVisualizer:
+        if (event.payload is List) {
+          final list = (event.payload as List).cast<double>();
+          _visualizerController.add(list);
         }
         break;
 
@@ -315,6 +336,34 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   @override
   Future<void> setSkipSilence(bool enabled) =>
       _send(BackendMethods.playbackSetSkipSilence, {'enabled': enabled});
+
+  @override
+  Future<void> setVolumeNormalization(bool enabled) =>
+      _send(BackendMethods.playbackSetVolumeNormalization, {'enabled': enabled});
+
+  @override
+  Future<void> setPreamp(double preampDb) =>
+      _send(BackendMethods.playbackSetPreamp, {'preampDb': preampDb});
+
+  @override
+  Future<void> setBalance(double balance) =>
+      _send(BackendMethods.playbackSetBalance, {'balance': balance});
+
+  @override
+  Future<void> setMono(bool enabled) =>
+      _send(BackendMethods.playbackSetMono, {'enabled': enabled});
+
+  @override
+  Future<void> setCrossfeed(CrossfeedMode mode) =>
+      _send(BackendMethods.playbackSetCrossfeed, {'mode': mode.index});
+
+  @override
+  Future<void> setSpatializer(double width) =>
+      _send(BackendMethods.playbackSetSpatializer, {'width': width});
+
+  @override
+  Future<void> setLimiter(bool enabled) =>
+      _send(BackendMethods.playbackSetLimiter, {'enabled': enabled});
 
   @override
   Future<void> setEqualizer(Equalizer equalizer) =>
@@ -414,6 +463,10 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   @override
   Future<void> setCrossfadeConfig(CrossfadeConfig config) =>
       _send(BackendMethods.playbackSetCrossfadeConfig, {'config': config});
+
+  @override
+  Future<void> setVisualizerEnabled(bool enabled) =>
+      _send(BackendMethods.playbackSetVisualizerEnabled, {'enabled': enabled});
 
   @override
   Future<void> setInfiniteMix(bool enabled) =>

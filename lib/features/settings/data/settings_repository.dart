@@ -36,6 +36,13 @@ class SettingsRepository {
   static const _keyLoopMode = 's_loop_mode';
   static const _keyShuffle = 's_shuffle';
   static const _keySkipSilence = 's_skip_silence';
+  static const _keyVolumeNormalization = 's_volume_normalization';
+  static const _keyPreamp = 's_preamp';
+  static const _keyBalance = 's_balance';
+  static const _keyMono = 's_mono';
+  static const _keyCrossfeed = 's_crossfeed';
+  static const _keySpatializer = 's_spatializer';
+  static const _keyLimiter = 's_limiter';
   static const _keyVolumeBoost = 's_volume_boost';
   static const _keyTheme = 's_theme';
   static const _keyLanguage = 's_language';
@@ -88,6 +95,16 @@ class SettingsRepository {
       loopMode: Loop.fromString(_prefs.getString(_keyLoopMode)),
       shuffle: _prefs.getBool(_keyShuffle) ?? false,
       skipSilence: _prefs.getBool(_keySkipSilence) ?? false,
+      volumeNormalization: _prefs.getBool(_keyVolumeNormalization) ?? true,
+      preampDb: _prefs.getDouble(_keyPreamp) ?? 0.0,
+      balance: _prefs.getDouble(_keyBalance) ?? 0.0,
+      mono: _prefs.getBool(_keyMono) ?? false,
+      crossfeedMode: CrossfeedMode.values.elementAtOrNull(
+            _prefs.getInt(_keyCrossfeed) ?? 0,
+          ) ??
+          CrossfeedMode.off,
+      spatializerWidth: _prefs.getDouble(_keySpatializer) ?? 1.0,
+      limiterEnabled: _prefs.getBool(_keyLimiter) ?? true,
       volumeBoost: _prefs.getDouble(_keyVolumeBoost) ?? 100.0,
       themeMode: _getAppTheme(),
       accentColorValue: _prefs.getInt(_keyAccentColor) ?? 0xFF7C4DFF,
@@ -134,6 +151,13 @@ class SettingsRepository {
       _prefs.setString(_keyLoopMode, settings.loopMode.repr),
       _prefs.setBool(_keyShuffle, settings.shuffle),
       _prefs.setBool(_keySkipSilence, settings.skipSilence),
+      _prefs.setBool(_keyVolumeNormalization, settings.volumeNormalization),
+      _prefs.setDouble(_keyPreamp, settings.preampDb),
+      _prefs.setDouble(_keyBalance, settings.balance),
+      _prefs.setBool(_keyMono, settings.mono),
+      _prefs.setInt(_keyCrossfeed, settings.crossfeedMode.index),
+      _prefs.setDouble(_keySpatializer, settings.spatializerWidth),
+      _prefs.setBool(_keyLimiter, settings.limiterEnabled),
       _prefs.setDouble(_keyVolumeBoost, settings.volumeBoost),
       _prefs.setInt(_keyTheme, settings.themeMode.index),
       _prefs.setInt(_keyAccentColor, settings.accentColorValue),
@@ -281,6 +305,25 @@ class SettingsRepository {
 
   Future<void> setSkipSilence(bool skip) =>
       _prefs.setBool(_keySkipSilence, skip);
+
+  Future<void> setVolumeNormalization(bool normalize) =>
+      _prefs.setBool(_keyVolumeNormalization, normalize);
+
+  Future<void> setPreamp(double preampDb) =>
+      _prefs.setDouble(_keyPreamp, preampDb.clamp(-12.0, 12.0));
+
+  Future<void> setBalance(double balance) =>
+      _prefs.setDouble(_keyBalance, balance.clamp(-1.0, 1.0));
+
+  Future<void> setMono(bool mono) => _prefs.setBool(_keyMono, mono);
+
+  Future<void> setCrossfeed(CrossfeedMode mode) =>
+      _prefs.setInt(_keyCrossfeed, mode.index);
+
+  Future<void> setSpatializer(double width) =>
+      _prefs.setDouble(_keySpatializer, width.clamp(0.0, 2.0));
+
+  Future<void> setLimiter(bool limiter) => _prefs.setBool(_keyLimiter, limiter);
 
   Future<void> setVolumeBoost(double boost) =>
       _prefs.setDouble(_keyVolumeBoost, boost.clamp(100, 200));

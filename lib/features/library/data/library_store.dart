@@ -6,6 +6,7 @@ import 'package:tachyon/features/library/domain/genre.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/domain/track_sort_option.dart';
+import 'package:tachyon/shared/utils/waveform_codec.dart';
 
 /// In-memory relational graph for the UI Isolate.
 ///
@@ -226,6 +227,7 @@ class LibraryStore {
         modifiedAt: rawTrack.modifiedAt,
         replayGainTrackGain: rawTrack.replayGainTrackGain,
         replayGainTrackPeak: rawTrack.replayGainTrackPeak,
+        waveform: WaveformCodec.decode(rawTrack.waveformData),
         thumbnailHash: rawTrack.thumbnailHash,
         album: album,
         artists: linkedArtists,

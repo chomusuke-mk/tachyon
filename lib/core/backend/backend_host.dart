@@ -100,6 +100,29 @@ class TachyonBackendHost {
       }),
     );
 
+    _subscriptions.add(
+      _audioEngine.devicesStream.listen((devices) {
+        config.uiSendPort.send(
+          BackendEvent(
+            topic: BackendTopics.playbackDevices,
+            payload: devices,
+          ),
+        );
+      }),
+    );
+
+    try {
+      final initialDevices = _audioEngine.getAudioDevicesSync();
+      if (initialDevices.isNotEmpty) {
+        config.uiSendPort.send(
+          BackendEvent(
+            topic: BackendTopics.playbackDevices,
+            payload: initialDevices,
+          ),
+        );
+      }
+    } catch (_) {}
+
     // Throttled position updates (max ~25Hz) to keep UI isolate completely smooth
     _subscriptions.add(
       _audioEngine.positionStream.listen((pos) {
@@ -116,6 +139,23 @@ class TachyonBackendHost {
             ),
           );
         }
+      }),
+    );
+
+    _subscriptions.add(
+      _audioEngine.visualizerStream.listen((vis) {
+        config.uiSendPort.send(
+          BackendEvent(
+            topic: BackendTopics.playbackVisualizer,
+            payload: <double>[
+              vis.rms,
+              vis.peak,
+              vis.left,
+              vis.right,
+              ...vis.bands,
+            ],
+          ),
+        );
       }),
     );
 
@@ -343,9 +383,49 @@ class TachyonBackendHost {
         await _audioEngine.setSkipSilence(enabled);
         return null;
 
+      case BackendMethods.playbackSetVolumeNormalization:
+        final enabled = params['enabled'] as bool;
+        await _audioEngine.setVolumeNormalization(enabled);
+        return null;
+
+      case BackendMethods.playbackSetPreamp:
+        final preampDb = (params['preampDb'] as num).toDouble();
+        await _audioEngine.setPreamp(preampDb);
+        return null;
+
+      case BackendMethods.playbackSetBalance:
+        final balance = (params['balance'] as num).toDouble();
+        await _audioEngine.setBalance(balance);
+        return null;
+
+      case BackendMethods.playbackSetMono:
+        final enabled = params['enabled'] as bool;
+        await _audioEngine.setMono(enabled);
+        return null;
+
+      case BackendMethods.playbackSetCrossfeed:
+        final modeIndex = params['mode'] as int;
+        await _audioEngine.setCrossfeed(CrossfeedMode.values[modeIndex]);
+        return null;
+
+      case BackendMethods.playbackSetSpatializer:
+        final width = (params['width'] as num).toDouble();
+        await _audioEngine.setSpatializer(width);
+        return null;
+
+      case BackendMethods.playbackSetLimiter:
+        final enabled = params['enabled'] as bool;
+        await _audioEngine.setLimiter(enabled);
+        return null;
+
       case BackendMethods.playbackSetCrossfadeConfig:
         final config = params['config'] as CrossfadeConfig;
         await _audioEngine.setCrossfadeConfig(config);
+        return null;
+
+      case BackendMethods.playbackSetVisualizerEnabled:
+        final enabled = params['enabled'] as bool;
+        _audioEngine.setVisualizerEnabled(enabled);
         return null;
 
       case BackendMethods.playbackSetInfiniteMix:

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/settings/domain/app_settings.dart'
+    show CrossfeedMode;
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
 /// Modal bottom sheet or dialog presenting advanced audio controls and effects:
@@ -10,7 +12,9 @@ import 'package:tachyon/features/settings/presentation/settings_controller.dart'
 /// - Pitch Shifting (0.5 - 1.5 with reset)
 /// - Volume Boost (up to 200% with reset)
 /// - Crossfade Transitions (Auto duration, Manual skip duration)
-/// - 10-Band Graphic Equalizer with Presets and Adaptive Spacing
+/// - Audio Enhancements (Volume Normalization, True-Peak Limiter, Skip Silence, Mono Audio)
+/// - Stereo & Spatial Processing (Stereo Balance, Stereo Width, Bauer Crossfeed bs2b)
+/// - 10-Band Graphic Equalizer with Preamp Gain, Presets and Adaptive Spacing
 class AudioEffectsSheet extends StatelessWidget {
   final bool isDialog;
 
@@ -480,7 +484,183 @@ class AudioEffectsSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
 
-                  // Card 3: 10-Band Graphic Equalizer
+                  // Card 3: Audio Enhancements (Volume Normalization & Skip Silence)
+                  Card(
+                    elevation: 0,
+                    color: colorScheme.surfaceContainerLow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Volume Normalization
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.auto_fix_high_rounded,
+                                size: 20,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      strings.sReplayGainMode,
+                                      style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      strings.sReplayGainModeDesc,
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Switch(
+                                value: settings.volumeNormalization,
+                                onChanged: (val) =>
+                                    settings.setVolumeNormalization(val),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+
+                          // Skip Silence
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.graphic_eq_rounded,
+                                size: 20,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      strings.sSkipSilence,
+                                      style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      strings.sSkipSilenceDesc,
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Switch(
+                                value: settings.skipSilence,
+                                onChanged: (val) => settings.setSkipSilence(val),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+
+                          // True-Peak Limiter
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.shield_rounded,
+                                size: 20,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      strings.sLimiter,
+                                      style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      strings.sLimiterDesc,
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Switch(
+                                value: settings.limiterEnabled,
+                                onChanged: (val) => settings.setLimiter(val),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+
+                          // Mono Audio
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.volume_down_rounded,
+                                size: 20,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      strings.sMonoAudio,
+                                      style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      strings.sMonoAudioDesc,
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Switch(
+                                value: settings.mono,
+                                onChanged: (val) => settings.setMono(val),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Card 4: Stereo & Spatial Processing
+                  const _StereoProcessingSection(),
+                  const SizedBox(height: 12),
+
+                  // Card 5: 10-Band Graphic Equalizer
                   const _EqualizerSection(),
                 ],
               ),
@@ -567,6 +747,69 @@ class _EqualizerSection extends StatelessWidget {
             ),
             if (isEnabled) ...[
               const SizedBox(height: 14),
+
+              // Preamp Slider (-12 dB to +12 dB)
+              Row(
+                children: [
+                  Icon(
+                    Icons.tune_rounded,
+                    size: 18,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      strings.sPreamp,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${settings.preampDb > 0 ? '+' : ''}${settings.preampDb.toStringAsFixed(1)} dB',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.restore_rounded),
+                    tooltip: '0.0 dB',
+                    onPressed: () => settings.setPreamp(0.0),
+                    iconSize: 20,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  Expanded(
+                    child: Slider.adaptive(
+                      value: settings.preampDb.clamp(-12.0, 12.0),
+                      min: -12.0,
+                      max: 12.0,
+                      divisions: 48,
+                      onChanged: (val) => settings.setPreamp(val),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 16),
+
               // Preset Selector Row in modern container
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -772,3 +1015,277 @@ class _EqualizerSection extends StatelessWidget {
     );
   }
 }
+
+class _StereoProcessingSection extends StatelessWidget {
+  const _StereoProcessingSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsController>();
+    final strings = context.watch<LocaleController>().localeStrings;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final balance = settings.balance;
+    final spatializerWidth = settings.spatializerWidth;
+
+    final String balanceLabel;
+    if (balance == 0.0) {
+      balanceLabel = strings.sStereoBalanceCenter;
+    } else if (balance < 0.0) {
+      balanceLabel = 'L ${(-balance * 100).round()}%';
+    } else {
+      balanceLabel = 'R ${(balance * 100).round()}%';
+    }
+
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section Header
+            Row(
+              children: [
+                Icon(
+                  Icons.headphones_rounded,
+                  size: 20,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    strings.sAudioDspSection,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // Stereo Balance
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    strings.sStereoBalance,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    balanceLabel,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.restore_rounded),
+                  tooltip: strings.sStereoBalanceCenter,
+                  onPressed: () => settings.setBalance(0.0),
+                  iconSize: 20,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                Expanded(
+                  child: Slider.adaptive(
+                    value: balance.clamp(-1.0, 1.0),
+                    min: -1.0,
+                    max: 1.0,
+                    divisions: 40,
+                    onChanged: (val) => settings.setBalance(val),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+
+            // Stereo Width (Spatializer)
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    strings.sSpatializer,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${spatializerWidth.toStringAsFixed(2)}x',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.restore_rounded),
+                  tooltip: '1.0x',
+                  onPressed: () => settings.setSpatializer(1.0),
+                  iconSize: 20,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                Expanded(
+                  child: Slider.adaptive(
+                    value: spatializerWidth.clamp(0.0, 2.0),
+                    min: 0.0,
+                    max: 2.0,
+                    divisions: 40,
+                    onChanged: (val) => settings.setSpatializer(val),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+
+            // Bauer Crossfeed Dropdown
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final bool isNarrow = constraints.maxWidth < 360;
+                final dropdownWidget = Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: DropdownButton<CrossfeedMode>(
+                    value: settings.crossfeedMode,
+                    underline: const SizedBox(),
+                    borderRadius: BorderRadius.circular(12),
+                    isDense: true,
+                    isExpanded: true,
+                    items: [
+                      DropdownMenuItem(
+                        value: CrossfeedMode.off,
+                        child: Text(
+                          strings.sCrossfeedOff,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: CrossfeedMode.moffatBauer,
+                        child: Text(
+                          strings.sCrossfeedMoffat,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: CrossfeedMode.chuMoy,
+                        child: Text(
+                          strings.sCrossfeedChumoy,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        settings.setCrossfeed(val);
+                      }
+                    },
+                  ),
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        strings.sCrossfeed,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: double.infinity,
+                        child: dropdownWidget,
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        strings.sCrossfeed,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 190),
+                      child: dropdownWidget,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

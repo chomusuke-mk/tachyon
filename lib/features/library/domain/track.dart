@@ -2,6 +2,7 @@ import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/genre.dart';
 import 'package:tachyon/shared/utils/parse_utils.dart';
+import 'package:tachyon/shared/utils/waveform_codec.dart';
 
 class Track {
   final int? id;
@@ -19,6 +20,7 @@ class Track {
   final int modifiedAt;
   final double? replayGainTrackGain;
   final double? replayGainTrackPeak;
+  final List<double>? waveform;
   final String? thumbnailHash;
 
   final Album? album;
@@ -41,6 +43,7 @@ class Track {
     required this.modifiedAt,
     this.replayGainTrackGain,
     this.replayGainTrackPeak,
+    this.waveform,
     this.thumbnailHash,
 
     this.album,
@@ -51,6 +54,24 @@ class Track {
   Duration get duration => Duration(milliseconds: durationMs);
   DateTime get modifiedDateTime =>
       DateTime.fromMillisecondsSinceEpoch(modifiedAt);
+
+  /// Samples the waveform height corresponding to a specific playback [position]
+  /// given the track's [totalDuration]. Returns 0.0 if waveform is empty or duration is 0.
+  double getPointAtPosition(Duration position, Duration totalDuration) {
+    if (waveform == null || waveform!.isEmpty) return 0.0;
+    if (totalDuration.inMilliseconds <= 0) return 0.0;
+    final progress =
+        (position.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
+    return getPointAtProgress(progress);
+  }
+
+  /// Samples the waveform height at a fractional [progress] between `0.0` and `1.0`.
+  double getPointAtProgress(double progress) {
+    if (waveform == null || waveform!.isEmpty) return 0.0;
+    final clamped = progress.clamp(0.0, 1.0);
+    final index = (clamped * (waveform!.length - 1)).round();
+    return waveform![index];
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -69,6 +90,7 @@ class Track {
       'modified_at': modifiedAt,
       'replay_gain_track_gain': replayGainTrackGain,
       'replay_gain_track_peak': replayGainTrackPeak,
+      'waveform_data': WaveformCodec.encode(waveform),
       'thumbnail_hash': thumbnailHash,
 
       'album_id': album?.id,
@@ -98,6 +120,7 @@ class Track {
       replayGainTrackPeak: ParserUtils.parseDouble(
         map['replay_gain_track_peak'],
       ),
+      waveform: WaveformCodec.decode(ParserUtils.parseString(map['waveform_data'])),
       thumbnailHash: ParserUtils.parseString(map['thumbnail_hash']),
     );
   }

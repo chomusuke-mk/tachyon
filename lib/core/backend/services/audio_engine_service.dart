@@ -3,9 +3,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:miniaudio_player/miniaudio_player.dart'
-    show AudioDevice, Equalizer;
+    show AudioDevice, CrossfeedMode, Equalizer, VisualizerData;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/behavior_subject.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
@@ -85,6 +86,8 @@ class AudioEngineService {
   final BehaviorSubject<PlaybackState> _stateSubject;
   final StreamController<Duration> _positionStreamController =
       StreamController<Duration>.broadcast();
+  final StreamController<VisualizerData> _visualizerStreamController =
+      StreamController<VisualizerData>.broadcast();
   final List<StreamSubscription<dynamic>> _playerSubscriptions = [];
   StreamSubscription<PlaylistEntry?>? _queueSubscription;
 
@@ -113,8 +116,23 @@ class AudioEngineService {
   double _playbackRate = AppDefaults.playbackRateDefault;
   double _playbackPitch = AppDefaults.playbackPitchDefault;
   bool _skipSilence = false;
+  bool _volumeNormalizationEnabled = true;
+  double _preampDb = 0.0;
+  double _balance = 0.0;
+  bool _mono = false;
+  CrossfeedMode _crossfeedMode = CrossfeedMode.off;
+  double _spatializerWidth = 1.0;
+  bool _limiterEnabled = true;
   Equalizer _equalizer = Equalizer.flat;
   AudioDevice? _currentDevice;
+
+  bool get volumeNormalization => _volumeNormalizationEnabled;
+  double get preampDb => _preampDb;
+  double get balance => _balance;
+  bool get mono => _mono;
+  CrossfeedMode get crossfeedMode => _crossfeedMode;
+  double get spatializerWidth => _spatializerWidth;
+  bool get limiterEnabled => _limiterEnabled;
 
   AudioEngineService({
     AudioPlayerAdapter? playerA,
@@ -156,6 +174,13 @@ class AudioEngineService {
 
   Stream<PlaybackState> get stateStream => _stateSubject;
   Stream<Duration> get positionStream => _positionStreamController.stream;
+  Stream<VisualizerData> get visualizerStream =>
+      _visualizerStreamController.stream;
+
+  void setVisualizerEnabled(bool enabled) {
+    _playerA.setVisualizerEnabled(enabled);
+    _playerB.setVisualizerEnabled(enabled);
+  }
 
   /// Last emitted state (position may lag up to [_positionStateInterval]).
   PlaybackState get currentState => _stateSubject.value;
@@ -431,6 +456,75 @@ class AudioEngineService {
     _emitState();
   }
 
+  Future<void> setVolumeNormalization(bool enabled) async {
+    _volumeNormalizationEnabled = enabled;
+    await _applyReplayGainToPlayer(
+      _activePlayer,
+      _queueManager.currentTrack?.track,
+    );
+    _emitState();
+  }
+
+  Future<void> setPreamp(double preampDb) async {
+    _preampDb = preampDb.clamp(-12.0, 12.0);
+    await Future.wait([
+      _playerA.setPreamp(_preampDb),
+      _playerB.setPreamp(_preampDb),
+    ]);
+    if (_volumeNormalizationEnabled) {
+      await _applyReplayGainToPlayer(
+        _activePlayer,
+        _queueManager.currentTrack?.track,
+      );
+    }
+    _emitState();
+  }
+
+  Future<void> setBalance(double balance) async {
+    _balance = balance.clamp(-1.0, 1.0);
+    await Future.wait([
+      _playerA.setBalance(_balance),
+      _playerB.setBalance(_balance),
+    ]);
+    _emitState();
+  }
+
+  Future<void> setMono(bool enabled) async {
+    _mono = enabled;
+    await Future.wait([
+      _playerA.setMono(enabled),
+      _playerB.setMono(enabled),
+    ]);
+    _emitState();
+  }
+
+  Future<void> setCrossfeed(CrossfeedMode mode) async {
+    _crossfeedMode = mode;
+    await Future.wait([
+      _playerA.setCrossfeed(mode),
+      _playerB.setCrossfeed(mode),
+    ]);
+    _emitState();
+  }
+
+  Future<void> setSpatializer(double width) async {
+    _spatializerWidth = width.clamp(0.0, 2.0);
+    await Future.wait([
+      _playerA.setSpatializer(_spatializerWidth),
+      _playerB.setSpatializer(_spatializerWidth),
+    ]);
+    _emitState();
+  }
+
+  Future<void> setLimiter(bool enabled) async {
+    _limiterEnabled = enabled;
+    await Future.wait([
+      _playerA.setLimiter(enabled),
+      _playerB.setLimiter(enabled),
+    ]);
+    _emitState();
+  }
+
   Future<void> setEqualizer(Equalizer equalizer) async {
     _equalizer = equalizer;
     await Future.wait([
@@ -450,6 +544,12 @@ class AudioEngineService {
 
   Future<List<AudioDevice>> getAudioDevices() =>
       _activePlayer.getAudioDevices();
+
+  List<AudioDevice> getAudioDevicesSync() =>
+      _activePlayer.getAudioDevicesSync();
+
+  Stream<List<AudioDevice>> get devicesStream =>
+      _activePlayer.devicesStream;
 
   Future<void> setCrossfadeDuration(Duration duration) => _serialize(() async {
     _crossfadeConfig = _crossfadeConfig.copyWith(duration: duration);
@@ -962,6 +1062,7 @@ class AudioEngineService {
       }
       await player.setVolume(volume);
       await _configurePlayerProperties(player);
+      await _applyReplayGainToPlayer(player, item.track);
       await player.open(filePath, play: false);
       await player.seek(Duration.zero);
       if (play) {
@@ -990,9 +1091,36 @@ class AudioEngineService {
       await player.setPitch(_playbackPitch);
       await player.setEqualizer(_equalizer);
       await player.setSkipSilence(_skipSilence);
+      await player.setPreamp(_preampDb);
+      await player.setBalance(_balance);
+      await player.setMono(_mono);
+      await player.setCrossfeed(_crossfeedMode);
+      await player.setSpatializer(_spatializerWidth);
+      await player.setLimiter(_limiterEnabled);
       final device = _currentDevice;
       if (device != null) {
         await player.setDevice(device);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _applyReplayGainToPlayer(
+    AudioPlayerAdapter player,
+    Track? track,
+  ) async {
+    try {
+      if (_volumeNormalizationEnabled &&
+          track != null &&
+          (track.replayGainTrackGain != null ||
+              track.replayGainTrackPeak != null)) {
+        await player.setReplayGain(
+          gainDb: track.replayGainTrackGain,
+          peak: track.replayGainTrackPeak,
+          preampDb: _preampDb,
+          preventClipping: true,
+        );
+      } else {
+        await player.clearReplayGain();
       }
     } catch (_) {}
   }
@@ -1026,6 +1154,15 @@ class AudioEngineService {
         }
         _maybeEmitPositionState(pos);
         _maybeScheduleAutoCrossfade(pos);
+      }),
+    );
+
+    _playerSubscriptions.add(
+      player.visualizerStream.listen((vis) {
+        if (!isCurrent() || _queueEnded) return;
+        if (!_visualizerStreamController.isClosed) {
+          _visualizerStreamController.add(vis);
+        }
       }),
     );
 
@@ -1114,10 +1251,19 @@ class AudioEngineService {
         loop: _queueManager.loopMode,
         crossfadeDuration: _crossfadeConfig.duration,
         skipSilence: _skipSilence,
+        volumeNormalization: _volumeNormalizationEnabled,
         isInfiniteMixEnabled: _queueManager.infiniteMixEnabled,
-        audioBitrate: previous.audioBitrate,
-        audioSampleRate: previous.audioSampleRate,
-        audioChannels: previous.audioChannels,
+        audioBitrate: active.audioBitrate > 0
+            ? active.audioBitrate.toDouble()
+            : (_queueManager.currentTrack?.track?.bitrate?.toDouble() ?? previous.audioBitrate),
+        audioSampleRate: _queueManager.currentTrack?.track?.sampleRate ?? previous.audioSampleRate,
+        audioChannels: _queueManager.currentTrack?.track?.channels ?? previous.audioChannels,
+        preampDb: _preampDb,
+        balance: _balance,
+        mono: _mono,
+        crossfeedMode: _crossfeedMode,
+        spatializerWidth: _spatializerWidth,
+        limiterEnabled: _limiterEnabled,
       ),
     );
   }

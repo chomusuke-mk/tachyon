@@ -11,13 +11,14 @@ import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/domain/playlist.dart' show PlaylistType;
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/shared/utils/waveform_codec.dart';
 typedef StoredTrackInfo = ({int id, String filePath, int modifiedAt});
 
 abstract final class AppDatabaseSchema {
   static const List<String> createTables = [
     'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE, thumbnail_hash TEXT);',
     'CREATE TABLE IF NOT EXISTS albums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE, year INTEGER, artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL, thumbnail_hash TEXT, UNIQUE(name COLLATE NOCASE, artist_id));',
-    'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT UNIQUE NOT NULL, title TEXT NOT NULL, track_number INTEGER, disc_number INTEGER DEFAULT 1, year INTEGER, duration_ms INTEGER NOT NULL, bitrate INTEGER, sample_rate INTEGER, channels INTEGER, codec TEXT, file_size INTEGER NOT NULL, modified_at INTEGER NOT NULL, replay_gain_track_gain REAL, replay_gain_track_peak REAL, album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL, thumbnail_hash TEXT);',
+    'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT UNIQUE NOT NULL, title TEXT NOT NULL, track_number INTEGER, disc_number INTEGER DEFAULT 1, year INTEGER, duration_ms INTEGER NOT NULL, bitrate INTEGER, sample_rate INTEGER, channels INTEGER, codec TEXT, file_size INTEGER NOT NULL, modified_at INTEGER NOT NULL, replay_gain_track_gain REAL, replay_gain_track_peak REAL, waveform_data TEXT, album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL, thumbnail_hash TEXT);',
     'CREATE TABLE IF NOT EXISTS genres (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE);',
     'CREATE TABLE IF NOT EXISTS track_genres (track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, genre_id INTEGER NOT NULL REFERENCES genres(id) ON DELETE CASCADE, PRIMARY KEY(track_id, genre_id));',
     'CREATE TABLE IF NOT EXISTS track_artists (track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE, PRIMARY KEY(track_id, artist_id));',
@@ -89,12 +90,6 @@ class AppDatabase {
 
   void _executeSchema(Database db) {
     for (final sql in AppDatabaseSchema.createTables) { db.execute(sql); }
-    for (final c in ['replay_gain_track_gain REAL', 'replay_gain_track_peak REAL', 'thumbnail_hash TEXT']) {
-      try { db.execute('ALTER TABLE tracks ADD COLUMN $c;'); } catch (_) {}
-    }
-    try { db.execute('ALTER TABLE albums ADD COLUMN thumbnail_hash TEXT;'); } catch (_) {}
-    try { db.execute('ALTER TABLE artists ADD COLUMN thumbnail_hash TEXT;'); } catch (_) {}
-    try { db.execute('ALTER TABLE lyrics ADD COLUMN lang TEXT;'); } catch (_) {}
     for (final sql in AppDatabaseSchema.indexes) { db.execute(sql); }
     final now = DateTime.now().millisecondsSinceEpoch;
     db.execute('INSERT OR IGNORE INTO playlists (id, name, created_at, type) VALUES (?, ?, ?, ?);', [likedSongsPlaylistId, 'Liked Songs', now, PlaylistType.liked.value]);
@@ -113,7 +108,7 @@ class AppDatabase {
       final genres = db.select('SELECT id, name FROM genres ORDER BY name COLLATE NOCASE;')
           .map((r) => RawGenreDto(id: r['id'] as int, name: r['name'] as String)).toList();
 
-      final tracks = db.select('SELECT id, file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, album_id, thumbnail_hash FROM tracks ORDER BY title COLLATE NOCASE;')
+      final tracks = db.select('SELECT id, file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, thumbnail_hash FROM tracks ORDER BY title COLLATE NOCASE;')
           .map((r) => RawTrackDto(
             id: r['id'] as int, filePath: r['file_path'] as String, title: r['title'] as String,
             trackNumber: r['track_number'] as int?, discNumber: r['disc_number'] as int?, year: r['year'] as int?,
@@ -122,6 +117,7 @@ class AppDatabase {
             modifiedAt: r['modified_at'] as int,
             replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
             replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
+            waveformData: r['waveform_data'] as String?,
             albumId: r['album_id'] as int?,
             thumbnailHash: r['thumbnail_hash'] as String?,
           )).toList();
@@ -169,7 +165,7 @@ class AppDatabase {
       final stmtInsertGenre = db.prepare('INSERT OR IGNORE INTO genres (name) VALUES (?);'); stmts.add(stmtInsertGenre);
       final stmtSelectGenre = db.prepare('SELECT id FROM genres WHERE name = ? COLLATE NOCASE LIMIT 1;'); stmts.add(stmtSelectGenre);
 
-      final stmtUpsertTrack = db.prepare('INSERT INTO tracks (file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, album_id, thumbnail_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET title = excluded.title, track_number = excluded.track_number, disc_number = excluded.disc_number, year = excluded.year, duration_ms = excluded.duration_ms, bitrate = excluded.bitrate, sample_rate = excluded.sample_rate, channels = excluded.channels, codec = excluded.codec, file_size = excluded.file_size, modified_at = excluded.modified_at, replay_gain_track_gain = excluded.replay_gain_track_gain, replay_gain_track_peak = excluded.replay_gain_track_peak, album_id = excluded.album_id, thumbnail_hash = excluded.thumbnail_hash RETURNING id;');
+      final stmtUpsertTrack = db.prepare('INSERT INTO tracks (file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, thumbnail_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET title = excluded.title, track_number = excluded.track_number, disc_number = excluded.disc_number, year = excluded.year, duration_ms = excluded.duration_ms, bitrate = excluded.bitrate, sample_rate = excluded.sample_rate, channels = excluded.channels, codec = excluded.codec, file_size = excluded.file_size, modified_at = excluded.modified_at, replay_gain_track_gain = excluded.replay_gain_track_gain, replay_gain_track_peak = excluded.replay_gain_track_peak, waveform_data = excluded.waveform_data, album_id = excluded.album_id, thumbnail_hash = excluded.thumbnail_hash RETURNING id;');
       stmts.add(stmtUpsertTrack);
       final stmtDeleteEmbeddedLyrics = db.prepare("DELETE FROM lyrics WHERE track_id = ? AND source = 'embedded';"); stmts.add(stmtDeleteEmbeddedLyrics);
       final stmtInsertEmbeddedLyrics = db.prepare("INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, updated_at) VALUES (?, 'embedded', 'FOUND', ?, ?, ?);"); stmts.add(stmtInsertEmbeddedLyrics);
@@ -261,7 +257,7 @@ class AppDatabase {
         final trackRes = stmtUpsertTrack.select([
           t.filePath, t.title, t.trackNumber, t.discNumber ?? 1, t.year, t.durationMs,
           t.bitrate, t.sampleRate, t.channels, t.codec, t.fileSize, t.modifiedAt,
-          t.replayGainTrackGain, t.replayGainTrackPeak, resolvedAlbumId, t.thumbnailHash,
+          t.replayGainTrackGain, t.replayGainTrackPeak, t.waveformData, resolvedAlbumId, t.thumbnailHash,
         ]);
         final trackId = trackRes.first['id'] as int;
 
@@ -564,7 +560,7 @@ class AppDatabase {
     final rows = db.select(
       "SELECT t.id, t.file_path, t.title, t.track_number, t.disc_number, t.year, "
       "t.duration_ms, t.bitrate, t.sample_rate, t.channels, t.codec, t.file_size, "
-      "t.modified_at, t.replay_gain_track_gain, t.replay_gain_track_peak, t.thumbnail_hash, al.name AS album_name, "
+      "t.modified_at, t.replay_gain_track_gain, t.replay_gain_track_peak, t.waveform_data, t.thumbnail_hash, al.name AS album_name, "
       "(SELECT GROUP_CONCAT(ar.name, ';;;') FROM track_artists ta JOIN artists ar ON ta.artist_id = ar.id WHERE ta.track_id = t.id) AS artist_names "
       "FROM tracks t LEFT JOIN albums al ON t.album_id = al.id ORDER BY RANDOM() LIMIT ?;",
       [limit],
@@ -580,6 +576,7 @@ class AppDatabase {
         modifiedAt: r['modified_at'] as int,
         replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
         replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
+        waveform: WaveformCodec.decode(r['waveform_data'] as String?),
         thumbnailHash: r['thumbnail_hash'] as String?,
         album: al != null ? Album(name: al) : null,
         artists: (art != null && art.isNotEmpty) ? art.split(';;;').map((n) => Artist(name: n.trim())).toList() : const [],
@@ -596,7 +593,7 @@ class AppDatabase {
     if (ids.isEmpty) return const [];
     final placeholders = List.filled(ids.length, '?').join(',');
     final rows = db.select(
-      'SELECT id, file_path, title, duration_ms, replay_gain_track_gain, replay_gain_track_peak FROM tracks WHERE id IN ($placeholders);',
+      'SELECT id, file_path, title, duration_ms, replay_gain_track_gain, replay_gain_track_peak, waveform_data FROM tracks WHERE id IN ($placeholders);',
       ids,
     );
     final byId = {
@@ -606,6 +603,7 @@ class AppDatabase {
           durationMs: r['duration_ms'] as int, fileSize: 0, modifiedAt: 0,
           replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
           replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
+          waveform: WaveformCodec.decode(r['waveform_data'] as String?),
         ),
     };
     return ids.map((id) => byId[id]).whereType<Track>().toList();

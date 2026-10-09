@@ -395,6 +395,32 @@ class AppStringKey {
       _cadenasLocalizadas['s_gapless_playback'] ?? '';
   String get sGaplessPlaybackDesc =>
       _cadenasLocalizadas['s_gapless_playback_desc'] ?? '';
+  String get sSkipSilence => _cadenasLocalizadas['s_skip_silence'] ?? '';
+  String get sSkipSilenceDesc =>
+      _cadenasLocalizadas['s_skip_silence_desc'] ?? '';
+  String get sPreamp => _cadenasLocalizadas['s_preamp'] ?? '';
+  String get sPreampDesc => _cadenasLocalizadas['s_preamp_desc'] ?? '';
+  String get sStereoBalance => _cadenasLocalizadas['s_stereo_balance'] ?? '';
+  String get sStereoBalanceDesc =>
+      _cadenasLocalizadas['s_stereo_balance_desc'] ?? '';
+  String get sStereoBalanceCenter =>
+      _cadenasLocalizadas['s_stereo_balance_center'] ?? '';
+  String get sMonoAudio => _cadenasLocalizadas['s_mono_audio'] ?? '';
+  String get sMonoAudioDesc => _cadenasLocalizadas['s_mono_audio_desc'] ?? '';
+  String get sCrossfeed => _cadenasLocalizadas['s_crossfeed'] ?? '';
+  String get sCrossfeedDesc => _cadenasLocalizadas['s_crossfeed_desc'] ?? '';
+  String get sCrossfeedOff => _cadenasLocalizadas['s_crossfeed_off'] ?? '';
+  String get sCrossfeedMoffat =>
+      _cadenasLocalizadas['s_crossfeed_moffat'] ?? '';
+  String get sCrossfeedChumoy =>
+      _cadenasLocalizadas['s_crossfeed_chumoy'] ?? '';
+  String get sSpatializer => _cadenasLocalizadas['s_spatializer'] ?? '';
+  String get sSpatializerDesc =>
+      _cadenasLocalizadas['s_spatializer_desc'] ?? '';
+  String get sLimiter => _cadenasLocalizadas['s_limiter'] ?? '';
+  String get sLimiterDesc => _cadenasLocalizadas['s_limiter_desc'] ?? '';
+  String get sAudioDspSection =>
+      _cadenasLocalizadas['s_audio_dsp_section'] ?? '';
   String get sAppearanceSection =>
       _cadenasLocalizadas['s_appearance_section'] ?? '';
   String get sThemeMode => _cadenasLocalizadas['s_theme_mode'] ?? '';
@@ -740,6 +766,25 @@ class AppStringKey {
     's_replay_gain_preamp_desc',
     's_gapless_playback',
     's_gapless_playback_desc',
+    's_skip_silence',
+    's_skip_silence_desc',
+    's_preamp',
+    's_preamp_desc',
+    's_stereo_balance',
+    's_stereo_balance_desc',
+    's_stereo_balance_center',
+    's_mono_audio',
+    's_mono_audio_desc',
+    's_crossfeed',
+    's_crossfeed_desc',
+    's_crossfeed_off',
+    's_crossfeed_moffat',
+    's_crossfeed_chumoy',
+    's_spatializer',
+    's_spatializer_desc',
+    's_limiter',
+    's_limiter_desc',
+    's_audio_dsp_section',
     's_appearance_section',
     's_theme_mode',
     's_theme_mode_desc',

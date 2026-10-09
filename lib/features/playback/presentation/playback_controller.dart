@@ -14,6 +14,8 @@ import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
 
+export 'package:miniaudio_player/miniaudio_player.dart'
+    show AudioDevice, Equalizer;
 export 'package:tachyon/features/playback/domain/loop_mode.dart';
 
 class PlaybackController extends ChangeNotifier {
@@ -23,17 +25,22 @@ class PlaybackController extends ChangeNotifier {
 
   late StreamSubscription<PlaybackState> _engineSubscription;
   StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<List<double>>? _visualizerSubscription;
   StreamSubscription<void>? _catalogSubscription;
+  StreamSubscription<List<AudioDevice>>? _devicesSubscription;
   PlaybackState _state = const PlaybackState.initial();
 
   Equalizer _equalizer = Equalizer.flat;
   AudioDevice? _currentDevice;
+  List<AudioDevice> _audioDevices = const [];
   bool _isInfiniteMixEnabled = false;
 
   // Scoped high-frequency position notifier
   final ValueNotifier<Duration> _positionNotifier = ValueNotifier<Duration>(
     Duration.zero,
   );
+  final ValueNotifier<List<double>> _visualizerNotifier =
+      ValueNotifier<List<double>>(List<double>.filled(14, 0.0));
 
   // Persistence throttling state
   DateTime? _lastPersistenceTime;
@@ -102,6 +109,28 @@ class PlaybackController extends ChangeNotifier {
         _positionNotifier.value = pos;
       }
     });
+
+    _visualizerSubscription = _backend.visualizerStream.listen((vis) {
+      _visualizerNotifier.value = vis;
+    });
+
+    _devicesSubscription = _backend.devicesStream.listen((devices) {
+      if (!_isDisposed) {
+        _audioDevices = devices;
+        _applySavedDeviceIfAvailable(devices);
+        notifyListeners();
+      }
+    });
+
+    _backend.getAudioDevices().then((devices) {
+      if (!_isDisposed && devices.isNotEmpty) {
+        _audioDevices = devices;
+        _applySavedDeviceIfAvailable(devices);
+        notifyListeners();
+      }
+    }).catchError((e) {
+      debugPrint('[PlaybackController] Error getting initial audio devices: $e');
+    });
   }
 
   PlaybackState _resolveStateTracks(PlaybackState raw) {
@@ -143,9 +172,22 @@ class PlaybackController extends ChangeNotifier {
   Duration get position => _positionNotifier.value;
   ValueNotifier<Duration> get positionNotifier => _positionNotifier;
   ValueListenable<Duration> get positionListenable => _positionNotifier;
+  
+  ValueNotifier<List<double>> get visualizerNotifier => _visualizerNotifier;
+  ValueListenable<List<double>> get visualizerListenable => _visualizerNotifier;
+
+  void setVisualizerEnabled(bool enabled) {
+    _backend.setVisualizerEnabled(enabled);
+  }
+
   Duration get duration => _state.duration;
   double get progress => _state.progress;
   Duration get remaining => _state.remaining;
+
+  /// Real-time visual amplitude (0.0 to 1.0) derived from current track's waveform
+  /// and the active playback position. Returns 0.0 when not playing or no waveform.
+  double get currentVisualAmplitude =>
+      isPlaying ? (currentTrack?.getPointAtPosition(position, duration) ?? 0.0) : 0.0;
 
   double get volume => _state.volume;
   double get rate => _state.rate;
@@ -162,6 +204,13 @@ class PlaybackController extends ChangeNotifier {
 
   CrossfadeConfig get crossfadeConfig => _state.crossfadeConfig;
   bool get skipSilence => _state.skipSilence;
+  bool get volumeNormalization => _state.volumeNormalization;
+  double get preampDb => _state.preampDb;
+  double get balance => _state.balance;
+  bool get mono => _state.mono;
+  CrossfeedMode get crossfeedMode => _state.crossfeedMode;
+  double get spatializerWidth => _state.spatializerWidth;
+  bool get limiterEnabled => _state.limiterEnabled;
 
   // ---------------------------------------------------------------------------
   // High-Level Track Selection & Queue Actions
@@ -281,6 +330,18 @@ class PlaybackController extends ChangeNotifier {
 
   Equalizer get equalizer => _equalizer;
   AudioDevice? get currentDevice => _currentDevice;
+  List<AudioDevice> get audioDevices => _audioDevices;
+  Stream<List<AudioDevice>> get devicesStream => _backend.devicesStream;
+
+  void _applySavedDeviceIfAvailable(List<AudioDevice> devices) {
+    final savedId = _settingsRepository.getSettings().audioOutputDeviceId;
+    if (savedId != null && savedId.isNotEmpty && _currentDevice == null) {
+      final match = devices.where((d) => d.id == savedId).firstOrNull;
+      if (match != null) {
+        setAudioDevice(match);
+      }
+    }
+  }
 
   Future<void> setEqualizer(Equalizer equalizer) async {
     _equalizer = equalizer;
@@ -456,6 +517,62 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
+  Future<void> setVolumeNormalization(bool enabled) async {
+    try {
+      await _backend.setVolumeNormalization(enabled);
+    } catch (e) {
+      debugPrint('[PlaybackController] setVolumeNormalization error: $e');
+    }
+  }
+
+  Future<void> setPreamp(double preampDb) async {
+    try {
+      await _backend.setPreamp(preampDb);
+    } catch (e) {
+      debugPrint('[PlaybackController] setPreamp error: $e');
+    }
+  }
+
+  Future<void> setBalance(double balance) async {
+    try {
+      await _backend.setBalance(balance);
+    } catch (e) {
+      debugPrint('[PlaybackController] setBalance error: $e');
+    }
+  }
+
+  Future<void> setMono(bool enabled) async {
+    try {
+      await _backend.setMono(enabled);
+    } catch (e) {
+      debugPrint('[PlaybackController] setMono error: $e');
+    }
+  }
+
+  Future<void> setCrossfeed(CrossfeedMode mode) async {
+    try {
+      await _backend.setCrossfeed(mode);
+    } catch (e) {
+      debugPrint('[PlaybackController] setCrossfeed error: $e');
+    }
+  }
+
+  Future<void> setSpatializer(double width) async {
+    try {
+      await _backend.setSpatializer(width);
+    } catch (e) {
+      debugPrint('[PlaybackController] setSpatializer error: $e');
+    }
+  }
+
+  Future<void> setLimiter(bool enabled) async {
+    try {
+      await _backend.setLimiter(enabled);
+    } catch (e) {
+      debugPrint('[PlaybackController] setLimiter error: $e');
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // History Logging & State Persistence Helpers
   // ---------------------------------------------------------------------------
@@ -590,6 +707,8 @@ class PlaybackController extends ChangeNotifier {
     _engineSubscription.cancel();
     _catalogSubscription?.cancel();
     _positionSubscription?.cancel();
+    _visualizerSubscription?.cancel();
+    _devicesSubscription?.cancel();
     if (_state.currentTrack != null) {
       _settingsRepository.setLastPlayed(
         filePath: _state.currentTrack!.filePath,

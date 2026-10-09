@@ -524,6 +524,46 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   const Divider(),
                   SettingRow(
+                    title: strings.sReplayGainMode,
+                    description: strings.sReplayGainModeDesc,
+                    type: ControllerType.switchCtrl,
+                    child: Switch(
+                      value: settings.volumeNormalization,
+                      onChanged: (val) => settings.setVolumeNormalization(val),
+                    ),
+                  ),
+                  const Divider(),
+                  SettingRow(
+                    title: strings.sSkipSilence,
+                    description: strings.sSkipSilenceDesc,
+                    type: ControllerType.switchCtrl,
+                    child: Switch(
+                      value: settings.skipSilence,
+                      onChanged: (val) => settings.setSkipSilence(val),
+                    ),
+                  ),
+                  const Divider(),
+                  SettingRow(
+                    title: strings.sLimiter,
+                    description: strings.sLimiterDesc,
+                    type: ControllerType.switchCtrl,
+                    child: Switch(
+                      value: settings.limiterEnabled,
+                      onChanged: (val) => settings.setLimiter(val),
+                    ),
+                  ),
+                  const Divider(),
+                  SettingRow(
+                    title: strings.sMonoAudio,
+                    description: strings.sMonoAudioDesc,
+                    type: ControllerType.switchCtrl,
+                    child: Switch(
+                      value: settings.mono,
+                      onChanged: (val) => settings.setMono(val),
+                    ),
+                  ),
+                  const Divider(),
+                  SettingRow(
                     title: strings.sGaplessPlayback,
                     description: strings.sGaplessPlaybackDesc,
                     type: ControllerType.switchCtrl,

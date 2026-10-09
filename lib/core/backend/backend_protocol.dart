@@ -66,8 +66,18 @@ abstract final class BackendMethods {
   static const String playbackSetRate = 'playback.setRate';
   static const String playbackSetPitch = 'playback.setPitch';
   static const String playbackSetSkipSilence = 'playback.setSkipSilence';
+  static const String playbackSetVolumeNormalization =
+      'playback.setVolumeNormalization';
+  static const String playbackSetPreamp = 'playback.setPreamp';
+  static const String playbackSetBalance = 'playback.setBalance';
+  static const String playbackSetMono = 'playback.setMono';
+  static const String playbackSetCrossfeed = 'playback.setCrossfeed';
+  static const String playbackSetSpatializer = 'playback.setSpatializer';
+  static const String playbackSetLimiter = 'playback.setLimiter';
   static const String playbackSetCrossfadeConfig =
       'playback.setCrossfadeConfig';
+  static const String playbackSetVisualizerEnabled =
+      'playback.setVisualizerEnabled';
   static const String playbackSetInfiniteMix = 'playback.setInfiniteMix';
 
   // Library & Catalog queries
@@ -104,6 +114,7 @@ abstract final class BackendMethods {
 abstract final class BackendTopics {
   static const String playbackState = 'playback.state';
   static const String playbackPosition = 'playback.position';
+  static const String playbackVisualizer = 'playback.visualizer';
   static const String playbackDevices = 'playback.devices';
   static const String libraryScanProgress = 'library.scanProgress';
   static const String catalogUpdated = 'catalog.updated';

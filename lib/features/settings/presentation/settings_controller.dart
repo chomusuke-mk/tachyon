@@ -38,6 +38,13 @@ class SettingsController extends ChangeNotifier {
   Loop get loopMode => _settings.loopMode;
   bool get shuffle => _settings.shuffle;
   bool get skipSilence => _settings.skipSilence;
+  bool get volumeNormalization => _settings.volumeNormalization;
+  double get preampDb => _settings.preampDb;
+  double get balance => _settings.balance;
+  bool get mono => _settings.mono;
+  CrossfeedMode get crossfeedMode => _settings.crossfeedMode;
+  double get spatializerWidth => _settings.spatializerWidth;
+  bool get limiterEnabled => _settings.limiterEnabled;
   double get volumeBoost => _settings.volumeBoost;
   ThemeMode get themeMode => _settings.themeMode;
   int get accentColorValue => _settings.accentColorValue;
@@ -72,6 +79,13 @@ class SettingsController extends ChangeNotifier {
     await _backend.setRate(_settings.playbackRate);
     await _backend.setPitch(_settings.playbackPitch);
     await _backend.setSkipSilence(_settings.skipSilence);
+    await _backend.setVolumeNormalization(_settings.volumeNormalization);
+    await _backend.setPreamp(_settings.preampDb);
+    await _backend.setBalance(_settings.balance);
+    await _backend.setMono(_settings.mono);
+    await _backend.setCrossfeed(_settings.crossfeedMode);
+    await _backend.setSpatializer(_settings.spatializerWidth);
+    await _backend.setLimiter(_settings.limiterEnabled);
     await _backend.setLoopMode(_settings.loopMode);
 
     if (_settings.equalizerEnabled) {
@@ -230,6 +244,58 @@ class SettingsController extends ChangeNotifier {
     _settings = _settings.copyWith(skipSilence: enabled);
     await _repository.setSkipSilence(enabled);
     await _backend.setSkipSilence(enabled);
+    notifyListeners();
+  }
+
+  Future<void> setVolumeNormalization(bool enabled) async {
+    _settings = _settings.copyWith(volumeNormalization: enabled);
+    await _repository.setVolumeNormalization(enabled);
+    await _backend.setVolumeNormalization(enabled);
+    notifyListeners();
+  }
+
+  Future<void> setPreamp(double preampDb) async {
+    final clamped = preampDb.clamp(-12.0, 12.0);
+    _settings = _settings.copyWith(preampDb: clamped);
+    await _repository.setPreamp(clamped);
+    await _backend.setPreamp(clamped);
+    notifyListeners();
+  }
+
+  Future<void> setBalance(double balance) async {
+    final clamped = balance.clamp(-1.0, 1.0);
+    _settings = _settings.copyWith(balance: clamped);
+    await _repository.setBalance(clamped);
+    await _backend.setBalance(clamped);
+    notifyListeners();
+  }
+
+  Future<void> setMono(bool mono) async {
+    _settings = _settings.copyWith(mono: mono);
+    await _repository.setMono(mono);
+    await _backend.setMono(mono);
+    notifyListeners();
+  }
+
+  Future<void> setCrossfeed(CrossfeedMode mode) async {
+    _settings = _settings.copyWith(crossfeedMode: mode);
+    await _repository.setCrossfeed(mode);
+    await _backend.setCrossfeed(mode);
+    notifyListeners();
+  }
+
+  Future<void> setSpatializer(double width) async {
+    final clamped = width.clamp(0.0, 2.0);
+    _settings = _settings.copyWith(spatializerWidth: clamped);
+    await _repository.setSpatializer(clamped);
+    await _backend.setSpatializer(clamped);
+    notifyListeners();
+  }
+
+  Future<void> setLimiter(bool limiter) async {
+    _settings = _settings.copyWith(limiterEnabled: limiter);
+    await _repository.setLimiter(limiter);
+    await _backend.setLimiter(limiter);
     notifyListeners();
   }
 

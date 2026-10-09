@@ -16,6 +16,7 @@ class RawTrackDto {
   final int modifiedAt;
   final double? replayGainTrackGain;
   final double? replayGainTrackPeak;
+  final String? waveformData;
   final int? albumId;
   final String? thumbnailHash;
 
@@ -35,6 +36,7 @@ class RawTrackDto {
     required this.modifiedAt,
     this.replayGainTrackGain,
     this.replayGainTrackPeak,
+    this.waveformData,
     this.albumId,
     this.thumbnailHash,
   });

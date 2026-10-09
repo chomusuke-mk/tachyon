@@ -38,6 +38,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   final StreamController<void> _catalogUpdatedController =
       StreamController<void>.broadcast();
   StreamSubscription<ScanProgress>? _scanSubscription;
+  StreamSubscription<List<AudioDevice>>? _devicesSubscription;
 
   DirectTachyonBackendClient({
     this.audioEngine,
@@ -54,6 +55,13 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
           if (!_catalogUpdatedController.isClosed) {
             _catalogUpdatedController.add(null);
           }
+        }
+      });
+    }
+    if (audioEngine != null) {
+      _devicesSubscription = audioEngine!.devicesStream.listen((devices) {
+        if (!_devicesController.isClosed) {
+          _devicesController.add(devices);
         }
       });
     }
@@ -78,7 +86,30 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   }
 
   @override
+  Stream<List<double>> get visualizerStream {
+    try {
+      return audioEngine?.visualizerStream.map((vis) => [
+            vis.rms,
+            vis.peak,
+            vis.left,
+            vis.right,
+            ...vis.bands,
+          ]) ??
+          const Stream.empty();
+    } catch (_) {
+      return const Stream.empty();
+    }
+  }
+
+  @override
   Stream<List<AudioDevice>> get devicesStream => _devicesController.stream;
+
+  /// Test-only hook to emit synthetic audio devices.
+  void emitAudioDevices(List<AudioDevice> devices) {
+    if (!_devicesController.isClosed) {
+      _devicesController.add(devices);
+    }
+  }
 
   @override
   Stream<ScanProgress> get scanProgressStream => _scanProgressController.stream;
@@ -124,6 +155,34 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<void> setSkipSilence(bool enabled) async =>
       await audioEngine?.setSkipSilence(enabled);
+
+  @override
+  Future<void> setVolumeNormalization(bool enabled) async =>
+      await audioEngine?.setVolumeNormalization(enabled);
+
+  @override
+  Future<void> setPreamp(double preampDb) async =>
+      await audioEngine?.setPreamp(preampDb);
+
+  @override
+  Future<void> setBalance(double balance) async =>
+      await audioEngine?.setBalance(balance);
+
+  @override
+  Future<void> setMono(bool enabled) async =>
+      await audioEngine?.setMono(enabled);
+
+  @override
+  Future<void> setCrossfeed(CrossfeedMode mode) async =>
+      await audioEngine?.setCrossfeed(mode);
+
+  @override
+  Future<void> setSpatializer(double width) async =>
+      await audioEngine?.setSpatializer(width);
+
+  @override
+  Future<void> setLimiter(bool enabled) async =>
+      await audioEngine?.setLimiter(enabled);
 
   @override
   Future<void> setEqualizer(Equalizer equalizer) async =>
@@ -243,6 +302,10 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   @override
   Future<void> setCrossfadeConfig(CrossfadeConfig config) async =>
       await audioEngine?.setCrossfadeConfig(config);
+
+  @override
+  Future<void> setVisualizerEnabled(bool enabled) async =>
+      audioEngine?.setVisualizerEnabled(enabled);
 
   @override
   Future<void> setInfiniteMix(bool enabled) async =>
@@ -418,6 +481,8 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   Future<void> dispose() async {
     await _scanSubscription?.cancel();
     _scanSubscription = null;
+    await _devicesSubscription?.cancel();
+    _devicesSubscription = null;
     metadataService?.dispose();
     await _devicesController.close();
     await _scanProgressController.close();

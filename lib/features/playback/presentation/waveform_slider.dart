@@ -15,6 +15,7 @@ class WaveformSlider extends StatefulWidget {
   final int? totalCount;
   final Duration Function()? playlistDuration;
   final Duration Function()? playlistPosition;
+  final List<double>? waveform;
 
   @visibleForTesting
   static void clearGeometryCache() {
@@ -32,6 +33,7 @@ class WaveformSlider extends StatefulWidget {
     this.totalCount,
     this.playlistDuration,
     this.playlistPosition,
+    this.waveform,
   }) : assert(
           position != null || positionListenable != null,
           'Either position or positionListenable must be provided',
@@ -151,6 +153,7 @@ class _WaveformSliderState extends State<WaveformSlider> {
                           bufferedColor:
                               colorScheme.primary.withValues(alpha: 0.35),
                           isDragging: _isDragging,
+                          waveform: widget.waveform,
                           positionMs: currentMs.round(),
                         ),
                       ),
@@ -224,22 +227,13 @@ class _WaveformSliderPainter extends CustomPainter {
   final Color inactiveColor;
   final Color bufferedColor;
   final bool isDragging;
+  final List<double>? waveform;
   final int positionMs;
 
   static const int _barCount = 55;
   static const double _barWidth = 3.5;
   static const double _barRadius = 2.0;
   static const int _positionQuantizationMs = 50;
-
-  // Precomputed static waveform amplitude multipliers (0.3 to 0.9)
-  static final List<double> _waveformAmplitudes = List<double>.generate(
-    _barCount,
-    (i) {
-      final angle = (i / _barCount) * math.pi * 3;
-      return math.sin(angle).abs() * 0.6 + 0.3;
-    },
-    growable: false,
-  );
 
   // Precomputed bar fractions [0.0 ... 1.0]
   static final List<double> _barFractions = List<double>.generate(
@@ -248,28 +242,40 @@ class _WaveformSliderPainter extends CustomPainter {
     growable: false,
   );
 
-  // Geometry cache keyed by Size to eliminate RRect allocations during playback
+  // Geometry cache keyed by Size and waveform to eliminate RRect allocations during playback
   static Size? _cachedSize;
+  static List<double>? _cachedWaveform;
   static List<RRect>? _cachedBars;
 
   @visibleForTesting
   static void clearGeometryCache() {
     _cachedSize = null;
+    _cachedWaveform = null;
     _cachedBars = null;
   }
 
-  static List<RRect> _getBars(Size size) {
-    if (_cachedSize == size && _cachedBars != null) {
+  static List<RRect> _getBars(Size size, List<double>? waveform) {
+    if (_cachedSize == size &&
+        identical(_cachedWaveform, waveform) &&
+        _cachedBars != null) {
       return _cachedBars!;
     }
     final centerY = size.height / 2;
     final spacing = (size.width - (_barCount * _barWidth)) / (_barCount - 1);
     final heightFactor = size.height * 0.75;
+    final hasWaveform = waveform != null && waveform.isNotEmpty;
 
     final bars = List<RRect>.generate(_barCount, (i) {
       final x = i * (_barWidth + spacing);
-      final amplitude = _waveformAmplitudes[i] * heightFactor;
-      final halfHeight = math.max(3.0, amplitude / 2);
+      final double amp;
+      if (hasWaveform) {
+        final t = i / (_barCount - 1);
+        final wIndex = (t * (waveform.length - 1)).round();
+        amp = 0.2 + (waveform[wIndex].clamp(0.0, 1.0) * 0.8);
+      } else {
+        amp = 0.35;
+      }
+      final halfHeight = math.max(3.0, (amp * heightFactor) / 2);
       return RRect.fromRectAndRadius(
         Rect.fromCenter(
           center: Offset(x + _barWidth / 2, centerY),
@@ -281,6 +287,7 @@ class _WaveformSliderPainter extends CustomPainter {
     }, growable: false);
 
     _cachedSize = size;
+    _cachedWaveform = waveform;
     _cachedBars = bars;
     return bars;
   }
@@ -306,12 +313,13 @@ class _WaveformSliderPainter extends CustomPainter {
     required this.inactiveColor,
     required this.bufferedColor,
     required this.isDragging,
+    this.waveform,
     this.positionMs = 0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final bars = _getBars(size);
+    final bars = _getBars(size, waveform);
     final centerY = size.height / 2;
 
     _activePaint.color = activeColor;
@@ -367,6 +375,7 @@ class _WaveformSliderPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _WaveformSliderPainter oldDelegate) {
     if (identical(this, oldDelegate)) return false;
+    if (!identical(oldDelegate.waveform, waveform)) return true;
     if (oldDelegate.isDragging != isDragging) return true;
     if (isDragging && oldDelegate.progress != progress) return true;
     if (oldDelegate.activeColor != activeColor ||

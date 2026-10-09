@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
 import 'package:tachyon/features/library/domain/track_sort_option.dart';
 import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
+
+export 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
 
 typedef LoopMode = Loop;
 
@@ -22,6 +25,13 @@ class AppSettings {
   final Loop loopMode; // Loop.off (default)
   final bool shuffle; // default false
   final bool skipSilence; // default false
+  final bool volumeNormalization; // default true
+  final double preampDb; // -12.0 to +12.0 dB (default 0.0)
+  final double balance; // -1.0 to +1.0 (default 0.0)
+  final bool mono; // default false
+  final CrossfeedMode crossfeedMode; // CrossfeedMode.off (default)
+  final double spatializerWidth; // 0.0 to 2.0 (default 1.0)
+  final bool limiterEnabled; // default true
   final double volumeBoost; // 100.0% to 200.0% (default 100.0)
   final bool exclusiveAudio; // Windows WASAPI exclusive (default false)
   final String? audioOutputDeviceId;
@@ -66,6 +76,13 @@ class AppSettings {
     this.loopMode = Loop.off,
     this.shuffle = false,
     this.skipSilence = false,
+    this.volumeNormalization = true,
+    this.preampDb = 0.0,
+    this.balance = 0.0,
+    this.mono = false,
+    this.crossfeedMode = CrossfeedMode.off,
+    this.spatializerWidth = 1.0,
+    this.limiterEnabled = true,
     this.volumeBoost = 100.0,
     this.exclusiveAudio = false,
     this.audioOutputDeviceId,
@@ -118,6 +135,13 @@ class AppSettings {
           loopMode == other.loopMode &&
           shuffle == other.shuffle &&
           skipSilence == other.skipSilence &&
+          volumeNormalization == other.volumeNormalization &&
+          preampDb == other.preampDb &&
+          balance == other.balance &&
+          mono == other.mono &&
+          crossfeedMode == other.crossfeedMode &&
+          spatializerWidth == other.spatializerWidth &&
+          limiterEnabled == other.limiterEnabled &&
           volumeBoost == other.volumeBoost &&
           exclusiveAudio == other.exclusiveAudio &&
           audioOutputDeviceId == other.audioOutputDeviceId &&
@@ -152,6 +176,13 @@ class AppSettings {
     Loop? loopMode,
     bool? shuffle,
     bool? skipSilence,
+    bool? volumeNormalization,
+    double? preampDb,
+    double? balance,
+    bool? mono,
+    CrossfeedMode? crossfeedMode,
+    double? spatializerWidth,
+    bool? limiterEnabled,
     double? volumeBoost,
     bool? exclusiveAudio,
     String? audioOutputDeviceId,
@@ -188,6 +219,13 @@ class AppSettings {
       loopMode: loopMode ?? this.loopMode,
       shuffle: shuffle ?? this.shuffle,
       skipSilence: skipSilence ?? this.skipSilence,
+      volumeNormalization: volumeNormalization ?? this.volumeNormalization,
+      preampDb: preampDb ?? this.preampDb,
+      balance: balance ?? this.balance,
+      mono: mono ?? this.mono,
+      crossfeedMode: crossfeedMode ?? this.crossfeedMode,
+      spatializerWidth: spatializerWidth ?? this.spatializerWidth,
+      limiterEnabled: limiterEnabled ?? this.limiterEnabled,
       volumeBoost: volumeBoost ?? this.volumeBoost,
       exclusiveAudio: exclusiveAudio ?? this.exclusiveAudio,
       audioOutputDeviceId: audioOutputDeviceId ?? this.audioOutputDeviceId,
@@ -229,6 +267,13 @@ class AppSettings {
     loopMode,
     shuffle,
     skipSilence,
+    volumeNormalization,
+    preampDb,
+    balance,
+    mono,
+    crossfeedMode,
+    spatializerWidth,
+    limiterEnabled,
     volumeBoost,
     exclusiveAudio,
     audioOutputDeviceId,
