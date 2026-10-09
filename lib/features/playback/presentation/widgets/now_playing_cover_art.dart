@@ -3,15 +3,17 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
-import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/features/playback/presentation/widgets/wave_visualizer.dart';
+import 'package:tachyon/features/shell/mini_player_bar.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 /// Self-contained, beat-reactive artwork component for the Now Playing view.
 ///
 /// Encapsulates its own state and dependencies via [context.watch], safely
-/// detaching itself from its parent container. Renders a prominent bass-reactive
-/// animation that pumps and scales in sync with the current audio energy,
-/// and draws a continuous audio wave directly attached beneath the cover art.
+/// detaching itself from its parent container. Renders a bass-isolated drum-like
+/// pulse animation (+8% scale on bass only with inertia damping) and draws a
+/// continuous audio wave positioned cleanly behind/under the cover art without
+/// causing layout flex overflow.
 class NowPlayingCoverArt extends StatefulWidget {
   const NowPlayingCoverArt({super.key});
 
@@ -20,6 +22,18 @@ class NowPlayingCoverArt extends StatefulWidget {
 }
 
 class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
+  static const double _cornerRadius = 20.0;
+  static const double _visualizerHeight = 56.0; // Duplicated wave height
+
+  // Inertia and damping tracking arrays:
+  // Smooth Exponential Moving Average filters to eliminate high-frequency jitter/trembling
+  final List<double> _smoothedBands = List<double>.filled(10, 0.0);
+  double _smoothedBass = 0.0;
+  double _smoothedRms = 0.0;
+
+  String? _lastThumbnailHash;
+  Color? _resolvedColor;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +51,29 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
     super.deactivate();
   }
 
+  void _resolveThumbnailColor(String? hash, ThemeData theme) {
+    if (hash == null || hash.isEmpty) {
+      if (_resolvedColor != null) {
+        _resolvedColor = null;
+        _lastThumbnailHash = null;
+      }
+      return;
+    }
+    if (hash == _lastThumbnailHash) return;
+    _lastThumbnailHash = hash;
+
+    MiniPlayerColorResolver.resolveColor(
+      thumbnailHash: hash,
+      theme: theme,
+    ).then((color) {
+      if (mounted && _lastThumbnailHash == hash && _resolvedColor != color) {
+        setState(() {
+          _resolvedColor = color;
+        });
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final playback = context.watch<PlaybackController>();
@@ -48,73 +85,136 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
     final filePath = currentTrack.filePath;
     final thumbnailHash =
         currentTrack.thumbnailHash ?? currentTrack.album?.thumbnailHash;
+    final isPlaying = playback.isPlaying;
+    final theme = Theme.of(context);
+
+    _resolveThumbnailColor(thumbnailHash, theme);
+
+    // Compute solid color matching miniplayer background
+    final isDark = theme.brightness == Brightness.dark;
+    final isOled =
+        isDark && theme.colorScheme.surface == const Color(0xFF000000);
+    final waveColor =
+        _resolvedColor ??
+        (isOled
+            ? theme.colorScheme.surface
+            : theme.colorScheme.surfaceContainerHigh);
 
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final maxSide = math.min(constraints.maxWidth, constraints.maxHeight - 90.0);
-          final size = maxSide.isFinite && maxSide > 0 ? maxSide * 0.85 : 280.0;
+          final maxSide = math.min(constraints.maxWidth, constraints.maxHeight);
+          final size = maxSide.isFinite && maxSide > 0 ? maxSide * 0.84 : 280.0;
 
           return ValueListenableBuilder<List<double>>(
             valueListenable: playback.visualizerListenable,
             builder: (context, vis, cachedHeroChild) {
-              // vis: [0] rms, [1] peak, [2] left, [3] right, [4..13] bands
-              final double rms = vis.isNotEmpty ? vis[0] : 0.0;
-              final List<double> bands = vis.length >= 14 ? vis.sublist(4) : List.filled(10, 0.0);
+              // Raw hardware snapshot: [0] rms, [1] peak, [2] left, [3] right, [4..13] bands
+              final double rawRms = (isPlaying && vis.isNotEmpty)
+                  ? vis[0]
+                  : 0.0;
+              final List<double> rawBands = (isPlaying && vis.length >= 14)
+                  ? vis.sublist(4)
+                  : List.filled(10, 0.0);
 
-              // Audio reactivity - purely scale bounce on bass (like pressing a drum)
-              // No movement or floating when quiet.
-              final scale = 1.0 + (rms * 0.15);
-              
-              // Shadow logic based on energy
-              final shadowBlur = 12.0 + (rms * 32.0);
-              final spread = 2.0 + (rms * 8.0);
-              final shadowAlpha = (0.2 + (rms * 0.3)).clamp(0.0, 0.6);
+              // 1. Audio Ballistics with Fluid Inertia for Frequency Bands:
+              // Attack and decay with damping to eliminate high-frequency buzzing/jitter
+              final displayBands = List<double>.filled(10, 0.0);
+              for (int i = 0; i < 10; i++) {
+                final target = isPlaying ? rawBands[i].clamp(0.0, 1.0) : 0.0;
+                if (target > _smoothedBands[i]) {
+                  _smoothedBands[i] += (target - _smoothedBands[i]) * 0.38;
+                } else {
+                  _smoothedBands[i] += (target - _smoothedBands[i]) * 0.15;
+                }
+                if (_smoothedBands[i] < 0.01) _smoothedBands[i] = 0.0;
+                displayBands[i] = _smoothedBands[i];
+              }
 
-              final waveColor = Theme.of(context).colorScheme.primary.withValues(alpha: 0.8);
+              // 2. Audio Ballistics with Inertia for Bass ONLY (Sub-bass & Kick drum: bands 0 and 1)
+              // Noise gate and momentum smoothing to eliminate trembling from voices & ambient noise!
+              final rawBass = (rawBands.length >= 2)
+                  ? math.max(rawBands[0], rawBands[1])
+                  : (rawBands.isNotEmpty ? rawBands[0] : 0.0);
+
+              final targetBass = isPlaying && rawBass > 0.16
+                  ? ((rawBass - 0.16) / (1.0 - 0.16)).clamp(0.0, 1.0)
+                  : 0.0;
+
+              if (targetBass > _smoothedBass) {
+                // Smooth attack with physical mass (reaches peak over ~100ms instead of instantaneous twitch)
+                _smoothedBass += (targetBass - _smoothedBass) * 0.35;
+              } else {
+                // Smooth elastic release
+                _smoothedBass += (targetBass - _smoothedBass) * 0.14;
+              }
+              if (_smoothedBass < 0.01) _smoothedBass = 0.0;
+
+              // 3. Ambient RMS smoothing
+              _smoothedRms = (_smoothedRms * 0.85) + (rawRms * 0.15);
+
+              // 4. Bass-reactive scale: exactly 8% maximum bounce with inertia
+              final scale = 1.0 + (_smoothedBass * 0.08);
+
+              // Dynamic shadow density reacting to sustained energy
+              final shadowBlur = 14.0 + (_smoothedRms * 32.0);
+              final spread = 2.0 + (_smoothedRms * 8.0);
+              final shadowAlpha = (0.2 + (_smoothedRms * 0.35)).clamp(
+                0.0,
+                0.65,
+              );
 
               return Transform.scale(
                 scale: scale,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // The Cover Art (Square)
-                    Container(
-                      width: size,
-                      height: size,
-                      decoration: BoxDecoration(
-                        // Slightly rounded top corners, sharp bottom corners so the wave attaches perfectly
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16.0),
-                          topRight: Radius.circular(16.0),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: shadowAlpha),
-                            blurRadius: shadowBlur,
-                            spreadRadius: spread,
-                            offset: Offset(0, 16.0 + (rms * 12.0)),
+                child: SizedBox(
+                  width: size,
+                  height: size,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // 1. Continuous Wave Visualizer:
+                      // Positioned directly at the bottom edge of the card, projecting downwards.
+                      // Stack paint order places this behind the card. In NowPlayingScreen,
+                      // subsequent flex children (song title/controls) paint on top of this overflow!
+                      Positioned(
+                        top: size - 1.0,
+                        left: 0,
+                        width: size,
+                        height: _visualizerHeight,
+                        child: CustomPaint(
+                          size: Size(size, _visualizerHeight),
+                          painter: WaveVisualizerPainter(
+                            bands: displayBands,
+                            color: waveColor,
+                            cornerRadius: _cornerRadius,
                           ),
-                        ],
-                      ),
-                      // Use a ClipRRect matching the container
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16.0),
-                          topRight: Radius.circular(16.0),
                         ),
-                        child: cachedHeroChild,
                       ),
-                    ),
-                    // The continuous wave visualizer directly beneath and attached to the cover
-                    CustomPaint(
-                      size: Size(size, 90.0), // The maximum height of the wave amplitude pointing down
-                      painter: WaveVisualizerPainter(
-                        bands: bands,
-                        color: waveColor,
+
+                      // 2. The Album Art container (fully rounded 4 corners, sits on top of wave dock)
+                      Container(
+                        width: size,
+                        height: size,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(_cornerRadius),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: shadowAlpha,
+                              ),
+                              blurRadius: shadowBlur,
+                              spreadRadius: spread,
+                              offset: Offset(0, 14.0 + (_smoothedBass * 10.0)),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(_cornerRadius),
+                          child: cachedHeroChild,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },

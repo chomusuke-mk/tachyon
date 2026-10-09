@@ -396,6 +396,29 @@ void main() {
       expect(service.isCrossfading, isTrue, reason: 'Fade continues, not restarted');
       expect(incoming.openCount, equals(1));
     });
+
+    test('Pressing next during auto-crossfade caps remaining duration to manualDuration', () async {
+      await service.open(testItems, index: 0, play: true);
+      await service.setCrossfadeConfig(
+        const CrossfadeConfig(
+          duration: Duration(seconds: 10),
+          manualDuration: Duration(milliseconds: 100),
+        ),
+      );
+      final activeMock = service.activePlayer as MockAudioPlayerAdapter;
+      // Seek near end to trigger auto-crossfade (track is 180s)
+      await activeMock.seek(const Duration(seconds: 171));
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(service.isCrossfading, isTrue);
+
+      // Next is pressed: should promote and cap to manualDuration (100ms)
+      await service.next();
+
+      expect(service.isCrossfading, isTrue, reason: 'Fade continues to finish in manualDuration');
+      // Wait for the 100ms manual duration to complete (~140ms)
+      await Future.delayed(const Duration(milliseconds: 140));
+      expect(service.isCrossfading, isFalse, reason: 'Fade finished within manual duration');
+    });
   });
 
   group('QueueManager peekNext & hasNextDifferent Tests', () {

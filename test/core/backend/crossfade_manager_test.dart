@@ -533,5 +533,78 @@ void main() {
       expect(manager.progress, greaterThanOrEqualTo(0.5));
       manager.cancel();
     });
+
+    group('capRemainingDuration Unit Tests', () {
+      test('capRemainingDuration rescales remaining time without volume jump', () async {
+        bool completed = false;
+        await manager.cross(
+          playerOut: playerOut,
+          playerIn: playerIn,
+          targetDuration: const Duration(milliseconds: 1000),
+          curve: CrossfadeCurve.linear,
+          masterVolume: 100.0,
+          onCrossEnd: () => completed = true,
+        );
+
+        // Wait until ~200ms of the 1000ms have elapsed (progress ~0.2)
+        await Future.delayed(const Duration(milliseconds: 200));
+        expect(manager.isActive, isTrue);
+        final progressBefore = manager.progress;
+        final volOutBefore = playerOut.currentVolume;
+        final volInBefore = playerIn.currentVolume;
+
+        // Cap remaining duration to 150ms (original remaining was ~800ms)
+        manager.capRemainingDuration(const Duration(milliseconds: 150));
+
+        // Immediately after capping: progress and volumes must be virtually unchanged
+        expect((manager.progress - progressBefore).abs(), lessThan(0.05));
+        expect((playerOut.currentVolume - volOutBefore).abs(), lessThan(5.0));
+        expect((playerIn.currentVolume - volInBefore).abs(), lessThan(5.0));
+        expect(completed, isFalse);
+
+        // Wait for the capped duration to finish (~170ms)
+        await Future.delayed(const Duration(milliseconds: 180));
+        expect(manager.isActive, isFalse);
+        expect(completed, isTrue);
+        expect(playerOut.currentVolume, equals(0.0));
+        expect(playerIn.currentVolume, equals(100.0));
+      });
+
+      test('capRemainingDuration is a no-op when remaining time is already shorter', () async {
+        await manager.cross(
+          playerOut: playerOut,
+          playerIn: playerIn,
+          targetDuration: const Duration(milliseconds: 200),
+          curve: CrossfadeCurve.linear,
+          masterVolume: 100.0,
+        );
+
+        final initialEffective = manager.effectiveDuration;
+        // Remaining time is at most 200ms; capping to 500ms should do nothing
+        manager.capRemainingDuration(const Duration(milliseconds: 500));
+
+        expect(manager.effectiveDuration, equals(initialEffective));
+        manager.cancel();
+      });
+
+      test('capRemainingDuration with Duration.zero completes immediately', () async {
+        bool completed = false;
+        await manager.cross(
+          playerOut: playerOut,
+          playerIn: playerIn,
+          targetDuration: const Duration(seconds: 10),
+          curve: CrossfadeCurve.linear,
+          masterVolume: 100.0,
+          onCrossEnd: () => completed = true,
+        );
+
+        manager.capRemainingDuration(Duration.zero);
+
+        expect(manager.isActive, isFalse);
+        expect(completed, isTrue);
+        expect(playerOut.currentVolume, equals(0.0));
+        expect(playerIn.currentVolume, equals(100.0));
+      });
+    });
   });
 }

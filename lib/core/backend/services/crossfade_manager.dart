@@ -202,6 +202,43 @@ class CrossfadeManager {
     _timer = Timer.periodic(tickerInterval, (_) => _onTick(opId));
   }
 
+  /// Caps the remaining duration of an active crossfade to [maxRemainingDuration].
+  ///
+  /// If the remaining time is already less than or equal to [maxRemainingDuration],
+  /// or if the crossfade is inactive, this is a no-op.
+  ///
+  /// Rescales the timing without restarting or causing volume discontinuities,
+  /// ensuring the ongoing fade reaches completion smoothly within [maxRemainingDuration].
+  void capRemainingDuration(Duration maxRemainingDuration) {
+    if (!_isActive || _isPaused) return;
+    final opId = _operationId;
+
+    if (maxRemainingDuration <= Duration.zero) {
+      _complete(opId);
+      return;
+    }
+
+    final currentP = progress;
+    if (currentP >= 1.0) return;
+
+    final remainingFraction = 1.0 - currentP;
+    final remainingMs = remainingFraction * _effectiveDuration.inMilliseconds;
+    if (remainingMs <= maxRemainingDuration.inMilliseconds) {
+      return;
+    }
+
+    final newTotalMs =
+        (maxRemainingDuration.inMilliseconds / remainingFraction).round();
+    if (newTotalMs <= 0) {
+      _complete(opId);
+      return;
+    }
+
+    _effectiveDuration = Duration(milliseconds: newTotalMs);
+    _accumulatedTime = Duration(milliseconds: (currentP * newTotalMs).round());
+    _startPositionOut = null;
+  }
+
   /// Cancels the running crossfade transition ticker immediately.
   ///
   /// Guarantees:

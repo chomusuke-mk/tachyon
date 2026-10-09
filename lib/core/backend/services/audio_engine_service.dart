@@ -860,6 +860,7 @@ class AudioEngineService {
     _standbyPlayer = transition.outgoing;
     _bumpSession();
     _bindActivePlayer();
+    _crossfadeManager.capRemainingDuration(_crossfadeConfig.manualDuration);
     _emitState();
     return true;
   }
