@@ -156,14 +156,6 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
               // 4. Bass-reactive scale: exactly 8% maximum bounce with inertia
               final scale = 1.0 + (_smoothedBass * 0.08);
 
-              // Dynamic shadow density reacting to sustained energy
-              final shadowBlur = 14.0 + (_smoothedRms * 32.0);
-              final spread = 2.0 + (_smoothedRms * 8.0);
-              final shadowAlpha = (0.2 + (_smoothedRms * 0.35)).clamp(
-                0.0,
-                0.65,
-              );
-
               return Transform.scale(
                 scale: scale,
                 child: SizedBox(
@@ -197,16 +189,6 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
                         height: size,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(_cornerRadius),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: shadowAlpha,
-                              ),
-                              blurRadius: shadowBlur,
-                              spreadRadius: spread,
-                              offset: Offset(0, 14.0 + (_smoothedBass * 10.0)),
-                            ),
-                          ],
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(_cornerRadius),
