@@ -143,7 +143,7 @@ class PlaylistsController extends ChangeNotifier {
           name: clean,
           createdAt: DateTime.now().millisecondsSinceEpoch,
           type: PlaylistType.user,
-          entries: const [],
+            entries: [],
         ));
         _syncFromStore();
         notifyListeners();

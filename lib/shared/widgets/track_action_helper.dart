@@ -93,7 +93,7 @@ abstract final class TrackActionHelper {
         return AlertDialog(
           title: Text(strings.trAddPlaylist),
           content: playlists.isEmpty
-              ? Text(strings.plEmpty)
+              ? Text(strings.plNoPlaylists)
               : SizedBox(
                   width: 300,
                   child: ListView.builder(
@@ -119,6 +119,13 @@ abstract final class TrackActionHelper {
                 ),
           actions: [
             TextButton(
+              onPressed: () => showCreatePlaylistDialog(context),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.secondary,
+              ),
+              child: Text(strings.plCreateNew),
+            ),
+            TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(strings.selCancel),
             ),
@@ -126,6 +133,41 @@ abstract final class TrackActionHelper {
         );
       },
     );
+  }
+
+  static void showCreatePlaylistDialog(BuildContext context) {
+    final strings = context.read<LocaleController>().localeStrings;
+    final controller = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(strings.plCreateNew),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(hintText: strings.plNewNameHint),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(strings.plCancelButton),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = controller.text.trim();
+                if (name.isNotEmpty) {
+                  context.read<PlaylistsController>().createPlaylist(name);
+                }
+                Navigator.of(dialogContext).pop();
+              },
+              child: Text(strings.plCreateButton),
+            ),
+          ],
+        );
+      },
+    ).then((_) => controller.dispose());
   }
 
   static void showTrackInfoDialog(BuildContext context, Track track) {

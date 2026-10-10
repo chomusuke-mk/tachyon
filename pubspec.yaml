@@ -45,6 +45,9 @@ dependencies:
   sqlite3: ^3.7.0
   miniaudio_player:
     path: ../miniaudio_player
+  audio_service: ^0.18.19
+  smtc_windows: ^1.1.0
+  dbus: ^0.7.15
 dev_dependencies:
   flutter_test:
     sdk: flutter

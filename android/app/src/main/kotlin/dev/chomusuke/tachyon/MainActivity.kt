@@ -1,11 +1,11 @@
 package dev.chomusuke.tachyon
 
 import androidx.annotation.NonNull
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
     private val CHANNEL = "tachyon_channel"
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {

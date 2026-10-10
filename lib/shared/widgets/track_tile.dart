@@ -199,29 +199,21 @@ class TrackTile extends StatelessWidget {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   icon: AnimatedSwitcher(
-                    // 1. Duración rápida y con energía
                     duration: const Duration(milliseconds: 400),
-
-                    // 2. Curvas de animación: easeOutBack da ese efecto de "rebote" al inflarse
                     switchInCurve: Curves.easeOutBack,
                     switchOutCurve: Curves.easeIn,
-
-                    // 3. Constructor de la transición: Escala el ícono desde el centro
                     transitionBuilder:
                         (Widget child, Animation<double> animation) {
                           return ScaleTransition(
                             scale: animation,
-                            child: child, // Opcional: puedes envolver 'child' en FadeTransition si también quieres que se desvanezca
+                            child: child,
                           );
                         },
-
-                    // 4. El contenido: El ícono en sí
                     child: Icon(
                       effectiveIsLiked
                           ? Icons.favorite_rounded
                           : Icons.favorite_border_rounded,
 
-                      // ¡EL KEY ES OBLIGATORIO! Le dice al Switcher que son dos widgets diferentes.
                       key: ValueKey<bool>(effectiveIsLiked),
 
                       size: 20,

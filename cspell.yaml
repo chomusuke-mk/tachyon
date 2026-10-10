@@ -271,6 +271,7 @@ words:
   - MULTICONFIG
   - multilinea
   - multilínea
+  - multiplatform
   - Multiplatform
   - multistreams
   - muxing
@@ -319,6 +320,7 @@ words:
   - pkcs
   - pkgs
   - playables
+  - playerctl
   - podspec
   - posix
   - postuninstall
@@ -337,6 +339,7 @@ words:
   - PYTHONUNBUFFERED
   - quickjs
   - Reactividad
+  - readwrite
   - Rebuffer
   - reconectamos
   - Reconectando
@@ -436,6 +439,7 @@ words:
   - tldextract
   - tmpfilename
   - tombstoned
+  - trackid
   - twofactor
   - typedef
   - ultrarrápida
@@ -500,6 +504,7 @@ words:
   - xcuserdata
   - xcworkspace
   - Xdmcp
+  - xesam
   - Xext
   - Xfixes
   - youtub

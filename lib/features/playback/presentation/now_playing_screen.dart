@@ -11,6 +11,7 @@ import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/shared/widgets/track_action_helper.dart';
 
 import 'audio_effects_sheet.dart';
 import 'lyrics_view.dart';
@@ -399,9 +400,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               ),
 
               IconButton(
-                onPressed: _toggleQueue,
+                onPressed: () => TrackActionHelper.showAddToPlaylistDialog(
+                  context,
+                  currentTrack,
+                ),
                 icon: const Icon(Icons.add_rounded, size: 28),
-                tooltip: strings.npQueue,
+                tooltip: strings.npAddToPlaylist,
               ),
             ],
           ),

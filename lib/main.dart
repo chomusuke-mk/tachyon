@@ -16,6 +16,7 @@ import 'features/locales/data/locale_repository.dart';
 import 'features/locales/presentation/locale_controller.dart';
 import 'features/playback/presentation/lyrics_controller.dart';
 import 'features/playback/presentation/playback_controller.dart';
+import 'features/playback/services/system_media_service.dart';
 import 'features/playlists/presentation/playlists_controller.dart';
 import 'features/search/presentation/tachyon_search_controller.dart';
 import 'features/settings/data/settings_repository.dart';
@@ -97,6 +98,11 @@ Future<void> main() async {
     libraryStoreSupplier: () => libraryController.store,
   );
 
+  final systemMediaService = await SystemMediaService.initialize(
+    backendClient: backendClient,
+    playbackController: playbackController,
+  );
+
   final lyricsController = LyricsController(
     backendClient: backendClient,
     playbackController: playbackController,
@@ -141,6 +147,7 @@ Future<void> main() async {
         Provider<TachyonBackendClient>.value(value: backendClient),
         Provider<SettingsRepository>.value(value: settingsRepository),
         Provider<LocaleRepository>.value(value: localeRepository),
+        Provider<SystemMediaService>.value(value: systemMediaService),
         ChangeNotifierProvider<SettingsController>.value(
           value: settingsController,
         ),
