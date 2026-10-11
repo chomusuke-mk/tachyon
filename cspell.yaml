@@ -61,6 +61,7 @@ words:
   - checkedonce
   - chocolateyinstall
   - chomusuke
+  - Chumoy
   - clearsign
   - Cleartext
   - COINIT
@@ -76,6 +77,7 @@ words:
   - crossfade
   - crossfading
   - Crossfading
+  - crossfeed
   - Crossfeed
   - cupertino
   - dailymotion
@@ -262,6 +264,8 @@ words:
   - miniaturizable
   - miniaudio
   - miniplayer
+  - moffat
+  - Moffat
   - molestoso
   - Motorstatus
   - mpris
@@ -397,6 +401,7 @@ words:
   - snapstore
   - softprops
   - sourcecode
+  - spatializer
   - Spatializer
   - sponsorblock
   - sqflite

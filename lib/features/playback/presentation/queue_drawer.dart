@@ -7,6 +7,7 @@ import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 
 import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/shared/widgets/track_action_helper.dart';
 import 'playback_controller.dart';
 
 /// Modal bottom sheet representation of the playback queue on Mobile.
@@ -161,8 +162,20 @@ class _QueueViewState extends State<QueueView> {
                       ? colorScheme.primary
                       : colorScheme.onSurfaceVariant,
                 ),
-                tooltip: 'Infinite Library Mix',
+                tooltip: strings.npInfiniteMix,
                 onPressed: playback.toggleInfiniteMix,
+              ),
+
+              // Add Queue to Playlist
+              IconButton(
+                icon: const Icon(Icons.playlist_add_rounded),
+                tooltip: strings.npQueueAddToPlaylist,
+                onPressed: queue.isNotEmpty
+                    ? () => TrackActionHelper.showAddQueueToPlaylistDialog(
+                          context,
+                          queue,
+                        )
+                    : null,
               ),
 
               // Clear Queue with confirmation

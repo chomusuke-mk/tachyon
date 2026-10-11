@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/features/playlists/presentation/playlist_cover_helper.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/shared/utils/toast_utils.dart';
 
@@ -18,6 +21,12 @@ enum TrackAction {
   viewArtist,
   fileInfo,
   delete,
+}
+
+enum _QueueAddMode {
+  cancel,
+  addAnyway,
+  onlyNew,
 }
 
 T? _tryRead<T>(BuildContext context) {
@@ -85,89 +94,378 @@ abstract final class TrackActionHelper {
     final strings = context.read<LocaleController>().localeStrings;
     final controller = _tryRead<PlaylistsController>(context);
     if (controller == null) return;
-    final playlists = controller.userPlaylists;
 
     showDialog<void>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(strings.trAddPlaylist),
-          content: playlists.isEmpty
-              ? Text(strings.plNoPlaylists)
-              : SizedBox(
-                  width: 300,
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: playlists.length,
-                    itemBuilder: (context, index) {
-                      final pl = playlists[index];
-                      return ListTile(
-                        leading: const Icon(Icons.playlist_add_rounded),
-                        title: Text(pl.name),
-                        onTap: () {
-                          if (track.id != null && pl.id != null) {
-                            controller.addTrackToPlaylist(pl.id!, track.id!);
-                          }
-                          Navigator.of(context).pop();
-                          ToastUtils.showSuccess(
-                            strings.trAddedToPlaylistFormatted(pl.name),
-                          );
-                        },
+      builder: (dialogContext) {
+        bool isProcessing = false;
+
+        return ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) {
+            final playlists = controller.userPlaylists;
+            final colorScheme = Theme.of(context).colorScheme;
+
+            Future<void> handleSelectPlaylist(Playlist pl) async {
+              if (isProcessing) return;
+              isProcessing = true;
+              try {
+                if (pl.id == null) return;
+
+                final alreadyIn = pl.entries.any((entry) {
+                  if (track.id != null && entry.track?.id != null) {
+                    return entry.track!.id == track.id;
+                  }
+                  return entry.track?.filePath == track.filePath;
+                });
+
+                if (alreadyIn) {
+                  final confirmed = await showDialog<bool>(
+                    context: dialogContext,
+                    builder: (confirmContext) {
+                      return AlertDialog(
+                        icon: Icon(
+                          Icons.warning_amber_rounded,
+                          color: Theme.of(confirmContext).colorScheme.error,
+                          size: 28,
+                        ),
+                        title: Text(strings.plDuplicateTitle),
+                        content: Text(
+                          strings.plDuplicateConfirmFormatted(pl.name),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.of(confirmContext).pop(false),
+                            child: Text(strings.plCancelButton),
+                          ),
+                          FilledButton(
+                            onPressed: () =>
+                                Navigator.of(confirmContext).pop(true),
+                            child: Text(strings.plAddAnyway),
+                          ),
+                        ],
                       );
                     },
+                  );
+
+                  if (confirmed != true) return;
+                }
+
+                if (track.id != null) {
+                  await controller.addTrackToPlaylist(pl.id!, track.id!);
+                }
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+                ToastUtils.showSuccess(
+                  strings.trAddedToPlaylistFormatted(pl.name),
+                );
+              } finally {
+                isProcessing = false;
+              }
+            }
+
+            return AlertDialog(
+              title: Text(strings.trAddPlaylist),
+              content: playlists.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 24.0,
+                        horizontal: 8.0,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.playlist_remove_rounded,
+                            size: 48,
+                            color: colorScheme.onSurfaceVariant.withAlpha(128),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            strings.plNoPlaylists,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: 360,
+                        maxHeight: MediaQuery.sizeOf(dialogContext).height * 0.6,
+                      ),
+                      child: SizedBox(
+                        width: 320,
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: playlists.length,
+                          itemBuilder: (context, index) {
+                            final pl = playlists[index];
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 4.0,
+                              ),
+                              leading: buildPlaylistLeading(
+                                dialogContext,
+                                pl,
+                                size: 40,
+                              ),
+                              title: Text(
+                                pl.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                strings.plTracksCountFormatted(pl.trackCount),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.add_rounded),
+                                tooltip: strings.sAdd,
+                                onPressed: () => handleSelectPlaylist(pl),
+                              ),
+                              onTap: () => handleSelectPlaylist(pl),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+              actions: [
+                TextButton(
+                  onPressed: () => showCreatePlaylistDialog(dialogContext),
+                  style: TextButton.styleFrom(
+                    foregroundColor: colorScheme.secondary,
                   ),
+                  child: Text(strings.plCreateNew),
                 ),
-          actions: [
-            TextButton(
-              onPressed: () => showCreatePlaylistDialog(context),
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.secondary,
-              ),
-              child: Text(strings.plCreateNew),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(strings.selCancel),
-            ),
-          ],
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(strings.selCancel),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  static void showCreatePlaylistDialog(BuildContext context) {
+  static void showAddQueueToPlaylistDialog(
+    BuildContext context,
+    List<PlaylistEntry> queue,
+  ) {
     final strings = context.read<LocaleController>().localeStrings;
-    final controller = TextEditingController();
+    final controller = _tryRead<PlaylistsController>(context);
+    if (controller == null) return;
+
+    final queueTracks = queue
+        .map((e) => e.track)
+        .whereType<Track>()
+        .where((t) => t.id != null)
+        .toList();
+    if (queueTracks.isEmpty) return;
 
     showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(strings.plCreateNew),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: InputDecoration(hintText: strings.plNewNameHint),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(strings.plCancelButton),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = controller.text.trim();
-                if (name.isNotEmpty) {
-                  context.read<PlaylistsController>().createPlaylist(name);
+        bool isProcessing = false;
+
+        return ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) {
+            final playlists = controller.userPlaylists;
+            final colorScheme = Theme.of(context).colorScheme;
+
+            Future<void> handleSelectPlaylist(Playlist pl) async {
+              if (isProcessing) return;
+              isProcessing = true;
+              try {
+                if (pl.id == null) return;
+
+                final existingTrackIds = pl.entries
+                    .map((e) => e.track?.id)
+                    .whereType<int>()
+                    .toSet();
+
+                final duplicates = queueTracks
+                    .where((t) => existingTrackIds.contains(t.id))
+                    .toList();
+                final newTracks = queueTracks
+                    .where((t) => !existingTrackIds.contains(t.id))
+                    .toList();
+
+                List<Track>? tracksToAdd;
+
+                if (duplicates.isNotEmpty) {
+                  final choice = await showDialog<_QueueAddMode>(
+                    context: dialogContext,
+                    builder: (confirmContext) {
+                      return AlertDialog(
+                        icon: Icon(
+                          Icons.warning_amber_rounded,
+                          color: Theme.of(confirmContext).colorScheme.error,
+                          size: 28,
+                        ),
+                        title: Text(strings.plDuplicateQueueTitle),
+                        content: Text(
+                          strings.plDuplicateQueueConfirmFormatted(pl.name),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(confirmContext)
+                                .pop(_QueueAddMode.cancel),
+                            child: Text(strings.plCancelButton),
+                          ),
+                          FilledButton.tonal(
+                            onPressed: () => Navigator.of(confirmContext)
+                                .pop(_QueueAddMode.addAnyway),
+                            child: Text(strings.plAddAnyway),
+                          ),
+                          FilledButton(
+                            onPressed: newTracks.isNotEmpty
+                                ? () => Navigator.of(confirmContext)
+                                    .pop(_QueueAddMode.onlyNew)
+                                : null,
+                            child: Text(
+                              strings.plInsertOnlyNewFormatted(
+                                newTracks.length,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+
+                  if (choice == null || choice == _QueueAddMode.cancel) {
+                    return;
+                  } else if (choice == _QueueAddMode.addAnyway) {
+                    tracksToAdd = queueTracks;
+                  } else if (choice == _QueueAddMode.onlyNew) {
+                    tracksToAdd = newTracks;
+                  }
+                } else {
+                  tracksToAdd = queueTracks;
                 }
-                Navigator.of(dialogContext).pop();
-              },
-              child: Text(strings.plCreateButton),
-            ),
-          ],
+
+                if (tracksToAdd != null && tracksToAdd.isNotEmpty) {
+                  final trackIds = tracksToAdd.map((t) => t.id!).toList();
+                  await controller.addTracksToPlaylist(pl.id!, trackIds);
+                }
+
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+                ToastUtils.showSuccess(
+                  strings.trAddedToPlaylistFormatted(pl.name),
+                );
+              } finally {
+                isProcessing = false;
+              }
+            }
+
+            return AlertDialog(
+              title: Text(strings.trAddPlaylist),
+              content: playlists.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 24.0,
+                        horizontal: 8.0,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.playlist_remove_rounded,
+                            size: 48,
+                            color: colorScheme.onSurfaceVariant.withAlpha(128),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            strings.plNoPlaylists,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: 360,
+                        maxHeight:
+                            MediaQuery.sizeOf(dialogContext).height * 0.6,
+                      ),
+                      child: SizedBox(
+                        width: 320,
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: playlists.length,
+                          itemBuilder: (context, index) {
+                            final pl = playlists[index];
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 4.0,
+                              ),
+                              leading: buildPlaylistLeading(
+                                dialogContext,
+                                pl,
+                                size: 40,
+                              ),
+                              title: Text(
+                                pl.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                strings.plTracksCountFormatted(pl.trackCount),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.add_rounded),
+                                tooltip: strings.sAdd,
+                                onPressed: () => handleSelectPlaylist(pl),
+                              ),
+                              onTap: () => handleSelectPlaylist(pl),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+              actions: [
+                TextButton(
+                  onPressed: () => showCreatePlaylistDialog(dialogContext),
+                  style: TextButton.styleFrom(
+                    foregroundColor: colorScheme.secondary,
+                  ),
+                  child: Text(strings.plCreateNew),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(strings.selCancel),
+                ),
+              ],
+            );
+          },
         );
       },
-    ).then((_) => controller.dispose());
+    );
+  }
+
+  static Future<void> showCreatePlaylistDialog(BuildContext context) {
+    final strings = context.read<LocaleController>().localeStrings;
+    final playlistsCtrl = _tryRead<PlaylistsController>(context);
+
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _CreatePlaylistDialog(
+        playlistsCtrl: playlistsCtrl,
+        strings: strings,
+      ),
+    );
   }
 
   static void showTrackInfoDialog(BuildContext context, Track track) {
@@ -456,6 +754,68 @@ class TrackPopupMenuButton extends StatelessWidget {
               ],
             ),
           ),
+      ],
+    );
+  }
+}
+
+class _CreatePlaylistDialog extends StatefulWidget {
+  final PlaylistsController? playlistsCtrl;
+  final AppStringKey strings;
+
+  const _CreatePlaylistDialog({
+    required this.playlistsCtrl,
+    required this.strings,
+  });
+
+  @override
+  State<_CreatePlaylistDialog> createState() => _CreatePlaylistDialogState();
+}
+
+class _CreatePlaylistDialogState extends State<_CreatePlaylistDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit(BuildContext context) async {
+    final name = _controller.text.trim();
+    if (name.isNotEmpty && widget.playlistsCtrl != null) {
+      await widget.playlistsCtrl!.createPlaylist(name);
+    }
+    if (context.mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.strings.plCreateNew),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: InputDecoration(hintText: widget.strings.plNewNameHint),
+        onSubmitted: (_) => _submit(context),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(widget.strings.plCancelButton),
+        ),
+        FilledButton(
+          onPressed: () => _submit(context),
+          child: Text(widget.strings.plCreateButton),
+        ),
       ],
     );
   }

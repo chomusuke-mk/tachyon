@@ -416,6 +416,13 @@ class LibraryStore {
     }
   }
 
+  void addTracksToPlaylist(int playlistId, List<int> trackIds) {
+    if (trackIds.isEmpty) return;
+    for (final trackId in trackIds) {
+      addTrackToPlaylist(playlistId, trackId);
+    }
+  }
+
   void removeTrackFromPlaylist(int playlistId, int trackId) {
     final playlist = _playlistsById[playlistId];
     if (playlist == null) return;

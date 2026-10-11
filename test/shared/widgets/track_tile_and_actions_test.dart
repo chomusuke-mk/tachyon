@@ -359,4 +359,370 @@ void main() {
     );
     expect(menuButton, findsOneWidget);
   });
+
+  testWidgets(
+      'showAddToPlaylistDialog displays playlists with icon, count, and add button, and updates reactively when new playlist created',
+      (tester) async {
+    await tester.pumpWidget(
+      buildApp(
+        Builder(
+          builder: (context) {
+            return ElevatedButton(
+              onPressed: () =>
+                  TrackActionHelper.showAddToPlaylistDialog(context, trackA),
+              child: const Text('Open Dialog'),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Open dialog
+    await tester.tap(find.text('Open Dialog'));
+    await tester.pumpAndSettle();
+
+    // Verify dialog title
+    expect(
+      find.text(localeController.localeStrings.trAddPlaylist),
+      findsOneWidget,
+    );
+
+    // Verify existing user playlist "My Mix"
+    expect(find.text('My Mix'), findsOneWidget);
+    // Track count should be "0 tracks"
+    expect(
+      find.text(localeController.localeStrings.plTracksCountFormatted(0)),
+      findsOneWidget,
+    );
+    // Trailing add icon button exists
+    expect(find.byIcon(Icons.add_rounded), findsWidgets);
+
+    // Tap "Create playlist" button in actions
+    await tester.tap(find.text(localeController.localeStrings.plCreateNew));
+    await tester.pumpAndSettle();
+
+    // Enter new playlist name
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Workout Beats');
+    await tester.pumpAndSettle();
+
+    // Tap "Create" button
+    await tester.tap(find.text(localeController.localeStrings.plCreateButton));
+    await tester.pumpAndSettle();
+
+    // The add-to-playlist dialog is STILL OPEN and now shows the new playlist!
+    expect(find.text('Workout Beats'), findsOneWidget);
+    expect(find.text('My Mix'), findsOneWidget);
+    // "Workout Beats" also has "0 tracks"
+    expect(
+      find.text(localeController.localeStrings.plTracksCountFormatted(0)),
+      findsNWidgets(2),
+    );
+  });
+
+  testWidgets(
+      'showAddToPlaylistDialog shows duplicate warning when track is already in playlist',
+      (tester) async {
+    // Add trackA to "My Mix" first
+    final userPl = store.playlists.firstWhere((p) => p.name == 'My Mix');
+    store.addTrackToPlaylist(userPl.id!, trackA.id!);
+    playlistsController.updateStore(store);
+
+    await tester.pumpWidget(
+      buildApp(
+        Builder(
+          builder: (context) {
+            return ElevatedButton(
+              onPressed: () =>
+                  TrackActionHelper.showAddToPlaylistDialog(context, trackA),
+              child: const Text('Open Dialog'),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Open dialog
+    await tester.tap(find.text('Open Dialog'));
+    await tester.pumpAndSettle();
+
+    // Verify track count reflects 1 track
+    expect(
+      find.text(localeController.localeStrings.plTracksCountFormatted(1)),
+      findsOneWidget,
+    );
+
+    // Tap "My Mix" playlist tile to add trackA again
+    await tester.tap(find.text('My Mix'));
+    await tester.pumpAndSettle();
+
+    // Warning dialog should appear
+    expect(
+      find.text(localeController.localeStrings.plDuplicateTitle),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        localeController.localeStrings.plDuplicateConfirmFormatted('My Mix'),
+      ),
+      findsOneWidget,
+    );
+    final warningDialogFinder = find.byWidgetPredicate(
+      (w) =>
+          w is AlertDialog &&
+          find
+              .descendant(
+                of: find.byWidget(w),
+                matching:
+                    find.text(localeController.localeStrings.plDuplicateTitle),
+              )
+              .evaluate()
+              .isNotEmpty,
+    );
+    expect(warningDialogFinder, findsOneWidget);
+
+    final warningCancelButton = find.descendant(
+      of: warningDialogFinder,
+      matching: find.text(localeController.localeStrings.plCancelButton),
+    );
+    expect(warningCancelButton, findsOneWidget);
+    expect(
+      find.text(localeController.localeStrings.plAddAnyway),
+      findsOneWidget,
+    );
+
+    // Test Cancel first
+    await tester.tap(warningCancelButton);
+    await tester.pumpAndSettle();
+
+    // Warning dialog dismissed, parent dialog still open
+    expect(
+      find.text(localeController.localeStrings.plDuplicateTitle),
+      findsNothing,
+    );
+    expect(
+      find.text(localeController.localeStrings.trAddPlaylist),
+      findsOneWidget,
+    );
+    // Count remains 1
+    expect(userPl.entries.length, 1);
+
+    // Tap "My Mix" again
+    await tester.tap(find.text('My Mix'));
+    await tester.pumpAndSettle();
+
+    // Tap "Add anyway"
+    await tester.tap(find.text(localeController.localeStrings.plAddAnyway));
+    await tester.pumpAndSettle();
+
+    // Dialog should be dismissed
+    expect(
+      find.text(localeController.localeStrings.trAddPlaylist),
+      findsNothing,
+    );
+    // Track count should now be 2
+    expect(userPl.entries.length, 2);
+  });
+
+  testWidgets(
+      'showAddQueueToPlaylistDialog adds entire queue when no duplicates',
+      (tester) async {
+    final userPl = store.playlists.firstWhere((p) => p.name == 'My Mix');
+    expect(userPl.entries.isEmpty, isTrue);
+
+    final queue = [
+      PlaylistEntry.forQueue(id: 1, position: 0, track: trackA),
+      PlaylistEntry.forQueue(id: 2, position: 1, track: trackB),
+    ];
+
+    await tester.pumpWidget(
+      buildApp(
+        Builder(
+          builder: (context) {
+            return ElevatedButton(
+              onPressed: () =>
+                  TrackActionHelper.showAddQueueToPlaylistDialog(context, queue),
+              child: const Text('Open Queue Dialog'),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open Queue Dialog'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(localeController.localeStrings.trAddPlaylist),
+      findsOneWidget,
+    );
+    expect(find.text('My Mix'), findsOneWidget);
+
+    // Tap "My Mix"
+    await tester.tap(find.text('My Mix'));
+    await tester.pumpAndSettle();
+
+    // Dialog dismissed immediately since no duplicates
+    expect(
+      find.text(localeController.localeStrings.trAddPlaylist),
+      findsNothing,
+    );
+    // userPl now has 2 entries (trackA and trackB)
+    expect(userPl.entries.length, 2);
+    expect(userPl.entries[0].track?.id, trackA.id);
+    expect(userPl.entries[1].track?.id, trackB.id);
+  });
+
+  testWidgets(
+      'showAddQueueToPlaylistDialog with duplicates presents 3 options and handles each',
+      (tester) async {
+    final userPl = store.playlists.firstWhere((p) => p.name == 'My Mix');
+    store.addTrackToPlaylist(userPl.id!, trackA.id!);
+    playlistsController.updateStore(store);
+
+    expect(userPl.entries.length, 1);
+
+    final queue = [
+      PlaylistEntry.forQueue(id: 1, position: 0, track: trackA),
+      PlaylistEntry.forQueue(id: 2, position: 1, track: trackB),
+    ];
+
+    await tester.pumpWidget(
+      buildApp(
+        Builder(
+          builder: (context) {
+            return ElevatedButton(
+              onPressed: () =>
+                  TrackActionHelper.showAddQueueToPlaylistDialog(context, queue),
+              child: const Text('Open Queue Dialog'),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open Queue Dialog'));
+    await tester.pumpAndSettle();
+
+    // Tap "My Mix" to trigger duplicate warning
+    await tester.tap(find.text('My Mix'));
+    await tester.pumpAndSettle();
+
+    // Verify warning dialog title and message
+    expect(
+      find.text(localeController.localeStrings.plDuplicateQueueTitle),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        localeController.localeStrings.plDuplicateQueueConfirmFormatted('My Mix'),
+      ),
+      findsOneWidget,
+    );
+
+    final warningDialogFinder = find.byWidgetPredicate(
+      (w) =>
+          w is AlertDialog &&
+          find
+              .descendant(
+                of: find.byWidget(w),
+                matching:
+                    find.text(localeController.localeStrings.plDuplicateQueueTitle),
+              )
+              .evaluate()
+              .isNotEmpty,
+    );
+    expect(warningDialogFinder, findsOneWidget);
+
+    // Verify 3 options:
+    // 1. Cancel
+    final cancelBtn = find.descendant(
+      of: warningDialogFinder,
+      matching: find.text(localeController.localeStrings.plCancelButton),
+    );
+    expect(cancelBtn, findsOneWidget);
+
+    // 2. Add anyway
+    final addAnywayBtn = find.descendant(
+      of: warningDialogFinder,
+      matching: find.text(localeController.localeStrings.plAddAnyway),
+    );
+    expect(addAnywayBtn, findsOneWidget);
+
+    // 3. Insert only new (1)
+    final onlyNewBtn = find.descendant(
+      of: warningDialogFinder,
+      matching: find.text(
+        localeController.localeStrings.plInsertOnlyNewFormatted(1),
+      ),
+    );
+    expect(onlyNewBtn, findsOneWidget);
+
+    // Test Option 1: Cancel
+    await tester.tap(cancelBtn);
+    await tester.pumpAndSettle();
+
+    // Warning closed, parent dialog still open, count still 1
+    expect(
+      find.text(localeController.localeStrings.plDuplicateQueueTitle),
+      findsNothing,
+    );
+    expect(
+      find.text(localeController.localeStrings.trAddPlaylist),
+      findsOneWidget,
+    );
+    expect(userPl.entries.length, 1);
+
+    // Tap "My Mix" again
+    await tester.tap(find.text('My Mix'));
+    await tester.pumpAndSettle();
+
+    // Test Option 3: Insert only new (1)
+    await tester.tap(
+      find.text(localeController.localeStrings.plInsertOnlyNewFormatted(1)),
+    );
+    await tester.pumpAndSettle();
+
+    // Dialog closed, only trackB was inserted (total 2)
+    expect(
+      find.text(localeController.localeStrings.trAddPlaylist),
+      findsNothing,
+    );
+    expect(userPl.entries.length, 2);
+    expect(userPl.entries[0].track?.id, trackA.id);
+    expect(userPl.entries[1].track?.id, trackB.id);
+
+    // Now test Option 2: Add anyway when duplicates exist
+    await tester.tap(find.text('Open Queue Dialog'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('My Mix'));
+    await tester.pumpAndSettle();
+
+    // Now both trackA and trackB are duplicates! New count is 0.
+    final onlyNewZero = find.text(
+      localeController.localeStrings.plInsertOnlyNewFormatted(0),
+    );
+    expect(onlyNewZero, findsOneWidget);
+    // Button should be disabled
+    final filledBtnWidget = tester.widget<FilledButton>(
+      find.ancestor(of: onlyNewZero, matching: find.byType(FilledButton)),
+    );
+    expect(filledBtnWidget.onPressed, isNull);
+
+    // Tap Add anyway
+    await tester.tap(find.text(localeController.localeStrings.plAddAnyway));
+    await tester.pumpAndSettle();
+
+    // Dialog dismissed, both tracks added anyway (total 4)
+    expect(
+      find.text(localeController.localeStrings.trAddPlaylist),
+      findsNothing,
+    );
+    expect(userPl.entries.length, 4);
+  });
 }

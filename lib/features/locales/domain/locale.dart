@@ -37,6 +37,10 @@ class AppStringKey {
       _cadenasLocalizadas['np_queue_clear_confirm'] ?? '';
   String get npQueueEmpty => _cadenasLocalizadas['np_queue_empty'] ?? '';
   String get npQueueReorder => _cadenasLocalizadas['np_queue_reorder'] ?? '';
+  String get npQueueAddToPlaylist =>
+      _cadenasLocalizadas['np_queue_add_to_playlist'] ?? '';
+  String get npInfiniteMix =>
+      _cadenasLocalizadas['np_infinite_mix'] ?? '';
   String get npLyrics => _cadenasLocalizadas['np_lyrics'] ?? '';
   String get npLyricsEmpty => _cadenasLocalizadas['np_lyrics_empty'] ?? '';
   String get npLyricsSync => _cadenasLocalizadas['np_lyrics_sync'] ?? '';
@@ -254,6 +258,17 @@ class AppStringKey {
   String get plTracksCount => _cadenasLocalizadas['pl_tracks_count'] ?? '';
   String get plReorderHint => _cadenasLocalizadas['pl_reorder_hint'] ?? '';
   String get plNoPlaylists => _cadenasLocalizadas['pl_no_playlists'] ?? '';
+  String get plDuplicateTitle =>
+      _cadenasLocalizadas['pl_duplicate_title'] ?? '';
+  String get plDuplicateConfirm =>
+      _cadenasLocalizadas['pl_duplicate_confirm'] ?? '';
+  String get plAddAnyway => _cadenasLocalizadas['pl_add_anyway'] ?? '';
+  String get plDuplicateQueueTitle =>
+      _cadenasLocalizadas['pl_duplicate_queue_title'] ?? '';
+  String get plDuplicateQueueConfirm =>
+      _cadenasLocalizadas['pl_duplicate_queue_confirm'] ?? '';
+  String get plInsertOnlyNew =>
+      _cadenasLocalizadas['pl_insert_only_new'] ?? '';
 
   // ---------------------------------------------------------------------------
   // g_: Genres Screen
@@ -609,6 +624,12 @@ class AppStringKey {
       plTracksCount.replaceAll('{count}', count.toString());
   String plDeleteConfirmFormatted(String name) =>
       plDeleteConfirm.replaceAll('{name}', name);
+  String plDuplicateConfirmFormatted(String name) =>
+      plDuplicateConfirm.replaceAll('{name}', name);
+  String plDuplicateQueueConfirmFormatted(String name) =>
+      plDuplicateQueueConfirm.replaceAll('{name}', name);
+  String plInsertOnlyNewFormatted(int count) =>
+      plInsertOnlyNew.replaceAll('{count}', count.toString());
   String gTracksCountFormatted(int count) =>
       gTracksCount.replaceAll('{count}', count.toString());
   String gAlbumsCountFormatted(int count) =>
@@ -640,7 +661,8 @@ class AppStringKey {
     'np_repeat_off', 'np_repeat_all', 'np_repeat_one', 'np_elapsed',
     'np_remaining', 'np_duration', 'np_seek_forward', 'np_seek_backward',
     'np_queue', 'np_queue_clear', 'np_queue_clear_confirm',
-    'np_queue_empty', 'np_queue_reorder',
+    'np_queue_empty', 'np_queue_reorder', 'np_queue_add_to_playlist',
+    'np_infinite_mix',
     'np_lyrics', 'np_lyrics_empty', 'np_lyrics_sync', 'np_lyrics_unsync',
     'np_lyrics_translate',
     'np_lyrics_translating',
@@ -718,6 +740,12 @@ class AppStringKey {
     'pl_tracks_count',
     'pl_reorder_hint',
     'pl_no_playlists',
+    'pl_duplicate_title',
+    'pl_duplicate_confirm',
+    'pl_add_anyway',
+    'pl_duplicate_queue_title',
+    'pl_duplicate_queue_confirm',
+    'pl_insert_only_new',
     // g_
     'g_title', 'g_search_hint', 'g_unknown', 'g_tracks_count', 'g_albums_count',
     'g_play_all', 'g_shuffle_all', 'g_no_genres', 'g_no_genres_desc',

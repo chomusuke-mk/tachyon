@@ -186,4 +186,48 @@ void main() {
 
     debugPrint('Reorder tested successfully (from $reorderFrom to $reorderTo)');
   });
+
+  testWidgets('QueueView displays Add to Playlist button beside infinity mix with localized tooltip', (tester) async {
+    final mockPlayback = MockPlaybackController();
+    final localeRepo = _FileSystemLocaleRepository();
+    final localeController = LocaleController(localeRepo, 'en');
+    await localeController.whenReady;
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackController>.value(value: mockPlayback),
+          ChangeNotifierProvider<LocaleController>.value(value: localeController),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: QueueView(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final addToPlaylistFinder = find.byIcon(Icons.playlist_add_rounded);
+    expect(addToPlaylistFinder, findsOneWidget);
+
+    final infinityFinder = find.byIcon(Icons.all_inclusive_rounded);
+    expect(infinityFinder, findsOneWidget);
+
+    final btnWidget = tester.widget<IconButton>(
+      find.ancestor(of: addToPlaylistFinder, matching: find.byType(IconButton)),
+    );
+    expect(btnWidget.tooltip, localeController.localeStrings.npQueueAddToPlaylist);
+    expect(btnWidget.onPressed, isNotNull);
+
+    // When queue is empty, button is disabled
+    mockPlayback.queue = [];
+    mockPlayback.notifyListeners();
+    await tester.pumpAndSettle();
+
+    final emptyBtnWidget = tester.widget<IconButton>(
+      find.ancestor(of: addToPlaylistFinder, matching: find.byType(IconButton)),
+    );
+    expect(emptyBtnWidget.onPressed, isNull);
+  });
 }

@@ -208,6 +208,22 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
+  Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) async {
+    if (trackIds.isEmpty) return;
+    _store.addTracksToPlaylist(playlistId, trackIds);
+    if (playlistId == AppDatabase.likedSongsPlaylistId) {
+      _likedTrackIds.addAll(trackIds);
+    }
+    _syncFromStore();
+    notifyListeners();
+
+    try {
+      await _backend.addTracksToPlaylist(playlistId, trackIds);
+    } catch (e) {
+      debugPrint('[PlaylistsController] addTracksToPlaylist error: $e');
+    }
+  }
+
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) async {
     _store.removeTrackFromPlaylist(playlistId, trackId);
     if (playlistId == AppDatabase.likedSongsPlaylistId) {

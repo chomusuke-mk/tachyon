@@ -43,650 +43,709 @@ class AudioEffectsSheet extends StatelessWidget {
             horizontalPad,
             isDialog ? 20 : 32,
           ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Drag handle for bottom sheet mode
-          if (!isDialog) ...[
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Title & Close Button
-          Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.tune_rounded,
-                  color: colorScheme.primary,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  strings.npAudioControls,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+              // Drag handle for bottom sheet mode
+              if (!isDialog) ...[
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.4,
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
+                const SizedBox(height: 14),
+              ],
+
+              // Title & Close Button
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer.withValues(
+                        alpha: 0.5,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.tune_rounded,
+                      color: colorScheme.primary,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      strings.npAudioControls,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
               ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded),
-                onPressed: () => Navigator.of(context).pop(),
+              const SizedBox(height: 16),
+
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Card 1: Playback Tuning (Speed, Pitch, Volume)
+                      Card(
+                        elevation: 0,
+                        color: colorScheme.surfaceContainerLow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: colorScheme.outlineVariant.withValues(
+                              alpha: 0.35,
+                            ),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.speed_rounded,
+                                    size: 18,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      strings.npSpeed,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surfaceContainerHighest
+                                          .withValues(alpha: 0.5),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '${rate.toStringAsFixed(2)}x',
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.primary,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.restore_rounded),
+                                    tooltip: '1.0x',
+                                    onPressed: () => playback.setRate(
+                                      AppDefaults.playbackRateDefault,
+                                    ),
+                                    iconSize: 20,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  Expanded(
+                                    child: Slider.adaptive(
+                                      value: rate.clamp(
+                                        AppDefaults.playbackRateMin,
+                                        AppDefaults.playbackRateMax,
+                                      ),
+                                      min: AppDefaults.playbackRateMin,
+                                      max: AppDefaults.playbackRateMax,
+                                      divisions:
+                                          ((AppDefaults.playbackRateMax -
+                                                      AppDefaults
+                                                          .playbackRateMin) /
+                                                  0.1)
+                                              .round(),
+                                      onChanged: playback.setRate,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 16),
+
+                              // Pitch Shifting
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.keyboard_voice_rounded,
+                                    size: 18,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      strings.npPitch,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surfaceContainerHighest
+                                          .withValues(alpha: 0.5),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      pitch.toStringAsFixed(2),
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.primary,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.restore_rounded),
+                                    tooltip: '1.0',
+                                    onPressed: () => playback.setPitch(
+                                      AppDefaults.playbackPitchDefault,
+                                    ),
+                                    iconSize: 20,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      value: pitch.clamp(
+                                        AppDefaults.playbackPitchMin,
+                                        AppDefaults.playbackPitchMax,
+                                      ),
+                                      min: AppDefaults.playbackPitchMin,
+                                      max: AppDefaults.playbackPitchMax,
+                                      divisions:
+                                          ((AppDefaults.playbackPitchMax -
+                                                      AppDefaults
+                                                          .playbackPitchMin) /
+                                                  0.1)
+                                              .round(),
+                                      onChanged: playback.setPitch,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 16),
+
+                              // Volume Boost
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.volume_up_rounded,
+                                    size: 18,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      strings.npVolumeBoost,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surfaceContainerHighest
+                                          .withValues(alpha: 0.5),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '${volume.toStringAsFixed(0)}%',
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.primary,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.restore_rounded),
+                                    tooltip: '100%',
+                                    onPressed: () => playback.setVolume(
+                                      AppDefaults.volumeBoostDefault,
+                                    ),
+                                    iconSize: 20,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      value: volume.clamp(
+                                        AppDefaults.volumeBoostMin,
+                                        AppDefaults.volumeBoostMax,
+                                      ),
+                                      min: AppDefaults.volumeBoostMin,
+                                      max: AppDefaults.volumeBoostMax,
+                                      divisions:
+                                          (AppDefaults.volumeBoostMax -
+                                                  AppDefaults.volumeBoostMin)
+                                              .round(),
+                                      onChanged: playback.setVolume,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Card 2: Crossfade Durations
+                      Card(
+                        elevation: 0,
+                        color: colorScheme.surfaceContainerLow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: colorScheme.outlineVariant.withValues(
+                              alpha: 0.35,
+                            ),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.swap_horiz_rounded,
+                                    size: 18,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      strings.sCrossfadeEnable,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Auto Crossfade Duration
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      strings.npCrossfadeAuto,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${settings.crossfadeDuration}s',
+                                    style: theme.textTheme.labelMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.primary,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.restore_rounded),
+                                    tooltip:
+                                        '${AppDefaults.crossfadeDefaultDuration}s',
+                                    onPressed: () =>
+                                        settings.setCrossfadeDuration(
+                                          AppDefaults.crossfadeDefaultDuration,
+                                        ),
+                                    iconSize: 20,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      value: settings.crossfadeDuration
+                                          .toDouble()
+                                          .clamp(
+                                            AppDefaults.crossfadeMinDuration
+                                                .toDouble(),
+                                            AppDefaults.crossfadeMaxDuration
+                                                .toDouble(),
+                                          ),
+                                      min: AppDefaults.crossfadeMinDuration
+                                          .toDouble(),
+                                      max: AppDefaults.crossfadeMaxDuration
+                                          .toDouble(),
+                                      divisions:
+                                          AppDefaults.crossfadeMaxDuration -
+                                          AppDefaults.crossfadeMinDuration,
+                                      onChanged: (val) => settings
+                                          .setCrossfadeDuration(val.round()),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              // Manual Skip Crossfade Duration
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      strings.npCrossfadeManual,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${settings.crossfadeManualDuration}s',
+                                    style: theme.textTheme.labelMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.primary,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.restore_rounded),
+                                    tooltip:
+                                        '${AppDefaults.crossfadeManualDefaultDuration}s',
+                                    onPressed: () =>
+                                        settings.setCrossfadeManualDuration(
+                                          AppDefaults
+                                              .crossfadeManualDefaultDuration,
+                                        ),
+                                    iconSize: 20,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      value: settings.crossfadeManualDuration
+                                          .toDouble()
+                                          .clamp(
+                                            AppDefaults
+                                                .crossfadeManualMinDuration
+                                                .toDouble(),
+                                            AppDefaults
+                                                .crossfadeManualMaxDuration
+                                                .toDouble(),
+                                          ),
+                                      min: AppDefaults
+                                          .crossfadeManualMinDuration
+                                          .toDouble(),
+                                      max: AppDefaults
+                                          .crossfadeManualMaxDuration
+                                          .toDouble(),
+                                      divisions:
+                                          AppDefaults
+                                              .crossfadeManualMaxDuration -
+                                          AppDefaults
+                                              .crossfadeManualMinDuration,
+                                      onChanged: (val) =>
+                                          settings.setCrossfadeManualDuration(
+                                            val.round(),
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Card 3: Audio Enhancements (Volume Normalization & Skip Silence)
+                      Card(
+                        elevation: 0,
+                        color: colorScheme.surfaceContainerLow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: colorScheme.outlineVariant.withValues(
+                              alpha: 0.35,
+                            ),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Volume Normalization
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.auto_fix_high_rounded,
+                                    size: 20,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          strings.sReplayGainMode,
+                                          style: theme.textTheme.titleSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          strings.sReplayGainModeDesc,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Switch(
+                                    value: settings.volumeNormalization,
+                                    onChanged: (val) =>
+                                        settings.setVolumeNormalization(val),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 24),
+
+                              // Skip Silence
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.graphic_eq_rounded,
+                                    size: 20,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          strings.sSkipSilence,
+                                          style: theme.textTheme.titleSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          strings.sSkipSilenceDesc,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Switch(
+                                    value: settings.skipSilence,
+                                    onChanged: (val) =>
+                                        settings.setSkipSilence(val),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 24),
+
+                              // True-Peak Limiter
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.shield_rounded,
+                                    size: 20,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          strings.sLimiter,
+                                          style: theme.textTheme.titleSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          strings.sLimiterDesc,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Switch(
+                                    value: settings.limiterEnabled,
+                                    onChanged: (val) =>
+                                        settings.setLimiter(val),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 24),
+
+                              // Mono Audio
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.volume_down_rounded,
+                                    size: 20,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          strings.sMonoAudio,
+                                          style: theme.textTheme.titleSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          strings.sMonoAudioDesc,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Switch(
+                                    value: settings.mono,
+                                    onChanged: (val) => settings.setMono(val),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Card 4: Stereo & Spatial Processing
+                      const _StereoProcessingSection(),
+                      const SizedBox(height: 12),
+
+                      // Card 5: 10-Band Graphic Equalizer
+                      const _EqualizerSection(),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Card 1: Playback Tuning (Speed, Pitch, Volume)
-                  Card(
-                    elevation: 0,
-                    color: colorScheme.surfaceContainerLow,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.speed_rounded,
-                                size: 18,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  strings.npSpeed,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.surfaceContainerHighest
-                                      .withValues(alpha: 0.5),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '${rate.toStringAsFixed(2)}x',
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.restore_rounded),
-                                tooltip: '1.0x',
-                                onPressed: () => playback
-                                    .setRate(AppDefaults.playbackRateDefault),
-                                iconSize: 20,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                              Expanded(
-                                child: Slider.adaptive(
-                                  value: rate.clamp(
-                                    AppDefaults.playbackRateMin,
-                                    AppDefaults.playbackRateMax,
-                                  ),
-                                  min: AppDefaults.playbackRateMin,
-                                  max: AppDefaults.playbackRateMax,
-                                  divisions: ((AppDefaults.playbackRateMax -
-                                              AppDefaults.playbackRateMin) /
-                                          0.1)
-                                      .round(),
-                                  onChanged: playback.setRate,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 16),
-
-                          // Pitch Shifting
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.keyboard_voice_rounded,
-                                size: 18,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  strings.npPitch,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.surfaceContainerHighest
-                                      .withValues(alpha: 0.5),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  pitch.toStringAsFixed(2),
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.restore_rounded),
-                                tooltip: '1.0',
-                                onPressed: () => playback
-                                    .setPitch(AppDefaults.playbackPitchDefault),
-                                iconSize: 20,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                              Expanded(
-                                child: Slider(
-                                  value: pitch.clamp(
-                                    AppDefaults.playbackPitchMin,
-                                    AppDefaults.playbackPitchMax,
-                                  ),
-                                  min: AppDefaults.playbackPitchMin,
-                                  max: AppDefaults.playbackPitchMax,
-                                  divisions: ((AppDefaults.playbackPitchMax -
-                                              AppDefaults.playbackPitchMin) /
-                                          0.1)
-                                      .round(),
-                                  onChanged: playback.setPitch,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 16),
-
-                          // Volume Boost
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.volume_up_rounded,
-                                size: 18,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  strings.npVolumeBoost,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.surfaceContainerHighest
-                                      .withValues(alpha: 0.5),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '${volume.toStringAsFixed(0)}%',
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.restore_rounded),
-                                tooltip: '100%',
-                                onPressed: () => playback
-                                    .setVolume(AppDefaults.volumeBoostDefault),
-                                iconSize: 20,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                              Expanded(
-                                child: Slider(
-                                  value: volume.clamp(
-                                    AppDefaults.volumeBoostMin,
-                                    AppDefaults.volumeBoostMax,
-                                  ),
-                                  min: AppDefaults.volumeBoostMin,
-                                  max: AppDefaults.volumeBoostMax,
-                                  divisions: (AppDefaults.volumeBoostMax -
-                                          AppDefaults.volumeBoostMin)
-                                      .round(),
-                                  onChanged: playback.setVolume,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Card 2: Crossfade Durations
-                  Card(
-                    elevation: 0,
-                    color: colorScheme.surfaceContainerLow,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.swap_horiz_rounded,
-                                size: 18,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  strings.sCrossfadeEnable,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Auto Crossfade Duration
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  strings.npCrossfadeAuto,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${settings.crossfadeDuration}s',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.restore_rounded),
-                                tooltip: '${AppDefaults.crossfadeDefaultDuration}s',
-                                onPressed: () => settings.setCrossfadeDuration(
-                                  AppDefaults.crossfadeDefaultDuration,
-                                ),
-                                iconSize: 20,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                              Expanded(
-                                child: Slider(
-                                  value: settings.crossfadeDuration
-                                      .toDouble()
-                                      .clamp(
-                                        AppDefaults.crossfadeMinDuration
-                                            .toDouble(),
-                                        AppDefaults.crossfadeMaxDuration
-                                            .toDouble(),
-                                      ),
-                                  min: AppDefaults.crossfadeMinDuration
-                                      .toDouble(),
-                                  max: AppDefaults.crossfadeMaxDuration
-                                      .toDouble(),
-                                  divisions: AppDefaults.crossfadeMaxDuration -
-                                      AppDefaults.crossfadeMinDuration,
-                                  onChanged: (val) => settings
-                                      .setCrossfadeDuration(val.round()),
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          // Manual Skip Crossfade Duration
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  strings.npCrossfadeManual,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${settings.crossfadeManualDuration}s',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.restore_rounded),
-                                tooltip:
-                                    '${AppDefaults.crossfadeManualDefaultDuration}s',
-                                onPressed: () =>
-                                    settings.setCrossfadeManualDuration(
-                                      AppDefaults.crossfadeManualDefaultDuration,
-                                    ),
-                                iconSize: 20,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                              Expanded(
-                                child: Slider(
-                                  value: settings.crossfadeManualDuration
-                                      .toDouble()
-                                      .clamp(
-                                        AppDefaults.crossfadeManualMinDuration
-                                            .toDouble(),
-                                        AppDefaults.crossfadeManualMaxDuration
-                                            .toDouble(),
-                                      ),
-                                  min: AppDefaults.crossfadeManualMinDuration
-                                      .toDouble(),
-                                  max: AppDefaults.crossfadeManualMaxDuration
-                                      .toDouble(),
-                                  divisions:
-                                      AppDefaults.crossfadeManualMaxDuration -
-                                      AppDefaults.crossfadeManualMinDuration,
-                                  onChanged: (val) => settings
-                                      .setCrossfadeManualDuration(val.round()),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Card 3: Audio Enhancements (Volume Normalization & Skip Silence)
-                  Card(
-                    elevation: 0,
-                    color: colorScheme.surfaceContainerLow,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Volume Normalization
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.auto_fix_high_rounded,
-                                size: 20,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      strings.sReplayGainMode,
-                                      style: theme.textTheme.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      strings.sReplayGainModeDesc,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Switch(
-                                value: settings.volumeNormalization,
-                                onChanged: (val) =>
-                                    settings.setVolumeNormalization(val),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 24),
-
-                          // Skip Silence
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.graphic_eq_rounded,
-                                size: 20,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      strings.sSkipSilence,
-                                      style: theme.textTheme.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      strings.sSkipSilenceDesc,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Switch(
-                                value: settings.skipSilence,
-                                onChanged: (val) => settings.setSkipSilence(val),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 24),
-
-                          // True-Peak Limiter
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.shield_rounded,
-                                size: 20,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      strings.sLimiter,
-                                      style: theme.textTheme.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      strings.sLimiterDesc,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Switch(
-                                value: settings.limiterEnabled,
-                                onChanged: (val) => settings.setLimiter(val),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 24),
-
-                          // Mono Audio
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.volume_down_rounded,
-                                size: 20,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      strings.sMonoAudio,
-                                      style: theme.textTheme.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      strings.sMonoAudioDesc,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Switch(
-                                value: settings.mono,
-                                onChanged: (val) => settings.setMono(val),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Card 4: Stereo & Spatial Processing
-                  const _StereoProcessingSection(),
-                  const SizedBox(height: 12),
-
-                  // Card 5: 10-Band Graphic Equalizer
-                  const _EqualizerSection(),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
-  },
-);
-}
+  }
 }
 
 class _EqualizerSection extends StatelessWidget {
   const _EqualizerSection();
 
   static const _bandFrequencies = [
-    '60Hz',
-    '170Hz',
-    '310Hz',
-    '600Hz',
+    '31Hz',
+    '63Hz',
+    '125Hz',
+    '250Hz',
+    '500Hz',
     '1kHz',
-    '3kHz',
-    '6kHz',
-    '12kHz',
-    '14kHz',
+    '2kHz',
+    '4kHz',
+    '8kHz',
     '16kHz',
   ];
 
@@ -741,7 +800,10 @@ class _EqualizerSection extends StatelessWidget {
                 const SizedBox(width: 8),
                 Switch.adaptive(
                   value: isEnabled,
-                  onChanged: (val) => settings.setEqualizerEnabled(val),
+                  onChanged: (val) {
+                    settings.setEqualizerEnabled(val);
+                    settings.setPreamp(0.0);
+                  },
                 ),
               ],
             ),
@@ -774,8 +836,9 @@ class _EqualizerSection extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
+                      color: colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.5,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -815,12 +878,19 @@ class _EqualizerSection extends StatelessWidget {
                 builder: (context, constraints) {
                   final bool isNarrow = constraints.maxWidth < 360;
                   final dropdownWidget = Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                      color: colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.45,
+                      ),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.4,
+                        ),
                       ),
                     ),
                     child: DropdownButton<String>(
@@ -832,31 +902,52 @@ class _EqualizerSection extends StatelessWidget {
                       items: [
                         DropdownMenuItem(
                           value: 'flat',
-                          child: Text(strings.sEqPresetFlat, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            strings.sEqPresetFlat,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'rock',
-                          child: Text(strings.sEqPresetRock, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            strings.sEqPresetRock,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'pop',
-                          child: Text(strings.sEqPresetPop, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            strings.sEqPresetPop,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'jazz',
-                          child: Text(strings.sEqPresetJazz, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            strings.sEqPresetJazz,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'classical',
-                          child: Text(strings.sEqPresetClassical, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            strings.sEqPresetClassical,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'bassBoost',
-                          child: Text(strings.sEqPresetBassBoost, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            strings.sEqPresetBassBoost,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'custom',
-                          child: Text(strings.sEqPresetCustom, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            strings.sEqPresetCustom,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                       onChanged: (val) {
@@ -879,10 +970,7 @@ class _EqualizerSection extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 6),
-                        SizedBox(
-                          width: double.infinity,
-                          child: dropdownWidget,
-                        ),
+                        SizedBox(width: double.infinity, child: dropdownWidget),
                       ],
                     );
                   }
@@ -918,7 +1006,10 @@ class _EqualizerSection extends StatelessWidget {
                   final double eqWidth = availableWidth.clamp(0.0, 520.0);
                   final double bandColumnWidth = eqWidth / 10;
                   final bool isNarrow = bandColumnWidth < 34.0;
-                  final double sliderWidth = (bandColumnWidth * 0.9).clamp(18.0, 32.0);
+                  final double sliderWidth = (bandColumnWidth * 0.9).clamp(
+                    18.0,
+                    32.0,
+                  );
 
                   return Center(
                     child: SizedBox(
@@ -927,7 +1018,9 @@ class _EqualizerSection extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: List.generate(10, (index) {
-                          final gain = index < gains.length ? gains[index] : 0.0;
+                          final gain = index < gains.length
+                              ? gains[index]
+                              : 0.0;
                           final freqLabel = index < _bandFrequencies.length
                               ? _bandFrequencies[index]
                               : '${index + 1}';
@@ -943,15 +1036,16 @@ class _EqualizerSection extends StatelessWidget {
                                     fit: BoxFit.scaleDown,
                                     child: Text(
                                       '${gain > 0 ? '+' : ''}${gain.toStringAsFixed(1)}',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        fontSize: isNarrow ? 8.5 : 10,
-                                        fontWeight: gain != 0.0
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
-                                        color: gain != 0.0
-                                            ? colorScheme.primary
-                                            : colorScheme.onSurfaceVariant,
-                                      ),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            fontSize: isNarrow ? 8.5 : 10,
+                                            fontWeight: gain != 0.0
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                            color: gain != 0.0
+                                                ? colorScheme.primary
+                                                : colorScheme.onSurfaceVariant,
+                                          ),
                                     ),
                                   ),
                                 ),
@@ -965,7 +1059,9 @@ class _EqualizerSection extends StatelessWidget {
                                       data: SliderTheme.of(context).copyWith(
                                         trackHeight: isNarrow ? 2.0 : 3.0,
                                         thumbShape: RoundSliderThumbShape(
-                                          enabledThumbRadius: isNarrow ? 3.5 : 5.0,
+                                          enabledThumbRadius: isNarrow
+                                              ? 3.5
+                                              : 5.0,
                                         ),
                                         overlayShape: RoundSliderOverlayShape(
                                           overlayRadius: isNarrow ? 7.0 : 10.0,
@@ -992,10 +1088,11 @@ class _EqualizerSection extends StatelessWidget {
                                     fit: BoxFit.scaleDown,
                                     child: Text(
                                       freqLabel,
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        fontSize: isNarrow ? 8.5 : 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            fontSize: isNarrow ? 8.5 : 10,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                   ),
                                 ),
@@ -1095,8 +1192,9 @@ class _StereoProcessingSection extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.5),
+                    color: colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -1152,8 +1250,9 @@ class _StereoProcessingSection extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.5),
+                    color: colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -1193,11 +1292,14 @@ class _StereoProcessingSection extends StatelessWidget {
               builder: (context, constraints) {
                 final bool isNarrow = constraints.maxWidth < 360;
                 final dropdownWidget = Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.45),
+                    color: colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.45,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: colorScheme.outlineVariant.withValues(alpha: 0.4),
@@ -1252,10 +1354,7 @@ class _StereoProcessingSection extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      SizedBox(
-                        width: double.infinity,
-                        child: dropdownWidget,
-                      ),
+                      SizedBox(width: double.infinity, child: dropdownWidget),
                     ],
                   );
                 }
@@ -1288,4 +1387,3 @@ class _StereoProcessingSection extends StatelessWidget {
     );
   }
 }
-
