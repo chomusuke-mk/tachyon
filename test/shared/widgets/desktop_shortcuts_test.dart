@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -553,8 +554,8 @@ void main() {
           tempDir.deleteSync(recursive: true);
         }
       });
-      final parentDir = Directory('${tempDir.path}/rock')..createSync(recursive: true);
-      final subDir = Directory('${parentDir.path}/queen')..createSync(recursive: true);
+      final parentDir = Directory(p.join(tempDir.path, 'rock'))..createSync(recursive: true);
+      final subDir = Directory(p.join(parentDir.path, 'queen'))..createSync(recursive: true);
 
       await tester.pumpWidget(buildApp(const TachyonShell()));
       await tester.pumpAndSettle();

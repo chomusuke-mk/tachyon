@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart' as as_lib;
+import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/backend/backend.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/shared/utils/cover_utils.dart';
 
@@ -16,6 +18,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
   bool _isDisposed = false;
   String? _lastEmittedTrackPath;
+  List<PlaylistEntry>? _lastSyncedPlayables;
 
   TachyonAudioHandler({
     required this.backend,
@@ -30,7 +33,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     final state = playbackController.state;
     final track = state.currentTrack;
 
-    // 1. Sync Current MediaItem
+    // 1. Sync Current MediaItem (using small / low-quality thumbnail)
     if (track?.filePath != _lastEmittedTrackPath) {
       _lastEmittedTrackPath = track?.filePath;
       if (track != null) {
@@ -38,10 +41,10 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
         if (track.thumbnailHash != null && track.thumbnailHash!.isNotEmpty) {
           coverFile = CoverUtils.getCoverFile(
             track.thumbnailHash!,
-            quality: ThumbnailQuality.medium,
+            quality: ThumbnailQuality.low,
           );
         } else {
-          coverFile = CoverUtils.getTrackFiles(track.filePath).mq;
+          coverFile = CoverUtils.getTrackFiles(track.filePath).lq;
         }
 
         final uri =
@@ -63,38 +66,43 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
       }
     }
 
-    // 2. Sync Queue
-    final queueItems = state.playables
-        .map((entry) {
-          final t = entry.track;
-          if (t == null) return null;
-          final artists = t.artists.map((a) => a.name).join(', ');
-          File? cover;
-          if (t.thumbnailHash != null && t.thumbnailHash!.isNotEmpty) {
-            cover = CoverUtils.getCoverFile(
-              t.thumbnailHash!,
-              quality: ThumbnailQuality.low,
+    // 2. Sync Queue only when queue structure actually mutates (prevents UI isolate disk I/O on pause/skip)
+    if (_lastSyncedPlayables == null ||
+        !identical(state.playables, _lastSyncedPlayables) &&
+        !listEquals(state.playables, _lastSyncedPlayables)) {
+      _lastSyncedPlayables = List<PlaylistEntry>.unmodifiable(state.playables);
+      final queueItems = state.playables
+          .map((entry) {
+            final t = entry.track;
+            if (t == null) return null;
+            final artists = t.artists.map((a) => a.name).join(', ');
+            File? cover;
+            if (t.thumbnailHash != null && t.thumbnailHash!.isNotEmpty) {
+              cover = CoverUtils.getCoverFile(
+                t.thumbnailHash!,
+                quality: ThumbnailQuality.low,
+              );
+            } else {
+              cover = CoverUtils.getTrackFiles(t.filePath).lq;
+            }
+
+            final uri =
+                (cover.existsSync() && cover.lengthSync() > 0) ? cover.uri : null;
+
+            return as_lib.MediaItem(
+              id: t.filePath,
+              title: t.title,
+              artist: artists.isNotEmpty ? artists : null,
+              album: t.album?.name,
+              duration: Duration(milliseconds: t.durationMs),
+              artUri: uri,
             );
-          } else {
-            cover = CoverUtils.getTrackFiles(t.filePath).lq;
-          }
+          })
+          .whereType<as_lib.MediaItem>()
+          .toList();
 
-          final uri =
-              (cover.existsSync() && cover.lengthSync() > 0) ? cover.uri : null;
-
-          return as_lib.MediaItem(
-            id: t.filePath,
-            title: t.title,
-            artist: artists.isNotEmpty ? artists : null,
-            album: t.album?.name,
-            duration: Duration(milliseconds: t.durationMs),
-            artUri: uri,
-          );
-        })
-        .whereType<as_lib.MediaItem>()
-        .toList();
-
-    queue.add(queueItems);
+      queue.add(queueItems);
+    }
 
     // 3. Sync PlaybackState
     final isPlaying = state.isPlaying;

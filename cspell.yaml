@@ -30,6 +30,7 @@ words:
   - asíncronamente
   - asincrónicamente
   - assetcatalog
+  - audioservice
   - audiotrack
   - audiounit
   - autocompletado
@@ -214,6 +215,7 @@ words:
   - libffprobe
   - libflutter
   - libfuse
+  - libgio
   - libglib
   - libgomp
   - libmpv
@@ -377,6 +379,7 @@ words:
   - Roboto
   - RUNPATH
   - rxdart
+  - ryanheise
   - samplerate
   - Sandboxed
   - SANDBOXING

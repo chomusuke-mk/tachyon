@@ -26,11 +26,13 @@ endif()
 # Define settings for the Profile build mode.
 set(CMAKE_EXE_LINKER_FLAGS_PROFILE "${CMAKE_EXE_LINKER_FLAGS_RELEASE}")
 set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE}")
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} /INCREMENTAL:NO")
+set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} /INCREMENTAL:NO")
 set(CMAKE_C_FLAGS_PROFILE "${CMAKE_C_FLAGS_RELEASE}")
 set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 
 # Use Unicode for all projects.
-add_definitions(-DUNICODE -D_UNICODE)
+add_definitions(-DUNICODE -D_UNICODE -D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
 
 # Compilation settings that should be applied to most targets.
 #
@@ -42,6 +44,7 @@ function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
+  target_compile_definitions(${TARGET} PRIVATE "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
 endfunction()
 
@@ -53,9 +56,31 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
+# Cargokit on Windows invokes resolve_symlinks.ps1 via PowerShell Get-Item.
+# When paths traverse hidden directories such as AppData, Get-Item throws an
+# ObjectNotFound error unless -Force is used. In modern CMake (>= 3.14),
+# get_filename_component(... REALPATH) already resolves symlinks. We intercept
+# resolve_symlinks.ps1 calls to run with Get-Item:Force and suppress spurious errors.
+macro(execute_process)
+  set(_cargokit_call_args "${ARGV}")
+  if(_cargokit_call_args MATCHES "resolve_symlinks\\.ps1")
+    _execute_process(${ARGV} ERROR_QUIET)
+  else()
+    _execute_process(${ARGV})
+  endif()
+endmacro()
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
+
+if(TARGET url_launcher_windows_plugin)
+  set_target_properties(url_launcher_windows_plugin PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/plugins/url_launcher_windows/out"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/plugins/url_launcher_windows/out"
+    PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/plugins/url_launcher_windows/out"
+  )
+endif()
 
 
 # === Installation ===

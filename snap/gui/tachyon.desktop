@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Tachyon
+GenericName=Tachyon Music Player
+Exec=tachyon %u
+Icon=${SNAP}/meta/gui/tachyon.png
+Type=Application
+Terminal=false
+StartupNotify=true
+StartupWMClass=dev.chomusuke.tachyon
+Categories=AudioVideo;Player;Audio;Music;
+Keywords=Tachyon;Music;Player;Audio;Music;

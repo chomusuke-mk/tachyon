@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 
 abstract final class FilePickerService {
   /// Opens the native system folder picker to select a directory.
@@ -9,7 +10,8 @@ abstract final class FilePickerService {
         dialogTitle: dialogTitle,
       );
       return path;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Error picking directory: $e');
       return null;
     }
   }

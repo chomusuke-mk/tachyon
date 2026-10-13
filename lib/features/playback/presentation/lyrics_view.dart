@@ -1,8 +1,10 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 
+import 'package:tachyon/core/backend/services/lrc_parser.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
@@ -34,25 +36,149 @@ class LyricsView extends StatefulWidget {
 }
 
 class _LyricsViewState extends State<LyricsView> {
+  static const _centerDuration = Duration(milliseconds: 320);
+  static const _maxCenterAttempts = 6;
+
+  final ScrollController _scrollController = ScrollController();
+
+  /// Contexts of the currently built lines, keyed by line index.
+  final Map<int, BuildContext> _lineContexts = {};
+
+  late final LyricsController _controller;
+
+  // Last observed controller state, used to decide when to re-center.
+  ParsedLrc? _lastLyrics;
+  int _lastIndex = -1;
+  LyricsDisplayMode? _lastMode;
+  List<String>? _lastTranslated;
+  bool _lastLocked = false;
+
+  bool _centerScheduled = false;
+  bool _centerAnimated = true;
+
   @override
   void initState() {
     super.initState();
+    _controller = context.read<LyricsController>();
+    _controller.addListener(_onControllerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<LyricsController>().onLyricsViewMounted();
-      }
+      if (!mounted) return;
+      _controller.onLyricsViewMounted();
+      _rememberState();
+      _scheduleCenter(animated: false);
     });
   }
 
   @override
-  void didUpdateWidget(covariant LyricsView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.filePath != widget.filePath) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          context.read<LyricsController>().onLyricsViewMounted();
-        }
-      });
+  void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _rememberState() {
+    _lastLyrics = _controller.lyrics;
+    _lastIndex = _controller.currentIndex;
+    _lastMode = _controller.displayMode;
+    _lastTranslated = _controller.translatedLines;
+    _lastLocked = _controller.isUserScrollLocked;
+  }
+
+  void _onControllerChanged() {
+    final c = _controller;
+    final lyricsChanged = !identical(c.lyrics, _lastLyrics);
+    final needsCenter =
+        c.currentIndex != _lastIndex ||
+        c.displayMode != _lastMode ||
+        !identical(c.translatedLines, _lastTranslated) ||
+        (_lastLocked && !c.isUserScrollLocked);
+    _rememberState();
+    if (lyricsChanged) {
+      _scheduleCenter(animated: false);
+    } else if (needsCenter) {
+      _scheduleCenter(animated: true);
+    }
+  }
+
+  /// Centers the active line after the pending rebuild has been laid out.
+  void _scheduleCenter({required bool animated}) {
+    _centerAnimated = _centerScheduled ? (_centerAnimated && animated) : animated;
+    if (_centerScheduled) return;
+    _centerScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _centerScheduled = false;
+      _centerActiveLine(animated: _centerAnimated);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _centerActiveLine({required bool animated, int attempt = 0}) {
+    if (!mounted || !_scrollController.hasClients) return;
+    final c = _controller;
+    final position = _scrollController.position;
+    if (!c.hasLyrics) return;
+    if (!c.isSynced) {
+      if (!animated) position.jumpTo(position.minScrollExtent);
+      return;
+    }
+    if (c.isUserScrollLocked) return;
+
+    final index = c.currentIndex;
+    final target = _lineContexts[index]?.findRenderObject();
+    if (target != null && target.attached) {
+      position.ensureVisible(
+        target,
+        alignment: 0.5,
+        duration: animated ? _centerDuration : Duration.zero,
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+
+    // The active line is not built (far away): jump close to it using the
+    // measured height of the built lines, then retry once it is laid out.
+    if (attempt >= _maxCenterAttempts) return;
+    final estimate = _estimateOffsetFor(index);
+    if (estimate == null) return;
+    position.jumpTo(
+      estimate.clamp(position.minScrollExtent, position.maxScrollExtent),
+    );
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _centerActiveLine(animated: animated, attempt: attempt + 1),
+    );
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  double? _estimateOffsetFor(int index) {
+    int? refIndex;
+    RenderBox? refBox;
+    double totalHeight = 0;
+    int count = 0;
+    for (final entry in _lineContexts.entries) {
+      final box = entry.value.findRenderObject();
+      if (box is! RenderBox || !box.attached || !box.hasSize) continue;
+      totalHeight += box.size.height;
+      count++;
+      if (refIndex == null ||
+          (entry.key - index).abs() < (refIndex - index).abs()) {
+        refIndex = entry.key;
+        refBox = box;
+      }
+    }
+    if (refBox == null || refIndex == null) return null;
+    final viewport = RenderAbstractViewport.maybeOf(refBox);
+    if (viewport == null) return null;
+    final refOffset = viewport.getOffsetToReveal(refBox, 0.5).offset;
+    return refOffset + (index - refIndex) * (totalHeight / count);
+  }
+
+  void _registerLine(int index, BuildContext lineContext) {
+    _lineContexts[index] = lineContext;
+  }
+
+  void _unregisterLine(int index, BuildContext lineContext) {
+    if (identical(_lineContexts[index], lineContext)) {
+      _lineContexts.remove(index);
     }
   }
 
@@ -169,7 +295,7 @@ class _LyricsViewState extends State<LyricsView> {
               : 160.0;
 
           return ListView.builder(
-            controller: lyricsController.scrollController,
+            controller: _scrollController,
             physics: const BouncingScrollPhysics(),
             padding: EdgeInsets.only(
               left: 24.0,
@@ -201,6 +327,8 @@ class _LyricsViewState extends State<LyricsView> {
                 colorScheme: colorScheme,
                 lyricsController: lyricsController,
                 onSeek: widget.onSeek,
+                onMounted: _registerLine,
+                onUnmounted: _unregisterLine,
               );
             },
           );
@@ -498,6 +626,8 @@ class _LyricLineItem extends StatefulWidget {
   final ColorScheme colorScheme;
   final LyricsController lyricsController;
   final ValueChanged<Duration>? onSeek;
+  final void Function(int index, BuildContext context) onMounted;
+  final void Function(int index, BuildContext context) onUnmounted;
 
   const _LyricLineItem({
     super.key,
@@ -511,6 +641,8 @@ class _LyricLineItem extends StatefulWidget {
     required this.isInterleaved,
     required this.colorScheme,
     required this.lyricsController,
+    required this.onMounted,
+    required this.onUnmounted,
     this.onSeek,
   });
 
@@ -522,35 +654,22 @@ class _LyricLineItemState extends State<_LyricLineItem> {
   @override
   void initState() {
     super.initState();
-    _checkEnsureVisible();
+    widget.onMounted(widget.index, context);
   }
 
   @override
   void didUpdateWidget(covariant _LyricLineItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive &&
-        (!oldWidget.isActive || oldWidget.line != widget.line)) {
-      _checkEnsureVisible();
+    if (oldWidget.index != widget.index) {
+      oldWidget.onUnmounted(oldWidget.index, context);
+      widget.onMounted(widget.index, context);
     }
   }
 
-  void _checkEnsureVisible() {
-    if (widget.isActive &&
-        widget.isSynced &&
-        !widget.lyricsController.isUserScrollLocked) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            widget.isActive &&
-            !widget.lyricsController.isUserScrollLocked) {
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeOutCubic,
-          );
-        }
-      });
-    }
+  @override
+  void dispose() {
+    widget.onUnmounted(widget.index, context);
+    super.dispose();
   }
 
   @override

@@ -23,7 +23,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^2.0.0
   path_provider: ^2.1.6
-  shared_preferences: ^2.5.5
+  shared_preferences: ^2.5.6
   provider: ^6.1.5+1
   http: ^1.6.0
   permission_handler: ^13.0.2
@@ -35,19 +35,22 @@ dependencies:
   convert: ^3.1.2
   openpgp: ^3.10.7
   dio: ^5.11.1
-  archive: ^4.3.0
+  archive: ^4.5.2
   url_launcher: ^6.3.3
   open_filex: ^4.7.0
   file_picker: ^13.1.0
   flutter_markdown_plus: ^1.0.12
   haudiotagger: ^3.1.0
-  image: ^4.10.1
+  image: ^4.12.0
   sqlite3: ^3.7.0
   miniaudio_player:
     path: ../miniaudio_player
   audio_service: ^0.18.19
   smtc_windows: ^1.1.0
-  dbus: ^0.7.15
+  dbus: ^0.8.0
+  win32_registry: ^3.0.3
+  ffi: ^2.2.0
+  flutter_rust_bridge: ^2.11.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

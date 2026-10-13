@@ -74,11 +74,17 @@ class SystemMediaService with WidgetsBindingObserver {
         '[SystemMediaService] Platform is Windows. Starting WindowsSmtcBridge...',
       );
       final windowsBridge = WindowsSmtcBridge(handler);
-      await windowsBridge.initialize();
-      service._windowsBridge = windowsBridge;
-      debugPrint(
-        '[SystemMediaService] WindowsSmtcBridge initialized successfully.',
-      );
+      final ok = await windowsBridge.initialize();
+      if (ok) {
+        service._windowsBridge = windowsBridge;
+        debugPrint(
+          '[SystemMediaService] WindowsSmtcBridge initialized successfully.',
+        );
+      } else {
+        debugPrint(
+          '[SystemMediaService] WindowsSmtcBridge failed to initialize.',
+        );
+      }
     }
 
     debugPrint('[SystemMediaService] Initialization complete.');
@@ -87,10 +93,14 @@ class SystemMediaService with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      dispose();
+      return;
+    }
+
     // When Android enters background or headless state, free visual image memory.
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.detached) {
+        state == AppLifecycleState.hidden) {
       debugPrint(
         '[SystemMediaService] AppLifecycleState changed to $state. Clearing image cache...',
       );

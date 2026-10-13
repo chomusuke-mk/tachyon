@@ -1,0 +1,73 @@
+name: tachyon
+title: Tachyon
+adopt-info: tachyon
+summary: The ultimate, lightning-fast music player
+description: |
+  Meet Tachyon, the ultimate open-source music player designed for power users who demand speed, reliability, and a beautiful interface. Tachyon brings a premium listening experience right to your desktop!
+
+  Features:
+  - Lightning-Fast & Reliable: 
+  - Advanced Processing: Integrated FFmpeg handles complex media processing tasks effortlessly in the background.
+  - Privacy-Focused & Open Source: Zero telemetry, offline-first, and 100% Free and Open-Source Software (FOSS).
+  - Always Up-to-Date (OTA): Built-in Over-The-Air updates ensure your core engines are always running the latest versions.
+
+contact: https://github.com/chomusuke-mk/tachyon/issues
+license: GPL-3.0-or-later
+issues: https://github.com/chomusuke-mk/tachyon/issues
+source-code: https://github.com/chomusuke-mk/tachyon
+website: https://chomusuke.dev
+donation:
+  - https://patreon.com/chomusuke_dev
+  - https://buymeacoffee.com/chomusuke
+icon: assets/icon/icon512.png
+type: app
+
+grade: stable
+confinement: strict
+compression: xz
+base: core24
+
+apps:
+  vidra:
+    command: tachyon
+    extensions: [gnome]
+    plugs:
+      - network
+      - network-bind
+      - home
+      - removable-media
+      - opengl
+      - wayland
+      - audio-playback
+    environment:
+      # Fix for some Flutter apps under strict confinement finding their own assets
+      FLUTTER_ASSET_DIR: $SNAP/data/flutter_assets
+
+parts:
+  vidra:
+    plugin: flutter
+    source: .
+    flutter-target: lib/main.dart
+    override-build: |
+      # 0. Set dynamic version from pubspec.yaml
+      VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1 | xargs)
+      craftctl set version="$VERSION"
+      craftctl default
+
+  ffmpeg-dependencies:
+    plugin: nil
+    stage-packages:
+      - libbz2-1.0 # Para libbz2.so.1.0
+      - libnuma1 # Para libnuma.so.1
+      - libva-x11-2 # Para libva-x11.so.2
+      - libgomp1 # Para libgomp.so.1
+      - libva2 # Para libva.so.2
+      - libdrm2 # Para libdrm.so.2
+      - libx11-6 # Para libX11.so.6
+      - libxext6 # Para libXext.so.6
+      - libxfixes3 # Para libXfixes.so.3
+      - libx11-xcb1 # Para libX11-xcb.so.1
+      - libxcb1 # Para libxcb.so.1
+      - libxcb-dri3-0 # Para libxcb-dri3.so.0
+      - libxau6 # Para libXau.so.6
+      - libxdmcp6 # Para libXdmcp.so.6

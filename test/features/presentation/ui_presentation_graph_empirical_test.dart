@@ -320,7 +320,11 @@ void main() {
           .listSync(recursive: true)
           .whereType<File>()
           .where((f) => f.path.endsWith('.dart'))
-          .where((f) => f.path.contains('/presentation/') || f.path.contains('/shared/widgets/'))
+          .where((f) =>
+              f.path.contains('/presentation/') ||
+              f.path.contains(r'\presentation\') ||
+              f.path.contains('/shared/widgets/') ||
+              f.path.contains(r'\shared\widgets\'))
           .toList();
 
       expect(presentationFiles.isNotEmpty, isTrue);

@@ -8,6 +8,7 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/shared/widgets/track_action_helper.dart';
+
 import 'playback_controller.dart';
 
 /// Modal bottom sheet representation of the playback queue on Mobile.
@@ -66,10 +67,13 @@ class QueueView extends StatefulWidget {
 
 class _QueueViewState extends State<QueueView> {
   static const double _itemExtent = 72.0;
+  bool _autoScroll = true;
+  int? lastIndexScrolledTo;
 
   ScrollController? _internalController;
   ScrollController get _effectiveController =>
-      widget.scrollController ?? (_internalController ??= _createInternalController());
+      widget.scrollController ??
+      (_internalController ??= _createInternalController());
 
   ScrollController _createInternalController() {
     final playback = context.read<PlaybackController>();
@@ -96,8 +100,9 @@ class _QueueViewState extends State<QueueView> {
     if (index <= 0 || index >= playback.queue.length) return;
 
     final viewportHeight = _effectiveController.position.viewportDimension;
-    final targetOffset = ((index * _itemExtent) - (viewportHeight / 2) + (_itemExtent / 2))
-        .clamp(0.0, _effectiveController.position.maxScrollExtent);
+    final targetOffset =
+        ((index * _itemExtent) - (viewportHeight / 2) + (_itemExtent / 2))
+            .clamp(0.0, _effectiveController.position.maxScrollExtent);
 
     if (animated) {
       _effectiveController.animateTo(
@@ -108,6 +113,7 @@ class _QueueViewState extends State<QueueView> {
     } else {
       _effectiveController.jumpTo(targetOffset);
     }
+    lastIndexScrolledTo = index;
   }
 
   @override
@@ -124,14 +130,27 @@ class _QueueViewState extends State<QueueView> {
 
   @override
   Widget build(BuildContext context) {
-    final queue = context.select<PlaybackController, List<PlaylistEntry>>((c) => c.queue);
-    final currentIndex = context.select<PlaybackController, int>((c) => c.currentIndex);
-    final isPlaying = context.select<PlaybackController, bool>((c) => c.isPlaying);
-    final isInfiniteMixEnabled =
-        context.select<PlaybackController, bool>((c) => c.isInfiniteMixEnabled);
+    final queue = context.select<PlaybackController, List<PlaylistEntry>>(
+      (c) => c.queue,
+    );
+    final currentIndex = context.select<PlaybackController, int>(
+      (c) => c.currentIndex,
+    );
+    final isPlaying = context.select<PlaybackController, bool>(
+      (c) => c.isPlaying,
+    );
+    final isInfiniteMixEnabled = context.select<PlaybackController, bool>(
+      (c) => c.isInfiniteMixEnabled,
+    );
     final playback = context.read<PlaybackController>();
     final strings = context.watch<LocaleController>().localeStrings;
     final colorScheme = Theme.of(context).colorScheme;
+
+    if (_autoScroll && lastIndexScrolledTo != currentIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToCurrentIndex(animated: true);
+      });
+    }
 
     return Column(
       children: [
@@ -172,9 +191,9 @@ class _QueueViewState extends State<QueueView> {
                 tooltip: strings.npQueueAddToPlaylist,
                 onPressed: queue.isNotEmpty
                     ? () => TrackActionHelper.showAddQueueToPlaylistDialog(
-                          context,
-                          queue,
-                        )
+                        context,
+                        queue,
+                      )
                     : null,
               ),
 
@@ -184,156 +203,208 @@ class _QueueViewState extends State<QueueView> {
                 tooltip: strings.npQueueClear,
                 onPressed:
                     (queue.length > 1 ||
-                            (queue.length == 1 && currentIndex == -1))
-                        ? () => _confirmClearQueue(context, playback, strings)
-                        : null,
+                        (queue.length == 1 && currentIndex == -1))
+                    ? () => _confirmClearQueue(context, playback, strings)
+                    : null,
               ),
             ],
           ),
         ),
         const Divider(height: 1),
-
-        // Queue Items List or Empty State
         Expanded(
-          child: queue.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.queue_music_rounded,
-                        size: 56,
-                        color: colorScheme.onSurfaceVariant.withValues(
-                          alpha: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        strings.npQueueEmpty,
-                        style: Theme.of(context).textTheme.bodyMedium
-                            ?.copyWith(color: colorScheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                )
-              : ReorderableListView.builder(
-                  scrollController: _effectiveController,
-                  buildDefaultDragHandles: false,
-                  itemExtent: _itemExtent,
-                  scrollCacheExtent: const ScrollCacheExtent.pixels(720.0),
-                  itemCount: queue.length,
-                  onReorderItem: (from, to) {
-                    playback.reorderQueue(from, to);
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification is UserScrollNotification) {
+                      if (!_autoScroll) return false;
+                      setState(() {
+                        _autoScroll = false;
+                      });
+                    }
+                    return false;
                   },
-                  itemBuilder: (context, index) {
-                    final item = queue[index];
-                    final track = item.track;
-                    final isCurrent = index == currentIndex;
-
-                    return Dismissible(
-                      key: ValueKey(item.id),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 20),
-                        color: colorScheme.errorContainer,
-                        child: Icon(
-                          Icons.delete_outline_rounded,
-                          color: colorScheme.onErrorContainer,
-                        ),
-                      ),
-                      onDismissed: (_) => playback.removeFromQueue(index),
-                      child: Material(
-                        color: isCurrent
-                            ? colorScheme.primaryContainer.withValues(
-                                alpha: 0.28,
-                              )
-                            : Colors.transparent,
-                        child: ListTile(
-                          leading: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6.0),
-                                child: SizedBox(
-                                  width: 42,
-                                  height: 42,
-                                  child: AlbumArtImage(
-                                    thumbnailHash: track?.thumbnailHash ??
-                                        track?.album?.thumbnailHash,
-                                    quality: ThumbnailQuality.low,
-                                    fit: BoxFit.cover,
-                                    cacheWidth: 100,
-                                    cacheHeight: 100,
-                                  ),
-                                ),
-                              ),
-                              if (isCurrent)
-                                Container(
-                                  width: 42,
-                                  height: 42,
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.55),
-                                    borderRadius: BorderRadius.circular(6.0),
-                                  ),
-                                  child: Icon(
-                                    isPlaying
-                                        ? Icons.graphic_eq_rounded
-                                        : Icons.play_arrow_rounded,
-                                    color: colorScheme.primary,
-                                    size: 24,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          title: Text(
-                            track?.title ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: isCurrent
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: isCurrent
-                                  ? colorScheme.primary
-                                  : colorScheme.onSurface,
-                            ),
-                          ),
-                          subtitle: Text(
-                            track?.artists.map((a) => a.name).join(', ') ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: colorScheme.onSurfaceVariant,
-                              fontSize: 12,
-                            ),
-                          ),
-                          trailing: Row(
+                  child: queue.isEmpty
+                      ? Center(
+                          child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                _formatDuration(track?.duration ?? Duration.zero),
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                              const SizedBox(width: 8),
-                              ReorderableDragStartListener(
-                                index: index,
-                                child: Icon(
-                                  Icons.drag_handle_rounded,
-                                  color: colorScheme.onSurfaceVariant
-                                      .withValues(alpha: 0.6),
+                              Icon(
+                                Icons.queue_music_rounded,
+                                size: 56,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.5,
                                 ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                strings.npQueueEmpty,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
                               ),
                             ],
                           ),
-                          onTap: () {
-                            playback.skipToQueueIndex(index);
+                        )
+                      : ReorderableListView.builder(
+                          scrollController: _effectiveController,
+
+                          buildDefaultDragHandles: false,
+                          itemExtent: _itemExtent,
+                          scrollCacheExtent: const ScrollCacheExtent.pixels(
+                            720.0,
+                          ),
+                          itemCount: queue.length,
+                          onReorderItem: (from, to) {
+                            playback.reorderQueue(from, to);
+                          },
+                          itemBuilder: (context, index) {
+                            final item = queue[index];
+                            final track = item.track;
+                            final isCurrent = index == currentIndex;
+
+                            return Dismissible(
+                              key: ValueKey(item.id),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                color: colorScheme.errorContainer,
+                                child: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: colorScheme.onErrorContainer,
+                                ),
+                              ),
+                              onDismissed: (_) =>
+                                  playback.removeFromQueue(index),
+                              child: Material(
+                                color: isCurrent
+                                    ? colorScheme.primaryContainer.withValues(
+                                        alpha: 0.28,
+                                      )
+                                    : Colors.transparent,
+                                child: ListTile(
+                                  leading: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(
+                                          6.0,
+                                        ),
+                                        child: SizedBox(
+                                          width: 42,
+                                          height: 42,
+                                          child: AlbumArtImage(
+                                            thumbnailHash:
+                                                track?.thumbnailHash ??
+                                                track?.album?.thumbnailHash,
+                                            quality: ThumbnailQuality.low,
+                                            fit: BoxFit.cover,
+                                            cacheWidth: 100,
+                                            cacheHeight: 100,
+                                          ),
+                                        ),
+                                      ),
+                                      if (isCurrent)
+                                        Container(
+                                          width: 42,
+                                          height: 42,
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(
+                                              alpha: 0.55,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              6.0,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            isPlaying
+                                                ? Icons.graphic_eq_rounded
+                                                : Icons.play_arrow_rounded,
+                                            color: colorScheme.primary,
+                                            size: 24,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  title: Text(
+                                    track?.title ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: isCurrent
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: isCurrent
+                                          ? colorScheme.primary
+                                          : colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    track?.artists
+                                            .map((a) => a.name)
+                                            .join(', ') ??
+                                        '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _formatDuration(
+                                          track?.duration ?? Duration.zero,
+                                        ),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ReorderableDragStartListener(
+                                        index: index,
+                                        child: Icon(
+                                          Icons.drag_handle_rounded,
+                                          color: colorScheme.onSurfaceVariant
+                                              .withValues(alpha: 0.6),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  onTap: () {
+                                    playback.skipToQueueIndex(index);
+                                  },
+                                ),
+                              ),
+                            );
                           },
                         ),
-                      ),
-                    );
-                  },
                 ),
+              ),
+              if (!_autoScroll)
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: FloatingActionButton.small(
+                    backgroundColor: colorScheme.primaryContainer,
+                    foregroundColor: colorScheme.onPrimaryContainer,
+                    tooltip: strings.npLyricsResumeSync,
+                    onPressed: () {
+                      setState(() {
+                        _autoScroll = true;
+                      });
+                      _scrollToCurrentIndex(animated: true);
+                    },
+                    child: const Icon(Icons.sync_rounded, size: 20),
+                  ),
+                ),
+            ],
+          ),
         ),
       ],
     );

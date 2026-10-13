@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/app.dart';
 import 'package:tachyon/shared/utils/cover_utils.dart';
+import 'package:tachyon/shared/utils/folder_utils.dart';
 
 import 'core/backend/backend.dart';
 import 'core/constants/languages.dart';
@@ -24,6 +25,9 @@ import 'features/settings/presentation/settings_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint(
+    "Current MUSIC DIRECTORY: ${await FolderUtils.getMusicDirectory()}",
+  );
   PaintingBinding.instance.imageCache.maximumSize = 60;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 15 * 1024 * 1024;
 

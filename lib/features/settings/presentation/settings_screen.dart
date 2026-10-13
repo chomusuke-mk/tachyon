@@ -22,10 +22,12 @@ class SettingsScreen extends StatelessWidget {
     final settings = context.read<SettingsController>();
     final strings = context.read<LocaleController>().localeStrings;
 
+    debugPrint('Opening folder picker dialog...');
     final picked = await FilePickerService.pickDirectory(
       dialogTitle: strings.sAddFolderTitle,
     );
     if (picked == null) {
+      debugPrint('No folder selected.');
       return;
     }
 
