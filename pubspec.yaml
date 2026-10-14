@@ -33,7 +33,6 @@ dependencies:
   path: ^1.9.1
   crypto: ^3.0.7
   convert: ^3.1.2
-  openpgp: ^3.10.7
   dio: ^5.11.1
   archive: ^4.5.2
   url_launcher: ^6.3.3
@@ -41,16 +40,16 @@ dependencies:
   file_picker: ^13.1.0
   flutter_markdown_plus: ^1.0.12
   haudiotagger: ^3.1.0
-  image: ^4.12.0
-  sqlite3: ^3.7.0
-  miniaudio_player: ^2.0.0
+  sqlite3: ^3.7.1
+  miniaudio_player: ^2.1.0
   audio_service: ^0.18.19
   smtc_windows: ^1.1.0
   dbus: ^0.8.0
   win32_registry: ^3.0.3
   win32: ^6.4.0
   ffi: ^2.2.0
-  flutter_rust_bridge: ^2.11.1
+  flutter_rust_bridge: ^2.13.0
+  image: ^4.12.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -65,12 +64,11 @@ flutter:
     - LICENSE
     - CHANGELOG.md
     - third_party_licenses/
-    - assets/icon/icon.ico
-    - assets/icon/icon.png
+    - assets/icon/icon.webp
     - i18n/
 
 flutter_launcher_icons:
-  image_path: "assets/icon/icon.png"
+  image_path: "assets/icon/icon.webp"
   android: true
   ios:
     generate: true
@@ -81,4 +79,4 @@ flutter_launcher_icons:
     generate: true
   linux:
     generate: true
-    image_path: "assets/icon/icon.png"
+    image_path: "assets/icon/icon.webp"

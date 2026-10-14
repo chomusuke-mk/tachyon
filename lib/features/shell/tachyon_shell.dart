@@ -83,7 +83,7 @@ class _TachyonShellState extends State<TachyonShell> {
                         width: 50,
                         height: 50,
                         child: const Image(
-                          image: AssetImage('assets/icon/icon.png'),
+                          image: AssetImage('assets/icon/icon.webp'),
                           fit: BoxFit.cover,
                         ),
                       ),

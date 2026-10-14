@@ -44,6 +44,7 @@ words:
   - baneos
   - bestaudio
   - bestvideo
+  - bilineal
   - BITCODE
   - bitrate
   - bluetooth
@@ -66,6 +67,7 @@ words:
   - clearsign
   - Cleartext
   - COINIT
+  - COMDLG
   - Compris
   - configúralo
   - Conversores
@@ -135,15 +137,19 @@ words:
   - ffmpegvideoconvertor
   - FILEFLAGS
   - FILEFLAGSMASK
+  - FILEMUSTEXIST
   - FILEOS
   - FILESUBTYPE
+  - FILESYSPATH
   - FILEVERSION
   - filex
+  - FILTERSPEC
   - fixdate
   - fixnum
   - flac
   - flutterlocalnotifications
   - FONTCHANGE
+  - FORCEFILESYSTEM
   - FOSS
   - FSML
   - gboolean
@@ -164,6 +170,7 @@ words:
   - HKEY
   - HMONITOR
   - HREDRAW
+  - HRESULT
   - httpx
   - hwnd
   - HWND
@@ -252,6 +259,7 @@ words:
   - lrclib
   - LRESULT
   - LSTATUS
+  - LTWH
   - lyricsovh
   - lzma
   - márcalo
@@ -288,6 +296,7 @@ words:
   - Neue
   - nlohmann
   - NOCASE
+  - NOCHANGEDIR
   - NOMINMAX
   - nonnull
   - NONNULL
@@ -319,9 +328,12 @@ words:
   - parseo
   - patreon
   - pbxuser
+  - pcwstr
   - perspectivev
   - petitparser
   - phantomjs
+  - picasa
+  - PICKFOLDERS
   - pinentry
   - pkcs
   - pkgs
@@ -340,6 +352,7 @@ words:
   - PRODUCTVERSION
   - proguard
   - pubspec
+  - pwstr
   - pytest
   - PYTHONPATH
   - PYTHONUNBUFFERED
@@ -393,6 +406,7 @@ words:
   - Segoe
   - selfpromo
   - SERIALIZACIÓN
+  - SIGDN
   - síncrono
   - skipifsilent
   - smtc

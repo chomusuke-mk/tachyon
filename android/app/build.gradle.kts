@@ -14,19 +14,35 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    androidResources {
+        localeFilters += listOf("es", "en")
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.wasm:!*.js"
+    }
+
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "dev.chomusuke.tachyon"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    splits {
+        abi {
+            isEnable = project.hasProperty("split-per-abi")
+            reset()
+            include("arm64-v8a", "x86_64", "armeabi-v7a")
+            // Generate both per-ABI APKs and the universal (fat) APK.
+            isUniversalApk = true
+        }
     }
 
     buildTypes {
@@ -34,6 +50,10 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
@@ -46,4 +66,16 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// Excluir archivos Web (.wasm, .js) e íconos de escritorio (.ico) de flutter_assets
+tasks.withType<Copy>().configureEach {
+    if (name.startsWith("copyFlutterAssets")) {
+        exclude(
+            "**/packages/haudiotagger/pkg/**",
+            "**/*.wasm",
+            "**/*.js",
+            "**/*.ico"
+        )
+    }
 }

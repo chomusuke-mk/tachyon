@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Resources referenced by name at runtime (audio_service resolves the notification
-     icon via getIdentifier), so the resource shrinker must not strip them in release. -->
+<!-- Resources referenced by name or dynamically at runtime by audio_service
+     and AndroidX Media (e.g. getIdentifier, MediaStyle RemoteViews).
+     Must not be stripped by the R8 resource shrinker in release builds. -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@drawable/ic_notification"
-    tools:shrinkMode="strict" />
+    tools:keep="@drawable/ic_notification,@drawable/audio_service_*,@layout/notification_*,@drawable/notification_*,@dimen/notification_*,@dimen/compat_notification_*,@style/TextAppearance_Compat_Notification*,@style/Widget_Compat_Notification*,@color/notification_*"
+    tools:shrinkMode="safe" />
