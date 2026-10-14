@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resources referenced by name at runtime (audio_service resolves the notification
+     icon via getIdentifier), so the resource shrinker must not strip them in release. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification"
+    tools:shrinkMode="strict" />

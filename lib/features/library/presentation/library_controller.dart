@@ -13,6 +13,7 @@ import 'package:tachyon/features/library/domain/scan_progress.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/library/domain/track_sort_option.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/shared/utils/memory_optimizer.dart';
 
 export 'package:tachyon/features/library/domain/track_sort_option.dart';
 
@@ -48,6 +49,7 @@ class LibraryController extends ChangeNotifier {
 
       if (progress.stage == ScanStage.completed) {
         loadLibrary();
+        MemoryOptimizer.trim();
       }
     });
 
@@ -143,6 +145,7 @@ class LibraryController extends ChangeNotifier {
       final snapshot = await _backend.getCatalogSnapshot();
       _store = LibraryStore.fromSnapshot(snapshot);
       _syncFromStore();
+      MemoryOptimizer.trim();
 
       if (_folderNavigationStack.isNotEmpty) {
         await _loadCurrentFolderContent();

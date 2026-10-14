@@ -85,7 +85,15 @@ class AppDatabase {
     _db!.execute('PRAGMA journal_mode = WAL;');
     _db!.execute('PRAGMA synchronous = NORMAL;');
     _db!.execute('PRAGMA cache_size = -500;');
+    _db!.execute('PRAGMA mmap_size = 0;');
     _executeSchema(_db!);
+  }
+
+  /// Commands SQLite to release statement caches, page cache pages, and memory buffers.
+  void shrinkMemory() {
+    try {
+      _db?.execute('PRAGMA shrink_memory;');
+    } catch (_) {}
   }
 
   void _executeSchema(Database db) {
@@ -144,6 +152,8 @@ class AppDatabase {
       try { db.execute('ROLLBACK;'); } catch (_) {}
       debugPrint('[AppDatabase] Error in getCatalogSnapshot: $e');
       return const CatalogSnapshot.empty();
+    } finally {
+      shrinkMemory();
     }
   }
 
@@ -282,6 +292,7 @@ class AppDatabase {
       rethrow;
     } finally {
       for (final s in stmts) { s.close(); }
+      shrinkMemory();
     }
   }
 

@@ -160,8 +160,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_showLyrics) {
-      if (state == AppLifecycleState.paused ||
-          state == AppLifecycleState.hidden ||
+      if (state == AppLifecycleState.hidden ||
           state == AppLifecycleState.detached) {
         _lyricsController?.setLyricsViewVisible(false);
       } else if (state == AppLifecycleState.resumed) {

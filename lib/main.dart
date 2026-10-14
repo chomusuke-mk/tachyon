@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/app.dart';
 import 'package:tachyon/shared/utils/cover_utils.dart';
 import 'package:tachyon/shared/utils/folder_utils.dart';
+import 'package:tachyon/shared/utils/memory_optimizer.dart';
+import 'package:tachyon/shared/utils/permission_utils.dart';
 
 import 'core/backend/backend.dart';
 import 'core/constants/languages.dart';
@@ -28,8 +30,8 @@ Future<void> main() async {
   debugPrint(
     "Current MUSIC DIRECTORY: ${await FolderUtils.getMusicDirectory()}",
   );
-  PaintingBinding.instance.imageCache.maximumSize = 60;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 15 * 1024 * 1024;
+  PaintingBinding.instance.imageCache.maximumSize = 40;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 8 * 1024 * 1024;
 
   final sharedPreferences = await SharedPreferences.getInstance();
   final appSupportDir = await getApplicationSupportDirectory();
@@ -78,10 +80,17 @@ Future<void> main() async {
     }
   });
 
+  // Only register the default music folder and auto-scan once permissions are
+  // granted; otherwise PermissionsGate does it after the user grants them.
+  final permissionsGranted = await PermissionUtils.areAllGranted();
+  if (permissionsGranted) {
+    await settingsController.ensureDefaultMusicDirectory();
+  }
+
   final libraryController = LibraryController(
     backend: backendClient,
     settingsRepository: settingsRepository,
-  )..loadLibrary(autoScan: true);
+  )..loadLibrary(autoScan: permissionsGranted);
 
   final playlistsController = PlaylistsController(
     backend: backendClient,
@@ -170,7 +179,12 @@ Future<void> main() async {
         ),
         ChangeNotifierProvider<LyricsController>.value(value: lyricsController),
       ],
-      child: const App(),
+      child: App(permissionsGranted: permissionsGranted),
     ),
   );
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    MemoryOptimizer.trim();
+    MemoryOptimizer.startPeriodicTrimmer();
+  });
 }

@@ -284,6 +284,21 @@ class AppStringKey {
   String get gNoGenresDesc => _cadenasLocalizadas['g_no_genres_desc'] ?? '';
 
   // ---------------------------------------------------------------------------
+  // perm_: Permissions Screen
+  // ---------------------------------------------------------------------------
+  String get permTitle => _cadenasLocalizadas['perm_title'] ?? '';
+  String get permSubtitle => _cadenasLocalizadas['perm_subtitle'] ?? '';
+  String get permMusicTitle => _cadenasLocalizadas['perm_music_title'] ?? '';
+  String get permMusicDesc => _cadenasLocalizadas['perm_music_desc'] ?? '';
+  String get permGranted => _cadenasLocalizadas['perm_granted'] ?? '';
+  String get permGrantAccess => _cadenasLocalizadas['perm_grant_access'] ?? '';
+  String get permOpenSettings =>
+      _cadenasLocalizadas['perm_open_settings'] ?? '';
+  String get permDeniedHint => _cadenasLocalizadas['perm_denied_hint'] ?? '';
+  String get permContinue => _cadenasLocalizadas['perm_continue'] ?? '';
+
+
+  // ---------------------------------------------------------------------------
   // f_: Folders & Filesystem Browser
   // ---------------------------------------------------------------------------
   String get fTitle => _cadenasLocalizadas['f_title'] ?? '';
@@ -749,6 +764,11 @@ class AppStringKey {
     // g_
     'g_title', 'g_search_hint', 'g_unknown', 'g_tracks_count', 'g_albums_count',
     'g_play_all', 'g_shuffle_all', 'g_no_genres', 'g_no_genres_desc',
+    // perm_
+    'perm_title', 'perm_subtitle', 'perm_music_title', 'perm_music_desc',
+    'perm_granted',
+    'perm_grant_access', 'perm_open_settings', 'perm_denied_hint',
+    'perm_continue',
     // f_
     'f_title', 'f_navigate_up', 'f_current_folder', 'f_empty_folder',
     'f_scan_folder', 'f_add_to_library', 'f_items_count', 'f_inaccessible',

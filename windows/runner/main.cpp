@@ -13,6 +13,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     CreateAndAttachConsole();
   }
 
+  // Optimize default process heap allocation behavior
+  HANDLE process_heap = ::GetProcessHeap();
+  if (process_heap != NULL) {
+    ::HeapSetInformation(process_heap, HeapEnableTerminationOnCorruption, nullptr, 0);
+  }
+
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);

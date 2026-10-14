@@ -44,7 +44,7 @@ class SystemMediaService with WidgetsBindingObserver {
       config: const AudioServiceConfig(
         androidNotificationChannelId: 'dev.chomusuke.tachyon.playback',
         androidNotificationChannelName: 'Tachyon Music Playback',
-        androidNotificationIcon: 'drawable/ic_launcher',
+        androidNotificationIcon: 'drawable/ic_notification',
         androidShowNotificationBadge: true,
         androidStopForegroundOnPause: false,
       ),
@@ -99,8 +99,7 @@ class SystemMediaService with WidgetsBindingObserver {
     }
 
     // When Android enters background or headless state, free visual image memory.
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
+    if (state == AppLifecycleState.hidden) {
       debugPrint(
         '[SystemMediaService] AppLifecycleState changed to $state. Clearing image cache...',
       );

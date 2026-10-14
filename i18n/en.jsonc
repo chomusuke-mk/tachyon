@@ -231,6 +231,16 @@
   "sr_view_more": "See all ({count})",
   "sr_recent_searches": "Recent Searches",
   "sr_clear_history": "Clear search history",
+  // --- perm_: Permissions Screen -------------------------------------------
+  "perm_title": "Before we start",
+  "perm_subtitle": "Tachyon needs a couple of permissions to play your music.",
+  "perm_music_title": "Music library",
+  "perm_music_desc": "Read the audio files stored on your device.",
+  "perm_granted": "Allowed",
+  "perm_grant_access": "Allow",
+  "perm_open_settings": "Open settings",
+  "perm_denied_hint": "Permission denied. Enable it from the app settings.",
+  "perm_continue": "Continue",
   // --- s_: Settings Screen -------------------------------------------------
   "s_title": "Settings",
   "s_music_folders": "Music Folders",

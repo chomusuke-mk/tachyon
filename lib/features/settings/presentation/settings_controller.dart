@@ -9,6 +9,7 @@ import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
+import 'package:tachyon/shared/utils/folder_utils.dart';
 
 class SettingsController extends ChangeNotifier {
   final SettingsRepository _repository;
@@ -123,6 +124,15 @@ class SettingsController extends ChangeNotifier {
     _settings = _settings.copyWith(musicDirectories: updated);
     await _repository.setMusicDirectories(updated);
     notifyListeners();
+  }
+
+  /// Adds the platform's default music directory when [musicDirectories]
+  /// has never been set. Returns `true` if a directory was added.
+  Future<bool> ensureDefaultMusicDirectory() async {
+    if (_repository.hasMusicDirectoriesBeenSet) return false;
+    final musicDir = await FolderUtils.getMusicDirectory();
+    if (musicDir == null) return false;
+    return addMusicDirectory(musicDir.path);
   }
 
   // ---------------------------------------------------------------------------

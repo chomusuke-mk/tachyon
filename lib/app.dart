@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/features/permissions/presentation/permissions_gate.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/features/shell/tachyon_shell.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
@@ -10,7 +11,10 @@ import 'package:tachyon/shared/widgets/app_background.dart';
 import 'package:tachyon/shared/widgets/desktop_shortcuts_handler.dart';
 
 class App extends StatelessWidget {
-  const App({super.key});
+  /// Whether all required runtime permissions were already granted at startup.
+  final bool permissionsGranted;
+
+  const App({super.key, this.permissionsGranted = true});
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +60,10 @@ class App extends StatelessWidget {
           ),
         );
       },
-      home: const TachyonShell(),
+      home: PermissionsGate(
+        initiallyGranted: permissionsGranted,
+        child: const TachyonShell(),
+      ),
     );
   }
 }

@@ -230,6 +230,16 @@
   "sr_playlists_found": "Listas de reproducción",
   "sr_view_more": "Ver todos ({count})",
   "sr_recent_searches": "Búsquedas recientes",
+  // --- perm_: Pantalla de permisos -----------------------------------------
+  "perm_title": "Antes de empezar",
+  "perm_subtitle": "Tachyon necesita un par de permisos para reproducir tu música.",
+  "perm_music_title": "Biblioteca de música",
+  "perm_music_desc": "Leer los archivos de audio almacenados en tu dispositivo.",
+  "perm_granted": "Permitido",
+  "perm_grant_access": "Permitir",
+  "perm_open_settings": "Abrir ajustes",
+  "perm_denied_hint": "Permiso denegado. Actívalo desde los ajustes de la aplicación.",
+  "perm_continue": "Continuar",
   "sr_clear_history": "Borrar historial de búsqueda",
   // --- s_: Pantalla de Configuración ---------------------------------------
   "s_title": "Configuración",

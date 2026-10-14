@@ -1,8 +1,24 @@
 #include "flutter_window.h"
-
+#include <malloc.h>
+#include <windows.h>
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+// Trims excess heap allocations and flushes unreferenced pages from the working set.
+void TrimProcessMemory() {
+  _heapmin();
+  HANDLE process_heap = ::GetProcessHeap();
+  if (process_heap != NULL) {
+    ::HeapCompact(process_heap, 0);
+  }
+  ::SetProcessWorkingSetSize(::GetCurrentProcess(), static_cast<SIZE_T>(-1),
+                             static_cast<SIZE_T>(-1));
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -29,6 +45,7 @@ bool FlutterWindow::OnCreate() {
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
+    TrimProcessMemory();
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -36,10 +53,15 @@ bool FlutterWindow::OnCreate() {
   // window is shown. It is a no-op if the first frame hasn't completed yet.
   flutter_controller_->ForceRedraw();
 
+  // Periodic memory trim timer during idle (every 3000ms)
+  ::SetTimer(GetHandle(), 1001, 3000, nullptr);
+
   return true;
 }
 
 void FlutterWindow::OnDestroy() {
+  ::KillTimer(GetHandle(), 1001);
+
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -64,6 +86,21 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    case WM_SIZE:
+      if (wparam == SIZE_MINIMIZED) {
+        TrimProcessMemory();
+      }
+      break;
+    case WM_ACTIVATE:
+      if (LOWORD(wparam) == WA_INACTIVE) {
+        TrimProcessMemory();
+      }
+      break;
+    case WM_TIMER:
+      if (wparam == 1001) {
+        TrimProcessMemory();
+      }
       break;
   }
 

@@ -10,6 +10,7 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
 import 'package:tachyon/shared/utils/cover_utils.dart';
+import 'package:tachyon/shared/utils/memory_optimizer.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/backend/services/queue_manager.dart';
@@ -180,6 +181,9 @@ class TachyonBackendHost {
 
     // 8. Listen for incoming requests from the UI isolate
     _hostReceivePort.listen(_onRequestReceived);
+
+    // 9. Trim startup memory allocations
+    MemoryOptimizer.trim();
   }
 
   Future<void> _onRequestReceived(dynamic message) async {
@@ -437,7 +441,9 @@ class TachyonBackendHost {
       // LIBRARY & CATALOG
       // =======================================================================
       case BackendMethods.libraryGetCatalogSnapshot:
-        return _database.getCatalogSnapshot();
+        final snapshot = _database.getCatalogSnapshot();
+        MemoryOptimizer.trim();
+        return snapshot;
 
       case BackendMethods.libraryGetTracks:
         return const <Track>[];

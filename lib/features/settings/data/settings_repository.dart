@@ -280,6 +280,11 @@ class SettingsRepository {
   Future<void> setMusicDirectories(List<String> dirs) =>
       _prefs.setStringList(_keyMusicDirectories, dirs);
 
+  /// Whether the music directories list has ever been persisted
+  /// (even as an empty list after the user removed all folders).
+  bool get hasMusicDirectoriesBeenSet =>
+      _prefs.containsKey(_keyMusicDirectories);
+
   Future<void> setCrossfadeDuration(int durationSeconds) =>
       _prefs.setInt(_keyCrossfadeDuration, durationSeconds.clamp(0, 30));
 
