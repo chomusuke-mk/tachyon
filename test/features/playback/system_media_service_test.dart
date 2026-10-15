@@ -15,7 +15,7 @@ import 'package:tachyon/features/playback/presentation/playback_controller.dart'
 import 'package:tachyon/features/playback/services/linux_mpris_bridge.dart';
 import 'package:tachyon/features/playback/services/tachyon_audio_handler.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/shared/utils/cover_utils.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 
 class FakeTachyonBackendClient implements TachyonBackendClient {
   final StreamController<PlaybackState> _playbackStateController =
@@ -154,7 +154,7 @@ void main() {
       settingsRepo = SettingsRepository(prefs);
       backend = FakeTachyonBackendClient();
       tempCacheDir = await Directory.systemTemp.createTemp('tachyon_cover_test');
-      CoverUtils.init(tempCacheDir);
+      MetadataUtils.init(tempCacheDir.path, tempCacheDir.path);
 
       controller = PlaybackController(
         backend: backend,

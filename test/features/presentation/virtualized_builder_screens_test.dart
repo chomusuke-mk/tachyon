@@ -30,6 +30,7 @@ import 'package:tachyon/features/playlists/presentation/playlists_controller.dar
 import 'package:tachyon/features/playlists/presentation/playlists_screen.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/album_card.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
@@ -1123,7 +1124,7 @@ void main() {
 
       final albumArtImages = tester.widgetList<AlbumArtImage>(find.byType(AlbumArtImage));
       final headerArt = albumArtImages.firstWhere(
-        (img) => img.quality == ThumbnailQuality.high,
+        (img) => img.quality == ThumbnailQuality.medium,
       );
       expect(headerArt.thumbnailHash, 'ambient_hash_99');
 

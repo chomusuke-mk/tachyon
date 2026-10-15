@@ -176,9 +176,16 @@ class PlaybackController extends ChangeNotifier {
   ValueNotifier<List<double>> get visualizerNotifier => _visualizerNotifier;
   ValueListenable<List<double>> get visualizerListenable => _visualizerNotifier;
 
+  bool _visualizerEnabled = false;
+
   void setVisualizerEnabled(bool enabled) {
+    _visualizerEnabled = enabled;
     if (!enabled) {
-      _visualizerNotifier.value = const [];
+      scheduleMicrotask(() {
+        if (!_visualizerEnabled && !_isDisposed) {
+          _visualizerNotifier.value = const [];
+        }
+      });
     }
     _backend.setVisualizerEnabled(enabled);
   }

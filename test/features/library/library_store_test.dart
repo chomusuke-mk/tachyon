@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/core/backend/direct_backend_client.dart';
-import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/data/library_store.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';

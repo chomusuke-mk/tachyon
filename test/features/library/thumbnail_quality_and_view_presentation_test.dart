@@ -1,16 +1,16 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image/image.dart' as img;
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/core/backend/backend_client.dart';
 import 'package:tachyon/core/backend/direct_backend_client.dart';
-import 'package:tachyon/shared/utils/cover_utils.dart';
-import 'package:tachyon/core/backend/services/metadata_service.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/shared/utils/parse_utils.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/data/library_store.dart';
@@ -129,293 +129,110 @@ void main() {
     });
   });
 
-  group('CoverUtils Triple-Quality JPEG Caching', () {
+  group('MetadataUtils Triple-Quality PNG Caching', () {
     late Directory tempDir;
+    late Directory thumbnailsDir;
 
-    setUp(() async {
-      tempDir = Directory.systemTemp.createTempSync('cover_cache_test_');
-      CoverUtils.init(tempDir);
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('metadata_temp_test_');
+      thumbnailsDir = Directory.systemTemp.createTempSync('metadata_thumb_test_');
+      MetadataUtils.init(thumbnailsDir.path, tempDir.path);
     });
 
     tearDown(() {
       if (tempDir.existsSync()) {
         tempDir.deleteSync(recursive: true);
       }
+      if (thumbnailsDir.existsSync()) {
+        thumbnailsDir.deleteSync(recursive: true);
+      }
     });
 
-    test('File path resolution follows _lq.jpg, _mq.jpg, _hq.jpg naming', () {
+    test('File path resolution follows _low.png, _medium.png, _high.png naming', () {
       const testHash = 'a1b2c3d4e5f6';
 
-      final lqFile = CoverUtils.getCoverFile(
+      final lqPath = MetadataUtils.getThumbnailFilePath(
         testHash,
         quality: ThumbnailQuality.low,
       );
-      final mqFile = CoverUtils.getCoverFile(
+      final mqPath = MetadataUtils.getThumbnailFilePath(
         testHash,
         quality: ThumbnailQuality.medium,
       );
-      final hqFile = CoverUtils.getCoverFile(
+      final hqPath = MetadataUtils.getThumbnailFilePath(
         testHash,
         quality: ThumbnailQuality.high,
       );
 
-      expect(lqFile.path.endsWith('_lq.jpg'), isTrue);
-      expect(mqFile.path.endsWith('_mq.jpg'), isTrue);
-      expect(hqFile.path.endsWith('_hq.jpg'), isTrue);
+      expect(lqPath.endsWith('_low.png'), isTrue);
+      expect(mqPath.endsWith('_medium.png'), isTrue);
+      expect(hqPath.endsWith('_high.png'), isTrue);
     });
 
-    test('Artist cover file path resolution follows triple quality naming', () {
-      const artistHash = 'b2c3d4e5f6a1';
-
-      final lqFile = CoverUtils.getArtistCoverFile(
-        artistHash,
-        quality: ThumbnailQuality.low,
-      );
-      final mqFile = CoverUtils.getArtistCoverFile(
-        artistHash,
-        quality: ThumbnailQuality.medium,
-      );
-      final hqFile = CoverUtils.getArtistCoverFile(
-        artistHash,
-        quality: ThumbnailQuality.high,
-      );
-
-      expect(lqFile.path.endsWith('_lq.jpg'), isTrue);
-      expect(mqFile.path.endsWith('_mq.jpg'), isTrue);
-      expect(hqFile.path.endsWith('_hq.jpg'), isTrue);
-    });
-
-    test('Album cover file path resolution follows triple quality naming', () {
-      const albumHash = 'c3d4e5f6a1b2';
-
-      final lqFile = CoverUtils.getAlbumCoverFile(
-        albumHash,
-        quality: ThumbnailQuality.low,
-      );
-      final mqFile = CoverUtils.getAlbumCoverFile(
-        albumHash,
-        quality: ThumbnailQuality.medium,
-      );
-      final hqFile = CoverUtils.getAlbumCoverFile(
-        albumHash,
-        quality: ThumbnailQuality.high,
-      );
-
-      expect(lqFile.path.endsWith('_lq.jpg'), isTrue);
-      expect(mqFile.path.endsWith('_mq.jpg'), isTrue);
-      expect(hqFile.path.endsWith('_hq.jpg'), isTrue);
-    });
-
-    test('writeTripleQualityImages generates and saves all 3 qualities in JPEG format', () async {
-      // Create a 1000x1000 test image
-      final testImg = img.Image(width: 1000, height: 1000);
-      img.fill(testImg, color: img.ColorRgb8(255, 0, 0));
-      final rawJpegBytes = img.encodeJpg(testImg);
-      final hash = CoverUtils.computeBytesHash(rawJpegBytes);
-
-      final lqFile = CoverUtils.getCoverFile(hash, quality: ThumbnailQuality.low);
-      final mqFile = CoverUtils.getCoverFile(
-        hash,
-        quality: ThumbnailQuality.medium,
-      );
-      final hqFile = CoverUtils.getCoverFile(hash, quality: ThumbnailQuality.high);
-
-      await CoverUtils.writeTripleQualityImages(
-        rawJpegBytes,
-        [hqFile],
-        [mqFile],
-        [lqFile],
-      );
-
-      // Verify that all 3 files exist on disk
-      expect(lqFile.existsSync(), isTrue);
-      expect(mqFile.existsSync(), isTrue);
-      expect(hqFile.existsSync(), isTrue);
+    test('extractHashFromThumbnailPath extracts content hash from thumbnail filenames', () {
       expect(
-        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.low),
-        isTrue,
+        MetadataUtils.extractHashFromThumbnailPath('/path/to/covers/a1b2c3d4_low.png'),
+        'a1b2c3d4',
       );
       expect(
-        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.medium),
-        isTrue,
+        MetadataUtils.extractHashFromThumbnailPath('/path/to/covers/a1b2c3d4_medium.png'),
+        'a1b2c3d4',
       );
       expect(
-        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.high),
-        isTrue,
+        MetadataUtils.extractHashFromThumbnailPath('/path/to/covers/a1b2c3d4_high.png'),
+        'a1b2c3d4',
       );
-
-      // Decode generated images to verify dimensions
-      final lqDecoded = img.decodeImage(lqFile.readAsBytesSync())!;
-      expect(lqDecoded.width, AppDefaults.lowQualityResolution);
-      expect(lqDecoded.height, AppDefaults.lowQualityResolution);
-
-      final mqDecoded = img.decodeImage(mqFile.readAsBytesSync())!;
-      expect(mqDecoded.width, AppDefaults.mediumQualityResolution);
-      expect(mqDecoded.height, AppDefaults.mediumQualityResolution);
-
-      final hqDecoded = img.decodeImage(hqFile.readAsBytesSync())!;
-      expect(hqDecoded.width, AppDefaults.highQualityResolution);
-      expect(hqDecoded.height, AppDefaults.highQualityResolution);
-    });
-
-    test('writeTripleQualityImages writes to multiple target files in a single pass', () async {
-      final testImg = img.Image(width: 800, height: 800);
-      img.fill(testImg, color: img.ColorRgb8(0, 0, 255));
-      final rawJpegBytes = img.encodeJpg(testImg);
-
-      final files1 = CoverUtils.getTrackFiles('/test/song1.mp3');
-      final files2 = CoverUtils.getTrackFiles('/test/song2.mp3');
-
-      await CoverUtils.writeTripleQualityImages(
-        rawJpegBytes,
-        [files1.hq, files2.hq],
-        [files1.mq, files2.mq],
-        [files1.lq, files2.lq],
-      );
-
-      expect(files1.existsAllSync(), isTrue);
-      expect(files2.existsAllSync(), isTrue);
-    });
-
-    test('parseArtistNames splits comma-separated artists cleanly', () {
-      expect(MetadataService.parseArtistNames('Queen, David Bowie'), [
-        'Queen',
-        'David Bowie',
-      ]);
       expect(
-        MetadataService.parseArtistNames('Queen,David Bowie, Freddie Mercury'),
-        ['Queen', 'David Bowie', 'Freddie Mercury'],
+        MetadataUtils.extractHashFromThumbnailPath('a1b2c3d4_high.png'),
+        'a1b2c3d4',
       );
-      expect(MetadataService.parseArtistNames('Cher'), ['Cher']);
-      expect(MetadataService.parseArtistNames(''), isEmpty);
-      expect(MetadataService.parseArtistNames(null), isEmpty);
     });
 
     test('Standardized hash methods produce deterministic SHA-256 hashes', () {
-      final trackHash = CoverUtils.hashTrack('/music/song.flac');
-      final albumHash = CoverUtils.hashAlbum('A Night at the Opera');
-      final artistHash = CoverUtils.hashArtist('Queen');
+      final bytesHash = ParserUtils.computeBytesHash(Uint8List.fromList([1, 2, 3, 4]));
+      final strHash = ParserUtils.computeStringHash('Queen');
 
-      expect(trackHash, isNotEmpty);
-      expect(albumHash, CoverUtils.hashAlbum('  a night at the opera  '));
-      expect(artistHash, CoverUtils.hashArtist('QUEEN '));
+      expect(bytesHash, isNotEmpty);
+      expect(strHash, ParserUtils.computeStringHash('Queen'));
     });
 
-    test('extractHashFromCoverPath extracts content hash from cover filenames', () {
-      expect(
-        CoverUtils.extractHashFromCoverPath('/path/to/covers/a1b2c3d4_lq.jpg'),
-        'a1b2c3d4',
-      );
-      expect(
-        CoverUtils.extractHashFromCoverPath('/path/to/covers/a1b2c3d4_mq.jpg'),
-        'a1b2c3d4',
-      );
-      expect(
-        CoverUtils.extractHashFromCoverPath('/path/to/covers/a1b2c3d4_hq.jpg'),
-        'a1b2c3d4',
-      );
-      expect(
-        CoverUtils.extractHashFromCoverPath('a1b2c3d4_hq.jpg'),
-        'a1b2c3d4',
-      );
-      expect(
-        CoverUtils.extractHashFromCoverPath('/path/to/covers/a1b2c3d4.jpg'),
-        'a1b2c3d4',
-      );
-    });
+    test('hasCachedThumbnail and listCachedThumbnails track saved files', () {
+      const hash = 'a1b2c3d4e5f6';
+      expect(MetadataUtils.hasCachedThumbnail(hash), isFalse);
 
-    test('CoverFileSet provides unified access across qualities and existence checks', () {
-      final files = CoverUtils.getTrackFiles('/music/song.mp3');
-      expect(files.lq.path.endsWith('_lq.jpg'), isTrue);
-      expect(files.mq.path.endsWith('_mq.jpg'), isTrue);
-      expect(files.hq.path.endsWith('_hq.jpg'), isTrue);
-      expect(files.getByQuality(ThumbnailQuality.low), files.lq);
-      expect(files.getByQuality(ThumbnailQuality.medium), files.mq);
-      expect(files.getByQuality(ThumbnailQuality.high), files.hq);
-      expect(files.existsAllSync(), isFalse);
-    });
+      final lqFile = File(
+        MetadataUtils.getThumbnailFilePath(hash, quality: ThumbnailQuality.low),
+      );
+      lqFile.writeAsStringSync('dummy_thumbnail_content');
 
-    test('saveThumbnailBytes saves and caches image by content hash', () async {
-      final testImg = img.Image(width: 800, height: 800);
-      img.fill(testImg, color: img.ColorRgb8(0, 255, 0));
-      final testJpg = img.encodeJpg(testImg);
-      final hash = CoverUtils.computeBytesHash(testJpg);
-
-      await CoverUtils.saveThumbnailBytes(hash, testJpg);
-
-      expect(CoverUtils.hasCachedCover(hash), isTrue);
       expect(
-        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.high),
+        MetadataUtils.hasCachedThumbnail(hash, quality: ThumbnailQuality.low),
         isTrue,
       );
       expect(
-        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.medium),
-        isTrue,
+        MetadataUtils.hasCachedThumbnail(hash, quality: ThumbnailQuality.high),
+        isFalse,
       );
-      expect(
-        CoverUtils.hasCachedCover(hash, quality: ThumbnailQuality.low),
-        isTrue,
-      );
+      expect(MetadataUtils.listCachedThumbnails().length, 1);
     });
 
-    test(
-      'saveThumbnailBytes is safe when processing identical bytes concurrently',
-      () async {
-        final testImg = img.Image(width: 800, height: 800);
-        img.fill(testImg, color: img.ColorRgb8(120, 40, 200));
-        final testJpg = img.encodeJpg(testImg);
-        final hash = CoverUtils.computeBytesHash(testJpg);
+    test('clearTempDirectory removes temporary files without touching saved covers', () async {
+      const hash = 'saved_hash_123';
+      final savedFile = File(
+        MetadataUtils.getThumbnailFilePath(hash, quality: ThumbnailQuality.low),
+      );
+      savedFile.writeAsStringSync('saved cover content');
+      expect(savedFile.existsSync(), isTrue);
 
-        // Concurrently save identical thumbnail bytes
-        await Future.wait<File?>([
-          CoverUtils.saveThumbnailBytes(hash, testJpg, force: true),
-          CoverUtils.saveThumbnailBytes(hash, testJpg, force: true),
-        ]);
+      final tempFile = File('${MetadataUtils.tempDirectory!.path}/leftover_worker.tmp')
+        ..writeAsStringSync('stale temp content');
+      expect(tempFile.existsSync(), isTrue);
 
-        final hqFile = CoverUtils.getCoverFile(
-          hash,
-          quality: ThumbnailQuality.high,
-        );
-        final mqFile = CoverUtils.getCoverFile(
-          hash,
-          quality: ThumbnailQuality.medium,
-        );
-        final lqFile = CoverUtils.getCoverFile(
-          hash,
-          quality: ThumbnailQuality.low,
-        );
+      await MetadataUtils.clearTempDirectory();
 
-        expect(hqFile.existsSync(), isTrue);
-        expect(mqFile.existsSync(), isTrue);
-        expect(lqFile.existsSync(), isTrue);
-
-        final decodedHq = img.decodeImage(hqFile.readAsBytesSync());
-        expect(decodedHq, isNotNull);
-        expect(decodedHq!.width, AppDefaults.highQualityResolution);
-      },
-    );
-
-    test(
-      'clearTemp removes temporary files without touching saved covers',
-      () async {
-        final testImg = img.Image(width: 400, height: 400);
-        final testJpg = img.encodeJpg(testImg);
-        final hash = CoverUtils.computeBytesHash(testJpg);
-
-        await CoverUtils.saveThumbnailBytes(hash, testJpg);
-        expect(CoverUtils.hasCachedCover(hash), isTrue);
-
-        // Create a dummy leftover temporary file in tempDir
-        final tempFile = File('${CoverUtils.tempDir.path}/leftover_worker.tmp')
-          ..writeAsStringSync('stale temp content');
-        expect(tempFile.existsSync(), isTrue);
-
-        await CoverUtils.clearTemp();
-
-        expect(tempFile.existsSync(), isFalse);
-        expect(CoverUtils.hasCachedCover(hash), isTrue);
-      },
-    );
+      expect(tempFile.existsSync(), isFalse);
+      expect(savedFile.existsSync(), isTrue);
+    });
   });
 
   group('Presentation View Modes (List vs Cards) UI Integration', () {

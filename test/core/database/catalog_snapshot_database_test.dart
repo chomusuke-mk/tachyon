@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/backend/backend_protocol.dart';
-import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 

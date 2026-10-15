@@ -48,7 +48,12 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
 
   @override
   void deactivate() {
-    context.read<PlaybackController>().setVisualizerEnabled(false);
+    final controller = context.read<PlaybackController>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        controller.setVisualizerEnabled(false);
+      }
+    });
     super.deactivate();
   }
 

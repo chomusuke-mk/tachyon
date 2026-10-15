@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/database/app_database.dart';
 
 void main() {

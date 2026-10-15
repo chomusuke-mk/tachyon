@@ -176,6 +176,24 @@ abstract final class MetadataUtils {
     return parts.first;
   }
 
+  static bool hasCachedThumbnail(
+    String hash, {
+    ThumbnailQuality quality = ThumbnailQuality.low,
+  }) {
+    _ensureInitialized();
+    final f = File(getThumbnailFilePath(hash, quality: quality));
+    return f.existsSync() && f.lengthSync() > 0;
+  }
+
+  @visibleForTesting
+  static Future<void> saveThumbnailBytes(
+    String hash,
+    Uint8List rawBytes,
+  ) async {
+    _ensureInitialized();
+    await _writeTripleQualityImages(rawBytes, hash);
+  }
+
   static Future<ExtractedTrackData?> extractTrackMetadata({
     required String filePath,
     bool useSync = false,
@@ -668,6 +686,8 @@ abstract final class MetadataUtils {
     );
     return files.whereType<File>().toList();
   }
+
+  static List<File> listCachedThumbnails() => listCachedCoverFiles();
 
   static void disposeBridge() {
     ui.IsolateNameServer.removePortNameMapping(_kGpuBridgePortName);

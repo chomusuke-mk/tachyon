@@ -15,7 +15,7 @@ import 'package:tachyon/features/playback/presentation/playback_controller.dart'
 import 'package:tachyon/features/playback/services/tachyon_audio_handler.dart';
 import 'package:tachyon/features/playback/services/windows_smtc_bridge.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/shared/utils/cover_utils.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 
 class _FakeBackendClient implements TachyonBackendClient {
   final StreamController<PlaybackState> _stateController =
@@ -113,7 +113,7 @@ void main() {
       backend = _FakeBackendClient();
 
       tempDir = await Directory.systemTemp.createTemp('smtc_verify_test');
-      CoverUtils.init(tempDir);
+      MetadataUtils.init(tempDir.path, tempDir.path);
 
       controller = PlaybackController(
         backend: backend,
@@ -137,7 +137,8 @@ void main() {
     });
 
     test('TachyonAudioHandler uses low-quality cover and caches queue synchronization', () async {
-      final coverLq = File('${tempDir.path}/covers/hash_lq_lq.jpg');
+      final coverPath = MetadataUtils.getThumbnailFilePath('hash_lq', quality: ThumbnailQuality.low);
+      final coverLq = File(coverPath);
       coverLq.parent.createSync(recursive: true);
       coverLq.writeAsBytesSync([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46]);
 
@@ -163,12 +164,13 @@ void main() {
       expect(item, isNotNull);
       expect(item!.artUri, isNotNull);
       // Verify small / LQ thumbnail is selected
-      expect(item.artUri!.toFilePath().contains('_lq.jpg'), isTrue);
+      expect(item.artUri!.toFilePath().contains('_low.png'), isTrue);
     });
 
     test('30 rapid skips execute smoothly without queue re-scan or bridge freeze', () async {
       final tracks = List.generate(50, (i) {
-        final coverLq = File('${tempDir.path}/covers/track_${i}_lq.jpg');
+        final coverPath = MetadataUtils.getThumbnailFilePath('track_$i', quality: ThumbnailQuality.low);
+        final coverLq = File(coverPath);
         coverLq.parent.createSync(recursive: true);
         coverLq.writeAsBytesSync([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46]);
 
