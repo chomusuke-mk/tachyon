@@ -5,6 +5,7 @@ import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/data/library_store.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
+import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
@@ -634,6 +635,256 @@ void main() {
       libraryController.dispose();
       await backend.dispose();
       await db.close();
+    });
+
+    test('Hydrates Track thumbnailHash with fallback to album.thumbnailHash', () {
+      final snapshot = CatalogSnapshot(
+        albums: const [
+          RawAlbumDto(id: 1, name: 'Album With Cover', thumbnailHash: 'album_hash'),
+          RawAlbumDto(id: 2, name: 'Album Without Cover', thumbnailHash: null),
+        ],
+        tracks: const [
+          RawTrackDto(
+            id: 101,
+            filePath: '/t1.mp3',
+            title: 'Track With Own Cover',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            albumId: 1,
+            thumbnailHash: 'own_track_hash',
+          ),
+          RawTrackDto(
+            id: 102,
+            filePath: '/t2.mp3',
+            title: 'Track Without Cover (Takes Album Cover)',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            albumId: 1,
+            thumbnailHash: null,
+          ),
+          RawTrackDto(
+            id: 103,
+            filePath: '/t3.mp3',
+            title: 'Track With Empty Cover (Takes Album Cover)',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            albumId: 1,
+            thumbnailHash: '',
+          ),
+          RawTrackDto(
+            id: 104,
+            filePath: '/t4.mp3',
+            title: 'Track Without Any Cover',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            albumId: 2,
+            thumbnailHash: null,
+          ),
+        ],
+        artists: const [],
+        genres: const [],
+        playlists: const [],
+        playlistEntries: const [],
+        trackArtists: const [],
+        trackGenres: const [],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      expect(store.getTrackById(101)?.thumbnailHash, equals('own_track_hash'));
+      expect(store.getTrackById(102)?.thumbnailHash, equals('album_hash'));
+      expect(store.getTrackById(103)?.thumbnailHash, equals('album_hash'));
+      expect(store.getTrackById(104)?.thumbnailHash, isNull);
+    });
+
+    test('Hydrates Genre coverHash from its tracks and updates upon track removal', () {
+      final snapshot = CatalogSnapshot(
+        albums: const [],
+        artists: const [],
+        genres: const [
+          RawGenreDto(id: 10, name: 'Rock'),
+          RawGenreDto(id: 20, name: 'Jazz'),
+        ],
+        tracks: const [
+          RawTrackDto(
+            id: 1,
+            filePath: '/rock1.mp3',
+            title: 'Rock 1',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            thumbnailHash: null,
+          ),
+          RawTrackDto(
+            id: 2,
+            filePath: '/rock2.mp3',
+            title: 'Rock 2',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            thumbnailHash: 'rock_cover_hash',
+          ),
+        ],
+        playlists: const [],
+        playlistEntries: const [],
+        trackArtists: const [],
+        trackGenres: const [
+          TrackGenrePair(trackId: 1, genreId: 10),
+          TrackGenrePair(trackId: 2, genreId: 10),
+        ],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      expect(store.getGenreById(10)?.coverHash, equals('rock_cover_hash'));
+      expect(store.getGenreById(20)?.coverHash, isNull);
+
+      // Remove the track that had the cover
+      store.removeTrack(2);
+      expect(store.getGenreById(10)?.coverHash, isNull);
+    });
+
+    test('Hydrates Playlist coverHash and updates on setTrackLiked and mutations', () {
+      final snapshot = CatalogSnapshot(
+        albums: const [],
+        artists: const [],
+        genres: const [],
+        tracks: const [
+          RawTrackDto(
+            id: 1,
+            filePath: '/t1.mp3',
+            title: 'T1',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            thumbnailHash: 'hash_1',
+          ),
+          RawTrackDto(
+            id: 2,
+            filePath: '/t2.mp3',
+            title: 'T2',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            thumbnailHash: 'hash_2',
+          ),
+          RawTrackDto(
+            id: 3,
+            filePath: '/t3.mp3',
+            title: 'T3',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            thumbnailHash: null,
+          ),
+        ],
+        playlists: [
+          RawPlaylistDto(
+            id: AppDatabase.likedSongsPlaylistId,
+            name: 'Liked Songs',
+            createdAt: 100,
+            type: PlaylistType.liked.index,
+          ),
+          const RawPlaylistDto(
+            id: 200,
+            name: 'Custom',
+            createdAt: 100,
+            type: 0,
+          ),
+        ],
+        playlistEntries: [
+          RawPlaylistEntryDto(
+            id: 1,
+            playlistId: AppDatabase.likedSongsPlaylistId,
+            trackId: 1,
+            position: 0,
+            addedAt: 100,
+          ),
+        ],
+        trackArtists: const [],
+        trackGenres: const [],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      final likedPl = store.likedSongsPlaylist!;
+      expect(likedPl.coverHash, equals('hash_1'));
+
+      // Like track 2 (more recent timestamp)
+      store.setTrackLiked(2, true);
+      expect(likedPl.coverHash, equals('hash_2'));
+
+      // Like track 3 (no cover) -> coverHash remains hash_2
+      store.setTrackLiked(3, true);
+      expect(likedPl.coverHash, equals('hash_2'));
+
+      // Unlike track 2 -> coverHash falls back to hash_1
+      store.setTrackLiked(2, false);
+      expect(likedPl.coverHash, equals('hash_1'));
+
+      // Unlike track 1 -> coverHash becomes null
+      store.setTrackLiked(1, false);
+      expect(likedPl.coverHash, isNull);
+
+      // Custom playlist mutations
+      final customPl = store.getPlaylistById(200)!;
+      expect(customPl.coverHash, isNull);
+      store.addTrackToPlaylist(200, 2);
+      expect(customPl.coverHash, equals('hash_2'));
+      store.removeTrackFromPlaylist(200, 2);
+      expect(customPl.coverHash, isNull);
+    });
+
+    test('Hydrates Artist thumbnailHash with fallback to album and track thumbnailHash', () {
+      final snapshot = CatalogSnapshot(
+        artists: const [
+          RawArtistDto(id: 1, name: 'Artist With Own Cover', thumbnailHash: 'own_artist_hash'),
+          RawArtistDto(id: 2, name: 'Artist With Album Fallback', thumbnailHash: null),
+          RawArtistDto(id: 3, name: 'Artist With Track Fallback', thumbnailHash: null),
+          RawArtistDto(id: 4, name: 'Artist Without Any Cover', thumbnailHash: null),
+        ],
+        albums: const [
+          RawAlbumDto(id: 10, name: 'Album 1', artistId: 2, thumbnailHash: 'album_10_hash'),
+          RawAlbumDto(id: 20, name: 'Album Without Cover', artistId: 3, thumbnailHash: null),
+        ],
+        tracks: const [
+          RawTrackDto(
+            id: 100,
+            filePath: '/t100.mp3',
+            title: 'Track With Cover for Artist 3',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            albumId: 20,
+            thumbnailHash: 'track_100_hash',
+          ),
+          RawTrackDto(
+            id: 200,
+            filePath: '/t200.mp3',
+            title: 'Track Without Cover for Artist 4',
+            durationMs: 1000,
+            fileSize: 100,
+            modifiedAt: 100,
+            albumId: null,
+            thumbnailHash: null,
+          ),
+        ],
+        genres: const [],
+        playlists: const [],
+        playlistEntries: const [],
+        trackArtists: const [
+          TrackArtistPair(trackId: 100, artistId: 3),
+          TrackArtistPair(trackId: 200, artistId: 4),
+        ],
+        trackGenres: const [],
+      );
+
+      final store = LibraryStore.fromSnapshot(snapshot);
+      expect(store.getArtistById(1)?.thumbnailHash, equals('own_artist_hash'));
+      expect(store.getArtistById(2)?.thumbnailHash, equals('album_10_hash'));
+      expect(store.getArtistById(3)?.thumbnailHash, equals('track_100_hash'));
+      expect(store.getArtistById(4)?.thumbnailHash, isNull);
     });
   });
 }

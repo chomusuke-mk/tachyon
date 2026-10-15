@@ -89,8 +89,7 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
     }
 
     final filePath = currentTrack.filePath;
-    final thumbnailHash =
-        currentTrack.thumbnailHash ?? currentTrack.album?.thumbnailHash;
+    final thumbnailHash = currentTrack.thumbnailHash;
     final isPlaying = playback.isPlaying;
     final theme = Theme.of(context);
 

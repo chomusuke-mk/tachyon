@@ -59,7 +59,6 @@ class GenresScreen extends StatelessWidget {
               itemBuilder: (context, index) {
                 final genre = genres[index];
                 final colorScheme = Theme.of(context).colorScheme;
-                final coverHash = findGenreCoverHash(genre);
 
                 return Card(
                   clipBehavior: Clip.antiAlias,
@@ -76,12 +75,12 @@ class GenresScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    child: coverHash != null
+                    child: genre.coverHash != null
                         ? Stack(
                             fit: StackFit.expand,
                             children: [
                               AlbumArtImage(
-                                thumbnailHash: coverHash,
+                                thumbnailHash: genre.coverHash,
                                 quality: ThumbnailQuality.medium,
                                 fit: BoxFit.cover,
                               ),

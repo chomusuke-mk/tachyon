@@ -146,8 +146,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
 
     if (currentTrack == null) return const SizedBox.shrink();
 
-    final thumbnailHash =
-        currentTrack.thumbnailHash ?? currentTrack.album?.thumbnailHash;
+    final thumbnailHash = currentTrack.thumbnailHash;
 
     final isDark = theme.brightness == Brightness.dark;
     final isOled = isDark && colorScheme.surface == const Color(0xFF000000);
@@ -285,34 +284,47 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              if (widget.isDesktop && currentTrack.artists.isNotEmpty)
+                              if (widget.isDesktop &&
+                                  currentTrack.artists.isNotEmpty)
                                 SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      for (int i = 0; i < currentTrack.artists.length; i++) ...[
+                                      for (
+                                        int i = 0;
+                                        i < currentTrack.artists.length;
+                                        i++
+                                      ) ...[
                                         if (i > 0)
                                           Text(
                                             ', ',
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: colorScheme.onSurfaceVariant,
-                                            ),
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                                  color: colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
                                           ),
                                         TextLink(
                                           text: currentTrack.artists[i].name,
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: colorScheme.onSurfaceVariant,
-                                          ),
-                                          hoverColor: colorScheme.primary,
-                                          defaultColor: colorScheme.onSurfaceVariant,
-                                          onTap: () => Navigator.of(context).push(
-                                            MaterialPageRoute<void>(
-                                              builder: (_) => ArtistDetailScreen(
-                                                artist: currentTrack.artists[i],
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
                                               ),
-                                            ),
-                                          ),
+                                          hoverColor: colorScheme.primary,
+                                          defaultColor:
+                                              colorScheme.onSurfaceVariant,
+                                          onTap: () => Navigator.of(context)
+                                              .push(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      ArtistDetailScreen(
+                                                        artist: currentTrack
+                                                            .artists[i],
+                                                      ),
+                                                ),
+                                              ),
                                         ),
                                       ],
                                     ],

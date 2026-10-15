@@ -24,15 +24,15 @@ void main() {
     });
 
     test('Oracle 2: Track has NO lyrics property, lyrics_id, or lyrics getter', () {
-      const track = Track(
+      final track = Track(
         id: 42,
         filePath: '/music/oracle_test.mp3',
         title: 'Oracle Song',
         durationMs: 180000,
         fileSize: 1024,
         modifiedAt: 1000,
-        album: Album(id: 1, name: 'Oracle Album'),
-        artists: [Artist(id: 1, name: 'Oracle Artist')],
+        album: const Album(id: 1, name: 'Oracle Album'),
+        artists: const [Artist(id: 1, name: 'Oracle Artist')],
         genres: [Genre(id: 1, name: 'Oracle Genre')],
       );
 

@@ -106,16 +106,19 @@ class Playlist {
   final int createdAt;
   final PlaylistType type;
   final List<PlaylistEntry> entries;
+  /// Only for UI
+  String? coverHash;
 
   int get trackCount => entries.length;
   bool get isSpecial => type != PlaylistType.user;
 
-  const Playlist({
+  Playlist({
     this.id,
     required this.name,
     required this.createdAt,
     this.type = PlaylistType.user,
     this.entries = const [],
+    this.coverHash,
   });
 
   Map<String, dynamic> toMap() {

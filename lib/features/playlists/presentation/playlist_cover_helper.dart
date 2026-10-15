@@ -1,41 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
-import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
-
-/// Finds the cover hash for a playlist by searching the most recently added tracks
-/// until finding one with a valid cover thumbnail hash.
-String? findPlaylistCoverHash(Playlist playlist, [List<Track>? tracks]) {
-  if (playlist.entries.isNotEmpty) {
-    final sorted = List<PlaylistEntry>.from(playlist.entries)
-      ..sort((a, b) {
-        final cmp = b.addedAt.compareTo(a.addedAt);
-        if (cmp != 0) return cmp;
-        return b.position.compareTo(a.position);
-      });
-    for (final entry in sorted) {
-      final track = entry.track;
-      if (track != null) {
-        final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
-        if (hash != null && hash.trim().isNotEmpty) {
-          return hash.trim();
-        }
-      }
-    }
-  }
-
-  if (tracks != null && tracks.isNotEmpty) {
-    for (final track in tracks.reversed) {
-      final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
-      if (hash != null && hash.trim().isNotEmpty) {
-        return hash.trim();
-      }
-    }
-  }
-
-  return null;
-}
 
 /// Builds the leading art widget for a playlist tile in the playlists list view.
 ///
@@ -48,11 +14,10 @@ Widget buildPlaylistLeading(
   double size = 48,
 }) {
   final colorScheme = Theme.of(context).colorScheme;
-  final coverHash = findPlaylistCoverHash(playlist);
 
   switch (playlist.type) {
     case PlaylistType.liked:
-      if (coverHash != null) {
+      if (playlist.coverHash != null) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(8.0),
           child: SizedBox(
@@ -62,7 +27,7 @@ Widget buildPlaylistLeading(
               fit: StackFit.expand,
               children: [
                 AlbumArtImage(
-                  thumbnailHash: coverHash,
+                  thumbnailHash: playlist.coverHash,
                   quality: ThumbnailQuality.low,
                   fit: BoxFit.cover,
                 ),
@@ -92,7 +57,7 @@ Widget buildPlaylistLeading(
       );
 
     case PlaylistType.history:
-      if (coverHash != null) {
+      if (playlist.coverHash != null) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(8.0),
           child: SizedBox(
@@ -102,7 +67,7 @@ Widget buildPlaylistLeading(
               fit: StackFit.expand,
               children: [
                 AlbumArtImage(
-                  thumbnailHash: coverHash,
+                  thumbnailHash: playlist.coverHash,
                   quality: ThumbnailQuality.low,
                   fit: BoxFit.cover,
                 ),
@@ -132,14 +97,14 @@ Widget buildPlaylistLeading(
       );
 
     case PlaylistType.user:
-      if (coverHash != null) {
+      if (playlist.coverHash != null) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(8.0),
           child: SizedBox(
             width: size,
             height: size,
             child: AlbumArtImage(
-              thumbnailHash: coverHash,
+              thumbnailHash: playlist.coverHash,
               quality: ThumbnailQuality.low,
               fit: BoxFit.cover,
             ),

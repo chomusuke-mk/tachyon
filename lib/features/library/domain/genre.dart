@@ -10,10 +10,18 @@ class Genre {
   /// The list of tracks associated with this genre.
   final List<Track> tracks;
 
+  /// Only for UI
+  String? coverHash;
+
   /// Returns the number of tracks associated with this genre.
   int get trackCount => tracks.length;
 
-  const Genre({this.id, required this.name, this.tracks = const []});
+  Genre({
+    this.id,
+    required this.name,
+    this.tracks = const [],
+    this.coverHash,
+  });
 
   Map<String, dynamic> toMap() {
     return {

@@ -298,9 +298,7 @@ class _QueueViewState extends State<QueueView> {
                                           width: 42,
                                           height: 42,
                                           child: AlbumArtImage(
-                                            thumbnailHash:
-                                                track?.thumbnailHash ??
-                                                track?.album?.thumbnailHash,
+                                            thumbnailHash: track?.thumbnailHash,
                                             quality: ThumbnailQuality.low,
                                             fit: BoxFit.cover,
                                             cacheWidth: 100,

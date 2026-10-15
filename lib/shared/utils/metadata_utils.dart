@@ -286,10 +286,10 @@ abstract final class MetadataUtils {
         pickBest(coverPriority, fallbackToFirst: true),
       );
       albumThumbnailHash = getOrComputeHash(
-        pickBest(albumPriority, fallbackToFirst: true),
+        pickBest(albumPriority, fallbackToFirst: false),
       );
       artistThumbnailHash = getOrComputeHash(
-        pickBest(artistPriority, fallbackToFirst: true),
+        pickBest(artistPriority, fallbackToFirst: false),
       );
     }
 

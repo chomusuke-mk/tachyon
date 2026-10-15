@@ -13,17 +13,6 @@ import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 
-/// Finds the cover thumbnail hash for a genre by picking the first available
-/// thumbnail hash among its internal tracks or albums (fastest/easiest access).
-String? findGenreCoverHash(Genre genre) {
-  for (final track in genre.tracks) {
-    final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
-    if (hash != null && hash.trim().isNotEmpty) {
-      return hash.trim();
-    }
-  }
-  return null;
-}
 
 class GenreDetailScreen extends StatelessWidget {
   final Genre genre;
@@ -52,7 +41,6 @@ class GenreDetailScreen extends StatelessWidget {
             : null) ??
         genre;
     final genreTracks = currentGenre.tracks;
-    final coverHash = findGenreCoverHash(currentGenre);
     final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     return Scaffold(
@@ -86,7 +74,7 @@ class GenreDetailScreen extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(
-            child: AmbientBackdrop(thumbnailHash: coverHash),
+            child: AmbientBackdrop(thumbnailHash: currentGenre.coverHash),
           ),
           CustomScrollView(
             slivers: [
@@ -106,7 +94,7 @@ class GenreDetailScreen extends StatelessWidget {
                           width: 200,
                           height: 200,
                           child: AlbumArtImage(
-                            thumbnailHash: coverHash,
+                            thumbnailHash: currentGenre.coverHash,
                             quality: ThumbnailQuality.medium,
                             width: 200,
                             height: 200,

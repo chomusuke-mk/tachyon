@@ -24,7 +24,6 @@ import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
-import 'package:tachyon/features/playlists/presentation/playlist_cover_helper.dart';
 import 'package:tachyon/features/playlists/presentation/playlist_detail_screen.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_screen.dart';
@@ -476,7 +475,7 @@ void main() {
   });
 
   group('Playlist Cover and Artwork Presentation', () {
-    test('findPlaylistCoverHash searches reverse added order until finding valid cover hash', () {
+    test('Playlist coverHash picks latest added track with valid cover hash', () {
       final track1 = const Track(
         id: 1,
         filePath: '/music/t1.mp3',
@@ -527,8 +526,8 @@ void main() {
       );
 
       // Should skip track 4 (addedAt 400, null hash) and pick track 3 (addedAt 300, 'hash_latest')
-      final resolvedHash = findPlaylistCoverHash(playlist);
-      expect(resolvedHash, equals('hash_latest'));
+      playlist.coverHash = LibraryStore.computePlaylistCoverHash(playlist);
+      expect(playlist.coverHash, equals('hash_latest'));
     });
 
     testWidgets('PlaylistsScreen renders cover with heart overlay for liked songs and clock for history', (tester) async {
@@ -651,8 +650,10 @@ void main() {
           PlaylistEntry(id: 1, position: 0, addedAt: 1000, track: trackWithCover),
         ],
       );
+      playlist.coverHash = LibraryStore.computePlaylistCoverHash(playlist);
 
       final store = LibraryStore();
+      store.addPlaylist(playlist);
       final playlistsCtrl = PlaylistsController(backend: backend, store: store);
       playlistsCtrl.selectPlaylist(playlist);
 
@@ -973,7 +974,7 @@ void main() {
       await db.close();
     });
 
-    test('findGenreCoverHash searches internal tracks and picks first non-empty thumbnailHash', () {
+    test('Genre coverHash searches internal tracks and picks first non-empty thumbnailHash', () {
       const trackWithoutCover = Track(
         id: 1,
         filePath: '/music/track1.mp3',
@@ -993,15 +994,17 @@ void main() {
         thumbnailHash: 'genre_track_cover_hash',
       );
 
-      const emptyGenre = Genre(id: 1, name: 'Empty Genre', tracks: []);
-      expect(findGenreCoverHash(emptyGenre), isNull);
+      final emptyGenre = Genre(id: 1, name: 'Empty Genre', tracks: []);
+      emptyGenre.coverHash = LibraryStore.computeGenreCoverHash(emptyGenre);
+      expect(emptyGenre.coverHash, isNull);
 
-      const genreWithCover = Genre(
+      final genreWithCover = Genre(
         id: 2,
         name: 'Rock',
         tracks: [trackWithoutCover, trackWithCover],
       );
-      expect(findGenreCoverHash(genreWithCover), 'genre_track_cover_hash');
+      genreWithCover.coverHash = LibraryStore.computeGenreCoverHash(genreWithCover);
+      expect(genreWithCover.coverHash, 'genre_track_cover_hash');
     });
 
     testWidgets('GenresScreen renders cover with ThumbnailQuality.medium on genre card', (tester) async {

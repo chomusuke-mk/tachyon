@@ -254,11 +254,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         children: [
           // 1. Ambient Blurred Backdrop
           Positioned.fill(
-            child: AmbientBackdrop(
-              thumbnailHash:
-                  currentTrack.thumbnailHash ??
-                  currentTrack.album?.thumbnailHash,
-            ),
+            child: AmbientBackdrop(thumbnailHash: currentTrack.thumbnailHash),
           ),
 
           // 2. Main Responsive Content Layer

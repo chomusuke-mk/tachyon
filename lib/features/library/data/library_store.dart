@@ -120,6 +120,55 @@ class LibraryStore {
       trackToGenreIds.putIfAbsent(pair.trackId, () => []).add(pair.genreId);
     }
 
+    // Pre-calculate thumbnail fallbacks from snapshot
+    final albumFirstTrackThumbnail = <int, String>{};
+    for (final rawTrack in snapshot.tracks) {
+      if (rawTrack.albumId != null &&
+          rawTrack.thumbnailHash != null &&
+          rawTrack.thumbnailHash!.trim().isNotEmpty) {
+        albumFirstTrackThumbnail.putIfAbsent(
+          rawTrack.albumId!,
+          () => rawTrack.thumbnailHash!.trim(),
+        );
+      }
+    }
+
+    final effectiveAlbumThumbnails = <int, String>{};
+    final artistFirstAlbumThumbnail = <int, String>{};
+    for (final rawAlbum in snapshot.albums) {
+      final hash = (rawAlbum.thumbnailHash != null &&
+              rawAlbum.thumbnailHash!.trim().isNotEmpty)
+          ? rawAlbum.thumbnailHash!.trim()
+          : albumFirstTrackThumbnail[rawAlbum.id];
+      if (hash != null && hash.isNotEmpty) {
+        effectiveAlbumThumbnails[rawAlbum.id] = hash;
+        if (rawAlbum.artistId != null) {
+          artistFirstAlbumThumbnail.putIfAbsent(rawAlbum.artistId!, () => hash);
+        }
+      }
+    }
+
+    final trackEffectiveThumbnail = <int, String>{};
+    for (final rawTrack in snapshot.tracks) {
+      final hash = (rawTrack.thumbnailHash != null &&
+              rawTrack.thumbnailHash!.trim().isNotEmpty)
+          ? rawTrack.thumbnailHash!.trim()
+          : (rawTrack.albumId != null
+              ? effectiveAlbumThumbnails[rawTrack.albumId]
+              : null);
+      if (hash != null && hash.isNotEmpty) {
+        trackEffectiveThumbnail[rawTrack.id] = hash;
+      }
+    }
+
+    final artistFirstTrackThumbnail = <int, String>{};
+    for (final pair in snapshot.trackArtists) {
+      final hash = trackEffectiveThumbnail[pair.trackId];
+      if (hash != null) {
+        artistFirstTrackThumbnail.putIfAbsent(pair.artistId, () => hash);
+      }
+    }
+
     // 2. Instantiate Artists with mutable backing lists for bi-directional linking
     final artistAlbumsMap = <int, List<Album>>{};
     final artistTracksMap = <int, List<Track>>{};
@@ -130,10 +179,16 @@ class LibraryStore {
       artistAlbumsMap[rawArtist.id] = albumsList;
       artistTracksMap[rawArtist.id] = tracksList;
 
+      final effectiveThumbnail = (rawArtist.thumbnailHash != null &&
+              rawArtist.thumbnailHash!.trim().isNotEmpty)
+          ? rawArtist.thumbnailHash!.trim()
+          : (artistFirstAlbumThumbnail[rawArtist.id] ??
+              artistFirstTrackThumbnail[rawArtist.id]);
+
       final artist = Artist(
         id: rawArtist.id,
         name: rawArtist.name,
-        thumbnailHash: rawArtist.thumbnailHash,
+        thumbnailHash: effectiveThumbnail,
         albums: albumsList,
         tracks: tracksList,
       );
@@ -168,11 +223,16 @@ class LibraryStore {
           ? _artistsById[rawAlbum.artistId]
           : null;
 
+      final effectiveAlbumThumbnail = (rawAlbum.thumbnailHash != null &&
+              rawAlbum.thumbnailHash!.trim().isNotEmpty)
+          ? rawAlbum.thumbnailHash
+          : effectiveAlbumThumbnails[rawAlbum.id];
+
       final album = Album(
         id: rawAlbum.id,
         name: rawAlbum.name,
         year: rawAlbum.year,
-        thumbnailHash: rawAlbum.thumbnailHash,
+        thumbnailHash: effectiveAlbumThumbnail,
         artist: artist,
         tracks: tracksList,
       );
@@ -228,7 +288,10 @@ class LibraryStore {
         replayGainTrackGain: rawTrack.replayGainTrackGain,
         replayGainTrackPeak: rawTrack.replayGainTrackPeak,
         waveform: WaveformCodec.decode(rawTrack.waveformData),
-        thumbnailHash: rawTrack.thumbnailHash,
+        thumbnailHash: (rawTrack.thumbnailHash != null &&
+                rawTrack.thumbnailHash!.isNotEmpty)
+            ? rawTrack.thumbnailHash
+            : album?.thumbnailHash,
         album: album,
         artists: linkedArtists,
         genres: linkedGenres,
@@ -284,6 +347,11 @@ class LibraryStore {
       });
     }
 
+    // Compute coverHash for each genre based on its tracks
+    for (final genre in _allGenres) {
+      genre.coverHash = computeGenreCoverHash(genre);
+    }
+
     // 6. Instantiate Playlists and PlaylistEntries linking to Tracks
     final playlistEntriesMap = <int, List<RawPlaylistEntryDto>>{};
     for (final entry in snapshot.playlistEntries) {
@@ -321,6 +389,8 @@ class LibraryStore {
           _likedTrackIds.add(track!.id!);
         }
       }
+
+      playlist.coverHash = computePlaylistCoverHash(playlist);
     }
   }
 
@@ -364,6 +434,7 @@ class LibraryStore {
           );
         }
       }
+      likedPl.coverHash = computePlaylistCoverHash(likedPl);
     }
   }
 
@@ -411,6 +482,8 @@ class LibraryStore {
       }
     }
 
+    playlist.coverHash = computePlaylistCoverHash(playlist);
+
     if (playlist.type == PlaylistType.liked) {
       _likedTrackIds.add(trackId);
     }
@@ -439,6 +512,7 @@ class LibraryStore {
         );
       }
     }
+    playlist.coverHash = computePlaylistCoverHash(playlist);
     if (playlist.type == PlaylistType.liked) {
       _likedTrackIds.remove(trackId);
     }
@@ -462,9 +536,11 @@ class LibraryStore {
         track: curr.track,
       );
     }
+    playlist.coverHash = computePlaylistCoverHash(playlist);
   }
 
   void addPlaylist(Playlist playlist) {
+    playlist.coverHash ??= computePlaylistCoverHash(playlist);
     if (playlist.id != null) {
       _playlistsById[playlist.id!] = playlist;
     }
@@ -485,6 +561,7 @@ class LibraryStore {
       createdAt: playlist.createdAt,
       type: playlist.type,
       entries: playlist.entries,
+      coverHash: playlist.coverHash,
     );
     _playlistsById[playlistId] = updated;
     final index = _allPlaylists.indexWhere((p) => p.id == playlistId);
@@ -495,6 +572,7 @@ class LibraryStore {
 
   void clearHistory() {
     historyPlaylist?.entries.clear();
+    historyPlaylist?.coverHash = null;
   }
 
   void removeTrack(int trackId) {
@@ -518,14 +596,80 @@ class LibraryStore {
     for (final genre in track.genres) {
       if (genre.id != null) {
         final g = _genresById[genre.id];
-        g?.tracks.removeWhere((t) => t.id == trackId);
+        if (g != null) {
+          g.tracks.removeWhere((t) => t.id == trackId);
+          g.coverHash = computeGenreCoverHash(g);
+        }
       }
     }
 
     for (final playlist in _allPlaylists) {
+      final had = playlist.entries.any((e) => e.track?.id == trackId);
       playlist.entries.removeWhere((e) => e.track?.id == trackId);
+      if (had) {
+        playlist.coverHash = computePlaylistCoverHash(playlist);
+      }
     }
     _likedTrackIds.remove(trackId);
+  }
+
+  static String? computePlaylistCoverHash(Playlist playlist, [List<Track>? tracks]) {
+    if (playlist.entries.isNotEmpty) {
+      final sorted = List<PlaylistEntry>.from(playlist.entries)
+        ..sort((a, b) {
+          final cmp = b.addedAt.compareTo(a.addedAt);
+          if (cmp != 0) return cmp;
+          return b.position.compareTo(a.position);
+        });
+      for (final entry in sorted) {
+        final track = entry.track;
+        if (track != null) {
+          final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
+          if (hash != null && hash.trim().isNotEmpty) {
+            return hash.trim();
+          }
+        }
+      }
+    }
+
+    if (tracks != null && tracks.isNotEmpty) {
+      for (final track in tracks.reversed) {
+        final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
+        if (hash != null && hash.trim().isNotEmpty) {
+          return hash.trim();
+        }
+      }
+    }
+
+    return null;
+  }
+
+  static String? computeGenreCoverHash(Genre genre) {
+    for (final track in genre.tracks) {
+      final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
+      if (hash != null && hash.trim().isNotEmpty) {
+        return hash.trim();
+      }
+    }
+    return null;
+  }
+
+  static String? computeArtistThumbnailHash(Artist artist) {
+    for (final album in artist.albums) {
+      final hash = album.thumbnailHash;
+      if (hash != null && hash.trim().isNotEmpty) {
+        return hash.trim();
+      }
+    }
+
+    for (final track in artist.tracks) {
+      final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
+      if (hash != null && hash.trim().isNotEmpty) {
+        return hash.trim();
+      }
+    }
+
+    return null;
   }
 
   // ---------------------------------------------------------------------------

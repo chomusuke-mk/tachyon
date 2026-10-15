@@ -13,7 +13,6 @@ import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 
-import 'playlist_cover_helper.dart';
 import 'playlists_controller.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
@@ -143,7 +142,6 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               .map((e) => e.track)
               .whereType<Track>()
               .toList();
-    final coverHash = findPlaylistCoverHash(currentPlaylist, tracks);
     final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     return Scaffold(
@@ -156,7 +154,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(child: AmbientBackdrop(thumbnailHash: coverHash)),
+          Positioned.fill(child: AmbientBackdrop(thumbnailHash: currentPlaylist.coverHash)),
           CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
@@ -169,7 +167,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                   padding: const EdgeInsets.all(20.0),
                   child: Column(
                     children: [
-                      _buildHeaderCover(context, currentPlaylist, coverHash),
+                      _buildHeaderCover(context, currentPlaylist, currentPlaylist.coverHash),
                       const SizedBox(height: 16),
                       Text(
                         currentPlaylist.name,
