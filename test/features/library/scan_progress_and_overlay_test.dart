@@ -17,7 +17,7 @@ import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/shell/scan_progress_overlay.dart';
-import 'package:tachyon/shared/utils/cover_utils.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 
 class _TestLocaleRepository extends LocaleRepository {
   @override
@@ -114,11 +114,10 @@ void main() {
 
     setUp(() {
       tempDir = Directory.systemTemp.createTempSync('tachyon_scan_test_');
-      CoverUtils.init(tempDir);
+      MetadataUtils.init(tempDir.path, tempDir.path);
       database = AppDatabase.inMemory();
       metadataService = MetadataService(
         database: database,
-        cacheDirPath: tempDir.path,
         customWorkerCount: 2,
       );
     });
@@ -183,7 +182,7 @@ void main() {
 
     setUp(() async {
       tempDir = Directory.systemTemp.createTempSync('tachyon_lib_ctrl_test_');
-      CoverUtils.init(tempDir);
+      MetadataUtils.init(tempDir.path, tempDir.path);
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       settingsRepository = SettingsRepository(prefs);
@@ -191,7 +190,6 @@ void main() {
       database = AppDatabase.inMemory();
       final metadataService = MetadataService(
         database: database,
-        cacheDirPath: tempDir.path,
         customWorkerCount: 1,
       );
       backend = DirectTachyonBackendClient(
@@ -296,7 +294,7 @@ void main() {
 
     setUp(() async {
       tempDir = Directory.systemTemp.createTempSync('tachyon_overlay_test_');
-      CoverUtils.init(tempDir);
+      MetadataUtils.init(tempDir.path, tempDir.path);
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       settingsRepository = SettingsRepository(prefs);

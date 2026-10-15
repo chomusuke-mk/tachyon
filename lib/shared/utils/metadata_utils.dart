@@ -149,9 +149,14 @@ abstract final class MetadataUtils {
 
   static Future<void> clearTempDirectory() async {
     _ensureInitialized();
-    if (!tempDirectory!.existsSync()) return;
-    await tempDirectory!.delete(recursive: true);
-    await tempDirectory!.create(recursive: true);
+    try {
+      if (await tempDirectory!.exists()) {
+        await tempDirectory!.delete(recursive: true);
+      }
+      if (!await tempDirectory!.exists()) {
+        await tempDirectory!.create(recursive: true);
+      }
+    } catch (_) {}
   }
 
   /// Returns the file path for the thumbnail image
@@ -173,6 +178,7 @@ abstract final class MetadataUtils {
 
   static Future<ExtractedTrackData?> extractTrackMetadata({
     required String filePath,
+    bool useSync = false,
   }) async {
     _ensureInitialized();
     final file = File(filePath);
@@ -202,12 +208,21 @@ abstract final class MetadataUtils {
     // Get Track Analysis
     AudioAnalysisResult? analysis;
     try {
-      analysis = await MiniaudioPlayer.analyzeAudio(
-        filePath,
-        replayGain: trackGain == null,
-        waveform: true,
-        waveformPoints: 100,
-      );
+      if (useSync) {
+        analysis = MiniaudioPlayer.analyzeAudioSync(
+          filePath,
+          replayGain: trackGain == null,
+          waveform: true,
+          waveformPoints: 100,
+        );
+      } else {
+        analysis = await MiniaudioPlayer.analyzeAudio(
+          filePath,
+          replayGain: trackGain == null,
+          waveform: true,
+          waveformPoints: 100,
+        );
+      }
       trackGain = trackGain ?? analysis.replayGain?.gainDb;
       trackPeak = trackPeak ?? analysis.replayGain?.peak;
       waveformData = WaveformCodec.encode(analysis.waveform?.points);

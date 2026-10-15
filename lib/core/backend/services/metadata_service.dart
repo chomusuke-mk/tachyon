@@ -44,10 +44,10 @@ class _QueuedScan {
 /// Service running in the Core Backend Host Isolate responsible for metadata
 /// orchestration, single-file tag extraction, thumbnail resolution, and full library scanning.
 ///
-/// Follows a high-performance Cache-First & Isolate.run worker pool strategy:
+/// Follows a high-performance Cache-First & Isolate worker pool strategy:
 /// 1. Queries database or disk cache first (immediate return, 0 CPU).
-/// 2. If missing, delegates single-file operations to an ephemeral worker via [Isolate.run].
-/// 3. Runs multi-file directory scans using a concurrent pool of [Isolate.run] workers
+/// 2. If missing, delegates extraction to dedicated worker isolates.
+/// 3. Runs multi-file directory scans using a concurrent pool of [Isolate] workers
 ///    scaled to the number of CPU processors ([Platform.numberOfProcessors]).
 /// 4. In each worker, extracts metadata and saves triple-quality (LQ, MQ, HQ) covers
 ///    to disk in a single pass.
@@ -86,7 +86,7 @@ class MetadataService {
   bool get isScanning =>
       _currentScanToken != null && !_currentScanToken!.isCancelled;
 
-  /// Starts the scan pipeline using a pool of [Isolate.run] workers proportional
+  /// Starts the scan pipeline using a pool of [Isolate] workers proportional
   /// to CPU cores and returns a [Stream<ScanProgress>].
   ///
   /// If a scan is already running, the request is queued and executed
@@ -155,7 +155,7 @@ class MetadataService {
   }
 
   // ---------------------------------------------------------------------------
-  // Private: Isolate.run pool orchestration
+  // Private: Isolate pool orchestration
   // ---------------------------------------------------------------------------
 
   Future<void> _runScanPipeline(
@@ -278,8 +278,6 @@ class MetadataService {
       // Etapa 4: Obteniendo metadatos completos de cada trackDiscover
       final totalExtract = toExtract.length;
       final extractedTracks = <ExtractedTrackData>[];
-      final activeTasks = <Future<void>>{};
-      final poolSize = workerCount;
       int extractedCount = 0;
 
       sendProgress(
@@ -291,50 +289,114 @@ class MetadataService {
         force: true,
       );
 
-      for (final file in toExtract) {
-        if (scanToken.isCancelled) break;
-
-        late final Future<void> task;
-        task = () async {
-          if (scanToken.isCancelled) return;
-          ExtractedTrackData? track;
-          try {
-            track = await MetadataUtils.extractTrackMetadata(
-              filePath: file.path,
-            );
-          } catch (e) {
-            debugPrint('[MetadataService] Worker failed for ${file.path}: $e');
-            debugPrint('[MetadataService] Stack trace: ${StackTrace.current}');
-          }
-
-          if (scanToken.isCancelled) return;
-          extractedCount++;
-
-          if (track != null) {
-            extractedTracks.add(track);
-          }
-
-          final progressVal = totalExtract > 0
-              ? extractedCount / totalExtract
-              : 1.0;
-          sendProgress(
-            ScanProgress(
-              stage: ScanStage.extracting,
-              progressLabel: '$extractedCount/$totalExtract',
-              progressValue: progressVal,
-            ),
-          );
-        }().whenComplete(() => activeTasks.remove(task));
-
-        activeTasks.add(task);
-
-        if (activeTasks.length >= poolSize) {
-          await Future.any(activeTasks);
+      if (totalExtract > 0 && !scanToken.isCancelled) {
+        final numWorkers = math.min(workerCount, totalExtract);
+        final fileChunks = List.generate(numWorkers, (_) => <String>[]);
+        for (int i = 0; i < totalExtract; i++) {
+          fileChunks[i % numWorkers].add(toExtract[i].path);
         }
-      }
 
-      if (activeTasks.isNotEmpty) {
-        await Future.wait(activeTasks);
+        final receivePort = ReceivePort();
+        final exitPort = ReceivePort();
+        final spawnedIsolates = <Isolate>[];
+        final thumbnailsPath = MetadataUtils.thumbnailsDirectory?.path;
+        final tempPath = MetadataUtils.tempDirectory?.path;
+
+        final completer = Completer<void>();
+        final remainingWorkers = List.generate(numWorkers, (i) => i).toSet();
+
+        void killWorkers() {
+          for (final iso in spawnedIsolates) {
+            iso.kill(priority: Isolate.immediate);
+          }
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        }
+
+        scanToken.onCancel(killWorkers);
+
+        try {
+          for (int i = 0; i < numWorkers; i++) {
+            if (scanToken.isCancelled) break;
+            final config = _MetadataWorkerConfig(
+              workerIndex: i,
+              sendPort: receivePort.sendPort,
+              filePaths: fileChunks[i],
+              thumbnailsPath: thumbnailsPath,
+              tempPath: tempPath,
+            );
+            final isolate = await Isolate.spawn(
+              _metadataWorkerEntryPoint,
+              config,
+            );
+            isolate.addOnExitListener(exitPort.sendPort, response: i);
+            spawnedIsolates.add(isolate);
+          }
+
+          if (scanToken.isCancelled) {
+            killWorkers();
+          } else {
+            exitPort.listen((dynamic workerIndex) {
+              if (workerIndex is int && remainingWorkers.remove(workerIndex)) {
+                if (remainingWorkers.isEmpty && !completer.isCompleted) {
+                  completer.complete();
+                }
+              }
+            });
+
+            receivePort.listen((dynamic message) {
+              if (scanToken.isCancelled) {
+                killWorkers();
+                return;
+              }
+
+              if (message is _WorkerTrackResult) {
+                extractedCount++;
+                if (message.track != null) {
+                  extractedTracks.add(message.track!);
+                }
+                final progressVal = totalExtract > 0
+                    ? extractedCount / totalExtract
+                    : 1.0;
+                sendProgress(
+                  ScanProgress(
+                    stage: ScanStage.extracting,
+                    progressLabel: '$extractedCount/$totalExtract',
+                    progressValue: progressVal,
+                  ),
+                );
+              } else if (message is _WorkerDone) {
+                remainingWorkers.remove(message.workerIndex);
+                if (remainingWorkers.isEmpty && !completer.isCompleted) {
+                  completer.complete();
+                }
+              }
+            });
+
+            await completer.future;
+
+            if (!scanToken.isCancelled) {
+              final finalVal = totalExtract > 0
+                  ? extractedCount / totalExtract
+                  : 1.0;
+              sendProgress(
+                ScanProgress(
+                  stage: ScanStage.extracting,
+                  progressLabel: '$extractedCount/$totalExtract',
+                  progressValue: finalVal,
+                ),
+                force: true,
+              );
+            }
+          }
+        } finally {
+          for (final iso in spawnedIsolates) {
+            iso.kill(priority: Isolate.immediate);
+          }
+          exitPort.close();
+          receivePort.close();
+        }
       }
 
       if (scanToken.isCancelled) {
@@ -498,5 +560,69 @@ Stream<DiscoveredAudioFile> _discoverFilesLocal(
         continue;
       }
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Worker Isolate Pool for Parallel Metadata Extraction
+// ---------------------------------------------------------------------------
+
+class _MetadataWorkerConfig {
+  final int workerIndex;
+  final SendPort sendPort;
+  final List<String> filePaths;
+  final String? thumbnailsPath;
+  final String? tempPath;
+
+  const _MetadataWorkerConfig({
+    required this.workerIndex,
+    required this.sendPort,
+    required this.filePaths,
+    this.thumbnailsPath,
+    this.tempPath,
+  });
+}
+
+sealed class _MetadataWorkerMessage {
+  const _MetadataWorkerMessage();
+}
+
+class _WorkerTrackResult extends _MetadataWorkerMessage {
+  final ExtractedTrackData? track;
+  final String filePath;
+
+  _WorkerTrackResult({required this.track, required this.filePath});
+}
+
+class _WorkerDone extends _MetadataWorkerMessage {
+  final int workerIndex;
+  const _WorkerDone({required this.workerIndex});
+}
+
+void _metadataWorkerEntryPoint(_MetadataWorkerConfig config) async {
+  try {
+    if (config.thumbnailsPath != null && config.tempPath != null) {
+      MetadataUtils.init(config.thumbnailsPath!, config.tempPath!);
+    }
+
+    for (final filePath in config.filePaths) {
+      ExtractedTrackData? track;
+      try {
+        track = await MetadataUtils.extractTrackMetadata(
+          filePath: filePath,
+          useSync: true,
+        );
+      } catch (e, st) {
+        debugPrint('[MetadataService] Worker isolate failed for $filePath: $e');
+        debugPrint('[MetadataService] Stack trace: $st');
+      }
+      config.sendPort.send(
+        _WorkerTrackResult(track: track, filePath: filePath),
+      );
+    }
+  } catch (e, st) {
+    debugPrint('[MetadataService] Worker isolate fatal error: $e\n$st');
+  } finally {
+    config.sendPort.send(_WorkerDone(workerIndex: config.workerIndex));
   }
 }
