@@ -74,6 +74,7 @@ abstract final class BackendMethods {
   static const String playbackSetCrossfeed = 'playback.setCrossfeed';
   static const String playbackSetSpatializer = 'playback.setSpatializer';
   static const String playbackSetLimiter = 'playback.setLimiter';
+  static const String playbackSetReverb = 'playback.setReverb';
   static const String playbackSetCrossfadeConfig =
       'playback.setCrossfadeConfig';
   static const String playbackSetVisualizerEnabled =

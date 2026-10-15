@@ -164,6 +164,12 @@ class AudioPlayerAdapter {
     } catch (_) {}
   }
 
+  Future<void> setReverb(Reverb config) async {
+    try {
+      await _player.action.setReverb(config);
+    } catch (_) {}
+  }
+
   Future<void> dispose() async {
     _isDisposed = true;
     await _player.dispose();
@@ -187,6 +193,8 @@ class AudioPlayerAdapter {
   Stream<double> get pitchStream => _player.stream.pitch;
 
   Stream<Equalizer> get equalizerStream => _player.stream.equalizer;
+
+  Stream<Reverb> get reverbStream => _player.stream.reverb;
 
   Stream<AudioDevice> get audioDeviceStream => _player.stream.audioDevice;
 
@@ -213,6 +221,8 @@ class AudioPlayerAdapter {
   double get pitch => _player.state.pitch;
 
   Equalizer get equalizer => _player.state.equalizer;
+
+  Reverb get reverb => _player.state.reverb;
 
   AudioDevice get audioDevice => _player.state.audioDevice;
 

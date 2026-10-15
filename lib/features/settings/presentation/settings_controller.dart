@@ -2,7 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:miniaudio_player/miniaudio_player.dart' show Equalizer;
+import 'package:miniaudio_player/miniaudio_player.dart'
+    show Equalizer, Reverb;
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
@@ -61,6 +62,14 @@ class SettingsController extends ChangeNotifier {
   bool get equalizerEnabled => _settings.equalizerEnabled;
   String get equalizerPreset => _settings.equalizerPreset;
   List<double> get equalizerGains => _settings.equalizerGains;
+  bool get reverbEnabled => _settings.reverbEnabled;
+  String get reverbPreset => _settings.reverbPreset;
+  double get reverbRoomSize => _settings.reverbRoomSize;
+  double get reverbDamping => _settings.reverbDamping;
+  double get reverbWidth => _settings.reverbWidth;
+  double get reverbWet => _settings.reverbWet;
+  double get reverbDry => _settings.reverbDry;
+  Reverb get reverbConfig => _settings.reverbConfig;
 
   // ---------------------------------------------------------------------------
   // Initialization & Service Sync
@@ -87,6 +96,7 @@ class SettingsController extends ChangeNotifier {
     await _backend.setCrossfeed(_settings.crossfeedMode);
     await _backend.setSpatializer(_settings.spatializerWidth);
     await _backend.setLimiter(_settings.limiterEnabled);
+    await _backend.setReverb(_settings.reverbConfig);
     await _backend.setLoopMode(_settings.loopMode);
 
     if (_settings.equalizerEnabled) {
@@ -306,6 +316,124 @@ class SettingsController extends ChangeNotifier {
     _settings = _settings.copyWith(limiterEnabled: limiter);
     await _repository.setLimiter(limiter);
     await _backend.setLimiter(limiter);
+    notifyListeners();
+  }
+
+  Future<void> setReverbEnabled(bool enabled) async {
+    _settings = _settings.copyWith(reverbEnabled: enabled);
+    await _repository.setReverbEnabled(enabled);
+    await _backend.setReverb(_settings.reverbConfig);
+    notifyListeners();
+  }
+
+  Future<void> setReverbPreset(String preset) async {
+    final Reverb? target;
+    switch (preset) {
+      case 'off':
+        target = Reverb.off;
+        break;
+      case 'smallRoom':
+        target = Reverb.smallRoom;
+        break;
+      case 'studio':
+        target = Reverb.studio;
+        break;
+      case 'concertHall':
+        target = Reverb.concertHall;
+        break;
+      case 'cathedral':
+        target = Reverb.cathedral;
+        break;
+      case 'plate':
+        target = Reverb.plate;
+        break;
+      case 'ambient':
+        target = Reverb.ambient;
+        break;
+      default:
+        target = null;
+    }
+
+    if (target != null) {
+      _settings = _settings.copyWith(
+        reverbPreset: preset,
+        reverbRoomSize: target.roomSize,
+        reverbDamping: target.damping,
+        reverbWidth: target.width,
+        reverbWet: target.wet,
+        reverbDry: target.dry,
+      );
+      await _repository.setReverbPreset(preset);
+      await _repository.setReverbRoomSize(target.roomSize);
+      await _repository.setReverbDamping(target.damping);
+      await _repository.setReverbWidth(target.width);
+      await _repository.setReverbWet(target.wet);
+      await _repository.setReverbDry(target.dry);
+    } else {
+      _settings = _settings.copyWith(reverbPreset: preset);
+      await _repository.setReverbPreset(preset);
+    }
+    await _backend.setReverb(_settings.reverbConfig);
+    notifyListeners();
+  }
+
+  Future<void> setReverbRoomSize(double val) async {
+    final clamped = val.clamp(0.0, 1.0);
+    _settings = _settings.copyWith(
+      reverbRoomSize: clamped,
+      reverbPreset: 'custom',
+    );
+    await _repository.setReverbPreset('custom');
+    await _repository.setReverbRoomSize(clamped);
+    await _backend.setReverb(_settings.reverbConfig);
+    notifyListeners();
+  }
+
+  Future<void> setReverbDamping(double val) async {
+    final clamped = val.clamp(0.0, 1.0);
+    _settings = _settings.copyWith(
+      reverbDamping: clamped,
+      reverbPreset: 'custom',
+    );
+    await _repository.setReverbPreset('custom');
+    await _repository.setReverbDamping(clamped);
+    await _backend.setReverb(_settings.reverbConfig);
+    notifyListeners();
+  }
+
+  Future<void> setReverbWidth(double val) async {
+    final clamped = val.clamp(0.0, 1.0);
+    _settings = _settings.copyWith(
+      reverbWidth: clamped,
+      reverbPreset: 'custom',
+    );
+    await _repository.setReverbPreset('custom');
+    await _repository.setReverbWidth(clamped);
+    await _backend.setReverb(_settings.reverbConfig);
+    notifyListeners();
+  }
+
+  Future<void> setReverbWet(double val) async {
+    final clamped = val.clamp(0.0, 2.0);
+    _settings = _settings.copyWith(
+      reverbWet: clamped,
+      reverbPreset: 'custom',
+    );
+    await _repository.setReverbPreset('custom');
+    await _repository.setReverbWet(clamped);
+    await _backend.setReverb(_settings.reverbConfig);
+    notifyListeners();
+  }
+
+  Future<void> setReverbDry(double val) async {
+    final clamped = val.clamp(0.0, 2.0);
+    _settings = _settings.copyWith(
+      reverbDry: clamped,
+      reverbPreset: 'custom',
+    );
+    await _repository.setReverbPreset('custom');
+    await _repository.setReverbDry(clamped);
+    await _backend.setReverb(_settings.reverbConfig);
     notifyListeners();
   }
 

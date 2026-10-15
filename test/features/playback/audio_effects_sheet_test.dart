@@ -106,7 +106,18 @@ void main() {
     expect(find.text('Stereo Width'), findsOneWidget);
     expect(find.text('Bauer Crossfeed (bs2b)'), findsOneWidget);
 
-    // Verify Card 5: Equalizer Title
+    // Verify Card 5: Studio Reverb
+    expect(find.text('Studio Reverb'), findsOneWidget);
+
+    // Turn Reverb ON to view Presets and controls
+    await settingsController.setReverbEnabled(true);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Room Size'), findsOneWidget);
+    expect(find.text('Damping'), findsOneWidget);
+    expect(find.text('Dry Level'), findsOneWidget);
+
+    // Verify Card 6: Equalizer Title
     expect(find.text('Equalizer'), findsOneWidget);
 
     // Turn Equalizer ON to view Preamp
@@ -151,6 +162,31 @@ void main() {
     expect(settingsController.crossfeedMode, equals(CrossfeedMode.off));
     await settingsController.setCrossfeed(CrossfeedMode.moffatBauer);
     expect(settingsController.crossfeedMode, equals(CrossfeedMode.moffatBauer));
+
+    // Toggle Reverb & adjust parameters
+    expect(settingsController.reverbEnabled, isFalse);
+    await settingsController.setReverbEnabled(true);
+    expect(settingsController.reverbEnabled, isTrue);
+
+    await settingsController.setReverbPreset('studio');
+    expect(settingsController.reverbPreset, equals('studio'));
+    expect(settingsController.reverbRoomSize, equals(0.5));
+
+    await settingsController.setReverbRoomSize(0.85);
+    expect(settingsController.reverbPreset, equals('custom'));
+    expect(settingsController.reverbRoomSize, equals(0.85));
+
+    await settingsController.setReverbDamping(0.4);
+    expect(settingsController.reverbDamping, equals(0.4));
+
+    await settingsController.setReverbWidth(0.75);
+    expect(settingsController.reverbWidth, equals(0.75));
+
+    await settingsController.setReverbWet(0.5);
+    expect(settingsController.reverbWet, equals(0.5));
+
+    await settingsController.setReverbDry(1.2);
+    expect(settingsController.reverbDry, equals(1.2));
 
     // Enable EQ and adjust Preamp
     await settingsController.setEqualizerEnabled(true);

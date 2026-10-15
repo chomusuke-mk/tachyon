@@ -175,9 +175,9 @@ void main() {
       await tester.pumpWidget(buildTestApp(child: const AudioEffectsSheet()));
       await tester.pumpAndSettle();
 
-      // Find switch widgets (Volume Normalization, Skip Silence, Limiter, Mono, Equalizer)
+      // Find switch widgets (Volume Normalization, Skip Silence, Limiter, Mono, Reverb, Equalizer)
       final switches = find.byType(Switch);
-      expect(switches, findsNWidgets(5));
+      expect(switches, findsNWidgets(6));
 
       // Initially Volume Normalization is true, Skip Silence is false
       expect(settingsController.volumeNormalization, isTrue);

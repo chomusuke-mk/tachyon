@@ -426,6 +426,25 @@ class TachyonBackendHost {
         await _audioEngine.setLimiter(enabled);
         return null;
 
+      case BackendMethods.playbackSetReverb:
+        final enabled = params['enabled'] as bool? ?? false;
+        final roomSize = (params['roomSize'] as num?)?.toDouble() ?? 0.5;
+        final damping = (params['damping'] as num?)?.toDouble() ?? 0.5;
+        final width = (params['width'] as num?)?.toDouble() ?? 1.0;
+        final wet = (params['wet'] as num?)?.toDouble() ?? 0.33;
+        final dry = (params['dry'] as num?)?.toDouble() ?? 1.0;
+        await _audioEngine.setReverb(
+          Reverb(
+            enabled: enabled,
+            roomSize: roomSize.clamp(0.0, 1.0),
+            damping: damping.clamp(0.0, 1.0),
+            width: width.clamp(0.0, 1.0),
+            wet: wet.clamp(0.0, 2.0),
+            dry: dry.clamp(0.0, 2.0),
+          ),
+        );
+        return null;
+
       case BackendMethods.playbackSetCrossfadeConfig:
         final config = params['config'] as CrossfadeConfig;
         await _audioEngine.setCrossfadeConfig(config);

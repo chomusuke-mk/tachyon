@@ -6,7 +6,7 @@ import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/loop_mode.dart';
-import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
+import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode, Reverb;
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
 
 import 'crossfade_manager_test.dart';
@@ -997,6 +997,14 @@ void main() {
       expect(service.limiterEnabled, isFalse);
       expect(playerA.currentLimiterEnabled, isFalse);
       expect(playerB.currentLimiterEnabled, isFalse);
+
+      await service.setReverb(Reverb.studio);
+      expect(service.reverb.enabled, isTrue);
+      expect(service.reverb.roomSize, equals(0.5));
+      expect(playerA.currentReverb.enabled, isTrue);
+      expect(playerA.currentReverb.roomSize, equals(0.5));
+      expect(playerB.currentReverb.enabled, isTrue);
+      expect(playerB.currentReverb.roomSize, equals(0.5));
     });
   });
 }

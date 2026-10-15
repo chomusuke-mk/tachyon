@@ -43,6 +43,13 @@ class SettingsRepository {
   static const _keyCrossfeed = 's_crossfeed';
   static const _keySpatializer = 's_spatializer';
   static const _keyLimiter = 's_limiter';
+  static const _keyReverbEnabled = 's_reverb_enabled';
+  static const _keyReverbPreset = 's_reverb_preset';
+  static const _keyReverbRoomSize = 's_reverb_room_size';
+  static const _keyReverbDamping = 's_reverb_damping';
+  static const _keyReverbWidth = 's_reverb_width';
+  static const _keyReverbWet = 's_reverb_wet';
+  static const _keyReverbDry = 's_reverb_dry';
   static const _keyVolumeBoost = 's_volume_boost';
   static const _keyTheme = 's_theme';
   static const _keyLanguage = 's_language';
@@ -133,6 +140,13 @@ class SettingsRepository {
       equalizerEnabled: _prefs.getBool(_keyEqualizerEnabled) ?? false,
       equalizerPreset: _prefs.getString(_keyEqualizerPreset) ?? 'flat',
       equalizerGains: getEqualizerGains(),
+      reverbEnabled: _prefs.getBool(_keyReverbEnabled) ?? false,
+      reverbPreset: _prefs.getString(_keyReverbPreset) ?? 'off',
+      reverbRoomSize: _prefs.getDouble(_keyReverbRoomSize) ?? 0.5,
+      reverbDamping: _prefs.getDouble(_keyReverbDamping) ?? 0.5,
+      reverbWidth: _prefs.getDouble(_keyReverbWidth) ?? 1.0,
+      reverbWet: _prefs.getDouble(_keyReverbWet) ?? 0.33,
+      reverbDry: _prefs.getDouble(_keyReverbDry) ?? 1.0,
     );
   }
 
@@ -158,6 +172,13 @@ class SettingsRepository {
       _prefs.setInt(_keyCrossfeed, settings.crossfeedMode.index),
       _prefs.setDouble(_keySpatializer, settings.spatializerWidth),
       _prefs.setBool(_keyLimiter, settings.limiterEnabled),
+      _prefs.setBool(_keyReverbEnabled, settings.reverbEnabled),
+      _prefs.setString(_keyReverbPreset, settings.reverbPreset),
+      _prefs.setDouble(_keyReverbRoomSize, settings.reverbRoomSize),
+      _prefs.setDouble(_keyReverbDamping, settings.reverbDamping),
+      _prefs.setDouble(_keyReverbWidth, settings.reverbWidth),
+      _prefs.setDouble(_keyReverbWet, settings.reverbWet),
+      _prefs.setDouble(_keyReverbDry, settings.reverbDry),
       _prefs.setDouble(_keyVolumeBoost, settings.volumeBoost),
       _prefs.setInt(_keyTheme, settings.themeMode.index),
       _prefs.setInt(_keyAccentColor, settings.accentColorValue),
@@ -381,6 +402,30 @@ class SettingsRepository {
     _keyEqualizerGains,
     gains.map((g) => g.toString()).toList(),
   );
+
+  Future<void> setReverbEnabled(bool enabled) =>
+      _prefs.setBool(_keyReverbEnabled, enabled);
+
+  String getReverbPreset() =>
+      _prefs.getString(_keyReverbPreset) ?? 'off';
+
+  Future<void> setReverbPreset(String preset) =>
+      _prefs.setString(_keyReverbPreset, preset);
+
+  Future<void> setReverbRoomSize(double val) =>
+      _prefs.setDouble(_keyReverbRoomSize, val.clamp(0.0, 1.0));
+
+  Future<void> setReverbDamping(double val) =>
+      _prefs.setDouble(_keyReverbDamping, val.clamp(0.0, 1.0));
+
+  Future<void> setReverbWidth(double val) =>
+      _prefs.setDouble(_keyReverbWidth, val.clamp(0.0, 1.0));
+
+  Future<void> setReverbWet(double val) =>
+      _prefs.setDouble(_keyReverbWet, val.clamp(0.0, 2.0));
+
+  Future<void> setReverbDry(double val) =>
+      _prefs.setDouble(_keyReverbDry, val.clamp(0.0, 2.0));
 
   Future<void> resetToDefaults() async {
     await _prefs.clear();

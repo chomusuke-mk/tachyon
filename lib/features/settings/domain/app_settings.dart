@@ -1,12 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
+import 'package:miniaudio_player/miniaudio_player.dart'
+    show CrossfeedMode, Reverb;
 import 'package:tachyon/features/library/domain/track_sort_option.dart';
 import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
 import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
-export 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
+export 'package:miniaudio_player/miniaudio_player.dart'
+    show CrossfeedMode, Reverb;
 
 typedef LoopMode = Loop;
 
@@ -65,6 +67,15 @@ class AppSettings {
   final String equalizerPreset;
   final List<double> equalizerGains; // 10 bands (-24.0 to +24.0 dB)
 
+  // Reverb
+  final bool reverbEnabled;
+  final String reverbPreset;
+  final double reverbRoomSize;
+  final double reverbDamping;
+  final double reverbWidth;
+  final double reverbWet;
+  final double reverbDry;
+
   const AppSettings({
     this.musicDirectories = const [],
     this.crossfadeDuration = 5,
@@ -116,9 +127,25 @@ class AppSettings {
       0.0,
       0.0,
     ],
+    this.reverbEnabled = false,
+    this.reverbPreset = 'off',
+    this.reverbRoomSize = 0.0,
+    this.reverbDamping = 0.0,
+    this.reverbWidth = 1.0,
+    this.reverbWet = 0.0,
+    this.reverbDry = 1.0,
   });
 
   Color get accentColor => Color(accentColorValue);
+
+  Reverb get reverbConfig => Reverb(
+    enabled: reverbEnabled,
+    roomSize: reverbRoomSize,
+    damping: reverbDamping,
+    width: reverbWidth,
+    wet: reverbWet,
+    dry: reverbDry,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -163,7 +190,14 @@ class AppSettings {
           lastPlayedPositionMs == other.lastPlayedPositionMs &&
           equalizerEnabled == other.equalizerEnabled &&
           equalizerPreset == other.equalizerPreset &&
-          listEquals(equalizerGains, other.equalizerGains);
+          listEquals(equalizerGains, other.equalizerGains) &&
+          reverbEnabled == other.reverbEnabled &&
+          reverbPreset == other.reverbPreset &&
+          reverbRoomSize == other.reverbRoomSize &&
+          reverbDamping == other.reverbDamping &&
+          reverbWidth == other.reverbWidth &&
+          reverbWet == other.reverbWet &&
+          reverbDry == other.reverbDry;
 
   AppSettings copyWith({
     List<String>? musicDirectories,
@@ -206,6 +240,13 @@ class AppSettings {
     bool? equalizerEnabled,
     String? equalizerPreset,
     List<double>? equalizerGains,
+    bool? reverbEnabled,
+    String? reverbPreset,
+    double? reverbRoomSize,
+    double? reverbDamping,
+    double? reverbWidth,
+    double? reverbWet,
+    double? reverbDry,
   }) {
     return AppSettings(
       musicDirectories: musicDirectories ?? this.musicDirectories,
@@ -252,6 +293,13 @@ class AppSettings {
       equalizerEnabled: equalizerEnabled ?? this.equalizerEnabled,
       equalizerPreset: equalizerPreset ?? this.equalizerPreset,
       equalizerGains: equalizerGains ?? this.equalizerGains,
+      reverbEnabled: reverbEnabled ?? this.reverbEnabled,
+      reverbPreset: reverbPreset ?? this.reverbPreset,
+      reverbRoomSize: reverbRoomSize ?? this.reverbRoomSize,
+      reverbDamping: reverbDamping ?? this.reverbDamping,
+      reverbWidth: reverbWidth ?? this.reverbWidth,
+      reverbWet: reverbWet ?? this.reverbWet,
+      reverbDry: reverbDry ?? this.reverbDry,
     );
   }
 
@@ -296,5 +344,12 @@ class AppSettings {
     equalizerEnabled,
     equalizerPreset,
     Object.hashAll(equalizerGains),
+    reverbEnabled,
+    reverbPreset,
+    reverbRoomSize,
+    reverbDamping,
+    reverbWidth,
+    reverbWet,
+    reverbDry,
   ]);
 }

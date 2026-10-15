@@ -51,6 +51,7 @@ abstract class TachyonBackendClient {
   Future<void> setCrossfeed(CrossfeedMode mode);
   Future<void> setSpatializer(double width);
   Future<void> setLimiter(bool enabled);
+  Future<void> setReverb(Reverb reverb);
   Future<void> setEqualizer(Equalizer equalizer);
   Future<void> setOutputDevice(AudioDevice device);
   Future<void> setVisualizerEnabled(bool enabled);
@@ -361,6 +362,19 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   @override
   Future<void> setLimiter(bool enabled) =>
       _send(BackendMethods.playbackSetLimiter, {'enabled': enabled});
+
+  @override
+  Future<void> setReverb(Reverb reverb) => _send(
+    BackendMethods.playbackSetReverb,
+    {
+      'enabled': reverb.enabled,
+      'roomSize': reverb.roomSize,
+      'damping': reverb.damping,
+      'width': reverb.width,
+      'wet': reverb.wet,
+      'dry': reverb.dry,
+    },
+  );
 
   @override
   Future<void> setEqualizer(Equalizer equalizer) =>

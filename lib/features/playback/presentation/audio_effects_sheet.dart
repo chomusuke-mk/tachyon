@@ -719,7 +719,11 @@ class AudioEffectsSheet extends StatelessWidget {
                       const _StereoProcessingSection(),
                       const SizedBox(height: 12),
 
-                      // Card 5: 10-Band Graphic Equalizer
+                      // Card 5: Studio Reverb
+                      const _ReverbSection(),
+                      const SizedBox(height: 12),
+
+                      // Card 6: 10-Band Graphic Equalizer
                       const _EqualizerSection(),
                     ],
                   ),
@@ -1384,6 +1388,381 @@ class _StereoProcessingSection extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ReverbSection extends StatelessWidget {
+  const _ReverbSection();
+
+  static const _validPresets = [
+    'off',
+    'smallRoom',
+    'studio',
+    'concertHall',
+    'cathedral',
+    'plate',
+    'ambient',
+    'custom',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsController>();
+    final strings = context.watch<LocaleController>().localeStrings;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isEnabled = settings.reverbEnabled;
+
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section Header with switch
+            Row(
+              children: [
+                Icon(
+                  Icons.blur_on_rounded,
+                  size: 20,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        strings.sReverb,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        strings.sReverbDesc,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Switch(
+                  value: isEnabled,
+                  onChanged: settings.setReverbEnabled,
+                ),
+              ],
+            ),
+            if (isEnabled) ...[
+              const Divider(height: 24),
+
+              // Presets Dropdown
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final bool isNarrow = constraints.maxWidth < 360;
+                  final dropdownWidget = Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.45,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.4,
+                        ),
+                      ),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _validPresets.contains(settings.reverbPreset)
+                          ? settings.reverbPreset
+                          : 'custom',
+                      underline: const SizedBox(),
+                      borderRadius: BorderRadius.circular(12),
+                      isDense: true,
+                      isExpanded: true,
+                      items: [
+                        DropdownMenuItem(
+                          value: 'off',
+                          child: Text(
+                            strings.sReverbPresetOff,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'smallRoom',
+                          child: Text(
+                            strings.sReverbPresetSmallRoom,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'studio',
+                          child: Text(
+                            strings.sReverbPresetStudio,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'concertHall',
+                          child: Text(
+                            strings.sReverbPresetConcertHall,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'cathedral',
+                          child: Text(
+                            strings.sReverbPresetCathedral,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'plate',
+                          child: Text(
+                            strings.sReverbPresetPlate,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'ambient',
+                          child: Text(
+                            strings.sReverbPresetAmbient,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'custom',
+                          child: Text(
+                            strings.sReverbPresetCustom,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          settings.setReverbPreset(val);
+                        }
+                      },
+                    ),
+                  );
+
+                  if (isNarrow) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          strings.sReverbPreset,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(width: double.infinity, child: dropdownWidget),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          strings.sReverbPreset,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 190),
+                        child: dropdownWidget,
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const Divider(height: 20),
+
+              // Room Size
+              _ReverbSliderRow(
+                label: strings.sReverbRoomSize,
+                displayValue: '${(settings.reverbRoomSize * 100).round()}%',
+                resetTooltip: '0%',
+                value: settings.reverbRoomSize,
+                min: 0.0,
+                max: 1.0,
+                onReset: () => settings.setReverbRoomSize(0.0),
+                onChanged: settings.setReverbRoomSize,
+              ),
+              const Divider(height: 16),
+
+              // Damping
+              _ReverbSliderRow(
+                label: strings.sReverbDamping,
+                displayValue: '${(settings.reverbDamping * 100).round()}%',
+                resetTooltip: '0%',
+                value: settings.reverbDamping,
+                min: 0.0,
+                max: 1.0,
+                onReset: () => settings.setReverbDamping(0.0),
+                onChanged: settings.setReverbDamping,
+              ),
+              const Divider(height: 16),
+
+              // Stereo Width
+              _ReverbSliderRow(
+                label: strings.sReverbWidth,
+                displayValue: '${(settings.reverbWidth * 100).round()}%',
+                resetTooltip: '100%',
+                value: settings.reverbWidth,
+                min: 0.0,
+                max: 1.0,
+                onReset: () => settings.setReverbWidth(1.0),
+                onChanged: settings.setReverbWidth,
+              ),
+              const Divider(height: 16),
+
+              // Wet Mix
+              _ReverbSliderRow(
+                label: strings.sReverbWet,
+                displayValue: '${settings.reverbWet.toStringAsFixed(2)}x',
+                resetTooltip: '0.33x',
+                value: settings.reverbWet,
+                min: 0.0,
+                max: 2.0,
+                onReset: () => settings.setReverbWet(0.0),
+                onChanged: settings.setReverbWet,
+              ),
+              const Divider(height: 16),
+
+              // Dry Level
+              _ReverbSliderRow(
+                label: strings.sReverbDry,
+                displayValue: '${settings.reverbDry.toStringAsFixed(2)}x',
+                resetTooltip: '1.00x',
+                value: settings.reverbDry,
+                min: 0.0,
+                max: 2.0,
+                onReset: () => settings.setReverbDry(1.0),
+                onChanged: settings.setReverbDry,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReverbSliderRow extends StatelessWidget {
+  final String label;
+  final String displayValue;
+  final String resetTooltip;
+  final double value;
+  final double min;
+  final double max;
+  final VoidCallback onReset;
+  final ValueChanged<double> onChanged;
+
+  const _ReverbSliderRow({
+    required this.label,
+    required this.displayValue,
+    required this.resetTooltip,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onReset,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                displayValue,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.restore_rounded),
+              tooltip: resetTooltip,
+              onPressed: onReset,
+              iconSize: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            Expanded(
+              child: Slider.adaptive(
+                value: value.clamp(min, max),
+                min: min,
+                max: max,
+                divisions: 100,
+                onChanged: onChanged,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

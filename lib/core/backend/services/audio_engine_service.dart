@@ -3,7 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:miniaudio_player/miniaudio_player.dart'
-    show AudioDevice, CrossfeedMode, Equalizer, VisualizerData;
+    show AudioDevice, CrossfeedMode, Equalizer, Reverb, VisualizerData;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
@@ -123,6 +123,7 @@ class AudioEngineService {
   CrossfeedMode _crossfeedMode = CrossfeedMode.off;
   double _spatializerWidth = 1.0;
   bool _limiterEnabled = true;
+  Reverb _reverb = Reverb.off;
   Equalizer _equalizer = Equalizer.flat;
   AudioDevice? _currentDevice;
 
@@ -133,6 +134,7 @@ class AudioEngineService {
   CrossfeedMode get crossfeedMode => _crossfeedMode;
   double get spatializerWidth => _spatializerWidth;
   bool get limiterEnabled => _limiterEnabled;
+  Reverb get reverb => _reverb;
 
   AudioEngineService({
     AudioPlayerAdapter? playerA,
@@ -530,6 +532,14 @@ class AudioEngineService {
     await Future.wait([
       _playerA.setEqualizer(equalizer),
       _playerB.setEqualizer(equalizer),
+    ]);
+  }
+
+  Future<void> setReverb(Reverb reverb) async {
+    _reverb = reverb;
+    await Future.wait([
+      _playerA.setReverb(reverb),
+      _playerB.setReverb(reverb),
     ]);
   }
 
@@ -1091,6 +1101,7 @@ class AudioEngineService {
       await player.setRate(_playbackRate);
       await player.setPitch(_playbackPitch);
       await player.setEqualizer(_equalizer);
+      await player.setReverb(_reverb);
       await player.setSkipSilence(_skipSilence);
       await player.setPreamp(_preampDb);
       await player.setBalance(_balance);

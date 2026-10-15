@@ -555,6 +555,8 @@ void main() {
       );
       await settingsCtrl.setEqualizerEnabled(true);
       await settingsCtrl.setEqualizerPreset('bassBoost');
+      await settingsCtrl.setReverbEnabled(true);
+      await settingsCtrl.setReverbPreset('concertHall');
 
       tester.view.physicalSize = const Size(320, 640);
       tester.view.devicePixelRatio = 1.0;

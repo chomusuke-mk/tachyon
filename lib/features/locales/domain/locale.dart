@@ -449,6 +449,30 @@ class AppStringKey {
       _cadenasLocalizadas['s_spatializer_desc'] ?? '';
   String get sLimiter => _cadenasLocalizadas['s_limiter'] ?? '';
   String get sLimiterDesc => _cadenasLocalizadas['s_limiter_desc'] ?? '';
+  String get sReverb => _cadenasLocalizadas['s_reverb'] ?? '';
+  String get sReverbDesc => _cadenasLocalizadas['s_reverb_desc'] ?? '';
+  String get sReverbPreset => _cadenasLocalizadas['s_reverb_preset'] ?? '';
+  String get sReverbPresetOff =>
+      _cadenasLocalizadas['s_reverb_preset_off'] ?? '';
+  String get sReverbPresetSmallRoom =>
+      _cadenasLocalizadas['s_reverb_preset_small_room'] ?? '';
+  String get sReverbPresetStudio =>
+      _cadenasLocalizadas['s_reverb_preset_studio'] ?? '';
+  String get sReverbPresetConcertHall =>
+      _cadenasLocalizadas['s_reverb_preset_concert_hall'] ?? '';
+  String get sReverbPresetCathedral =>
+      _cadenasLocalizadas['s_reverb_preset_cathedral'] ?? '';
+  String get sReverbPresetPlate =>
+      _cadenasLocalizadas['s_reverb_preset_plate'] ?? '';
+  String get sReverbPresetAmbient =>
+      _cadenasLocalizadas['s_reverb_preset_ambient'] ?? '';
+  String get sReverbPresetCustom =>
+      _cadenasLocalizadas['s_reverb_preset_custom'] ?? '';
+  String get sReverbRoomSize => _cadenasLocalizadas['s_reverb_room_size'] ?? '';
+  String get sReverbDamping => _cadenasLocalizadas['s_reverb_damping'] ?? '';
+  String get sReverbWidth => _cadenasLocalizadas['s_reverb_width'] ?? '';
+  String get sReverbWet => _cadenasLocalizadas['s_reverb_wet'] ?? '';
+  String get sReverbDry => _cadenasLocalizadas['s_reverb_dry'] ?? '';
   String get sAudioDspSection =>
       _cadenasLocalizadas['s_audio_dsp_section'] ?? '';
   String get sAppearanceSection =>
@@ -832,6 +856,22 @@ class AppStringKey {
     's_spatializer_desc',
     's_limiter',
     's_limiter_desc',
+    's_reverb',
+    's_reverb_desc',
+    's_reverb_preset',
+    's_reverb_preset_off',
+    's_reverb_preset_small_room',
+    's_reverb_preset_studio',
+    's_reverb_preset_concert_hall',
+    's_reverb_preset_cathedral',
+    's_reverb_preset_plate',
+    's_reverb_preset_ambient',
+    's_reverb_preset_custom',
+    's_reverb_room_size',
+    's_reverb_damping',
+    's_reverb_width',
+    's_reverb_wet',
+    's_reverb_dry',
     's_audio_dsp_section',
     's_appearance_section',
     's_theme_mode',

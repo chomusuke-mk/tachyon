@@ -185,6 +185,10 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
       await audioEngine?.setLimiter(enabled);
 
   @override
+  Future<void> setReverb(Reverb reverb) async =>
+      await audioEngine?.setReverb(reverb);
+
+  @override
   Future<void> setEqualizer(Equalizer equalizer) async =>
       await audioEngine?.setEqualizer(equalizer);
 

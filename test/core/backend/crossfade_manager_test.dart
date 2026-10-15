@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miniaudio_player/miniaudio_player.dart'
-    show AudioDevice, CrossfeedMode, Equalizer, ReplayGainConfig, VisualizerData;
+    show AudioDevice, CrossfeedMode, Equalizer, ReplayGainConfig, Reverb, VisualizerData;
 import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
 import 'package:tachyon/core/backend/services/crossfade_manager.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
@@ -15,6 +15,7 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
   double currentRate = 1.0;
   Duration currentPosition = Duration.zero;
   Duration totalDuration = const Duration(minutes: 3);
+  Reverb currentReverb = Reverb.off;
 
   final List<Duration> seekHistory = [];
   final List<double> volumeHistory = [];
@@ -157,6 +158,11 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
   }
 
   @override
+  Future<void> setReverb(Reverb config) async {
+    currentReverb = config;
+  }
+
+  @override
   ReplayGainConfig get replayGain => currentReplayGain;
 
   @override
@@ -176,6 +182,9 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
 
   @override
   bool get limiterEnabled => currentLimiterEnabled;
+
+  @override
+  Reverb get reverb => currentReverb;
 
   @override
   Future<void> setSkipSilence(bool enabled) async {}
@@ -257,6 +266,9 @@ class MockAudioPlayerAdapter implements AudioPlayerAdapter {
 
   @override
   Stream<Equalizer> get equalizerStream => Stream.value(Equalizer.flat);
+
+  @override
+  Stream<Reverb> get reverbStream => Stream.value(currentReverb);
 
   @override
   Stream<AudioDevice> get audioDeviceStream => Stream.value(audioDevice);
