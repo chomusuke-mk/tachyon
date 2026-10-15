@@ -4,12 +4,12 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:tachyon/core/backend/backend_protocol.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/backend/services/audio_engine_service.dart';
 import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
-import 'package:tachyon/shared/utils/cover_utils.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
 import 'package:tachyon/core/backend/services/metadata_service.dart';
@@ -26,17 +26,20 @@ import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart'
     show CrossfadeCurve;
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 
 /// Configuration passed from the UI Isolate when spawning the Core Service Isolate.
 class CoreInitConfig {
   final SendPort uiSendPort;
   final String dbPath;
   final String cacheDirPath;
+  final String appSupportDirPath;
 
   CoreInitConfig({
     required this.uiSendPort,
     required this.dbPath,
     required this.cacheDirPath,
+    required this.appSupportDirPath,
   });
 }
 
@@ -76,11 +79,13 @@ class TachyonBackendHost {
     await _database.init(config.dbPath);
 
     // 3. Initialize cover cache and metadata service
-    CoverUtils.init(Directory(config.cacheDirPath));
+    MetadataUtils.init(
+      Directory(p.join(config.appSupportDirPath, 'covers')),
+      Directory(p.join(config.cacheDirPath, 'covers')),
+    );
 
     _metadataService = MetadataService(
       database: _database,
-      cacheDirPath: config.cacheDirPath,
     );
 
     // 4. Initialize playback engine
@@ -481,13 +486,6 @@ class TachyonBackendHost {
           const BackendEvent(topic: BackendTopics.catalogUpdated),
         );
         return null;
-
-      // =======================================================================
-      // METADATA (WORKER ISOLATES)
-      // =======================================================================
-      case BackendMethods.metadataGetMetadata:
-        final filePath = params['filePath'] as String;
-        return await _metadataService.getMetadata(filePath);
 
       // =======================================================================
       // PLAYLISTS

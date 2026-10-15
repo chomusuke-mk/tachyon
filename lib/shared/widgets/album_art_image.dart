@@ -2,9 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
-import 'package:tachyon/shared/utils/cover_utils.dart';
-
-export 'package:tachyon/features/library/domain/thumbnail_quality.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 
 class AlbumArtImage extends StatelessWidget {
   final String? thumbnailHash;
@@ -57,7 +55,7 @@ class AlbumArtImage extends StatelessWidget {
     }
 
     try {
-      final f = CoverUtils.getCoverFile(cleanHash, quality: quality);
+      final f = File(MetadataUtils.getThumbnailFilePath(cleanHash, quality: quality));
       if (await f.exists() && await f.length() > 0) {
         _resolvedPaths[lookupKey] = f.path;
         return f.path;

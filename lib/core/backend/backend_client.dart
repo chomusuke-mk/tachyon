@@ -6,8 +6,6 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:tachyon/core/backend/backend_host.dart';
 import 'package:tachyon/core/backend/backend_protocol.dart';
 import 'package:tachyon/core/backend/services/lyrics_service.dart';
-import 'package:tachyon/core/backend/services/metadata_service.dart'
-    show ExtractedTrackData;
 import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/network/lyrics_translation_client.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
@@ -97,9 +95,6 @@ abstract class TachyonBackendClient {
   Future<void> cancelScan();
   Future<void> deleteTrack(int trackId);
 
-  // --- Metadata (Worker Isolates) ---
-  Future<ExtractedTrackData?> getMetadata(String filePath);
-
   // --- Playlists ---
   Future<int> createPlaylist(String name);
   Future<void> deletePlaylist(int playlistId);
@@ -185,6 +180,7 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   Future<void> initialize({
     required String dbPath,
     required String cacheDirPath,
+    required String appSupportDirPath,
   }) async {
     _uiReceivePort.listen(_handleIncomingMessage);
 
@@ -192,6 +188,7 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
       uiSendPort: _uiReceivePort.sendPort,
       dbPath: dbPath,
       cacheDirPath: cacheDirPath,
+      appSupportDirPath: appSupportDirPath
     );
 
     _hostIsolate = await Isolate.spawn(
@@ -545,15 +542,6 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
   @override
   Future<void> startScanDirectories(List<String> directories) =>
       _send(BackendMethods.libraryStartScan, {'directories': directories});
-
-  // ===========================================================================
-  // METADATA (WORKER ISOLATES)
-  // ===========================================================================
-  @override
-  Future<ExtractedTrackData?> getMetadata(String filePath) =>
-      _send<ExtractedTrackData?>(BackendMethods.metadataGetMetadata, {
-        'filePath': filePath,
-      });
 
   // ===========================================================================
   // PLAYLISTS

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/wave_visualizer.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 /// Self-contained, beat-reactive artwork component for the Now Playing view.

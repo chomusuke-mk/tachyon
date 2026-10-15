@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
+
 class ParserUtils {
   static double? parseDouble(dynamic val) {
     if (val == null) return null;
@@ -23,5 +28,13 @@ class ParserUtils {
     if (val == null) return null;
     if (val is String) return val.trim();
     return val.toString();
+  }
+
+  static String computeBytesHash(Uint8List bytes) {
+    return sha256.convert(bytes).toString();
+  }
+
+  static String computeStringHash(String input) {
+    return sha256.convert(utf8.encode(input)).toString();
   }
 }

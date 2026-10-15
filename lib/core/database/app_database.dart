@@ -4,8 +4,9 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import 'package:tachyon/core/backend/services/metadata_service.dart'
-    show ExtractedTrackData, TrackFileMeta;
+import 'package:tachyon/shared/utils/metadata_utils.dart'
+    show ExtractedTrackData;
+import 'package:tachyon/core/backend/services/metadata_service.dart' show TrackFileMeta;
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/library/domain/catalog_snapshot.dart';

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 /// Card widget displaying an artist in grid/card views with an animated

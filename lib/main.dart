@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -7,9 +8,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/app.dart';
-import 'package:tachyon/shared/utils/cover_utils.dart';
 import 'package:tachyon/shared/utils/folder_utils.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/shared/utils/permission_utils.dart';
 
 import 'core/backend/backend.dart';
@@ -41,13 +42,17 @@ Future<void> main() async {
     debugPrint("CACHE PATH: ${cacheDirectory.path}");
     debugPrint("DATA PATH: ${appSupportDir.path}");
   }
-  CoverUtils.init(cacheDirectory);
+  MetadataUtils.init(
+    Directory(p.join(appSupportDir.path, 'covers')),
+    Directory(p.join(cacheDirectory.path, 'covers')),
+  );
 
   // Spawn and initialize the Core Service Isolate
   final backendClient = TachyonIsolateBackendClient();
   await backendClient.initialize(
     dbPath: dbPath,
     cacheDirPath: cacheDirectory.path,
+    appSupportDirPath: appSupportDir.path,
   );
 
   final settingsRepository = SettingsRepository(sharedPreferences);
@@ -60,8 +65,8 @@ Future<void> main() async {
   await settingsController.init();
 
   String resolveDefaultLanguage() {
-    final systemCode =
-        ui.PlatformDispatcher.instance.locale.languageCode.toLowerCase();
+    final systemCode = ui.PlatformDispatcher.instance.locale.languageCode
+        .toLowerCase();
     return languagesEndonyms.containsKey(systemCode) ? systemCode : 'en';
   }
 
@@ -137,8 +142,8 @@ Future<void> main() async {
 
   String lastTargetLang = settingsRepository.getLyricsTranslationTargetLang();
   settingsController.addListener(() {
-    final currentTargetLang =
-        settingsRepository.getLyricsTranslationTargetLang();
+    final currentTargetLang = settingsRepository
+        .getLyricsTranslationTargetLang();
     if (currentTargetLang != lastTargetLang) {
       lastTargetLang = currentTargetLang;
       if (lyricsController.isTranslated && lyricsController.hasLyrics) {

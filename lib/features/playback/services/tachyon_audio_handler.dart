@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
-import 'package:tachyon/shared/utils/cover_utils.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 
 /// Bridges [PlaybackController] and [TachyonBackendClient] to [as_lib.BaseAudioHandler].
 /// This acts as the unified system media controls bridge for Android, iOS,
@@ -36,31 +36,32 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     // 1. Sync Current MediaItem (using small / low-quality thumbnail)
     if (track?.filePath != _lastEmittedTrackPath) {
       _lastEmittedTrackPath = track?.filePath;
+      Uri? uri;
       if (track != null) {
-        File? coverFile;
         if (track.thumbnailHash != null && track.thumbnailHash!.isNotEmpty) {
-          coverFile = CoverUtils.getCoverFile(
-            track.thumbnailHash!,
-            quality: ThumbnailQuality.low,
+          final coverFile = File(
+            MetadataUtils.getThumbnailFilePath(
+              track.thumbnailHash!,
+              quality: ThumbnailQuality.low,
+            ),
           );
-        } else {
-          coverFile = CoverUtils.getTrackFiles(track.filePath).lq;
+          uri = (coverFile.existsSync() && coverFile.lengthSync() > 0)
+              ? coverFile.uri
+              : null;
         }
 
-        final uri =
-            (coverFile.existsSync() && coverFile.lengthSync() > 0)
-                ? coverFile.uri
-                : null;
         final artistNames = track.artists.map((a) => a.name).join(', ');
 
-        mediaItem.add(as_lib.MediaItem(
-          id: track.filePath,
-          title: track.title,
-          artist: artistNames.isNotEmpty ? artistNames : null,
-          album: track.album?.name,
-          duration: Duration(milliseconds: track.durationMs),
-          artUri: uri,
-        ));
+        mediaItem.add(
+          as_lib.MediaItem(
+            id: track.filePath,
+            title: track.title,
+            artist: artistNames.isNotEmpty ? artistNames : null,
+            album: track.album?.name,
+            duration: Duration(milliseconds: track.durationMs),
+            artUri: uri,
+          ),
+        );
       } else {
         mediaItem.add(null);
       }
@@ -69,25 +70,25 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     // 2. Sync Queue only when queue structure actually mutates (prevents UI isolate disk I/O on pause/skip)
     if (_lastSyncedPlayables == null ||
         !identical(state.playables, _lastSyncedPlayables) &&
-        !listEquals(state.playables, _lastSyncedPlayables)) {
+            !listEquals(state.playables, _lastSyncedPlayables)) {
       _lastSyncedPlayables = List<PlaylistEntry>.unmodifiable(state.playables);
       final queueItems = state.playables
           .map((entry) {
             final t = entry.track;
             if (t == null) return null;
             final artists = t.artists.map((a) => a.name).join(', ');
-            File? cover;
+            Uri? uri;
             if (t.thumbnailHash != null && t.thumbnailHash!.isNotEmpty) {
-              cover = CoverUtils.getCoverFile(
-                t.thumbnailHash!,
-                quality: ThumbnailQuality.low,
+              final cover = File(
+                MetadataUtils.getThumbnailFilePath(
+                  t.thumbnailHash!,
+                  quality: ThumbnailQuality.low,
+                ),
               );
-            } else {
-              cover = CoverUtils.getTrackFiles(t.filePath).lq;
+              uri = (cover.existsSync() && cover.lengthSync() > 0)
+                  ? cover.uri
+                  : null;
             }
-
-            final uri =
-                (cover.existsSync() && cover.lengthSync() > 0) ? cover.uri : null;
 
             return as_lib.MediaItem(
               id: t.filePath,
@@ -144,18 +145,20 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
         ? as_lib.AudioServiceShuffleMode.all
         : as_lib.AudioServiceShuffleMode.none;
 
-    playbackState.add(as_lib.PlaybackState(
-      controls: controls,
-      systemActions: actions,
-      androidCompactActionIndices: const [0, 1, 2],
-      processingState: processingState,
-      playing: isPlaying,
-      updatePosition: state.position,
-      bufferedPosition: state.position,
-      speed: isPlaying ? state.rate : 0.0,
-      repeatMode: asRepeatMode,
-      shuffleMode: asShuffleMode,
-    ));
+    playbackState.add(
+      as_lib.PlaybackState(
+        controls: controls,
+        systemActions: actions,
+        androidCompactActionIndices: const [0, 1, 2],
+        processingState: processingState,
+        playing: isPlaying,
+        updatePosition: state.position,
+        bufferedPosition: state.position,
+        speed: isPlaying ? state.rate : 0.0,
+        repeatMode: asRepeatMode,
+        shuffleMode: asShuffleMode,
+      ),
+    );
   }
 
   @override
@@ -167,10 +170,12 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   @override
   Future<void> stop() async {
     await backend.pause();
-    playbackState.add(playbackState.value.copyWith(
-      playing: false,
-      processingState: as_lib.AudioProcessingState.idle,
-    ));
+    playbackState.add(
+      playbackState.value.copyWith(
+        playing: false,
+        processingState: as_lib.AudioProcessingState.idle,
+      ),
+    );
   }
 
   @override
@@ -198,7 +203,9 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   }
 
   @override
-  Future<void> setShuffleMode(as_lib.AudioServiceShuffleMode shuffleMode) async {
+  Future<void> setShuffleMode(
+    as_lib.AudioServiceShuffleMode shuffleMode,
+  ) async {
     final shouldShuffle = shuffleMode != as_lib.AudioServiceShuffleMode.none;
     if (playbackController.state.shuffle != shouldShuffle) {
       await playbackController.toggleShuffle();

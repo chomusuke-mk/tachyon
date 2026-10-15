@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 /// Finds the cover hash for a playlist by searching the most recently added tracks

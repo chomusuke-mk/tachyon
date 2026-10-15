@@ -371,14 +371,6 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
   }
 
   @override
-  Future<ExtractedTrackData?> getMetadata(String filePath) async {
-    if (metadataService != null) {
-      return await metadataService!.getMetadata(filePath);
-    }
-    return null;
-  }
-
-  @override
   Future<int> createPlaylist(String name) async {
     return database?.createPlaylist(name) ?? -1;
   }
