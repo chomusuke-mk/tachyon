@@ -49,7 +49,6 @@ dependencies:
   win32: ^6.4.0
   ffi: ^2.2.0
   flutter_rust_bridge: ^2.13.0
-  image: ^4.12.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

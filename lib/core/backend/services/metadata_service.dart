@@ -57,10 +57,7 @@ class MetadataService {
   final AppDatabase database;
   final int? customWorkerCount;
 
-  MetadataService({
-    required this.database,
-    this.customWorkerCount,
-  });
+  MetadataService({required this.database, this.customWorkerCount});
 
   int get workerCount =>
       customWorkerCount ?? math.max(1, Platform.numberOfProcessors);
@@ -307,6 +304,7 @@ class MetadataService {
             );
           } catch (e) {
             debugPrint('[MetadataService] Worker failed for ${file.path}: $e');
+            debugPrint('[MetadataService] Stack trace: ${StackTrace.current}');
           }
 
           if (scanToken.isCancelled) return;

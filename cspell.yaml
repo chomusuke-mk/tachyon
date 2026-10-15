@@ -47,6 +47,7 @@ words:
   - bilineal
   - BITCODE
   - bitrate
+  - bloqueante
   - bluetooth
   - Bokmål
   - bugtracker
@@ -161,6 +162,7 @@ words:
   - GWLP
   - hardcodeadas
   - hardcodeados
+  - hashear
   - haudiotagger
   - healthcheck
   - herunterladen
@@ -225,6 +227,7 @@ words:
   - libgio
   - libglib
   - libgomp
+  - libjpeg
   - libmpv
   - libnotify
   - libnuma
@@ -262,6 +265,7 @@ words:
   - LTWH
   - lyricsovh
   - lzma
+  - malloc
   - márcalo
   - Menlo
   - mensajito
@@ -364,6 +368,7 @@ words:
   - Reconectando
   - recursesubdirs
   - Redibuja
+  - redimensionadas
   - Redirección
   - rediseñada
   - refactorización

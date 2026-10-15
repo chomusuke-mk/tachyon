@@ -1,10 +1,11 @@
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:haudiotagger/haudiotagger.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:path/path.dart' as p;
-import 'package:image/image.dart' as img;
 import 'package:tachyon/core/constants/app_defaults.dart';
 
 import 'dart:math' as math;
@@ -99,16 +100,43 @@ class ExtractedTrackData {
 abstract final class MetadataUtils {
   static Directory? tempDirectory;
   static Directory? thumbnailsDirectory;
+  static const String _kGpuBridgePortName = 'cover_utils_dart_ui_gpu_bridge';
+  static RawReceivePort? _gpuBridgePort;
 
-  static void init(Directory thumbnailsDir, Directory tempDir) {
-    tempDirectory = tempDir;
-    thumbnailsDirectory = thumbnailsDir;
+  static final Map<String, Future<void>> _inFlightHashes = {};
+
+  static void init(String thumbnailsPath, String tempPath) {
+    tempDirectory = Directory(tempPath);
+    thumbnailsDirectory = Directory(thumbnailsPath);
     if (!thumbnailsDirectory!.existsSync()) {
       thumbnailsDirectory!.createSync(recursive: true);
     }
     if (!tempDirectory!.existsSync()) {
       tempDirectory!.createSync(recursive: true);
     }
+    if (ui.RootIsolateToken.instance == null) return;
+    if (_gpuBridgePort != null) return;
+
+    _gpuBridgePort = RawReceivePort((dynamic message) async {
+      if (message is! List || message.length != 3) return;
+      final SendPort replyPort = message[0] as SendPort;
+      final TransferableTypedData transferableRaw =
+          message[1] as TransferableTypedData;
+      final String hash = message[2] as String;
+      try {
+        final rawBytes = transferableRaw.materialize().asUint8List();
+        await _deduplicatedWriteOnRootIsolate(rawBytes, hash);
+        replyPort.send(null);
+      } catch (e) {
+        replyPort.send('ERROR:$e');
+      }
+    });
+
+    ui.IsolateNameServer.removePortNameMapping(_kGpuBridgePortName);
+    ui.IsolateNameServer.registerPortWithName(
+      _gpuBridgePort!.sendPort,
+      _kGpuBridgePortName,
+    );
   }
 
   static void _ensureInitialized() {
@@ -163,10 +191,8 @@ abstract final class MetadataUtils {
     double? trackPeak;
     String? waveformData;
     Tag? tag;
-    AudioProperties? properties;
     try {
       tag = await Haudiotagger.read(filePath);
-      properties = await Haudiotagger.readProperties(filePath);
       trackGain = ParserUtils.parseDouble(tag?.replayGainTrackGain);
       trackPeak = ParserUtils.parseDouble(tag?.replayGainTrackPeak);
     } catch (e) {
@@ -190,63 +216,55 @@ abstract final class MetadataUtils {
     }
 
     // Extract and cache cover art, album art, and artist images
-    Uint8List? coverBytes;
-    Uint8List? artistBytes;
-    Uint8List? albumBytes;
     String? coverHash;
     String? albumThumbnailHash;
     String? artistThumbnailHash;
+    final Map<String, Uint8List> hashToBytes = {};
     if (tag != null && tag.pictures.isNotEmpty) {
-      final pictures = tag.pictures.toList();
-      // Cover
-      pictures.sort((a, b) {
-        final aPriority = coverPriority[a.pictureType] ?? 99;
-        final bPriority = coverPriority[b.pictureType] ?? 99;
-        return aPriority.compareTo(bPriority);
-      });
-      coverBytes = pictures.isNotEmpty ? pictures.first.bytes : null;
-      coverHash = coverBytes != null && coverBytes.isNotEmpty
-          ? ParserUtils.computeBytesHash(coverBytes)
-          : null;
-      // Album
-      pictures.sort((a, b) {
-        final aPriority = albumPriority[a.pictureType] ?? 99;
-        final bPriority = albumPriority[b.pictureType] ?? 99;
-        return aPriority.compareTo(bPriority);
-      });
-      albumBytes = pictures.isNotEmpty ? pictures.first.bytes : null;
-      albumThumbnailHash = albumBytes != null && albumBytes.isNotEmpty
-          ? ParserUtils.computeBytesHash(albumBytes)
-          : null;
-      // Artist
-      pictures.sort((a, b) {
-        final aPriority = artistPriority[a.pictureType] ?? 99;
-        final bPriority = artistPriority[b.pictureType] ?? 99;
-        return aPriority.compareTo(bPriority);
-      });
-      artistBytes = pictures.isNotEmpty ? pictures.first.bytes : null;
-      artistThumbnailHash = artistBytes != null && artistBytes.isNotEmpty
-          ? ParserUtils.computeBytesHash(artistBytes)
-          : null;
+      final pictures = tag.pictures;
+      // Memorizar el cálculo SHA-256 por instancia de Picture para no hashear 3 veces los mismos bytes
+      final Map<Picture, String> pictureHashes = {};
+      String? getOrComputeHash(Picture? pic) {
+        if (pic == null || pic.bytes.isEmpty) return null;
+        return pictureHashes.putIfAbsent(pic, () {
+          final h = ParserUtils.computeBytesHash(pic.bytes);
+          hashToBytes[h] = pic.bytes;
+          return h;
+        });
+      }
+
+      Picture? pickBest(
+        Map<PictureType, int> priorityMap, {
+        bool fallbackToFirst = false,
+      }) {
+        Picture? best;
+        int bestPriority = 99;
+        for (final pic in pictures) {
+          final p = priorityMap[pic.pictureType];
+          if (p != null && p < bestPriority) {
+            bestPriority = p;
+            best = pic;
+          }
+        }
+        return best ?? (fallbackToFirst ? pictures.first : null);
+      }
+
+      coverHash = getOrComputeHash(
+        pickBest(coverPriority, fallbackToFirst: true),
+      );
+      albumThumbnailHash = getOrComputeHash(
+        pickBest(albumPriority, fallbackToFirst: true),
+      );
+      artistThumbnailHash = getOrComputeHash(
+        pickBest(artistPriority, fallbackToFirst: true),
+      );
     }
 
-    // Write cover art, album art, and artist images if they don't exist
-    final Map<String, Uint8List> hashToBytes = {};
-    if (coverBytes != null && coverHash != null) {
-      hashToBytes[coverHash] = coverBytes;
-    }
-    if (albumBytes != null && albumThumbnailHash != null) {
-      hashToBytes[albumThumbnailHash] = albumBytes;
-    }
-    if (artistBytes != null && artistThumbnailHash != null) {
-      hashToBytes[artistThumbnailHash] = artistBytes;
-    }
     for (final entry in hashToBytes.entries) {
       final hash = entry.key;
       final bytes = entry.value;
-      final file = File(getThumbnailFilePath(hash));
-      if (!await file.exists()) {
-        _writeTripleQualityImages(bytes, hash);
+      if (!_allQualitiesExistSync(hash)) {
+        await _writeTripleQualityImages(bytes, hash);
       }
     }
     return _buildExtractedTrackData(
@@ -254,7 +272,6 @@ abstract final class MetadataUtils {
       fileSize: size,
       modifiedAt: modifiedAt,
       tag: tag,
-      properties: properties,
       analysis: analysis,
       replayGainTrackGain: trackGain,
       replayGainTrackPeak: trackPeak,
@@ -265,7 +282,67 @@ abstract final class MetadataUtils {
     );
   }
 
+  static bool _allQualitiesExistSync(String hash) {
+    return File(getThumbnailFilePath(hash, quality: ThumbnailQuality.low))
+            .existsSync() &&
+        File(getThumbnailFilePath(hash, quality: ThumbnailQuality.medium))
+            .existsSync() &&
+        File(getThumbnailFilePath(hash, quality: ThumbnailQuality.high))
+            .existsSync();
+  }
+
   static Future<void> _writeTripleQualityImages(
+    Uint8List rawBytes,
+    String hash,
+  ) async {
+    _ensureInitialized();
+    if (ui.RootIsolateToken.instance != null) {
+      return _deduplicatedWriteOnRootIsolate(rawBytes, hash);
+    }
+    final SendPort? gpuSendPort = ui.IsolateNameServer.lookupPortByName(
+      _kGpuBridgePortName,
+    );
+    if (gpuSendPort == null) {
+      throw StateError(
+        'El puente GPU de MetadataUtils no fue inicializado en el Root Isolate. '
+        'Llama a MetadataUtils.init() antes de crear el Isolate.',
+      );
+    }
+    final responsePort = ReceivePort();
+    try {
+      gpuSendPort.send(<Object>[
+        responsePort.sendPort,
+        TransferableTypedData.fromList([rawBytes]),
+        hash,
+      ]);
+
+      final dynamic response = await responsePort.first;
+      if (response is String && response.startsWith('ERROR:')) {
+        throw Exception(response.substring(6));
+      }
+    } finally {
+      responsePort.close();
+    }
+  }
+
+  static Future<void> _deduplicatedWriteOnRootIsolate(
+    Uint8List rawBytes,
+    String hash,
+  ) {
+    if (_allQualitiesExistSync(hash)) return Future.value();
+    final existingTask = _inFlightHashes[hash];
+    if (existingTask != null) return existingTask;
+
+    final future = _writeTripleQualityImagesOnRootIsolate(rawBytes, hash)
+        .whenComplete(() async {
+          _inFlightHashes.remove(hash);
+          return Future.value();
+        });
+    _inFlightHashes[hash] = future;
+    return future;
+  }
+
+  static Future<void> _writeTripleQualityImagesOnRootIsolate(
     Uint8List rawBytes,
     String hash,
   ) async {
@@ -280,86 +357,179 @@ abstract final class MetadataUtils {
       getThumbnailFilePath(hash, quality: ThumbnailQuality.low),
     );
 
-    try {
-      final decoded = img.decodeImage(rawBytes);
-      if (decoded == null) {
-        debugPrint('[CoverUtils] Failed to decode image for hash: $hash');
-        return;
-      }
-      final minDim = math.min(decoded.width, decoded.height);
-      final cropX = (decoded.width - minDim) ~/ 2;
-      final cropY = (decoded.height - minDim) ~/ 2;
+    ui.ImmutableBuffer? buffer;
+    ui.ImageDescriptor? descriptor;
+    ui.Codec? codec;
+    ui.Image? decodedImage;
+    ui.Image? hqImage;
+    ui.Image? mqImage;
+    ui.Image? lqImage;
 
-      final squareImage =
-          (cropX == 0 &&
-              cropY == 0 &&
-              decoded.width == minDim &&
-              decoded.height == minDim)
-          ? decoded
-          : img.copyCrop(
-              decoded,
-              x: cropX,
-              y: cropY,
-              width: minDim,
-              height: minDim,
+    try {
+      // 1. Leer dimensiones del encabezado en C++ SIN decodificar toda la imagen
+      buffer = await ui.ImmutableBuffer.fromUint8List(rawBytes);
+      descriptor = await ui.ImageDescriptor.encoded(buffer);
+      final int origWidth = descriptor.width;
+      final int origHeight = descriptor.height;
+      final int side = math.min(origWidth, origHeight);
+
+      final int targetLarge = math.min(side, AppDefaults.highQualityResolution);
+      final int targetMedium = math.min(
+        side,
+        AppDefaults.mediumQualityResolution,
+      );
+      final int targetSmall = math.min(side, AppDefaults.lowQualityResolution);
+
+      // 2. Decodificar escalando directamente en el decodificador nativo (libjpeg-turbo / libpng)
+      final double scale = targetLarge / side;
+      final int decodeWidth = math.max(1, (origWidth * scale).round());
+      final int decodeHeight = math.max(1, (origHeight * scale).round());
+
+      codec = await descriptor.instantiateCodec(
+        targetWidth: decodeWidth,
+        targetHeight: decodeHeight,
+      );
+      final ui.FrameInfo frame = await codec.getNextFrame();
+      decodedImage = frame.image;
+
+      // 3. Obtener hqImage cuadrada (Si ya es cuadrada, reutilizamos decodedImage sin pasar por Canvas)
+      if (decodedImage.width == targetLarge &&
+          decodedImage.height == targetLarge) {
+        hqImage = decodedImage;
+      } else {
+        final int minDecoded = math.min(
+          decodedImage.width,
+          decodedImage.height,
+        );
+        final ui.Rect cropRect = ui.Rect.fromLTWH(
+          (decodedImage.width - minDecoded) / 2.0,
+          (decodedImage.height - minDecoded) / 2.0,
+          minDecoded.toDouble(),
+          minDecoded.toDouble(),
+        );
+        hqImage = await _renderResizedUiImage(
+          sourceImage: decodedImage,
+          srcRect: cropRect,
+          size: targetLarge,
+        );
+      }
+
+      // 4. Downsampling en cascada en GPU (hqImage -> mqImage -> lqImage)
+      final ui.Rect fullHqRect = ui.Rect.fromLTWH(
+        0,
+        0,
+        hqImage.width.toDouble(),
+        hqImage.height.toDouble(),
+      );
+
+      mqImage = (targetMedium == targetLarge)
+          ? hqImage
+          : await _renderResizedUiImage(
+              sourceImage: hqImage,
+              srcRect: fullHqRect,
+              size: targetMedium,
             );
 
-      // 1. High Quality: 800x800
-      final img.Image hqImage;
-      if (minDim > AppDefaults.highQualityResolution) {
-        hqImage = img.copyResize(
-          squareImage,
-          width: AppDefaults.highQualityResolution,
-          height: AppDefaults.highQualityResolution,
-          interpolation: img.Interpolation.linear,
-        );
-      } else {
-        hqImage = squareImage;
+      final ui.Rect fullMqRect = ui.Rect.fromLTWH(
+        0,
+        0,
+        mqImage.width.toDouble(),
+        mqImage.height.toDouble(),
+      );
+
+      lqImage = (targetSmall == targetMedium)
+          ? mqImage
+          : await _renderResizedUiImage(
+              sourceImage: mqImage,
+              srcRect: fullMqRect,
+              size: targetSmall,
+            );
+
+      // 5. Codificar a PNG en paralelo
+      final Future<Uint8List> hqFuture = _encodeUiImageToPng(hqImage);
+      final Future<Uint8List> mqFuture = identical(mqImage, hqImage)
+          ? hqFuture
+          : _encodeUiImageToPng(mqImage);
+      final Future<Uint8List> lqFuture = identical(lqImage, mqImage)
+          ? mqFuture
+          : _encodeUiImageToPng(lqImage);
+
+      final results = await Future.wait([hqFuture, mqFuture, lqFuture]);
+
+      // 6. Guardar las imágenes en paralelo (sin fsync bloqueante)
+      await Future.wait([
+        _safeAtomicWrite(fileHq, results[0]),
+        _safeAtomicWrite(fileMq, results[1]),
+        _safeAtomicWrite(fileLq, results[2]),
+      ]);
+    } finally {
+      if (lqImage != null && !identical(lqImage, mqImage)) {
+        lqImage.dispose();
       }
-
-      // 2. Medium Quality: 250x250 (cascaded downsampling from hqImage)
-      final img.Image mqImage;
-      if (hqImage.width > AppDefaults.mediumQualityResolution) {
-        mqImage = img.copyResize(
-          hqImage,
-          width: AppDefaults.mediumQualityResolution,
-          height: AppDefaults.mediumQualityResolution,
-          interpolation: img.Interpolation.linear,
-        );
-      } else {
-        mqImage = hqImage;
+      if (mqImage != null && !identical(mqImage, hqImage)) {
+        mqImage.dispose();
       }
-
-      // 3. Low Quality: 50x50 (cascaded downsampling from mqImage)
-      final img.Image lqImage;
-      if (mqImage.width > AppDefaults.lowQualityResolution) {
-        lqImage = img.copyResize(
-          mqImage,
-          width: AppDefaults.lowQualityResolution,
-          height: AppDefaults.lowQualityResolution,
-          interpolation: img.Interpolation.linear,
-        );
-      } else {
-        lqImage = mqImage;
+      if (hqImage != null && !identical(hqImage, decodedImage)) {
+        hqImage.dispose();
       }
-
-      final hqBytes = img.encodeJpg(hqImage, quality: 82);
-      final mqBytes = img.encodeJpg(mqImage, quality: 78);
-      final lqBytes = img.encodeJpg(lqImage, quality: 72);
-
-      final writeFutures = <Future<void>>[];
-      writeFutures.add(_safeAtomicWrite(fileHq, hqBytes));
-      writeFutures.add(_safeAtomicWrite(fileMq, mqBytes));
-      writeFutures.add(_safeAtomicWrite(fileLq, lqBytes));
-      await Future.wait(writeFutures);
-    } catch (e) {
-      debugPrint('[CoverUtils] Error generating triple quality images: $e');
+      decodedImage?.dispose();
+      codec?.dispose();
+      descriptor?.dispose();
+      buffer?.dispose();
     }
+  }
+
+  static Future<ui.Image> _renderResizedUiImage({
+    required ui.Image sourceImage,
+    required ui.Rect srcRect,
+    required int size,
+  }) async {
+    final ui.PictureRecorder recorder = ui.PictureRecorder();
+    final ui.Canvas canvas = ui.Canvas(recorder);
+    final ui.Rect dstRect = ui.Rect.fromLTWH(
+      0,
+      0,
+      size.toDouble(),
+      size.toDouble(),
+    );
+
+    canvas.drawImageRect(
+      sourceImage,
+      srcRect,
+      dstRect,
+      ui.Paint()
+        ..isAntiAlias = true
+        ..filterQuality = ui
+            .FilterQuality
+            .low, // Bilineal directo (sin costo de generar mipmaps)
+    );
+
+    final ui.Picture picture = recorder.endRecording();
+    try {
+      return await picture.toImage(size, size);
+    } finally {
+      picture.dispose();
+    }
+  }
+
+  static Future<Uint8List> _encodeUiImageToPng(ui.Image image) async {
+    final ByteData? byteData = await image.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+    if (byteData == null) {
+      throw StateError(
+        'No se pudo codificar la miniatura (${image.width} px) a PNG.',
+      );
+    }
+    return byteData.buffer.asUint8List(
+      byteData.offsetInBytes,
+      byteData.lengthInBytes,
+    );
   }
 
   static Future<void> _safeAtomicWrite(File targetFile, Uint8List bytes) async {
     _ensureInitialized();
-    if (await targetFile.exists() && await targetFile.length() > 0) {
+    if (targetFile.existsSync() && targetFile.lengthSync() > 0) {
       return;
     }
 
@@ -370,7 +540,7 @@ abstract final class MetadataUtils {
     );
 
     try {
-      await tempFile.writeAsBytes(bytes, flush: true);
+      await tempFile.writeAsBytes(bytes, flush: false);
       await tempFile.rename(targetFile.path);
     } catch (_) {
       try {
@@ -382,7 +552,7 @@ abstract final class MetadataUtils {
         return;
       }
       try {
-        await targetFile.writeAsBytes(bytes, flush: true);
+        await targetFile.writeAsBytes(bytes, flush: false);
       } catch (_) {}
     }
   }
@@ -392,7 +562,6 @@ abstract final class MetadataUtils {
     required int fileSize,
     required int modifiedAt,
     Tag? tag,
-    AudioProperties? properties,
     AudioAnalysisResult? analysis,
     double? replayGainTrackGain,
     double? replayGainTrackPeak,
@@ -404,21 +573,17 @@ abstract final class MetadataUtils {
     final ext = p.extension(filePath).toLowerCase();
     final extClean = ext.replaceAll('.', '').toUpperCase();
 
-    final effectiveBitrate =
-        properties?.bitrate ??
-        (analysis != null && analysis.bitrate > 0 ? analysis.bitrate : null);
-    final effectiveSampleRate =
-        properties?.sampleRate ??
-        (analysis != null && analysis.sampleRate > 0
-            ? analysis.sampleRate
-            : null);
-    final effectiveChannels =
-        properties?.channels ??
-        (analysis != null && analysis.channels > 0 ? analysis.channels : null);
+    final effectiveBitrate = analysis != null && analysis.bitrate > 0
+        ? analysis.bitrate
+        : null;
+    final effectiveSampleRate = analysis != null && analysis.sampleRate > 0
+        ? analysis.sampleRate
+        : null;
+    final effectiveChannels = analysis != null && analysis.channels > 0
+        ? analysis.channels
+        : null;
 
-    var durationMs = properties?.durationMicros != null
-        ? (properties!.durationMicros!.toInt() / 1000).round()
-        : (tag?.duration != null ? tag!.duration! * 1000 : 0);
+    var durationMs = tag?.duration != null ? tag!.duration! * 1000 : 0;
     if (durationMs <= 0 && analysis != null) {
       durationMs = analysis.duration.inMilliseconds;
     }
@@ -464,7 +629,7 @@ abstract final class MetadataUtils {
       bitrate: effectiveBitrate,
       sampleRate: effectiveSampleRate,
       channels: effectiveChannels,
-      codec: properties?.codec ?? (extClean.isNotEmpty ? extClean : null),
+      codec: extClean.isNotEmpty ? extClean : null,
       fileSize: fileSize,
       modifiedAt: modifiedAt,
       embeddedLyrics: tag?.lyrics,
@@ -487,5 +652,12 @@ abstract final class MetadataUtils {
       followLinks: false,
     );
     return files.whereType<File>().toList();
+  }
+
+  static void disposeBridge() {
+    ui.IsolateNameServer.removePortNameMapping(_kGpuBridgePortName);
+    _gpuBridgePort?.close();
+    _gpuBridgePort = null;
+    _inFlightHashes.clear();
   }
 }

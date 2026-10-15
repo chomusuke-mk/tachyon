@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -80,8 +79,8 @@ class TachyonBackendHost {
 
     // 3. Initialize cover cache and metadata service
     MetadataUtils.init(
-      Directory(p.join(config.appSupportDirPath, 'covers')),
-      Directory(p.join(config.cacheDirPath, 'covers')),
+      p.join(config.appSupportDirPath, 'covers'),
+      p.join(config.cacheDirPath, 'covers'),
     );
 
     _metadataService = MetadataService(
@@ -109,10 +108,7 @@ class TachyonBackendHost {
     _subscriptions.add(
       _audioEngine.devicesStream.listen((devices) {
         config.uiSendPort.send(
-          BackendEvent(
-            topic: BackendTopics.playbackDevices,
-            payload: devices,
-          ),
+          BackendEvent(topic: BackendTopics.playbackDevices, payload: devices),
         );
       }),
     );
@@ -512,7 +508,9 @@ class TachyonBackendHost {
         try {
           _database.addTracksToPlaylist(playlistId, trackIds);
         } catch (e) {
-          debugPrint('[CoreBackendHost] Error adding tracks to playlist $playlistId: $e');
+          debugPrint(
+            '[CoreBackendHost] Error adding tracks to playlist $playlistId: $e',
+          );
         }
         return null;
 
@@ -522,7 +520,9 @@ class TachyonBackendHost {
         try {
           _database.removeTrackFromPlaylist(playlistId, trackId);
         } catch (e) {
-          debugPrint('[CoreBackendHost] Error removing track from playlist $playlistId: $e');
+          debugPrint(
+            '[CoreBackendHost] Error removing track from playlist $playlistId: $e',
+          );
         }
         return null;
 
@@ -543,7 +543,9 @@ class TachyonBackendHost {
         try {
           _database.toggleLikeTrack(trackId, filePath);
         } catch (e) {
-          debugPrint('[CoreBackendHost] Error toggling like for track $trackId: $e');
+          debugPrint(
+            '[CoreBackendHost] Error toggling like for track $trackId: $e',
+          );
         }
         return _database.isTrackLiked(trackId);
 

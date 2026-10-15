@@ -89,7 +89,7 @@ class MemoryOptimizer {
   /// Starts a periodic background trimmer that ensures physical RAM remains
   /// at minimum levels during idle and after operations.
   static void startPeriodicTrimmer({
-    Duration interval = const Duration(seconds: 5),
+    Duration interval = const Duration(seconds: 10),
   }) {
     _periodicTimer?.cancel();
     _periodicTimer = Timer.periodic(interval, (_) {

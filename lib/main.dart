@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -43,8 +42,8 @@ Future<void> main() async {
     debugPrint("DATA PATH: ${appSupportDir.path}");
   }
   MetadataUtils.init(
-    Directory(p.join(appSupportDir.path, 'covers')),
-    Directory(p.join(cacheDirectory.path, 'covers')),
+    p.join(appSupportDir.path, 'covers'),
+    p.join(cacheDirectory.path, 'covers'),
   );
 
   // Spawn and initialize the Core Service Isolate
