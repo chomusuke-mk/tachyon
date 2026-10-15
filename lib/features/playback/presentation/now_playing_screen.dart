@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
@@ -28,6 +30,7 @@ class NowPlayingScreen extends StatefulWidget {
   static void open(BuildContext context) {
     Navigator.of(context).push(
       PageRouteBuilder(
+        opaque: false,
         pageBuilder: (context, animation, secondaryAnimation) =>
             const NowPlayingScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -53,17 +56,86 @@ class NowPlayingScreen extends StatefulWidget {
 }
 
 class _NowPlayingScreenState extends State<NowPlayingScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   bool _showLyrics = false;
   bool _showQueue = false;
   bool _hasInitializedViewSettings = false;
   LyricsController? _lyricsController;
   double _lastUnmutedVolume = AppDefaults.volumeDefault;
 
+  double _screenDragOffset = 0.0;
+  bool _isDismissing = false;
+  late final AnimationController _dragResetController;
+  Animation<double>? _dragResetAnimation;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _dragResetController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    )..addListener(() {
+        setState(() {
+          _screenDragOffset = _dragResetAnimation?.value ?? 0.0;
+        });
+      });
+  }
+
+  void _onVerticalDragStart(DragStartDetails details) {
+    if (_dragResetController.isAnimating) {
+      _dragResetController.stop();
+    }
+  }
+
+  void _onVerticalDragUpdate(DragUpdateDetails details) {
+    if (_isDismissing) return;
+    final delta = details.primaryDelta ?? 0.0;
+    setState(() {
+      _screenDragOffset = math.max(0.0, _screenDragOffset + delta);
+    });
+  }
+
+  void _onVerticalDragEnd(DragEndDetails details) {
+    if (_isDismissing) return;
+    final velocity = details.primaryVelocity ?? 0.0;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final dismissThreshold = math.min(150.0, screenHeight * 0.18);
+
+    if (velocity > 350 || _screenDragOffset > dismissThreshold) {
+      _dismissScreen();
+    } else {
+      _animateDragReset();
+    }
+  }
+
+  void _onVerticalDragCancel() {
+    if (_isDismissing) return;
+    _animateDragReset();
+  }
+
+  void _animateDragReset() {
+    _dragResetAnimation = Tween<double>(
+      begin: _screenDragOffset,
+      end: 0.0,
+    ).animate(
+      CurvedAnimation(
+        parent: _dragResetController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    _dragResetController.forward(from: 0.0);
+  }
+
+  void _dismissScreen() {
+    if (_isDismissing) return;
+    _isDismissing = true;
+    Navigator.of(context).maybePop().then((popped) {
+      if (!popped && mounted) {
+        _isDismissing = false;
+        _animateDragReset();
+      }
+    });
   }
 
   @override
@@ -171,6 +243,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
   @override
   void dispose() {
+    _dragResetController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     final lyricsController = _lyricsController;
     if (lyricsController != null) {
@@ -190,7 +263,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final colorScheme = theme.colorScheme;
 
     if (currentTrack == null) {
-      return Scaffold(
+      final emptyScaffold = Scaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
@@ -202,122 +275,181 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           child: Text(strings.npQueueEmpty, style: theme.textTheme.titleMedium),
         ),
       );
+
+      return Transform.translate(
+        offset: Offset(0.0, _screenDragOffset),
+        child: ClipRRect(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(_screenDragOffset > 0 ? 24.0 : 0.0),
+          ),
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onVerticalDragStart: _onVerticalDragStart,
+            onVerticalDragUpdate: _onVerticalDragUpdate,
+            onVerticalDragEnd: _onVerticalDragEnd,
+            onVerticalDragCancel: _onVerticalDragCancel,
+            child: emptyScaffold,
+          ),
+        ),
+      );
     }
 
     final double currentWidth = MediaQuery.sizeOf(context).width;
 
-    final Widget appTopBar = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-      child: Row(
+    final Widget appTopBar = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: _onVerticalDragStart,
+      onVerticalDragUpdate: _onVerticalDragUpdate,
+      onVerticalDragEnd: _onVerticalDragEnd,
+      onVerticalDragCancel: _onVerticalDragCancel,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32),
+              tooltip: strings.commonMinimize,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.speaker_group_rounded),
+              tooltip: strings.npAudioDevices,
+              color: colorScheme.onSurface,
+              onPressed: () => _showAudioDevicesDialog(context),
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.lyrics_rounded,
+                color: _showLyrics ? colorScheme.primary : colorScheme.onSurface,
+              ),
+              tooltip: strings.npLyrics,
+              onPressed: _toggleLyrics,
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.queue_music_rounded,
+                color: _showQueue ? colorScheme.primary : colorScheme.onSurface,
+              ),
+              tooltip: strings.npQueue,
+              onPressed: _toggleQueue,
+            ),
+            IconButton(
+              icon: const Icon(Icons.equalizer_rounded),
+              tooltip: strings.npAudioControls,
+              color: colorScheme.onSurface,
+              onPressed: () => _openAudioControls(context),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final Widget mainBody = currentWidth >= 588 && _showQueue
+        ? Row(
+            key: const ValueKey('queue_and_player'),
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onVerticalDragStart: _onVerticalDragStart,
+                  onVerticalDragUpdate: _onVerticalDragUpdate,
+                  onVerticalDragEnd: _onVerticalDragEnd,
+                  onVerticalDragCancel: _onVerticalDragCancel,
+                  child: _buildPlayer(
+                    currentTrack,
+                    context,
+                    preferVertical: true,
+                    hideQueue: true,
+                    hideLyrics: true,
+                  ),
+                ),
+              ),
+              Expanded(child: QueueView()),
+            ],
+          )
+        : currentWidth >= 588 && _showLyrics
+        ? Row(
+            key: const ValueKey('lyrics_and_player'),
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onVerticalDragStart: _onVerticalDragStart,
+                  onVerticalDragUpdate: _onVerticalDragUpdate,
+                  onVerticalDragEnd: _onVerticalDragEnd,
+                  onVerticalDragCancel: _onVerticalDragCancel,
+                  child: _buildPlayer(
+                    currentTrack,
+                    context,
+                    preferVertical: true,
+                    hideQueue: false,
+                    hideLyrics: true,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: LyricsView(
+                  key: const ValueKey('lyrics_view'),
+                  filePath: currentTrack.filePath,
+                  onSeek: playback.seek,
+                ),
+              ),
+            ],
+          )
+        : _buildPlayer(
+            currentTrack,
+            context,
+            key: ValueKey(
+              _showQueue
+                  ? 'narrow_queue'
+                  : _showLyrics
+                  ? 'narrow_lyrics'
+                  : 'player_only',
+            ),
+          );
+
+    final Widget responsiveContent = SafeArea(
+      child: Column(
         children: [
-          IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32),
-            tooltip: strings.commonMinimize,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.speaker_group_rounded),
-            tooltip: strings.npAudioDevices,
-            color: colorScheme.onSurface,
-            onPressed: () => _showAudioDevicesDialog(context),
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.lyrics_rounded,
-              color: _showLyrics ? colorScheme.primary : colorScheme.onSurface,
-            ),
-            tooltip: strings.npLyrics,
-            onPressed: _toggleLyrics,
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.queue_music_rounded,
-              color: _showQueue ? colorScheme.primary : colorScheme.onSurface,
-            ),
-            tooltip: strings.npQueue,
-            onPressed: _toggleQueue,
-          ),
-          IconButton(
-            icon: const Icon(Icons.equalizer_rounded),
-            tooltip: strings.npAudioControls,
-            color: colorScheme.onSurface,
-            onPressed: () => _openAudioControls(context),
-          ),
+          // Top App Bar
+          appTopBar,
+          Expanded(child: mainBody),
         ],
       ),
     );
 
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      body: Stack(
-        children: [
-          // 1. Ambient Blurred Backdrop
-          Positioned.fill(
-            child: AmbientBackdrop(thumbnailHash: currentTrack.thumbnailHash),
-          ),
+    final Widget interactiveContent = (!_showQueue && !_showLyrics)
+        ? GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onVerticalDragStart: _onVerticalDragStart,
+            onVerticalDragUpdate: _onVerticalDragUpdate,
+            onVerticalDragEnd: _onVerticalDragEnd,
+            onVerticalDragCancel: _onVerticalDragCancel,
+            child: responsiveContent,
+          )
+        : responsiveContent;
 
-          // 2. Main Responsive Content Layer
-          SafeArea(
-            child: Column(
-              children: [
-                // Top App Bar
-                appTopBar,
-                Expanded(
-                  child: currentWidth >= 588 && _showQueue
-                      ? Row(
-                          key: const ValueKey('queue_and_player'),
-                          children: [
-                            Expanded(
-                              child: _buildPlayer(
-                                currentTrack,
-                                context,
-                                preferVertical: true,
-                                hideQueue: true,
-                                hideLyrics: true,
-                              ),
-                            ),
-                            Expanded(child: QueueView()),
-                          ],
-                        )
-                      : currentWidth >= 588 && _showLyrics
-                      ? Row(
-                          key: const ValueKey('lyrics_and_player'),
-                          children: [
-                            Expanded(
-                              child: _buildPlayer(
-                                currentTrack,
-                                context,
-                                preferVertical: true,
-                                hideQueue: false,
-                                hideLyrics: true,
-                              ),
-                            ),
-                            Expanded(
-                              child: LyricsView(
-                                key: const ValueKey('lyrics_view'),
-                                filePath: currentTrack.filePath,
-                                onSeek: playback.seek,
-                              ),
-                            ),
-                          ],
-                        )
-                      : _buildPlayer(
-                          currentTrack,
-                          context,
-                          key: ValueKey(
-                            _showQueue
-                                ? 'narrow_queue'
-                                : _showLyrics
-                                ? 'narrow_lyrics'
-                                : 'player_only',
-                          ),
-                        ),
-                ),
-              ],
-            ),
+    return Transform.translate(
+      offset: Offset(0.0, _screenDragOffset),
+      child: ClipRRect(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(_screenDragOffset > 0 ? 24.0 : 0.0),
+        ),
+        child: Scaffold(
+          backgroundColor: colorScheme.surface,
+          body: Stack(
+            children: [
+              // 1. Ambient Blurred Backdrop
+              Positioned.fill(
+                child: AmbientBackdrop(thumbnailHash: currentTrack.thumbnailHash),
+              ),
+
+              // 2. Main Responsive Content Layer
+              interactiveContent,
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

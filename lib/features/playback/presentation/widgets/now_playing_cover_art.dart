@@ -22,7 +22,8 @@ class NowPlayingCoverArt extends StatefulWidget {
   State<NowPlayingCoverArt> createState() => _NowPlayingCoverArtState();
 }
 
-class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
+class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
+    with SingleTickerProviderStateMixin {
   static const double _cornerRadius = 20.0;
   static const double _visualizerHeight = 56.0; // Duplicated wave height
 
@@ -35,15 +36,85 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
   String? _lastThumbnailHash;
   Color? _resolvedColor;
 
+  double _dragOffset = 0.0;
+  late final AnimationController _resetController;
+  Animation<double>? _resetAnimation;
+
   @override
   void initState() {
     super.initState();
+    _resetController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    )..addListener(() {
+        setState(() {
+          _dragOffset = _resetAnimation?.value ?? 0.0;
+        });
+      });
+
     // Enable hardware visualizer DSP on mount
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<PlaybackController>().setVisualizerEnabled(true);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _resetController.dispose();
+    super.dispose();
+  }
+
+  void _onHorizontalDragStart(DragStartDetails details) {
+    if (_resetController.isAnimating) {
+      _resetController.stop();
+    }
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    setState(() {
+      _dragOffset += details.primaryDelta ?? 0.0;
+    });
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details, PlaybackController playback) {
+    final velocity = details.primaryVelocity ?? 0.0;
+    const threshold = 40.0;
+    const velocityThreshold = 250.0;
+
+    if (_dragOffset < -threshold || velocity < -velocityThreshold) {
+      // Swiped forward (finger moved right to left) -> next track
+      if (playback.hasNext) {
+        playback.next();
+      }
+    } else if (_dragOffset > threshold || velocity > velocityThreshold) {
+      // Swiped backward (finger moved left to right) -> previous track
+      if (playback.hasPrevious) {
+        playback.previous();
+      } else {
+        playback.seek(Duration.zero);
+      }
+    }
+
+    _animateReset();
+  }
+
+  void _onHorizontalDragCancel() {
+    _animateReset();
+  }
+
+  void _animateReset() {
+    _resetAnimation = Tween<double>(
+      begin: _dragOffset,
+      end: 0.0,
+    ).animate(
+      CurvedAnimation(
+        parent: _resetController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    _resetController.forward(from: 0.0);
   }
 
   @override
@@ -105,116 +176,126 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt> {
             ? theme.colorScheme.surface
             : theme.colorScheme.surfaceContainerHigh);
 
-    return RepaintBoundary(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final maxSide = math.min(constraints.maxWidth, constraints.maxHeight);
-          final size = maxSide.isFinite && maxSide > 0 ? maxSide * 0.84 : 280.0;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragStart: _onHorizontalDragStart,
+      onHorizontalDragUpdate: _onHorizontalDragUpdate,
+      onHorizontalDragEnd: (details) => _onHorizontalDragEnd(details, playback),
+      onHorizontalDragCancel: _onHorizontalDragCancel,
+      child: RepaintBoundary(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final maxSide = math.min(constraints.maxWidth, constraints.maxHeight);
+            final size = maxSide.isFinite && maxSide > 0 ? maxSide * 0.84 : 280.0;
 
-          return ValueListenableBuilder<List<double>>(
-            valueListenable: playback.visualizerListenable,
-            builder: (context, vis, cachedHeroChild) {
-              // Raw hardware snapshot: [0] rms, [1] peak, [2] left, [3] right, [4..13] bands
-              final double rawRms = (isPlaying && vis.isNotEmpty)
-                  ? vis[0]
-                  : 0.0;
-              final List<double> rawBands = (isPlaying && vis.length >= 14)
-                  ? vis.sublist(4)
-                  : List.filled(10, 0.0);
+            return ValueListenableBuilder<List<double>>(
+              valueListenable: playback.visualizerListenable,
+              builder: (context, vis, cachedHeroChild) {
+                // Raw hardware snapshot: [0] rms, [1] peak, [2] left, [3] right, [4..13] bands
+                final double rawRms = (isPlaying && vis.isNotEmpty)
+                    ? vis[0]
+                    : 0.0;
+                final List<double> rawBands = (isPlaying && vis.length >= 14)
+                    ? vis.sublist(4)
+                    : List.filled(10, 0.0);
 
-              // 1. Audio Ballistics with Fluid Inertia for Frequency Bands:
-              // Attack and decay with damping to eliminate high-frequency buzzing/jitter
-              final displayBands = List<double>.filled(10, 0.0);
-              for (int i = 0; i < 10; i++) {
-                final target = isPlaying ? rawBands[i].clamp(0.0, 1.0) : 0.0;
-                if (target > _smoothedBands[i]) {
-                  _smoothedBands[i] += (target - _smoothedBands[i]) * 0.38;
-                } else {
-                  _smoothedBands[i] += (target - _smoothedBands[i]) * 0.15;
+                // 1. Audio Ballistics with Fluid Inertia for Frequency Bands:
+                // Attack and decay with damping to eliminate high-frequency buzzing/jitter
+                final displayBands = List<double>.filled(10, 0.0);
+                for (int i = 0; i < 10; i++) {
+                  final target = isPlaying ? rawBands[i].clamp(0.0, 1.0) : 0.0;
+                  if (target > _smoothedBands[i]) {
+                    _smoothedBands[i] += (target - _smoothedBands[i]) * 0.38;
+                  } else {
+                    _smoothedBands[i] += (target - _smoothedBands[i]) * 0.15;
+                  }
+                  if (_smoothedBands[i] < 0.01) _smoothedBands[i] = 0.0;
+                  displayBands[i] = _smoothedBands[i];
                 }
-                if (_smoothedBands[i] < 0.01) _smoothedBands[i] = 0.0;
-                displayBands[i] = _smoothedBands[i];
-              }
 
-              // 2. Audio Ballistics with Inertia for Bass ONLY (Sub-bass & Kick drum: bands 0 and 1)
-              // Noise gate and momentum smoothing to eliminate trembling from voices & ambient noise!
-              final rawBass = (rawBands.length >= 2)
-                  ? math.max(rawBands[0], rawBands[1])
-                  : (rawBands.isNotEmpty ? rawBands[0] : 0.0);
+                // 2. Audio Ballistics with Inertia for Bass ONLY (Sub-bass & Kick drum: bands 0 and 1)
+                // Noise gate and momentum smoothing to eliminate trembling from voices & ambient noise!
+                final rawBass = (rawBands.length >= 2)
+                    ? math.max(rawBands[0], rawBands[1])
+                    : (rawBands.isNotEmpty ? rawBands[0] : 0.0);
 
-              final targetBass = isPlaying && rawBass > 0.16
-                  ? ((rawBass - 0.16) / (1.0 - 0.16)).clamp(0.0, 1.0)
-                  : 0.0;
+                final targetBass = isPlaying && rawBass > 0.16
+                    ? ((rawBass - 0.16) / (1.0 - 0.16)).clamp(0.0, 1.0)
+                    : 0.0;
 
-              if (targetBass > _smoothedBass) {
-                // Smooth attack with physical mass (reaches peak over ~100ms instead of instantaneous twitch)
-                _smoothedBass += (targetBass - _smoothedBass) * 0.35;
-              } else {
-                // Smooth elastic release
-                _smoothedBass += (targetBass - _smoothedBass) * 0.14;
-              }
-              if (_smoothedBass < 0.01) _smoothedBass = 0.0;
+                if (targetBass > _smoothedBass) {
+                  // Smooth attack with physical mass (reaches peak over ~100ms instead of instantaneous twitch)
+                  _smoothedBass += (targetBass - _smoothedBass) * 0.35;
+                } else {
+                  // Smooth elastic release
+                  _smoothedBass += (targetBass - _smoothedBass) * 0.14;
+                }
+                if (_smoothedBass < 0.01) _smoothedBass = 0.0;
 
-              // 3. Ambient RMS smoothing
-              _smoothedRms = (_smoothedRms * 0.85) + (rawRms * 0.15);
+                // 3. Ambient RMS smoothing
+                _smoothedRms = (_smoothedRms * 0.85) + (rawRms * 0.15);
 
-              // 4. Bass-reactive scale: exactly 8% maximum bounce with inertia
-              final scale = 1.0 + (_smoothedBass * 0.08);
+                // 4. Bass-reactive scale: exactly 8% maximum bounce with inertia
+                final scale = 1.0 + (_smoothedBass * 0.08);
 
-              return Transform.scale(
-                scale: scale,
-                child: SizedBox(
-                  width: size,
-                  height: size,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      // 1. Continuous Wave Visualizer:
-                      // Positioned directly at the bottom edge of the card, projecting downwards.
-                      // Stack paint order places this behind the card. In NowPlayingScreen,
-                      // subsequent flex children (song title/controls) paint on top of this overflow!
-                      Positioned(
-                        top: size - 1.0,
-                        left: 0,
-                        width: size,
-                        height: _visualizerHeight,
-                        child: CustomPaint(
-                          size: Size(size, _visualizerHeight),
-                          painter: WaveVisualizerPainter(
-                            bands: displayBands,
-                            color: waveColor,
-                            cornerRadius: _cornerRadius,
+                return Transform.translate(
+                  offset: Offset(_dragOffset.clamp(-120.0, 120.0), 0.0),
+                  child: Transform.scale(
+                    scale: scale,
+                    child: SizedBox(
+                      width: size,
+                      height: size,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          // 1. Continuous Wave Visualizer:
+                          // Positioned directly at the bottom edge of the card, projecting downwards.
+                          // Stack paint order places this behind the card. In NowPlayingScreen,
+                          // subsequent flex children (song title/controls) paint on top of this overflow!
+                          Positioned(
+                            top: size - 1.0,
+                            left: 0,
+                            width: size,
+                            height: _visualizerHeight,
+                            child: CustomPaint(
+                              size: Size(size, _visualizerHeight),
+                              painter: WaveVisualizerPainter(
+                                bands: displayBands,
+                                color: waveColor,
+                                cornerRadius: _cornerRadius,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
 
-                      // 2. The Album Art container (fully rounded 4 corners, sits on top of wave dock)
-                      Container(
-                        width: size,
-                        height: size,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(_cornerRadius),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(_cornerRadius),
-                          child: cachedHeroChild,
-                        ),
+                          // 2. The Album Art container (fully rounded 4 corners, sits on top of wave dock)
+                          Container(
+                            width: size,
+                            height: size,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(_cornerRadius),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(_cornerRadius),
+                              child: cachedHeroChild,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
+                );
+              },
+              child: Hero(
+                tag: 'now_playing_art_$filePath',
+                child: AlbumArtImage(
+                  thumbnailHash: thumbnailHash,
+                  quality: ThumbnailQuality.high,
+                  fit: BoxFit.cover,
                 ),
-              );
-            },
-            child: Hero(
-              tag: 'now_playing_art_$filePath',
-              child: AlbumArtImage(
-                thumbnailHash: thumbnailHash,
-                quality: ThumbnailQuality.high,
-                fit: BoxFit.cover,
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

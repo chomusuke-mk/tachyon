@@ -34,6 +34,11 @@ class _TestPlaybackController extends PlaybackController {
   Track? _mockTrack;
   double _mockAmplitude = 0.0;
   bool _mockIsPlaying = false;
+  bool mockHasNext = true;
+  bool mockHasPrevious = true;
+  int nextCallCount = 0;
+  int previousCallCount = 0;
+  int seekCallCount = 0;
 
   @override
   Track? get currentTrack => _mockTrack ?? super.currentTrack;
@@ -43,6 +48,27 @@ class _TestPlaybackController extends PlaybackController {
 
   @override
   double get currentVisualAmplitude => _mockAmplitude;
+
+  @override
+  bool get hasNext => mockHasNext;
+
+  @override
+  bool get hasPrevious => mockHasPrevious;
+
+  @override
+  Future<void> next() async {
+    nextCallCount++;
+  }
+
+  @override
+  Future<void> previous() async {
+    previousCallCount++;
+  }
+
+  @override
+  Future<void> seek(Duration pos) async {
+    seekCallCount++;
+  }
 
   void setMockTrack(Track? track, {bool isPlaying = true}) {
     _mockTrack = track;
@@ -167,6 +193,82 @@ void main() {
 
       expect(playbackController.currentVisualAmplitude, equals(0.8));
       await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('Swiping left (forward) triggers next track', (tester) async {
+      final track = Track(
+        id: 44,
+        filePath: '/music/track44.mp3',
+        title: 'Track 44',
+        durationMs: 200000,
+        fileSize: 1024,
+        modifiedAt: 1000,
+      );
+
+      playbackController.setMockTrack(track, isPlaying: true);
+      playbackController.mockHasNext = true;
+
+      await tester.pumpWidget(buildTestApp(child: const NowPlayingCoverArt()));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(playbackController.nextCallCount, equals(0));
+
+      // Swipe from right to left (drag left) on the cover art
+      await tester.drag(find.byType(NowPlayingCoverArt), const Offset(-100, 0));
+      await tester.pumpAndSettle();
+
+      expect(playbackController.nextCallCount, equals(1));
+    });
+
+    testWidgets('Swiping right (backward) triggers previous track', (tester) async {
+      final track = Track(
+        id: 45,
+        filePath: '/music/track45.mp3',
+        title: 'Track 45',
+        durationMs: 200000,
+        fileSize: 1024,
+        modifiedAt: 1000,
+      );
+
+      playbackController.setMockTrack(track, isPlaying: true);
+      playbackController.mockHasPrevious = true;
+
+      await tester.pumpWidget(buildTestApp(child: const NowPlayingCoverArt()));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(playbackController.previousCallCount, equals(0));
+
+      // Swipe from left to right (drag right) on the cover art
+      await tester.drag(find.byType(NowPlayingCoverArt), const Offset(100, 0));
+      await tester.pumpAndSettle();
+
+      expect(playbackController.previousCallCount, equals(1));
+    });
+
+    testWidgets('Small drag below threshold does not trigger track change', (tester) async {
+      final track = Track(
+        id: 46,
+        filePath: '/music/track46.mp3',
+        title: 'Track 46',
+        durationMs: 200000,
+        fileSize: 1024,
+        modifiedAt: 1000,
+      );
+
+      playbackController.setMockTrack(track, isPlaying: true);
+
+      await tester.pumpWidget(buildTestApp(child: const NowPlayingCoverArt()));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Drag only 15 pixels slowly (below 40 threshold)
+      final gesture = await tester.startGesture(tester.getCenter(find.byType(NowPlayingCoverArt)));
+      await gesture.moveBy(const Offset(-15, 0));
+      await tester.pump(const Duration(milliseconds: 50));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(playbackController.nextCallCount, equals(0));
+      expect(playbackController.previousCallCount, equals(0));
     });
   });
 
