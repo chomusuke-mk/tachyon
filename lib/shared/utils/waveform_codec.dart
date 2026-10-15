@@ -17,15 +17,18 @@ abstract final class WaveformCodec {
   }
 
   /// Decodes a Base64 string back into a list of normalized waveform points [0.0 ... 1.0].
-  static List<double>? decode(String? encoded) {
+  ///
+  /// Returns a compact [Float32List] that implements [List<double>] with zero heap boxing
+  /// overhead per float, keeping memory usage at 400 bytes per 100-point waveform.
+  static Float32List? decode(String? encoded) {
     if (encoded == null || encoded.isEmpty) return null;
     try {
       final bytes = base64Decode(encoded);
-      return List<double>.generate(
-        bytes.length,
-        (i) => bytes[i] / 255.0,
-        growable: false,
-      );
+      final floats = Float32List(bytes.length);
+      for (var i = 0; i < bytes.length; i++) {
+        floats[i] = bytes[i] / 255.0;
+      }
+      return floats;
     } catch (_) {
       return null;
     }

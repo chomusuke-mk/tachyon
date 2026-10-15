@@ -42,6 +42,8 @@ class AppBackground extends StatelessWidget {
                 child: Image.file(
                   file,
                   fit: BoxFit.cover,
+                  cacheWidth: 640,
+                  cacheHeight: 360,
                   errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
               ),
@@ -50,6 +52,8 @@ class AppBackground extends StatelessWidget {
             Image.file(
               file,
               fit: BoxFit.cover,
+              cacheWidth: 1280,
+              cacheHeight: 720,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           Container(

@@ -5,10 +5,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/domain/scan_progress.dart';
+import 'package:tachyon/shared/utils/memory_optimizer.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 
 /// Track metadata snapshot used to detect unchanged files during incremental scanning.
 typedef TrackFileMeta = ({int modifiedAt, int fileSize});
@@ -509,6 +510,7 @@ class MetadataService {
         _currentScanToken = null;
       }
       await MetadataUtils.clearTempDirectory();
+      MemoryOptimizer.trim();
       _processNextQueuedScan();
     }
   }

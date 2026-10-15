@@ -735,6 +735,8 @@ class SettingsScreen extends StatelessWidget {
                                       File(settings.customBackgroundPath!),
                                       width: 52,
                                       height: 52,
+                                      cacheWidth: 104,
+                                      cacheHeight: 104,
                                       fit: BoxFit.cover,
                                       errorBuilder: (_, _, _) => const Icon(
                                         Icons.broken_image_rounded,

@@ -69,7 +69,9 @@ class ArtistDetailScreen extends StatelessWidget {
                             height: 128,
                             child: AlbumArtImage(
                               thumbnailHash: currentArtist.thumbnailHash,
-                              quality: ThumbnailQuality.high,
+                              quality: ThumbnailQuality.medium,
+                              width: 128,
+                              height: 128,
                               fit: BoxFit.cover,
                               fallback: Icon(
                                 Icons.person_rounded,

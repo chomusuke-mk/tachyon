@@ -107,7 +107,9 @@ class GenreDetailScreen extends StatelessWidget {
                           height: 200,
                           child: AlbumArtImage(
                             thumbnailHash: coverHash,
-                            quality: ThumbnailQuality.high,
+                            quality: ThumbnailQuality.medium,
+                            width: 200,
+                            height: 200,
                             fit: BoxFit.cover,
                             fallback: Container(
                               color: Theme.of(context)

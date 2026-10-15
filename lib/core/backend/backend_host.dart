@@ -64,6 +64,7 @@ class TachyonBackendHost {
   final List<StreamSubscription> _subscriptions = [];
   int _lastEmittedPositionMs = -1;
   int _lastPositionEmitTimestamp = 0;
+  bool _visualizerEnabled = false;
 
   TachyonBackendHost(this.config);
 
@@ -92,6 +93,7 @@ class TachyonBackendHost {
       libraryTrackProvider: (count) async => _database.getRandomTracks(count),
     );
     _audioEngine = AudioEngineService(queueManager: _queueManager);
+    _audioEngine.setVisualizerEnabled(false);
 
     // 5. Initialize lyrics service
     _lyricsService = LyricsService(database: _database);
@@ -146,6 +148,7 @@ class TachyonBackendHost {
 
     _subscriptions.add(
       _audioEngine.visualizerStream.listen((vis) {
+        if (!_visualizerEnabled) return;
         config.uiSendPort.send(
           BackendEvent(
             topic: BackendTopics.playbackVisualizer,
@@ -430,6 +433,7 @@ class TachyonBackendHost {
 
       case BackendMethods.playbackSetVisualizerEnabled:
         final enabled = params['enabled'] as bool;
+        _visualizerEnabled = enabled;
         _audioEngine.setVisualizerEnabled(enabled);
         return null;
 

@@ -75,7 +75,9 @@ class AlbumDetailScreen extends StatelessWidget {
                           height: 200,
                           child: AlbumArtImage(
                             thumbnailHash: album.thumbnailHash,
-                            quality: ThumbnailQuality.high,
+                            quality: ThumbnailQuality.medium,
+                            width: 200,
+                            height: 200,
                             fit: BoxFit.cover,
                           ),
                         ),

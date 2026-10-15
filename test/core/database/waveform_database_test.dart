@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tachyon/core/backend/services/metadata_service.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/library/data/library_store.dart';
+import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
 
 void main() {
