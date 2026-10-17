@@ -224,9 +224,10 @@ class LyricsController extends ChangeNotifier {
     final lyrics = _lyrics;
     var changed = false;
     if (lyrics != null && lyrics.isSynced && lyrics.isNotEmpty) {
-      final index = lyrics.activeIndexAt(
-        playbackController.position + Duration(milliseconds: _userOffsetMs),
-      );
+      final pos = _userOffsetMs == 0
+          ? playbackController.position
+          : playbackController.position + Duration(milliseconds: _userOffsetMs);
+      final index = lyrics.activeIndexAt(pos);
       if (index >= 0 && index != _currentIndex) {
         _currentIndex = index;
         changed = true;

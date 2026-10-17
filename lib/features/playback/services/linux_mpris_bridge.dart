@@ -41,6 +41,8 @@ class LinuxMprisBridge {
   double get volume =>
       (playbackController.state.volume / 100.0).clamp(0.0, 1.0);
 
+  double get rate => playbackController.state.rate;
+
   int get positionMicros => playbackController.position.inMicroseconds;
 
   DBusDict get metadata {
@@ -156,6 +158,7 @@ class LinuxMprisBridge {
           changedProperties: {
             'PlaybackStatus': DBusString(playbackStatus),
             'LoopStatus': DBusString(loopStatus),
+            'Rate': DBusDouble(rate),
           },
         );
       });
@@ -433,12 +436,12 @@ class TachyonMprisObject extends DBusObject {
       final DBusValue? value = switch (name) {
         'PlaybackStatus' => DBusString(bridge.playbackStatus),
         'LoopStatus' => DBusString(bridge.loopStatus),
-        'Rate' => const DBusDouble(1.0),
+        'Rate' => DBusDouble(bridge.rate),
         'Metadata' => bridge.metadata,
         'Volume' => DBusDouble(bridge.volume),
         'Position' => DBusInt64(bridge.positionMicros),
-        'MinimumRate' => const DBusDouble(1.0),
-        'MaximumRate' => const DBusDouble(1.0),
+        'MinimumRate' => const DBusDouble(0.25),
+        'MaximumRate' => const DBusDouble(4.0),
         'CanGoNext' => const DBusBoolean(true),
         'CanGoPrevious' => const DBusBoolean(true),
         'CanPlay' => const DBusBoolean(true),
@@ -472,12 +475,12 @@ class TachyonMprisObject extends DBusObject {
       return DBusGetAllPropertiesResponse({
         'PlaybackStatus': DBusString(bridge.playbackStatus),
         'LoopStatus': DBusString(bridge.loopStatus),
-        'Rate': const DBusDouble(1.0),
+        'Rate': DBusDouble(bridge.rate),
         'Metadata': bridge.metadata,
         'Volume': DBusDouble(bridge.volume),
         'Position': DBusInt64(bridge.positionMicros),
-        'MinimumRate': const DBusDouble(1.0),
-        'MaximumRate': const DBusDouble(1.0),
+        'MinimumRate': const DBusDouble(0.25),
+        'MaximumRate': const DBusDouble(4.0),
         'CanGoNext': const DBusBoolean(true),
         'CanGoPrevious': const DBusBoolean(true),
         'CanPlay': const DBusBoolean(true),

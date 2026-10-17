@@ -1,5 +1,6 @@
 // ignore_for_file: prefer_initializing_formals
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart'
@@ -108,6 +109,12 @@ class PlaybackController extends ChangeNotifier {
       if (_positionNotifier.value != pos) {
         _positionNotifier.value = pos;
       }
+      if ((pos.inMilliseconds - _state.position.inMilliseconds).abs() >= 1000) {
+        final oldState = _state;
+        _state = _state.copyWith(position: pos);
+        _checkHistoryLogging(_state);
+        _checkStatePersistence(oldState, _state);
+      }
     });
 
     _visualizerSubscription = _backend.visualizerStream.listen((vis) {
@@ -122,32 +129,87 @@ class PlaybackController extends ChangeNotifier {
       }
     });
 
-    _backend.getAudioDevices().then((devices) {
-      if (!_isDisposed && devices.isNotEmpty) {
-        _audioDevices = devices;
-        _applySavedDeviceIfAvailable(devices);
-        notifyListeners();
+    final savedDeviceId =
+        _settingsRepository.getSettings().audioOutputDeviceId;
+    if (kIsWeb ||
+        !Platform.isAndroid ||
+        (savedDeviceId != null && savedDeviceId.isNotEmpty)) {
+      _backend.getAudioDevices().then((devices) {
+        if (!_isDisposed && devices.isNotEmpty) {
+          _audioDevices = devices;
+          _applySavedDeviceIfAvailable(devices);
+          notifyListeners();
+        }
+      }).catchError((e) {
+        debugPrint(
+          '[PlaybackController] Error getting initial audio devices: $e',
+        );
+      });
+    }
+  }
+
+  bool _samePlayableTracks(List<PlaylistEntry> a, List<PlaylistEntry> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      final ea = a[i];
+      final eb = b[i];
+      if (ea.id != eb.id ||
+          ea.position != eb.position ||
+          ea.track?.id != eb.track?.id ||
+          ea.track?.filePath != eb.track?.filePath) {
+        return false;
       }
-    }).catchError((e) {
-      debugPrint('[PlaybackController] Error getting initial audio devices: $e');
-    });
+    }
+    return true;
+  }
+
+  /// Re-links any [PlaylistEntry.track] references in [_state] to the canonical
+  /// [Track] pointers inside the current [LibraryStore].
+  void onLibraryStoreUpdated() {
+    if (_isDisposed || _state.playables.isEmpty) return;
+    final resolved = _resolveStateTracks(_state);
+    if (!identical(resolved.playables, _state.playables)) {
+      _state = resolved;
+      notifyListeners();
+    }
   }
 
   PlaybackState _resolveStateTracks(PlaybackState raw) {
     final store = _libraryStoreSupplier?.call();
     if (store == null || raw.playables.isEmpty) return raw;
 
-    final resolvedPlayables = raw.playables.map((item) {
-      final t = item.track;
-      if (t == null) return item;
-      final resolved =
-          (t.id != null ? store.getTrackById(t.id!) : null) ??
-          store.getTrackByPath(t.filePath);
-      if (resolved != null && !identical(resolved, t)) {
-        return item.copyWith(track: resolved);
+    if (_state.playables.isNotEmpty &&
+        _samePlayableTracks(_state.playables, raw.playables)) {
+      final firstTrack = _state.playables.first.track;
+      if (firstTrack != null) {
+        final storeTrack =
+            (firstTrack.id != null
+                ? store.getTrackById(firstTrack.id!)
+                : null) ??
+            store.getTrackByPath(firstTrack.filePath);
+        if (identical(firstTrack, storeTrack)) {
+          return raw.copyWith(playables: _state.playables);
+        }
       }
-      return item;
-    }).toList();
+    }
+
+    final resolvedPlayables = List<PlaylistEntry>.generate(
+      raw.playables.length,
+      (i) {
+        final item = raw.playables[i];
+        final t = item.track;
+        if (t == null) return item;
+        final resolved =
+            (t.id != null ? store.getTrackById(t.id!) : null) ??
+            store.getTrackByPath(t.filePath);
+        if (resolved != null && !identical(resolved, t)) {
+          return item.copyWith(track: resolved);
+        }
+        return item;
+      },
+      growable: false,
+    );
 
     return raw.copyWith(playables: resolvedPlayables);
   }
@@ -365,7 +427,13 @@ class PlaybackController extends ChangeNotifier {
 
   Future<List<AudioDevice>> getAudioDevices() async {
     try {
-      return await _backend.getAudioDevices();
+      final devices = await _backend.getAudioDevices();
+      if (!_isDisposed && devices.isNotEmpty) {
+        _audioDevices = devices;
+        _applySavedDeviceIfAvailable(devices);
+        notifyListeners();
+      }
+      return devices;
     } catch (e) {
       debugPrint('[PlaybackController] getAudioDevices error: $e');
       return const [];

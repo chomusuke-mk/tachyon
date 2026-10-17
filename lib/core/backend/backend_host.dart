@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -65,6 +66,7 @@ class TachyonBackendHost {
   int _lastEmittedPositionMs = -1;
   int _lastPositionEmitTimestamp = 0;
   bool _visualizerEnabled = false;
+  bool _isMinimized = false;
 
   TachyonBackendHost(this.config);
 
@@ -107,33 +109,41 @@ class TachyonBackendHost {
       }),
     );
 
-    _subscriptions.add(
-      _audioEngine.devicesStream.listen((devices) {
-        config.uiSendPort.send(
-          BackendEvent(topic: BackendTopics.playbackDevices, payload: devices),
-        );
-      }),
-    );
+    if (!Platform.isAndroid) {
+      _subscriptions.add(
+        _audioEngine.devicesStream.listen((devices) {
+          config.uiSendPort.send(
+            BackendEvent(
+              topic: BackendTopics.playbackDevices,
+              payload: devices,
+            ),
+          );
+        }),
+      );
 
-    try {
-      final initialDevices = _audioEngine.getAudioDevicesSync();
-      if (initialDevices.isNotEmpty) {
-        config.uiSendPort.send(
-          BackendEvent(
-            topic: BackendTopics.playbackDevices,
-            payload: initialDevices,
-          ),
-        );
-      }
-    } catch (_) {}
+      try {
+        final initialDevices = _audioEngine.getAudioDevicesSync();
+        if (initialDevices.isNotEmpty) {
+          config.uiSendPort.send(
+            BackendEvent(
+              topic: BackendTopics.playbackDevices,
+              payload: initialDevices,
+            ),
+          );
+        }
+      } catch (_) {}
+    }
 
-    // Throttled position updates (max ~25Hz) to keep UI isolate completely smooth
+    // Throttled position updates (~25Hz active, 0.2Hz when minimized)
     _subscriptions.add(
       _audioEngine.positionStream.listen((pos) {
         final now = DateTime.now().millisecondsSinceEpoch;
         final deltaMs = now - _lastPositionEmitTimestamp;
-        if (deltaMs >= 40 ||
-            (pos.inMilliseconds - _lastEmittedPositionMs).abs() > 1000) {
+        final minIntervalMs = _isMinimized ? 5000 : 40;
+        final jumpThresholdMs = _isMinimized ? 2000 : 1000;
+        if (deltaMs >= minIntervalMs ||
+            (pos.inMilliseconds - _lastEmittedPositionMs).abs() >
+                jumpThresholdMs) {
           _lastPositionEmitTimestamp = now;
           _lastEmittedPositionMs = pos.inMilliseconds;
           config.uiSendPort.send(
@@ -148,7 +158,7 @@ class TachyonBackendHost {
 
     _subscriptions.add(
       _audioEngine.visualizerStream.listen((vis) {
-        if (!_visualizerEnabled) return;
+        if (!_visualizerEnabled || _isMinimized) return;
         config.uiSendPort.send(
           BackendEvent(
             topic: BackendTopics.playbackVisualizer,
@@ -172,7 +182,7 @@ class TachyonBackendHost {
             payload: progress,
           ),
         );
-        if (progress.stage == ScanStage.completed) {
+        if (progress.stage == ScanStage.completed && progress.catalogModified) {
           config.uiSendPort.send(
             const BackendEvent(topic: BackendTopics.catalogUpdated),
           );
@@ -187,7 +197,8 @@ class TachyonBackendHost {
     _hostReceivePort.listen(_onRequestReceived);
 
     // 9. Trim startup memory allocations
-    MemoryOptimizer.trim();
+    _database.shrinkMemory();
+    MemoryOptimizer.trim(aggressive: false);
   }
 
   Future<void> _onRequestReceived(dynamic message) async {
@@ -466,6 +477,7 @@ class TachyonBackendHost {
       // =======================================================================
       case BackendMethods.libraryGetCatalogSnapshot:
         final snapshot = _database.getCatalogSnapshot();
+        _database.shrinkMemory();
         MemoryOptimizer.trim();
         return snapshot;
 
@@ -621,12 +633,38 @@ class TachyonBackendHost {
           };
         }
 
+      case BackendMethods.systemSetMinimized:
+        final minimized = params['minimized'] as bool? ?? false;
+        if (_isMinimized != minimized) {
+          _isMinimized = minimized;
+          if (minimized) {
+            _audioEngine.setVisualizerEnabled(false);
+            _database.shrinkMemory();
+            MemoryOptimizer.trim(aggressive: true);
+          } else {
+            if (_visualizerEnabled) {
+              _audioEngine.setVisualizerEnabled(true);
+            }
+            final posMs = _audioEngine.state.position.inMilliseconds;
+            _lastPositionEmitTimestamp = DateTime.now().millisecondsSinceEpoch;
+            _lastEmittedPositionMs = posMs;
+            config.uiSendPort.send(
+              BackendEvent(
+                topic: BackendTopics.playbackPosition,
+                payload: posMs,
+              ),
+            );
+          }
+        }
+        return null;
+
       default:
         throw UnimplementedError('Backend method not recognized: $method');
     }
   }
 
   Future<void> dispose() async {
+    MemoryOptimizer.stopPeriodicTrimmer();
     for (final sub in _subscriptions) {
       await sub.cancel();
     }

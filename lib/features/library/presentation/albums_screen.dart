@@ -23,32 +23,65 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
   bool _ascending = true;
   bool _isCardView = true;
 
+  List<Album>? _lastSourceAlbums;
+  AlbumSortOption? _lastSortOption;
+  bool? _lastAscending;
+  List<Album> _cachedAlbums = const [];
+
+  List<Album> _getSortedAlbums(List<Album> source) {
+    if (identical(source, _lastSourceAlbums) &&
+        _sortOption == _lastSortOption &&
+        _ascending == _lastAscending) {
+      return _cachedAlbums;
+    }
+    final albums = List<Album>.of(source, growable: false);
+    if (albums.length > 1) {
+      switch (_sortOption) {
+        case AlbumSortOption.title:
+          final keys = <Album, String>{
+            for (final a in albums) a: a.name.toLowerCase(),
+          };
+          albums.sort((a, b) {
+            final cmp = keys[a]!.compareTo(keys[b]!);
+            return _ascending ? cmp : -cmp;
+          });
+          break;
+        case AlbumSortOption.artist:
+          final keys = <Album, String>{
+            for (final a in albums) a: (a.artist?.name ?? '').toLowerCase(),
+          };
+          albums.sort((a, b) {
+            final cmp = keys[a]!.compareTo(keys[b]!);
+            return _ascending ? cmp : -cmp;
+          });
+          break;
+        case AlbumSortOption.year:
+          albums.sort((a, b) {
+            final cmp = (a.year ?? 0).compareTo(b.year ?? 0);
+            return _ascending ? cmp : -cmp;
+          });
+          break;
+        case AlbumSortOption.trackCount:
+          albums.sort((a, b) {
+            final cmp = a.trackCount.compareTo(b.trackCount);
+            return _ascending ? cmp : -cmp;
+          });
+          break;
+      }
+    }
+    _lastSourceAlbums = source;
+    _lastSortOption = _sortOption;
+    _lastAscending = _ascending;
+    _cachedAlbums = albums;
+    return albums;
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
 
-    final albums = List<Album>.from(library.albums);
-    albums.sort((a, b) {
-      int cmp;
-      switch (_sortOption) {
-        case AlbumSortOption.title:
-          cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-          break;
-        case AlbumSortOption.artist:
-          cmp = (a.artist?.name ?? '').toLowerCase().compareTo(
-            (b.artist?.name ?? '').toLowerCase(),
-          );
-          break;
-        case AlbumSortOption.year:
-          cmp = (a.year ?? 0).compareTo(b.year ?? 0);
-          break;
-        case AlbumSortOption.trackCount:
-          cmp = a.trackCount.compareTo(b.trackCount);
-          break;
-      }
-      return _ascending ? cmp : -cmp;
-    });
+    final albums = _getSortedAlbums(library.albums);
 
     return Scaffold(
       appBar: AppBar(

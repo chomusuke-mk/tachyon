@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/permissions/presentation/permissions_gate.dart';
+import 'package:tachyon/features/playback/services/system_media_service.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/features/shell/tachyon_shell.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
@@ -19,8 +18,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>();
-    final hasCustomBg = settings.customBackgroundPath != null &&
-        File(settings.customBackgroundPath!).existsSync();
+    final hasCustomBg = AppBackground.fileExists(settings.customBackgroundPath);
 
     final lightTheme = TachyonTheme.buildLightTheme(
       seedColor: settings.accentColor,
@@ -44,20 +42,26 @@ class App extends StatelessWidget {
       theme: lightTheme,
       darkTheme: darkTheme,
       builder: (context, child) {
-        return DesktopShortcutsHandler(
-          navigatorKey: ToastUtils.navigatorKey,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (hasCustomBg)
-                AppBackground(
-                  imagePath: settings.customBackgroundPath,
-                  blurSigma: settings.backgroundBlurSigma,
-                  dimOpacity: settings.backgroundDimOpacity,
-                ),
-              child ?? const SizedBox.shrink(),
-            ],
-          ),
+        return ValueListenableBuilder<bool>(
+          valueListenable: SystemMediaService.isMinimizedListenable,
+          child: child,
+          builder: (context, isMinimized, routeChild) {
+            return DesktopShortcutsHandler(
+              navigatorKey: ToastUtils.navigatorKey,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (hasCustomBg && !isMinimized)
+                    AppBackground(
+                      imagePath: settings.customBackgroundPath,
+                      blurSigma: settings.backgroundBlurSigma,
+                      dimOpacity: settings.backgroundDimOpacity,
+                    ),
+                  routeChild ?? const SizedBox.shrink(),
+                ],
+              ),
+            );
+          },
         );
       },
       home: PermissionsGate(

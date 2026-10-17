@@ -2,12 +2,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/app.dart';
-import 'package:tachyon/shared/utils/folder_utils.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
 import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/shared/utils/permission_utils.dart';
@@ -27,11 +27,14 @@ import 'features/settings/presentation/settings_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  debugPrint(
-    "Current MUSIC DIRECTORY: ${await FolderUtils.getMusicDirectory()}",
-  );
-  PaintingBinding.instance.imageCache.maximumSize = 40;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 8 * 1024 * 1024;
+  PaintingBinding.instance.imageCache.maximumSize = 25;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 4 * 1024 * 1024;
+  try {
+    SystemChannels.skia.invokeMethod<void>(
+      'Skia.setResourceCacheMaxBytes',
+      4 * 1024 * 1024,
+    );
+  } catch (_) {}
 
   final sharedPreferences = await SharedPreferences.getInstance();
   final appSupportDir = await getApplicationSupportDirectory();
@@ -101,10 +104,6 @@ Future<void> main() async {
     store: libraryController.store,
   );
 
-  libraryController.addListener(() {
-    playlistsController.updateStore(libraryController.store);
-  });
-
   final searchController = TachyonSearchController(
     storeSupplier: () => libraryController.store,
   );
@@ -114,6 +113,13 @@ Future<void> main() async {
     settingsRepository: settingsRepository,
     libraryStoreSupplier: () => libraryController.store,
   );
+
+  libraryController.addListener(() {
+    if (!identical(playlistsController.store, libraryController.store)) {
+      playlistsController.updateStore(libraryController.store);
+      playbackController.onLibraryStoreUpdated();
+    }
+  });
 
   final systemMediaService = await SystemMediaService.initialize(
     backendClient: backendClient,
@@ -188,7 +194,7 @@ Future<void> main() async {
   );
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    MemoryOptimizer.trim();
+    MemoryOptimizer.trim(aggressive: true);
     MemoryOptimizer.startPeriodicTrimmer();
   });
 }

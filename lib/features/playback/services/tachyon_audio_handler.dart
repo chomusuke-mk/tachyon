@@ -5,6 +5,7 @@ import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/shared/utils/metadata_utils.dart';
 
@@ -19,35 +20,92 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   bool _isDisposed = false;
   String? _lastEmittedTrackPath;
   List<PlaylistEntry>? _lastSyncedPlayables;
+  StreamSubscription<PlaybackState>? _backendStateSub;
+  StreamSubscription<Duration>? _backendPositionSub;
+  DateTime? _lastPositionUpdateTime;
+  Duration _lastEmittedPosition = Duration.zero;
 
   TachyonAudioHandler({
     required this.backend,
     required this.playbackController,
   }) {
     playbackController.addListener(_syncFromPlaybackController);
+    _backendStateSub = backend.playbackStateStream.listen((state) {
+      _syncFromPlaybackState(state, position: state.position);
+    });
+    _backendPositionSub = backend.positionStream.listen((pos) {
+      _onPositionUpdate(pos);
+    });
     _syncFromPlaybackController();
+  }
+
+  void _onPositionUpdate(Duration pos) {
+    if (_isDisposed) return;
+    final now = DateTime.now();
+    final jumped =
+        (pos - _lastEmittedPosition).abs() > const Duration(seconds: 2);
+    if (jumped ||
+        _lastPositionUpdateTime == null ||
+        now.difference(_lastPositionUpdateTime!) >= const Duration(seconds: 2)) {
+      _lastPositionUpdateTime = now;
+      _lastEmittedPosition = pos;
+      final current = playbackState.value;
+      if (current.playing) {
+        playbackState.add(
+          current.copyWith(
+            updatePosition: pos,
+            bufferedPosition: pos,
+          ),
+        );
+      }
+    }
   }
 
   void _syncFromPlaybackController() {
     if (_isDisposed) return;
-    final state = playbackController.state;
+    _syncFromPlaybackState(
+      playbackController.state,
+      position: playbackController.position,
+    );
+  }
+
+  void _syncFromPlaybackState(PlaybackState state, {Duration? position}) {
+    if (_isDisposed) return;
     final track = state.currentTrack;
 
-    // 1. Sync Current MediaItem (using small / low-quality thumbnail)
+    // 1. Sync Current MediaItem (using small / crisp thumbnail)
     if (track?.filePath != _lastEmittedTrackPath) {
       _lastEmittedTrackPath = track?.filePath;
       Uri? uri;
       if (track != null) {
         if (track.thumbnailHash != null && track.thumbnailHash!.isNotEmpty) {
-          final coverFile = File(
+          final mediumFile = File(
+            MetadataUtils.getThumbnailFilePath(
+              track.thumbnailHash!,
+              quality: ThumbnailQuality.medium,
+            ),
+          );
+          final lowFile = File(
             MetadataUtils.getThumbnailFilePath(
               track.thumbnailHash!,
               quality: ThumbnailQuality.low,
             ),
           );
-          uri = (coverFile.existsSync() && coverFile.lengthSync() > 0)
-              ? coverFile.uri
-              : null;
+          final highFile = File(
+            MetadataUtils.getThumbnailFilePath(
+              track.thumbnailHash!,
+              quality: ThumbnailQuality.high,
+            ),
+          );
+          final coverFile =
+              (mediumFile.existsSync() && mediumFile.lengthSync() > 0)
+                  ? mediumFile
+                  : ((lowFile.existsSync() && lowFile.lengthSync() > 0)
+                      ? lowFile
+                      : ((highFile.existsSync() && highFile.lengthSync() > 0)
+                          ? highFile
+                          : null));
+          uri = coverFile?.uri;
         }
 
         final artistNames = track.artists.map((a) => a.name).join(', ');
@@ -69,8 +127,8 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
     // 2. Sync Queue only when queue structure actually mutates (prevents UI isolate disk I/O on pause/skip)
     if (_lastSyncedPlayables == null ||
-        !identical(state.playables, _lastSyncedPlayables) &&
-            !listEquals(state.playables, _lastSyncedPlayables)) {
+        (!identical(state.playables, _lastSyncedPlayables) &&
+            !listEquals(state.playables, _lastSyncedPlayables))) {
       _lastSyncedPlayables = List<PlaylistEntry>.unmodifiable(state.playables);
       final queueItems = state.playables
           .map((entry) {
@@ -79,15 +137,25 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
             final artists = t.artists.map((a) => a.name).join(', ');
             Uri? uri;
             if (t.thumbnailHash != null && t.thumbnailHash!.isNotEmpty) {
-              final cover = File(
+              final mediumFile = File(
+                MetadataUtils.getThumbnailFilePath(
+                  t.thumbnailHash!,
+                  quality: ThumbnailQuality.medium,
+                ),
+              );
+              final lowFile = File(
                 MetadataUtils.getThumbnailFilePath(
                   t.thumbnailHash!,
                   quality: ThumbnailQuality.low,
                 ),
               );
-              uri = (cover.existsSync() && cover.lengthSync() > 0)
-                  ? cover.uri
-                  : null;
+              final cover =
+                  (mediumFile.existsSync() && mediumFile.lengthSync() > 0)
+                      ? mediumFile
+                      : ((lowFile.existsSync() && lowFile.lengthSync() > 0)
+                          ? lowFile
+                          : null);
+              uri = cover?.uri;
             }
 
             return as_lib.MediaItem(
@@ -145,6 +213,10 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
         ? as_lib.AudioServiceShuffleMode.all
         : as_lib.AudioServiceShuffleMode.none;
 
+    final livePosition = position ?? state.position;
+    _lastEmittedPosition = livePosition;
+    _lastPositionUpdateTime = DateTime.now();
+
     playbackState.add(
       as_lib.PlaybackState(
         controls: controls,
@@ -152,8 +224,8 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
         androidCompactActionIndices: const [0, 1, 2],
         processingState: processingState,
         playing: isPlaying,
-        updatePosition: state.position,
-        bufferedPosition: state.position,
+        updatePosition: livePosition,
+        bufferedPosition: livePosition,
         speed: isPlaying ? state.rate : 0.0,
         repeatMode: asRepeatMode,
         shuffleMode: asShuffleMode,
@@ -162,10 +234,10 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   }
 
   @override
-  Future<void> play() => playbackController.play();
+  Future<void> play() => backend.play();
 
   @override
-  Future<void> pause() => playbackController.pause();
+  Future<void> pause() => backend.pause();
 
   @override
   Future<void> stop() async {
@@ -179,17 +251,16 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   }
 
   @override
-  Future<void> seek(Duration position) => playbackController.seek(position);
+  Future<void> seek(Duration position) => backend.seek(position);
 
   @override
-  Future<void> skipToNext() => playbackController.next();
+  Future<void> skipToNext() => backend.next();
 
   @override
-  Future<void> skipToPrevious() => playbackController.previous();
+  Future<void> skipToPrevious() => backend.previous();
 
   @override
-  Future<void> skipToQueueItem(int index) =>
-      playbackController.skipToQueueIndex(index);
+  Future<void> skipToQueueItem(int index) => backend.skipToIndex(index);
 
   @override
   Future<void> setRepeatMode(as_lib.AudioServiceRepeatMode repeatMode) async {
@@ -199,7 +270,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
       as_lib.AudioServiceRepeatMode.all ||
       as_lib.AudioServiceRepeatMode.group => Loop.all,
     };
-    await playbackController.setLoopMode(targetLoop);
+    await backend.setLoopMode(targetLoop);
   }
 
   @override
@@ -207,16 +278,14 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     as_lib.AudioServiceShuffleMode shuffleMode,
   ) async {
     final shouldShuffle = shuffleMode != as_lib.AudioServiceShuffleMode.none;
-    if (playbackController.state.shuffle != shouldShuffle) {
-      await playbackController.toggleShuffle();
-    }
+    await backend.setShuffle(shouldShuffle);
   }
 
   @override
   Future<void> onTaskRemoved() async {
     // If not playing, stop the foreground service so Android can release the process.
     // If playing, keep running! The foreground service preserves playback in headless mode.
-    if (!playbackController.state.isPlaying) {
+    if (!playbackState.value.playing) {
       await stop();
     }
   }
@@ -228,6 +297,8 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
   void dispose() {
     _isDisposed = true;
+    _backendStateSub?.cancel();
+    _backendPositionSub?.cancel();
     playbackController.removeListener(_syncFromPlaybackController);
   }
 }

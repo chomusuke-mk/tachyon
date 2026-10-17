@@ -63,12 +63,6 @@ class _Transition {
 /// - Player events are only honoured when they come from the current active
 ///   player and the current playback session ([_playbackSession]).
 class AudioEngineService {
-  /// Minimum interval between full [PlaybackState] emissions caused purely by
-  /// position updates. Smooth position goes through [positionStream]; the
-  /// full state (which carries the whole queue) must not be re-sent on every
-  /// tick across isolates.
-  static const Duration _positionStateInterval = Duration(seconds: 1);
-
   /// Tolerance used to decide whether a `completed` event is genuine (the
   /// player is really at the end) or a stale event delivered after a seek.
   static const Duration _completionTolerance = Duration(seconds: 1);
@@ -109,7 +103,6 @@ class AudioEngineService {
   bool _autoStartScheduled = false;
   PlaylistEntry? _failedAutoTarget;
   bool _queueEnded = false;
-  DateTime? _lastStateEmit;
 
   CrossfadeConfig _crossfadeConfig = const CrossfadeConfig();
   double _masterVolume = AppDefaults.volumeDefault;
@@ -721,6 +714,7 @@ class AudioEngineService {
     _standbyPlayer = outgoing;
     _bumpSession();
     _bindActivePlayer();
+    _emitState();
 
     final targetDur =
         isManual ? _crossfadeConfig.manualDuration : _crossfadeConfig.duration;
@@ -1223,18 +1217,16 @@ class AudioEngineService {
     );
   }
 
+  Duration _lastKnownPosition = Duration.zero;
+
   void _maybeEmitPositionState(Duration position) {
-    final last = _lastStateEmit;
-    final now = DateTime.now();
+    final prev = _lastKnownPosition;
+    _lastKnownPosition = position;
     final jumped =
-        (position - currentState.position).abs() >
-        const Duration(milliseconds: 1500);
-    if (!jumped &&
-        last != null &&
-        now.difference(last) < _positionStateInterval) {
+        (position - prev).abs() > const Duration(milliseconds: 1500);
+    if (!jumped) {
       return;
     }
-    _lastStateEmit = now;
     _stateSubject.add(currentState.copyWith(position: position));
   }
 
@@ -1242,7 +1234,7 @@ class AudioEngineService {
     if (_stateSubject.isClosed) return;
     final previous = currentState;
     final active = _activePlayer;
-    _lastStateEmit = DateTime.now();
+    _lastKnownPosition = active.position;
     _stateSubject.add(
       PlaybackState(
         index: math.max(0, _queueManager.currentIndex),

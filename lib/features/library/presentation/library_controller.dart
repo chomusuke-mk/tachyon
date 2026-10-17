@@ -48,7 +48,9 @@ class LibraryController extends ChangeNotifier {
       }
 
       if (progress.stage == ScanStage.completed) {
-        loadLibrary();
+        if (progress.catalogModified) {
+          loadLibrary();
+        }
         MemoryOptimizer.trim();
       }
     });
@@ -62,10 +64,11 @@ class LibraryController extends ChangeNotifier {
   // State Fields
   // ---------------------------------------------------------------------------
   bool _isDisposed = false;
-  List<Track> _tracks = [];
-  List<Album> _albums = [];
-  List<Artist> _artists = [];
-  List<Genre> _genres = [];
+  Future<void>? _inFlightLoad;
+  List<Track> _tracks = const [];
+  List<Album> _albums = const [];
+  List<Artist> _artists = const [];
+  List<Genre> _genres = const [];
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -102,10 +105,10 @@ class LibraryController extends ChangeNotifier {
       ? _filteredTracks
       : _tracks;
 
-  List<Track> get allTracks => List.unmodifiable(_tracks);
-  List<Album> get albums => List.unmodifiable(_albums);
-  List<Artist> get artists => List.unmodifiable(_artists);
-  List<Genre> get genres => List.unmodifiable(_genres);
+  List<Track> get allTracks => _tracks;
+  List<Album> get albums => _albums;
+  List<Artist> get artists => _artists;
+  List<Genre> get genres => _genres;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -137,9 +140,36 @@ class LibraryController extends ChangeNotifier {
   // Library Loading & Sorting
   // ---------------------------------------------------------------------------
   Future<void> loadLibrary({bool autoScan = false}) async {
+    if (_inFlightLoad != null) {
+      await _inFlightLoad;
+      if (autoScan) {
+        unawaited(scanDirectories());
+      }
+      return;
+    }
+
+    final future = _performLoadLibrary();
+    _inFlightLoad = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_inFlightLoad, future)) {
+        _inFlightLoad = null;
+      }
+    }
+
+    if (autoScan) {
+      unawaited(scanDirectories());
+    }
+  }
+
+  Future<void> _performLoadLibrary() async {
+    final wasEmpty = _tracks.isEmpty;
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    if (wasEmpty) {
+      notifyListeners();
+    }
 
     try {
       final snapshot = await _backend.getCatalogSnapshot();
@@ -157,17 +187,15 @@ class LibraryController extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
-
-    if (autoScan) {
-      unawaited(scanDirectories());
-    }
   }
 
   void _syncFromStore() {
-    _tracks = _store.sortTracks(
-      _store.allTracks,
-      _sortOption,
-      ascending: _sortAscending,
+    _tracks = List<Track>.unmodifiable(
+      _store.sortTracks(
+        _store.allTracks,
+        _sortOption,
+        ascending: _sortAscending,
+      ),
     );
     _albums = _store.allAlbums;
     _artists = _store.allArtists;
@@ -199,10 +227,12 @@ class LibraryController extends ChangeNotifier {
     _settingsRepository.setTrackSortOption(_sortOption);
     _settingsRepository.setTrackSortAscending(_sortAscending);
 
-    _tracks = _store.sortTracks(
-      _store.allTracks,
-      _sortOption,
-      ascending: _sortAscending,
+    _tracks = List<Track>.unmodifiable(
+      _store.sortTracks(
+        _store.allTracks,
+        _sortOption,
+        ascending: _sortAscending,
+      ),
     );
     _applyFilters();
     notifyListeners();
@@ -233,7 +263,7 @@ class LibraryController extends ChangeNotifier {
     _selectedGenre = null;
     _selectedArtist = null;
     _selectedAlbum = null;
-    _filteredTracks.clear();
+    _filteredTracks = const [];
     notifyListeners();
   }
 
@@ -241,18 +271,20 @@ class LibraryController extends ChangeNotifier {
     if (_selectedAlbum == null &&
         _selectedArtist == null &&
         _selectedGenre == null) {
-      _filteredTracks.clear();
+      _filteredTracks = const [];
       return;
     }
 
-    _filteredTracks = _store.sortTracks(
-      _store.filterTracks(
-        album: _selectedAlbum,
-        artist: _selectedArtist,
-        genre: _selectedGenre,
+    _filteredTracks = List<Track>.unmodifiable(
+      _store.sortTracks(
+        _store.filterTracks(
+          album: _selectedAlbum,
+          artist: _selectedArtist,
+          genre: _selectedGenre,
+        ),
+        _sortOption,
+        ascending: _sortAscending,
       ),
-      _sortOption,
-      ascending: _sortAscending,
     );
   }
 

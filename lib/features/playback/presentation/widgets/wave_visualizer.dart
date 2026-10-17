@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 /// Custom painter that renders a continuous, steep audio spectrum wave with
@@ -16,92 +15,111 @@ class WaveVisualizerPainter extends CustomPainter {
   final Color color;
   final double cornerRadius;
 
+  static final Path _fillPath = Path();
+  static final Paint _fillPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+
   WaveVisualizerPainter({
     required this.bands,
     required this.color,
     required this.cornerRadius,
   });
 
+  static double _maxBandEnergy(List<double> values) {
+    var maxVal = 0.0;
+    for (var i = 0; i < values.length; i++) {
+      final v = values[i];
+      if (v > maxVal) maxVal = v;
+    }
+    return maxVal;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    if (bands.isEmpty) return;
+    final bandsCount = bands.length;
+    if (bandsCount == 0) return;
 
     final startX = cornerRadius;
     final endX = size.width - cornerRadius;
     if (endX <= startX) return;
 
     // Check if there is audible energy; if silent, do not draw protruding geometry
-    final maxEnergy = bands.fold<double>(0.0, (m, b) => math.max(m, b));
-    if (maxEnergy < 0.01) return;
+    if (_maxBandEnergy(bands) < 0.01) return;
 
     final spanX = endX - startX;
-    final bandsCount = bands.length;
-
-    // Map each frequency band to its vertex point
-    final points = <Offset>[];
-    for (int i = 0; i < bandsCount; i++) {
-      final progress = (i + 0.5) / bandsCount;
-      final x = startX + progress * spanX;
-      // Perceptual boost for higher visual punch
-      final rawIntensity = bands[i].clamp(0.0, 1.0);
-      final y = rawIntensity * size.height;
-      points.add(Offset(x, y));
-    }
 
     // Build continuous path with steep flanks and rounded crest summits
-    final fillPath = Path();
-    fillPath.moveTo(startX, 0.0);
+    _fillPath.reset();
+    _fillPath.moveTo(startX, 0.0);
+
+    var prevX = startX + (0.5 / bandsCount) * spanX;
+    var prevY = bands[0].clamp(0.0, 1.0) * size.height;
 
     // Curve from start dock anchor (startX, 0) to first band summit
-    final firstPoint = points.first;
-    final firstDx = (firstPoint.dx - startX) / 3.0;
-    fillPath.cubicTo(
+    final firstDx = (prevX - startX) / 3.0;
+    _fillPath.cubicTo(
       startX + firstDx,
       0.0,
-      firstPoint.dx - firstDx,
-      firstPoint.dy,
-      firstPoint.dx,
-      firstPoint.dy,
+      prevX - firstDx,
+      prevY,
+      prevX,
+      prevY,
     );
 
     // Smoothly connect band summits with horizontal tangent crests
-    for (int i = 0; i < points.length - 1; i++) {
-      final p0 = points[i];
-      final p1 = points[i + 1];
-      final dx = (p1.dx - p0.dx) / 3.0;
+    for (int i = 1; i < bandsCount; i++) {
+      final nextX = startX + ((i + 0.5) / bandsCount) * spanX;
+      final nextY = bands[i].clamp(0.0, 1.0) * size.height;
+      final dx = (nextX - prevX) / 3.0;
 
-      fillPath.cubicTo(
-        p0.dx + dx,
-        p0.dy,
-        p1.dx - dx,
-        p1.dy,
-        p1.dx,
-        p1.dy,
+      _fillPath.cubicTo(
+        prevX + dx,
+        prevY,
+        nextX - dx,
+        nextY,
+        nextX,
+        nextY,
       );
+      prevX = nextX;
+      prevY = nextY;
     }
 
     // Curve from last band summit to end dock anchor (endX, 0)
-    final lastPoint = points.last;
-    final lastDx = (endX - lastPoint.dx) / 3.0;
-    fillPath.cubicTo(
-      lastPoint.dx + lastDx,
-      lastPoint.dy,
+    final lastDx = (endX - prevX) / 3.0;
+    _fillPath.cubicTo(
+      prevX + lastDx,
+      prevY,
       endX - lastDx,
       0.0,
       endX,
       0.0,
     );
 
-    fillPath.close();
+    _fillPath.close();
 
     // Solid color fill (no borders, no gradient)
-    final fillPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(fillPath, fillPaint);
+    _fillPaint.color = color;
+    canvas.drawPath(_fillPath, _fillPaint);
   }
 
   @override
-  bool shouldRepaint(WaveVisualizerPainter oldDelegate) => true;
+  bool shouldRepaint(WaveVisualizerPainter oldDelegate) {
+    if (identical(this, oldDelegate)) return false;
+    if (color != oldDelegate.color || cornerRadius != oldDelegate.cornerRadius) {
+      return true;
+    }
+    if (bands.length != oldDelegate.bands.length) return true;
+
+    final newMax = _maxBandEnergy(bands);
+    final oldMax = _maxBandEnergy(oldDelegate.bands);
+    if (newMax < 0.01 && oldMax < 0.01) return false;
+
+    for (var i = 0; i < bands.length; i++) {
+      if ((bands[i] - oldDelegate.bands[i]).abs() > 0.002) {
+        return true;
+      }
+    }
+    return false;
+  }
 }

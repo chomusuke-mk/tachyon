@@ -6,7 +6,6 @@ import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
-import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/search/presentation/search_screen.dart';
 import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
@@ -55,7 +54,6 @@ class _TracksScreenState extends State<TracksScreen> {
       (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
-    final playlists = context.watch<PlaylistsController>();
 
     final tracks = library.tracks;
 
@@ -433,7 +431,7 @@ class _TracksScreenState extends State<TracksScreen> {
           : ListView.builder(
               padding: const EdgeInsets.only(bottom: 80.0),
               itemExtent: 72.0,
-              scrollCacheExtent: const ScrollCacheExtent.pixels(720.0),
+              scrollCacheExtent: const ScrollCacheExtent.pixels(250.0),
               addAutomaticKeepAlives: false,
               addRepaintBoundaries: true,
               itemCount: tracks.length,
@@ -441,8 +439,6 @@ class _TracksScreenState extends State<TracksScreen> {
                 final track = tracks[index];
                 final isPlaying =
                     currentTrack == track || playback.isCurrentTrack(track);
-                final isLiked =
-                    track.id != null && playlists.isTrackLiked(track.id!);
                 final isSelected =
                     track.id != null && _selectedTrackIds.contains(track.id!);
 
@@ -452,7 +448,7 @@ class _TracksScreenState extends State<TracksScreen> {
                   isPlaying: isPlaying,
                   isSelected: isSelected,
                   isSelectionMode: _isSelectionMode,
-                  isLiked: isLiked,
+                  showLikeButton: true,
                   onTap: () {
                     if (_isSelectionMode && track.id != null) {
                       _toggleTrackSelection(track.id!);
@@ -471,7 +467,6 @@ class _TracksScreenState extends State<TracksScreen> {
                       _toggleTrackSelection(track.id!);
                     }
                   },
-                  onToggleLike: () => playlists.toggleLikeTrack(track),
                   onActionSelected: (action) => _handleTrackAction(
                     context,
                     track,

@@ -109,6 +109,9 @@ abstract final class BackendMethods {
   // Lyrics
   static const String lyricsResolve = 'lyrics.resolve';
   static const String lyricsTranslate = 'lyrics.translate';
+
+  // System lifecycle / Minimized mode
+  static const String systemSetMinimized = 'system.setMinimized';
 }
 
 /// Standardized event topic names broadcast from the Core Service Isolate.

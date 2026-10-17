@@ -67,3 +67,4 @@ app.*.map.json
 /rust/
 /docs/
 /AGENTS.md
+/PERFORMANCE.md

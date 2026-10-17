@@ -51,7 +51,7 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
         if (!_scanProgressController.isClosed) {
           _scanProgressController.add(progress);
         }
-        if (progress.stage == ScanStage.completed) {
+        if (progress.stage == ScanStage.completed && progress.catalogModified) {
           if (!_catalogUpdatedController.isClosed) {
             _catalogUpdatedController.add(null);
           }
@@ -471,6 +471,14 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
       sourceLang: sourceLang,
       rawLines: rawLines,
     );
+  }
+
+  @override
+  Future<void> setMinimized(bool minimized) async {
+    if (minimized) {
+      audioEngine?.setVisualizerEnabled(false);
+      database?.shrinkMemory();
+    }
   }
 
   @override

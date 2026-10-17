@@ -22,6 +22,7 @@ import 'lyrics_controller.dart';
 import 'queue_drawer.dart';
 import 'waveform_slider.dart';
 import 'widgets/now_playing_cover_art.dart';
+import '../services/system_media_service.dart';
 
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
@@ -63,7 +64,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   LyricsController? _lyricsController;
   double _lastUnmutedVolume = AppDefaults.volumeDefault;
 
-  double _screenDragOffset = 0.0;
+  final ValueNotifier<double> _screenDragOffset = ValueNotifier<double>(0.0);
   bool _isDismissing = false;
   late final AnimationController _dragResetController;
   Animation<double>? _dragResetAnimation;
@@ -72,13 +73,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    SystemMediaService.isMinimizedListenable.addListener(_onMinimizedChanged);
     _dragResetController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
     )..addListener(() {
-        setState(() {
-          _screenDragOffset = _dragResetAnimation?.value ?? 0.0;
-        });
+        _screenDragOffset.value = _dragResetAnimation?.value ?? 0.0;
       });
   }
 
@@ -91,9 +91,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   void _onVerticalDragUpdate(DragUpdateDetails details) {
     if (_isDismissing) return;
     final delta = details.primaryDelta ?? 0.0;
-    setState(() {
-      _screenDragOffset = math.max(0.0, _screenDragOffset + delta);
-    });
+    _screenDragOffset.value = math.max(0.0, _screenDragOffset.value + delta);
   }
 
   void _onVerticalDragEnd(DragEndDetails details) {
@@ -102,7 +100,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final screenHeight = MediaQuery.sizeOf(context).height;
     final dismissThreshold = math.min(150.0, screenHeight * 0.18);
 
-    if (velocity > 350 || _screenDragOffset > dismissThreshold) {
+    if (velocity > 350 || _screenDragOffset.value > dismissThreshold) {
       _dismissScreen();
     } else {
       _animateDragReset();
@@ -116,7 +114,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
   void _animateDragReset() {
     _dragResetAnimation = Tween<double>(
-      begin: _screenDragOffset,
+      begin: _screenDragOffset.value,
       end: 0.0,
     ).animate(
       CurvedAnimation(
@@ -229,10 +227,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     } catch (_) {}
   }
 
+  void _onMinimizedChanged() {
+    if (_showLyrics) {
+      _lyricsController?.setLyricsViewVisible(!SystemMediaService.isMinimized);
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_showLyrics) {
       if (state == AppLifecycleState.hidden ||
+          state == AppLifecycleState.paused ||
           state == AppLifecycleState.detached) {
         _lyricsController?.setLyricsViewVisible(false);
       } else if (state == AppLifecycleState.resumed) {
@@ -244,6 +249,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   @override
   void dispose() {
     _dragResetController.dispose();
+    _screenDragOffset.dispose();
+    SystemMediaService.isMinimizedListenable.removeListener(
+      _onMinimizedChanged,
+    );
     WidgetsBinding.instance.removeObserver(this);
     final lyricsController = _lyricsController;
     if (lyricsController != null) {
@@ -252,6 +261,26 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       });
     }
     super.dispose();
+  }
+
+  Widget _wrapWithDragTransform(Widget child) {
+    return ValueListenableBuilder<double>(
+      valueListenable: _screenDragOffset,
+      child: child,
+      builder: (context, dragOffset, child) {
+        final isDragging = dragOffset > 0.0;
+        return Transform.translate(
+          offset: Offset(0.0, dragOffset),
+          child: ClipRRect(
+            clipBehavior: isDragging ? Clip.antiAlias : Clip.none,
+            borderRadius: isDragging
+                ? const BorderRadius.vertical(top: Radius.circular(24.0))
+                : BorderRadius.zero,
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -276,20 +305,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         ),
       );
 
-      return Transform.translate(
-        offset: Offset(0.0, _screenDragOffset),
-        child: ClipRRect(
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(_screenDragOffset > 0 ? 24.0 : 0.0),
-          ),
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onVerticalDragStart: _onVerticalDragStart,
-            onVerticalDragUpdate: _onVerticalDragUpdate,
-            onVerticalDragEnd: _onVerticalDragEnd,
-            onVerticalDragCancel: _onVerticalDragCancel,
-            child: emptyScaffold,
-          ),
+      return _wrapWithDragTransform(
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onVerticalDragStart: _onVerticalDragStart,
+          onVerticalDragUpdate: _onVerticalDragUpdate,
+          onVerticalDragEnd: _onVerticalDragEnd,
+          onVerticalDragCancel: _onVerticalDragCancel,
+          child: emptyScaffold,
         ),
       );
     }
@@ -430,28 +453,50 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           )
         : responsiveContent;
 
-    return Transform.translate(
-      offset: Offset(0.0, _screenDragOffset),
-      child: ClipRRect(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(_screenDragOffset > 0 ? 24.0 : 0.0),
-        ),
-        child: Scaffold(
-          backgroundColor: colorScheme.surface,
-          body: Stack(
-            children: [
-              // 1. Ambient Blurred Backdrop
-              Positioned.fill(
-                child: AmbientBackdrop(thumbnailHash: currentTrack.thumbnailHash),
-              ),
-
-              // 2. Main Responsive Content Layer
-              interactiveContent,
-            ],
+    final Widget scaffold = Scaffold(
+      backgroundColor: colorScheme.surface,
+      body: Stack(
+        children: [
+          // 1. Ambient Blurred Backdrop
+          Positioned.fill(
+            child: AmbientBackdrop(thumbnailHash: currentTrack.thumbnailHash),
           ),
-        ),
+
+          // 2. Main Responsive Content Layer
+          interactiveContent,
+        ],
       ),
     );
+
+    return _wrapWithDragTransform(scaffold);
+  }
+
+  Object? _cachedQueueRef;
+  int _cachedQueueIndex = -1;
+  Duration _cachedPrefixDuration = Duration.zero;
+  Duration _cachedTotalPlaylistDuration = Duration.zero;
+
+  void _ensurePlaylistDurationsCached(PlaybackController playback) {
+    final queue = playback.queue;
+    final idx = playback.currentIndex;
+    if (identical(queue, _cachedQueueRef) && idx == _cachedQueueIndex) {
+      return;
+    }
+    if (!identical(queue, _cachedQueueRef)) {
+      var total = Duration.zero;
+      for (var i = 0; i < queue.length; i++) {
+        total += queue[i].track?.duration ?? Duration.zero;
+      }
+      _cachedTotalPlaylistDuration = total;
+      _cachedQueueRef = queue;
+    }
+    var prefix = Duration.zero;
+    final limit = idx.clamp(0, queue.length);
+    for (var i = 0; i < limit; i++) {
+      prefix += queue[i].track?.duration ?? Duration.zero;
+    }
+    _cachedPrefixDuration = prefix;
+    _cachedQueueIndex = idx;
   }
 
   Widget _buildPlayer(
@@ -466,10 +511,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final strings = context.watch<LocaleController>().localeStrings;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final playlists = context.watch<PlaylistsController?>();
-    final isCurrentTrackLiked =
-        currentTrack.id != null &&
-        (playlists?.isTrackLiked(currentTrack.id!) ?? false);
+    final trackId = currentTrack.id;
+    final isCurrentTrackLiked = context.select<PlaylistsController?, bool>(
+      (p) => trackId != null && (p?.isTrackLiked(trackId) ?? false),
+    );
 
     final Widget playerControls = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -505,7 +550,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       (Widget child, Animation<double> animation) {
                         return ScaleTransition(
                           scale: animation,
-                          child: child, // Opcional: puedes envolver 'child' en FadeTransition si también quieres que se desvanezca
+                          child: child,
                         );
                       },
 
@@ -546,19 +591,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               waveform: currentTrack.waveform,
               currentIndex: playback.currentIndex + 1,
               totalCount: playback.queue.length,
-              playlistPosition: () =>
-                  playback.queue
-                      .take(playback.currentIndex)
-                      .fold<Duration>(
-                        Duration.zero,
-                        (sum, item) =>
-                            sum + (item.track?.duration ?? Duration.zero),
-                      ) +
-                  playback.position,
-              playlistDuration: () => playback.queue.fold<Duration>(
-                Duration.zero,
-                (sum, item) => sum + (item.track?.duration ?? Duration.zero),
-              ),
+              playlistPosition: () {
+                _ensurePlaylistDurationsCached(playback);
+                return _cachedPrefixDuration + playback.position;
+              },
+              playlistDuration: () {
+                _ensurePlaylistDurationsCached(playback);
+                return _cachedTotalPlaylistDuration;
+              },
             ),
           ),
           Row(

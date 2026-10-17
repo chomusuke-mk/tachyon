@@ -106,11 +106,64 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
   String? _lastRequestedKey;
   String? _currentThumbnailHash;
   Color? _extractedColor;
+  int? _lastFormattedSecond;
+  Duration? _lastTotalDuration;
+  TextStyle? _lastDurationStyle;
+  Widget? _cachedDurationText;
 
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+
+  Widget _buildProgressBar(
+    PlaybackController playback,
+    ColorScheme colorScheme,
+  ) {
+    return ValueListenableBuilder<Duration>(
+      valueListenable: playback.positionListenable,
+      builder: (context, pos, _) {
+        final totalMs = playback.duration.inMilliseconds;
+        final prog = totalMs > 0
+            ? (pos.inMilliseconds / totalMs).clamp(0.0, 1.0)
+            : 0.0;
+        return LinearProgressIndicator(
+          value: prog,
+          minHeight: widget.isDesktop ? 4.0 : 2.5,
+          backgroundColor: colorScheme.onSurface.withValues(alpha: 0.12),
+          valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopDurationCounter(
+    PlaybackController playback,
+    TextStyle? style,
+  ) {
+    return ValueListenableBuilder<Duration>(
+      valueListenable: playback.positionListenable,
+      builder: (context, pos, _) {
+        final sec = pos.inSeconds;
+        final dur = playback.duration;
+        if (_cachedDurationText != null &&
+            _lastFormattedSecond == sec &&
+            _lastTotalDuration == dur &&
+            _lastDurationStyle == style) {
+          return _cachedDurationText!;
+        }
+        final textWidget = Text(
+          '${_formatDuration(pos)} / ${_formatDuration(dur)}',
+          style: style,
+        );
+        _lastFormattedSecond = sec;
+        _lastTotalDuration = dur;
+        _lastDurationStyle = style;
+        _cachedDurationText = textWidget;
+        return textWidget;
+      },
+    );
   }
 
   void _requestColorResolution(
@@ -192,57 +245,42 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
               children: [
                 // Top linear progress bar (2.5dp / interactive click-to-seek in desktop mode)
                 RepaintBoundary(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return ValueListenableBuilder<Duration>(
-                        valueListenable: playback.positionListenable,
-                        builder: (context, pos, _) {
-                          final totalMs = playback.duration.inMilliseconds;
-                          final prog = totalMs > 0
-                              ? (pos.inMilliseconds / totalMs).clamp(0.0, 1.0)
-                              : 0.0;
-                          final progressBar = LinearProgressIndicator(
-                            value: prog,
-                            minHeight: widget.isDesktop ? 4.0 : 2.5,
-                            backgroundColor: colorScheme.onSurface.withValues(
-                              alpha: 0.12,
-                            ),
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              colorScheme.primary,
-                            ),
-                          );
-
-                          if (!widget.isDesktop) return progressBar;
-
-                          return MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTapDown: (details) {
-                                if (totalMs <= 0) return;
-                                final width = constraints.maxWidth;
-                                if (width <= 0) return;
-                                final fraction =
-                                    (details.localPosition.dx / width).clamp(
-                                      0.0,
-                                      1.0,
-                                    );
-                                final seekTarget = Duration(
-                                  milliseconds: (totalMs * fraction).round(),
-                                );
-                                playback.seek(seekTarget);
-                              },
-                              child: Container(
-                                height: 8.0,
-                                alignment: Alignment.topCenter,
-                                child: progressBar,
+                  child: !widget.isDesktop
+                      ? _buildProgressBar(playback, colorScheme)
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            return MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTapDown: (details) {
+                                  final totalMs =
+                                      playback.duration.inMilliseconds;
+                                  if (totalMs <= 0) return;
+                                  final width = constraints.maxWidth;
+                                  if (width <= 0) return;
+                                  final fraction =
+                                      (details.localPosition.dx / width).clamp(
+                                        0.0,
+                                        1.0,
+                                      );
+                                  final seekTarget = Duration(
+                                    milliseconds: (totalMs * fraction).round(),
+                                  );
+                                  playback.seek(seekTarget);
+                                },
+                                child: Container(
+                                  height: 8.0,
+                                  alignment: Alignment.topCenter,
+                                  child: _buildProgressBar(
+                                    playback,
+                                    colorScheme,
+                                  ),
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
+                            );
+                          },
+                        ),
                 ),
 
                 // Main Mini Player Row
@@ -347,14 +385,9 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
 
                         // Desktop Extra Controls (Duration & Repeat/Shuffle/Prev)
                         if (widget.isDesktop) ...[
-                          ValueListenableBuilder<Duration>(
-                            valueListenable: playback.positionListenable,
-                            builder: (context, pos, _) {
-                              return Text(
-                                '${_formatDuration(pos)} / ${_formatDuration(playback.duration)}',
-                                style: theme.textTheme.bodySmall,
-                              );
-                            },
+                          _buildDesktopDurationCounter(
+                            playback,
+                            theme.textTheme.bodySmall,
                           ),
                           const SizedBox(width: 16),
                           IconButton(

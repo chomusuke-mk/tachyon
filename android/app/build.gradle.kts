@@ -18,6 +18,9 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+        dex {
+            useLegacyPackaging = false
+        }
     }
 
     androidResources {

@@ -281,58 +281,60 @@ class _LyricsViewState extends State<LyricsView> {
     final isInterleaved = lyricsController.isInterleaved;
     final translatedLines = lyricsController.translatedLines;
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is UserScrollNotification) {
-          lyricsController.onUserScroll();
-        }
-        return false;
-      },
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final halfHeight = constraints.maxHeight > 0
-              ? constraints.maxHeight / 2
-              : 160.0;
-
-          return ListView.builder(
-            controller: _scrollController,
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.only(
-              left: 24.0,
-              right: 24.0,
-              top: isSynced ? (halfHeight - 28.0) : 100.0,
-              bottom: isSynced ? (halfHeight - 28.0) : 100.0,
-            ),
-            itemCount: lines.length,
-            itemBuilder: (context, index) {
-              final line = lines[index];
-              final isActive = isSynced && (index == activeIndex);
-              final translatedText =
-                  (index >= 0 && index < translatedLines.length)
-                  ? translatedLines[index]
-                  : null;
-              final hasTranslation =
-                  translatedText != null && translatedText.trim().isNotEmpty;
-
-              return _LyricLineItem(
-                key: ValueKey('line_${line.timestamp.inMilliseconds}_$index'),
-                line: line,
-                index: index,
-                isActive: isActive,
-                isSynced: isSynced,
-                hasTranslation: hasTranslation,
-                translatedText: translatedText,
-                isTranslated: isTranslated,
-                isInterleaved: isInterleaved,
-                colorScheme: colorScheme,
-                lyricsController: lyricsController,
-                onSeek: widget.onSeek,
-                onMounted: _registerLine,
-                onUnmounted: _unregisterLine,
-              );
-            },
-          );
+    return RepaintBoundary(
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification is UserScrollNotification) {
+            lyricsController.onUserScroll();
+          }
+          return false;
         },
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final halfHeight = constraints.maxHeight > 0
+                ? constraints.maxHeight / 2
+                : 160.0;
+
+            return ListView.builder(
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.only(
+                left: 24.0,
+                right: 24.0,
+                top: isSynced ? (halfHeight - 28.0) : 100.0,
+                bottom: isSynced ? (halfHeight - 28.0) : 100.0,
+              ),
+              itemCount: lines.length,
+              itemBuilder: (context, index) {
+                final line = lines[index];
+                final isActive = isSynced && (index == activeIndex);
+                final translatedText =
+                    (index >= 0 && index < translatedLines.length)
+                    ? translatedLines[index]
+                    : null;
+                final hasTranslation =
+                    translatedText != null && translatedText.trim().isNotEmpty;
+
+                return _LyricLineItem(
+                  key: ValueKey('line_${line.timestamp.inMilliseconds}_$index'),
+                  line: line,
+                  index: index,
+                  isActive: isActive,
+                  isSynced: isSynced,
+                  hasTranslation: hasTranslation,
+                  translatedText: translatedText,
+                  isTranslated: isTranslated,
+                  isInterleaved: isInterleaved,
+                  colorScheme: colorScheme,
+                  lyricsController: lyricsController,
+                  onSeek: widget.onSeek,
+                  onMounted: _registerLine,
+                  onUnmounted: _unregisterLine,
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -449,8 +451,7 @@ class _LyricsViewState extends State<LyricsView> {
     ColorScheme colorScheme,
   ) {
     if (controller.isTranslating) {
-      return Padding(
-        padding: const EdgeInsets.all(0),
+      return RepaintBoundary(
         child: SizedBox(
           width: 15,
           height: 15,

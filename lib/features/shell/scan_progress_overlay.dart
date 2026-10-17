@@ -13,7 +13,7 @@ class ScanProgressOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final library = context.watch<LibraryController>();
+    final library = context.read<LibraryController>();
 
     return ValueListenableBuilder<ScanProgress>(
       valueListenable: library.scanProgressListenable,
@@ -67,13 +67,15 @@ class ScanProgressOverlay extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          value: progress.progressValue,
-                          strokeWidth: 2.2,
-                          color: colorScheme.primary,
+                      RepaintBoundary(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            value: progress.progressValue,
+                            strokeWidth: 2.2,
+                            color: colorScheme.primary,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),

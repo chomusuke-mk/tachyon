@@ -197,29 +197,14 @@ class TrackTile extends StatelessWidget {
               if (showLikeButton || onToggleLike != null)
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  icon: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 400),
-                    switchInCurve: Curves.easeOutBack,
-                    switchOutCurve: Curves.easeIn,
-                    transitionBuilder:
-                        (Widget child, Animation<double> animation) {
-                          return ScaleTransition(
-                            scale: animation,
-                            child: child,
-                          );
-                        },
-                    child: Icon(
-                      effectiveIsLiked
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-
-                      key: ValueKey<bool>(effectiveIsLiked),
-
-                      size: 20,
-                      color: effectiveIsLiked
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                    ),
+                  icon: Icon(
+                    effectiveIsLiked
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    size: 20,
+                    color: effectiveIsLiked
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
                   ),
                   tooltip: effectiveIsLiked ? strings.npUnlike : strings.npLike,
                   onPressed: effectiveOnToggleLike,

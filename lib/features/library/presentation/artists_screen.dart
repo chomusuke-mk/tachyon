@@ -23,27 +23,56 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
   bool _ascending = true;
   bool _isCardView = true;
 
+  List<Artist>? _lastSourceArtists;
+  ArtistSortOption? _lastSortOption;
+  bool? _lastAscending;
+  List<Artist> _cachedArtists = const [];
+
+  List<Artist> _getSortedArtists(List<Artist> source) {
+    if (identical(source, _lastSourceArtists) &&
+        _sortOption == _lastSortOption &&
+        _ascending == _lastAscending) {
+      return _cachedArtists;
+    }
+    final artists = List<Artist>.of(source, growable: false);
+    if (artists.length > 1) {
+      switch (_sortOption) {
+        case ArtistSortOption.name:
+          final keys = <Artist, String>{
+            for (final a in artists) a: a.name.toLowerCase(),
+          };
+          artists.sort((a, b) {
+            final cmp = keys[a]!.compareTo(keys[b]!);
+            return _ascending ? cmp : -cmp;
+          });
+          break;
+        case ArtistSortOption.albums:
+          artists.sort((a, b) {
+            final cmp = a.albumCount.compareTo(b.albumCount);
+            return _ascending ? cmp : -cmp;
+          });
+          break;
+        case ArtistSortOption.tracks:
+          artists.sort((a, b) {
+            final cmp = a.trackCount.compareTo(b.trackCount);
+            return _ascending ? cmp : -cmp;
+          });
+          break;
+      }
+    }
+    _lastSourceArtists = source;
+    _lastSortOption = _sortOption;
+    _lastAscending = _ascending;
+    _cachedArtists = artists;
+    return artists;
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
 
-    final artists = List<Artist>.from(library.artists);
-    artists.sort((a, b) {
-      int cmp;
-      switch (_sortOption) {
-        case ArtistSortOption.name:
-          cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-          break;
-        case ArtistSortOption.albums:
-          cmp = a.albumCount.compareTo(b.albumCount);
-          break;
-        case ArtistSortOption.tracks:
-          cmp = a.trackCount.compareTo(b.trackCount);
-          break;
-      }
-      return _ascending ? cmp : -cmp;
-    });
+    final artists = _getSortedArtists(library.artists);
 
     return Scaffold(
       appBar: AppBar(

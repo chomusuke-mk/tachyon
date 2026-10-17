@@ -306,5 +306,38 @@ void main() {
 
       expect(find.byType(NowPlayingScreen), findsNothing);
     });
+
+    testWidgets('Multi-frame vertical drag dismisses NowPlayingScreen on the very first swipe without getting stuck after crossing touch slop', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final track = libraryStore.getTrackById(100)!;
+      playbackController.setMockTrack(track);
+
+      await tester.pumpWidget(buildApp(const TachyonShell()));
+      await tester.pumpAndSettle();
+
+      NowPlayingScreen.open(navigatorKey.currentContext!);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NowPlayingScreen), findsOneWidget);
+
+      // Simulate realistic 60fps finger drag where a frame is pumped right after
+      // crossing the ~20px (0.5cm) touch slop threshold:
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(NowPlayingScreen)),
+      );
+      await gesture.moveBy(const Offset(0, 22));
+      await tester.pump(const Duration(milliseconds: 16));
+      await gesture.moveBy(const Offset(0, 60));
+      await tester.pump(const Duration(milliseconds: 16));
+      await gesture.moveBy(const Offset(0, 120));
+      await tester.pump(const Duration(milliseconds: 16));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // Must dismiss on the first swipe without getting stuck at ~22px
+      expect(find.byType(NowPlayingScreen), findsNothing);
+    });
   });
 }

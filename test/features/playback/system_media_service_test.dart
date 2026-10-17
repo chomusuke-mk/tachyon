@@ -13,6 +13,7 @@ import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/playback/presentation/playback_controller.dart';
 import 'package:tachyon/features/playback/services/linux_mpris_bridge.dart';
+import 'package:tachyon/features/playback/services/system_media_service.dart';
 import 'package:tachyon/features/playback/services/tachyon_audio_handler.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/shared/utils/metadata_utils.dart';
@@ -36,6 +37,7 @@ class FakeTachyonBackendClient implements TachyonBackendClient {
   Duration? lastSeekPosition;
   Loop? lastSetLoop;
   bool? lastShuffle;
+  void Function(bool)? onSetMinimized;
 
   PlaybackState _currentState = const PlaybackState.initial();
 
@@ -123,6 +125,11 @@ class FakeTachyonBackendClient implements TachyonBackendClient {
     required String dbPath,
     required String cacheDirPath,
   }) async {}
+
+  @override
+  Future<void> setMinimized(bool minimized) async {
+    onSetMinimized?.call(minimized);
+  }
 
   @override
   Future<void> dispose() async {
@@ -326,6 +333,25 @@ void main() {
       expect(playerMap['CanControl']?.asBoolean(), isTrue);
       expect(playerMap['PlaybackStatus'], isNotNull);
       expect(playerMap['Metadata'], isNotNull);
+    });
+
+    test('Minimized Mode updates isMinimizedListenable and notifies backend client', () async {
+      bool? lastMinimizedSentToBackend;
+      backend.onSetMinimized = (minimized) {
+        lastMinimizedSentToBackend = minimized;
+      };
+
+      expect(SystemMediaService.isMinimized, isFalse);
+
+      SystemMediaService.updateMinimizedState(true, backendClient: backend);
+      expect(SystemMediaService.isMinimized, isTrue);
+      expect(SystemMediaService.isMinimizedListenable.value, isTrue);
+      expect(lastMinimizedSentToBackend, isTrue);
+
+      SystemMediaService.updateMinimizedState(false, backendClient: backend);
+      expect(SystemMediaService.isMinimized, isFalse);
+      expect(SystemMediaService.isMinimizedListenable.value, isFalse);
+      expect(lastMinimizedSentToBackend, isFalse);
     });
   });
 }

@@ -155,6 +155,7 @@ words:
   - FSML
   - gboolean
   - gchar
+  - gint
   - GLASSMORPHISM
   - GPGME
   - gradlew
@@ -361,6 +362,7 @@ words:
   - PYTHONPATH
   - PYTHONUNBUFFERED
   - quickjs
+  - Rasterizer
   - Reactividad
   - readwrite
   - Rebuffer
@@ -413,6 +415,7 @@ words:
   - SERIALIZACIÓN
   - SIGDN
   - síncrono
+  - Skia
   - skipifsilent
   - smtc
   - SMTC

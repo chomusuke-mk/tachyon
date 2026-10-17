@@ -23,12 +23,14 @@ class ScanProgress {
   final String? progressLabel;
   final double? progressValue;
   final String? errorMessage;
+  final bool catalogModified;
 
   const ScanProgress({
     this.stage = ScanStage.idle,
     this.progressLabel,
     this.progressValue,
     this.errorMessage,
+    this.catalogModified = true,
   });
 
   bool get isRunning =>
@@ -50,6 +52,7 @@ class ScanProgress {
     bool clearProgressValue = false,
     String? errorMessage,
     bool clearErrorMessage = false,
+    bool? catalogModified,
   }) {
     return ScanProgress(
       stage: stage ?? this.stage,
@@ -62,6 +65,7 @@ class ScanProgress {
       errorMessage: clearErrorMessage
           ? null
           : (errorMessage ?? this.errorMessage),
+      catalogModified: catalogModified ?? this.catalogModified,
     );
   }
 
@@ -71,6 +75,7 @@ class ScanProgress {
     'progressLabel': progressLabel,
     'progressValue': progressValue,
     'errorMessage': errorMessage,
+    'catalogModified': catalogModified,
   };
 
   /// Deserializes a [Map] received from a secondary Isolate back into a [ScanProgress].
@@ -85,6 +90,7 @@ class ScanProgress {
       progressLabel: json['progressLabel'] as String?,
       progressValue: (json['progressValue'] as num?)?.toDouble(),
       errorMessage: json['errorMessage'] as String?,
+      catalogModified: json['catalogModified'] as bool? ?? true,
     );
   }
 
@@ -96,11 +102,17 @@ class ScanProgress {
           stage == other.stage &&
           progressLabel == other.progressLabel &&
           progressValue == other.progressValue &&
-          errorMessage == other.errorMessage;
+          errorMessage == other.errorMessage &&
+          catalogModified == other.catalogModified;
 
   @override
-  int get hashCode =>
-      Object.hash(stage, progressLabel, progressValue, errorMessage);
+  int get hashCode => Object.hash(
+    stage,
+    progressLabel,
+    progressValue,
+    errorMessage,
+    catalogModified,
+  );
 
   @override
   String toString() =>

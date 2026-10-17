@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:path/path.dart' as p;
 import 'package:tachyon/features/library/domain/album.dart';
 import 'package:tachyon/features/library/domain/artist.dart';
@@ -36,6 +38,23 @@ class LibraryStore {
   // Fast set of liked track IDs
   final Set<int> _likedTrackIds = <int>{};
 
+  // Cached zero-copy unmodifiable views, invalidated on collection mutation
+  List<Track>? _tracksView;
+  List<Album>? _albumsView;
+  List<Artist>? _artistsView;
+  List<Genre>? _genresView;
+  List<Playlist>? _playlistsView;
+  Set<int>? _likedTrackIdsView;
+
+  void _invalidateViews() {
+    _tracksView = null;
+    _albumsView = null;
+    _artistsView = null;
+    _genresView = null;
+    _playlistsView = null;
+    _likedTrackIdsView = null;
+  }
+
   LibraryStore();
 
   /// Creates a hydrated [LibraryStore] from a [CatalogSnapshot].
@@ -48,22 +67,25 @@ class LibraryStore {
   // ---------------------------------------------------------------------------
   // Getters & Collections
   // ---------------------------------------------------------------------------
-  List<Track> get tracks => List.unmodifiable(_allTracks);
-  List<Track> get allTracks => List.unmodifiable(_allTracks);
+  List<Track> get tracks => _tracksView ??= UnmodifiableListView(_allTracks);
+  List<Track> get allTracks => tracks;
 
-  List<Album> get albums => List.unmodifiable(_allAlbums);
-  List<Album> get allAlbums => List.unmodifiable(_allAlbums);
+  List<Album> get albums => _albumsView ??= UnmodifiableListView(_allAlbums);
+  List<Album> get allAlbums => albums;
 
-  List<Artist> get artists => List.unmodifiable(_allArtists);
-  List<Artist> get allArtists => List.unmodifiable(_allArtists);
+  List<Artist> get artists =>
+      _artistsView ??= UnmodifiableListView(_allArtists);
+  List<Artist> get allArtists => artists;
 
-  List<Genre> get genres => List.unmodifiable(_allGenres);
-  List<Genre> get allGenres => List.unmodifiable(_allGenres);
+  List<Genre> get genres => _genresView ??= UnmodifiableListView(_allGenres);
+  List<Genre> get allGenres => genres;
 
-  List<Playlist> get playlists => List.unmodifiable(_allPlaylists);
-  List<Playlist> get allPlaylists => List.unmodifiable(_allPlaylists);
+  List<Playlist> get playlists =>
+      _playlistsView ??= UnmodifiableListView(_allPlaylists);
+  List<Playlist> get allPlaylists => playlists;
 
-  Set<int> get likedTrackIds => Set.unmodifiable(_likedTrackIds);
+  Set<int> get likedTrackIds =>
+      _likedTrackIdsView ??= UnmodifiableSetView(_likedTrackIds);
 
   Playlist? get likedSongsPlaylist =>
       _allPlaylists.where((p) => p.type == PlaylistType.liked).firstOrNull;
@@ -81,7 +103,7 @@ class LibraryStore {
   Track? getTrackByPath(String path) => _tracksByPath[path];
   List<Track> getTracksInDirectory(String directoryPath) {
     final normalized = p.normalize(directoryPath);
-    return List.unmodifiable(_tracksByDirectory[normalized] ?? const []);
+    return UnmodifiableListView(_tracksByDirectory[normalized] ?? const []);
   }
   Album? getAlbumById(int id) => _albumsById[id];
   Artist? getArtistById(int id) => _artistsById[id];
@@ -94,6 +116,7 @@ class LibraryStore {
   // Hydration Algorithm (O(N) single-pass)
   // ---------------------------------------------------------------------------
   void hydrateFromSnapshot(CatalogSnapshot snapshot) {
+    _invalidateViews();
     _tracksById.clear();
     _tracksByPath.clear();
     _tracksByDirectory.clear();
@@ -120,27 +143,32 @@ class LibraryStore {
       trackToGenreIds.putIfAbsent(pair.trackId, () => []).add(pair.genreId);
     }
 
+    final internedStrings = <String, String>{};
+    String? internString(String? value) {
+      if (value == null) return null;
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return null;
+      return internedStrings.putIfAbsent(trimmed, () => trimmed);
+    }
+
     // Pre-calculate thumbnail fallbacks from snapshot
     final albumFirstTrackThumbnail = <int, String>{};
     for (final rawTrack in snapshot.tracks) {
-      if (rawTrack.albumId != null &&
-          rawTrack.thumbnailHash != null &&
-          rawTrack.thumbnailHash!.trim().isNotEmpty) {
-        albumFirstTrackThumbnail.putIfAbsent(
-          rawTrack.albumId!,
-          () => rawTrack.thumbnailHash!.trim(),
-        );
+      if (rawTrack.albumId != null) {
+        final hash = internString(rawTrack.thumbnailHash);
+        if (hash != null) {
+          albumFirstTrackThumbnail.putIfAbsent(rawTrack.albumId!, () => hash);
+        }
       }
     }
 
     final effectiveAlbumThumbnails = <int, String>{};
     final artistFirstAlbumThumbnail = <int, String>{};
     for (final rawAlbum in snapshot.albums) {
-      final hash = (rawAlbum.thumbnailHash != null &&
-              rawAlbum.thumbnailHash!.trim().isNotEmpty)
-          ? rawAlbum.thumbnailHash!.trim()
-          : albumFirstTrackThumbnail[rawAlbum.id];
-      if (hash != null && hash.isNotEmpty) {
+      final hash =
+          internString(rawAlbum.thumbnailHash) ??
+          albumFirstTrackThumbnail[rawAlbum.id];
+      if (hash != null) {
         effectiveAlbumThumbnails[rawAlbum.id] = hash;
         if (rawAlbum.artistId != null) {
           artistFirstAlbumThumbnail.putIfAbsent(rawAlbum.artistId!, () => hash);
@@ -150,13 +178,12 @@ class LibraryStore {
 
     final trackEffectiveThumbnail = <int, String>{};
     for (final rawTrack in snapshot.tracks) {
-      final hash = (rawTrack.thumbnailHash != null &&
-              rawTrack.thumbnailHash!.trim().isNotEmpty)
-          ? rawTrack.thumbnailHash!.trim()
-          : (rawTrack.albumId != null
+      final hash =
+          internString(rawTrack.thumbnailHash) ??
+          (rawTrack.albumId != null
               ? effectiveAlbumThumbnails[rawTrack.albumId]
               : null);
-      if (hash != null && hash.isNotEmpty) {
+      if (hash != null) {
         trackEffectiveThumbnail[rawTrack.id] = hash;
       }
     }
@@ -179,11 +206,10 @@ class LibraryStore {
       artistAlbumsMap[rawArtist.id] = albumsList;
       artistTracksMap[rawArtist.id] = tracksList;
 
-      final effectiveThumbnail = (rawArtist.thumbnailHash != null &&
-              rawArtist.thumbnailHash!.trim().isNotEmpty)
-          ? rawArtist.thumbnailHash!.trim()
-          : (artistFirstAlbumThumbnail[rawArtist.id] ??
-              artistFirstTrackThumbnail[rawArtist.id]);
+      final effectiveThumbnail =
+          internString(rawArtist.thumbnailHash) ??
+          artistFirstAlbumThumbnail[rawArtist.id] ??
+          artistFirstTrackThumbnail[rawArtist.id];
 
       final artist = Artist(
         id: rawArtist.id,
@@ -223,10 +249,9 @@ class LibraryStore {
           ? _artistsById[rawAlbum.artistId]
           : null;
 
-      final effectiveAlbumThumbnail = (rawAlbum.thumbnailHash != null &&
-              rawAlbum.thumbnailHash!.trim().isNotEmpty)
-          ? rawAlbum.thumbnailHash
-          : effectiveAlbumThumbnails[rawAlbum.id];
+      final effectiveAlbumThumbnail =
+          internString(rawAlbum.thumbnailHash) ??
+          effectiveAlbumThumbnails[rawAlbum.id];
 
       final album = Album(
         id: rawAlbum.id,
@@ -253,22 +278,38 @@ class LibraryStore {
           ? _albumsById[rawTrack.albumId]
           : null;
 
-      final linkedArtistIds = trackToArtistIds[rawTrack.id] ?? const [];
-      final linkedArtists = <Artist>[];
-      for (final aId in linkedArtistIds) {
-        final artist = _artistsById[aId];
-        if (artist != null) {
-          linkedArtists.add(artist);
+      final linkedArtistIds = trackToArtistIds[rawTrack.id];
+      final List<Artist> linkedArtists;
+      if (linkedArtistIds == null || linkedArtistIds.isEmpty) {
+        linkedArtists = const <Artist>[];
+      } else {
+        final temp = <Artist>[];
+        for (final aId in linkedArtistIds) {
+          final artist = _artistsById[aId];
+          if (artist != null) {
+            temp.add(artist);
+          }
         }
+        linkedArtists = temp.isEmpty
+            ? const <Artist>[]
+            : List<Artist>.of(temp, growable: false);
       }
 
-      final linkedGenreIds = trackToGenreIds[rawTrack.id] ?? const [];
-      final linkedGenres = <Genre>[];
-      for (final gId in linkedGenreIds) {
-        final genre = _genresById[gId];
-        if (genre != null) {
-          linkedGenres.add(genre);
+      final linkedGenreIds = trackToGenreIds[rawTrack.id];
+      final List<Genre> linkedGenres;
+      if (linkedGenreIds == null || linkedGenreIds.isEmpty) {
+        linkedGenres = const <Genre>[];
+      } else {
+        final temp = <Genre>[];
+        for (final gId in linkedGenreIds) {
+          final genre = _genresById[gId];
+          if (genre != null) {
+            temp.add(genre);
+          }
         }
+        linkedGenres = temp.isEmpty
+            ? const <Genre>[]
+            : List<Genre>.of(temp, growable: false);
       }
 
       final track = Track(
@@ -282,16 +323,14 @@ class LibraryStore {
         bitrate: rawTrack.bitrate,
         sampleRate: rawTrack.sampleRate,
         channels: rawTrack.channels,
-        codec: rawTrack.codec,
+        codec: internString(rawTrack.codec),
         fileSize: rawTrack.fileSize,
         modifiedAt: rawTrack.modifiedAt,
         replayGainTrackGain: rawTrack.replayGainTrackGain,
         replayGainTrackPeak: rawTrack.replayGainTrackPeak,
         waveform: WaveformCodec.decode(rawTrack.waveformData),
-        thumbnailHash: (rawTrack.thumbnailHash != null &&
-                rawTrack.thumbnailHash!.isNotEmpty)
-            ? rawTrack.thumbnailHash
-            : album?.thumbnailHash,
+        thumbnailHash:
+            internString(rawTrack.thumbnailHash) ?? album?.thumbnailHash,
         album: album,
         artists: linkedArtists,
         genres: linkedGenres,
@@ -545,11 +584,13 @@ class LibraryStore {
       _playlistsById[playlist.id!] = playlist;
     }
     _allPlaylists.add(playlist);
+    _playlistsView = null;
   }
 
   void removePlaylist(int playlistId) {
     _playlistsById.remove(playlistId);
     _allPlaylists.removeWhere((p) => p.id == playlistId);
+    _playlistsView = null;
   }
 
   void renamePlaylist(int playlistId, String newName) {
@@ -568,6 +609,7 @@ class LibraryStore {
     if (index != -1) {
       _allPlaylists[index] = updated;
     }
+    _playlistsView = null;
   }
 
   void clearHistory() {
@@ -580,6 +622,7 @@ class LibraryStore {
     if (track == null) return;
     _tracksByPath.remove(track.filePath);
     _allTracks.removeWhere((t) => t.id == trackId);
+    _tracksView = null;
 
     if (track.album != null && track.album!.id != null) {
       final album = _albumsById[track.album!.id];
@@ -680,39 +723,59 @@ class LibraryStore {
     TrackSortOption option, {
     bool ascending = true,
   }) {
-    final copy = List<Track>.of(list);
-    copy.sort((a, b) {
+    if (list.length <= 1) return List<Track>.of(list);
+
+    // Precompute lowercase keys once in O(N) instead of O(N log N) inside comparator
+    final n = list.length;
+    final indices = List<int>.generate(n, (i) => i, growable: false);
+    final lowerTitles = List<String>.generate(
+      n,
+      (i) => list[i].title.toLowerCase(),
+      growable: false,
+    );
+
+    List<String>? primaryStrings;
+    if (option == TrackSortOption.artist) {
+      primaryStrings = List<String>.generate(
+        n,
+        (i) => (list[i].artists.firstOrNull?.name ?? '').toLowerCase(),
+        growable: false,
+      );
+    } else if (option == TrackSortOption.album) {
+      primaryStrings = List<String>.generate(
+        n,
+        (i) => (list[i].album?.name ?? '').toLowerCase(),
+        growable: false,
+      );
+    }
+
+    indices.sort((ia, ib) {
       int cmp;
       switch (option) {
         case TrackSortOption.title:
-          cmp = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          cmp = lowerTitles[ia].compareTo(lowerTitles[ib]);
           break;
         case TrackSortOption.artist:
-          final aArtist = a.artists.firstOrNull?.name ?? '';
-          final bArtist = b.artists.firstOrNull?.name ?? '';
-          cmp = aArtist.toLowerCase().compareTo(bArtist.toLowerCase());
-          break;
         case TrackSortOption.album:
-          final aAlbum = a.album?.name ?? '';
-          final bAlbum = b.album?.name ?? '';
-          cmp = aAlbum.toLowerCase().compareTo(bAlbum.toLowerCase());
+          cmp = primaryStrings![ia].compareTo(primaryStrings[ib]);
           break;
         case TrackSortOption.year:
-          cmp = (a.year ?? 0).compareTo(b.year ?? 0);
+          cmp = (list[ia].year ?? 0).compareTo(list[ib].year ?? 0);
           break;
         case TrackSortOption.duration:
-          cmp = a.durationMs.compareTo(b.durationMs);
+          cmp = list[ia].durationMs.compareTo(list[ib].durationMs);
           break;
         case TrackSortOption.dateAdded:
-          cmp = a.modifiedAt.compareTo(b.modifiedAt);
+          cmp = list[ia].modifiedAt.compareTo(list[ib].modifiedAt);
           break;
       }
-      if (cmp == 0) {
-        cmp = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      if (cmp == 0 && option != TrackSortOption.title) {
+        cmp = lowerTitles[ia].compareTo(lowerTitles[ib]);
       }
       return ascending ? cmp : -cmp;
     });
-    return copy;
+
+    return List<Track>.generate(n, (i) => list[indices[i]], growable: false);
   }
 
   List<Track> filterTracks({Album? album, Artist? artist, Genre? genre}) {

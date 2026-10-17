@@ -49,11 +49,19 @@ class _WaveformSliderState extends State<WaveformSlider> {
   bool _showRemaining = true;
   bool _showPlaylistProgressTime = false;
 
+  int? _lastRenderedSecond;
+  bool? _lastShowRemaining;
+  bool? _lastShowPlaylistProgressTime;
+  int? _lastCurrentIndex;
+  int? _lastTotalCount;
+  Duration? _lastDuration;
+  ColorScheme? _lastColorScheme;
+  Widget? _cachedTimeCounterRow;
+
   String _formatDuration(Duration duration, {String? prefix}) {
     final totalSeconds = duration.inSeconds.abs();
-    final hours = (totalSeconds ~/ 3600); //.padLeft(2, '0');
-    final minutes = ((totalSeconds % 3600) ~/ 60)
-        .toString(); //.padLeft(2, '0');
+    final hours = (totalSeconds ~/ 3600);
+    final minutes = ((totalSeconds % 3600) ~/ 60).toString();
     final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
     if (hours > 0) {
       return '${prefix ?? ""}$hours:${minutes.padLeft(2, '0')}:$seconds';
@@ -63,34 +71,11 @@ class _WaveformSliderState extends State<WaveformSlider> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.positionListenable != null) {
-      return ValueListenableBuilder<Duration>(
-        valueListenable: widget.positionListenable!,
-        builder: (context, pos, _) {
-          return _buildSlider(context, pos);
-        },
-      );
-    }
-    return _buildSlider(context, widget.position ?? Duration.zero);
-  }
-
-  Widget _buildSlider(BuildContext context, Duration currentPosition) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
     final totalMs = widget.duration.inMilliseconds.toDouble();
     final effectiveTotalMs = totalMs > 0 ? totalMs : 1.0;
-
-    final currentMs = _isDragging
-        ? _dragValue
-        : currentPosition.inMilliseconds.toDouble().clamp(
-            0.0,
-            effectiveTotalMs,
-          );
-
-    final progressFraction = (currentMs / effectiveTotalMs).clamp(0.0, 1.0);
-    final remainingDuration =
-        widget.duration - Duration(milliseconds: currentMs.round());
 
     return RepaintBoundary(
       child: Column(
@@ -141,22 +126,24 @@ class _WaveformSliderState extends State<WaveformSlider> {
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: RepaintBoundary(
-                      child: CustomPaint(
-                        size: Size(constraints.maxWidth, 38),
-                        painter: _WaveformSliderPainter(
-                          progress: progressFraction,
-                          bufferedFraction: widget.isBuffering
-                              ? (progressFraction + 0.15).clamp(0.0, 1.0)
-                              : 1.0,
-                          activeColor: colorScheme.primary,
-                          inactiveColor: colorScheme.surfaceContainerHighest,
-                          bufferedColor:
-                              colorScheme.primary.withValues(alpha: 0.35),
-                          isDragging: _isDragging,
-                          waveform: widget.waveform,
-                          positionMs: currentMs.round(),
-                        ),
-                      ),
+                      child: (widget.positionListenable != null && !_isDragging)
+                          ? ValueListenableBuilder<Duration>(
+                              valueListenable: widget.positionListenable!,
+                              builder: (context, pos, _) {
+                                return _buildWaveformPaint(
+                                  constraints.maxWidth,
+                                  pos,
+                                  effectiveTotalMs,
+                                  colorScheme,
+                                );
+                              },
+                            )
+                          : _buildWaveformPaint(
+                              constraints.maxWidth,
+                              widget.position ?? Duration.zero,
+                              effectiveTotalMs,
+                              colorScheme,
+                            ),
                     ),
                   ),
                 );
@@ -165,58 +152,142 @@ class _WaveformSliderState extends State<WaveformSlider> {
           ),
           const SizedBox(height: 4),
 
-          // Time Counter Row with Tabular Figures
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Elapsed Time
-              Text(
-                _formatDuration(Duration(milliseconds: currentMs.round())),
-                style: textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              if (widget.currentIndex != null && widget.totalCount != null)
-                GestureDetector(
-                  onTap: () => setState(
-                    () =>
-                        _showPlaylistProgressTime = !_showPlaylistProgressTime,
-                  ),
-                  child: Text(
-                    _showPlaylistProgressTime &&
-                            widget.playlistPosition != null &&
-                            widget.playlistDuration != null
-                        ? '${_formatDuration(widget.playlistPosition!())} / ${_formatDuration(widget.playlistDuration!())}'
-                        : '${widget.currentIndex ?? 0} / ${widget.totalCount ?? 0}',
-                    style: textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ),
-
-              // Toggle Total / Remaining Time on tap
-              GestureDetector(
-                onTap: () => setState(() => _showRemaining = !_showRemaining),
-                child: Text(
-                  _showRemaining
-                      ? _formatDuration(remainingDuration, prefix: "-")
-                      : _formatDuration(widget.duration),
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-            ],
-          ),
+          // Time Counter Row with Tabular Figures (quantized to 1Hz when not dragging)
+          if (widget.positionListenable != null && !_isDragging)
+            ValueListenableBuilder<Duration>(
+              valueListenable: widget.positionListenable!,
+              builder: (context, pos, _) {
+                return _buildTimeCounterRow(
+                  pos,
+                  effectiveTotalMs,
+                  colorScheme,
+                  textTheme,
+                );
+              },
+            )
+          else
+            _buildTimeCounterRow(
+              widget.position ?? Duration.zero,
+              effectiveTotalMs,
+              colorScheme,
+              textTheme,
+            ),
         ],
       ),
     );
+  }
+
+  Widget _buildWaveformPaint(
+    double maxWidth,
+    Duration currentPosition,
+    double effectiveTotalMs,
+    ColorScheme colorScheme,
+  ) {
+    final currentMs = _isDragging
+        ? _dragValue
+        : currentPosition.inMilliseconds.toDouble().clamp(
+            0.0,
+            effectiveTotalMs,
+          );
+    final progressFraction = (currentMs / effectiveTotalMs).clamp(0.0, 1.0);
+
+    return CustomPaint(
+      size: Size(maxWidth, 38),
+      painter: _WaveformSliderPainter(
+        progress: progressFraction,
+        bufferedFraction: widget.isBuffering
+            ? (progressFraction + 0.15).clamp(0.0, 1.0)
+            : 1.0,
+        activeColor: colorScheme.primary,
+        inactiveColor: colorScheme.surfaceContainerHighest,
+        bufferedColor: colorScheme.primary.withValues(alpha: 0.35),
+        isDragging: _isDragging,
+        waveform: widget.waveform,
+        positionMs: currentMs.round(),
+      ),
+    );
+  }
+
+  Widget _buildTimeCounterRow(
+    Duration currentPosition,
+    double effectiveTotalMs,
+    ColorScheme colorScheme,
+    TextTheme textTheme,
+  ) {
+    final currentMs = _isDragging
+        ? _dragValue.round()
+        : currentPosition.inMilliseconds.clamp(0, effectiveTotalMs.round());
+    final currentSecond = currentMs ~/ 1000;
+
+    if (!_isDragging &&
+        _cachedTimeCounterRow != null &&
+        _lastRenderedSecond == currentSecond &&
+        _lastShowRemaining == _showRemaining &&
+        _lastShowPlaylistProgressTime == _showPlaylistProgressTime &&
+        _lastCurrentIndex == widget.currentIndex &&
+        _lastTotalCount == widget.totalCount &&
+        _lastDuration == widget.duration &&
+        _lastColorScheme == colorScheme) {
+      return _cachedTimeCounterRow!;
+    }
+
+    final elapsedDuration = Duration(milliseconds: currentMs);
+    final remainingDuration = widget.duration - elapsedDuration;
+    final counterStyle = textTheme.bodySmall?.copyWith(
+      color: colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w500,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+    final row = Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // Elapsed Time
+        Text(_formatDuration(elapsedDuration), style: counterStyle),
+        if (widget.currentIndex != null && widget.totalCount != null)
+          GestureDetector(
+            onTap: () => setState(() {
+              _showPlaylistProgressTime = !_showPlaylistProgressTime;
+              _cachedTimeCounterRow = null;
+            }),
+            child: Text(
+              _showPlaylistProgressTime &&
+                      widget.playlistPosition != null &&
+                      widget.playlistDuration != null
+                  ? '${_formatDuration(widget.playlistPosition!())} / ${_formatDuration(widget.playlistDuration!())}'
+                  : '${widget.currentIndex ?? 0} / ${widget.totalCount ?? 0}',
+              style: counterStyle,
+            ),
+          ),
+
+        // Toggle Total / Remaining Time on tap
+        GestureDetector(
+          onTap: () => setState(() {
+            _showRemaining = !_showRemaining;
+            _cachedTimeCounterRow = null;
+          }),
+          child: Text(
+            _showRemaining
+                ? _formatDuration(remainingDuration, prefix: "-")
+                : _formatDuration(widget.duration),
+            style: counterStyle,
+          ),
+        ),
+      ],
+    );
+
+    if (!_isDragging) {
+      _lastRenderedSecond = currentSecond;
+      _lastShowRemaining = _showRemaining;
+      _lastShowPlaylistProgressTime = _showPlaylistProgressTime;
+      _lastCurrentIndex = widget.currentIndex;
+      _lastTotalCount = widget.totalCount;
+      _lastDuration = widget.duration;
+      _lastColorScheme = colorScheme;
+      _cachedTimeCounterRow = row;
+    }
+
+    return row;
   }
 }
 

@@ -27,6 +27,19 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
   static const double _cornerRadius = 20.0;
   static const double _visualizerHeight = 56.0; // Duplicated wave height
 
+  static const List<double> _zeroBands = <double>[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+  ];
+
   // Inertia and damping tracking arrays:
   // Smooth Exponential Moving Average filters to eliminate high-frequency jitter/trembling
   final List<double> _smoothedBands = List<double>.filled(10, 0.0);
@@ -192,42 +205,43 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
               valueListenable: playback.visualizerListenable,
               builder: (context, vis, cachedHeroChild) {
                 // Raw hardware snapshot: [0] rms, [1] peak, [2] left, [3] right, [4..13] bands
+                final hasLiveBands = isPlaying && vis.length >= 14;
                 final double rawRms = (isPlaying && vis.isNotEmpty)
                     ? vis[0]
                     : 0.0;
-                final List<double> rawBands = (isPlaying && vis.length >= 14)
-                    ? vis.sublist(4)
-                    : List.filled(10, 0.0);
 
                 // 1. Audio Ballistics with Fluid Inertia for Frequency Bands:
                 // Attack and decay with damping to eliminate high-frequency buzzing/jitter
-                final displayBands = List<double>.filled(10, 0.0);
+                var hasNonZeroBand = false;
                 for (int i = 0; i < 10; i++) {
-                  final target = isPlaying ? rawBands[i].clamp(0.0, 1.0) : 0.0;
+                  final target = hasLiveBands ? vis[4 + i].clamp(0.0, 1.0) : 0.0;
                   if (target > _smoothedBands[i]) {
                     _smoothedBands[i] += (target - _smoothedBands[i]) * 0.38;
                   } else {
                     _smoothedBands[i] += (target - _smoothedBands[i]) * 0.15;
                   }
-                  if (_smoothedBands[i] < 0.01) _smoothedBands[i] = 0.0;
-                  displayBands[i] = _smoothedBands[i];
+                  if (_smoothedBands[i] < 0.01) {
+                    _smoothedBands[i] = 0.0;
+                  } else {
+                    hasNonZeroBand = true;
+                  }
                 }
+                final List<double> displayBands = hasNonZeroBand
+                    ? List<double>.of(_smoothedBands, growable: false)
+                    : _zeroBands;
 
                 // 2. Audio Ballistics with Inertia for Bass ONLY (Sub-bass & Kick drum: bands 0 and 1)
-                // Noise gate and momentum smoothing to eliminate trembling from voices & ambient noise!
-                final rawBass = (rawBands.length >= 2)
-                    ? math.max(rawBands[0], rawBands[1])
-                    : (rawBands.isNotEmpty ? rawBands[0] : 0.0);
+                final rawBass = hasLiveBands
+                    ? math.max(vis[4], vis[5])
+                    : 0.0;
 
                 final targetBass = isPlaying && rawBass > 0.16
                     ? ((rawBass - 0.16) / (1.0 - 0.16)).clamp(0.0, 1.0)
                     : 0.0;
 
                 if (targetBass > _smoothedBass) {
-                  // Smooth attack with physical mass (reaches peak over ~100ms instead of instantaneous twitch)
                   _smoothedBass += (targetBass - _smoothedBass) * 0.35;
                 } else {
-                  // Smooth elastic release
                   _smoothedBass += (targetBass - _smoothedBass) * 0.14;
                 }
                 if (_smoothedBass < 0.01) _smoothedBass = 0.0;
@@ -238,52 +252,54 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
                 // 4. Bass-reactive scale: exactly 8% maximum bounce with inertia
                 final scale = 1.0 + (_smoothedBass * 0.08);
 
-                return Transform.translate(
-                  offset: Offset(_dragOffset.clamp(-120.0, 120.0), 0.0),
-                  child: Transform.scale(
-                    scale: scale,
-                    child: SizedBox(
-                      width: size,
-                      height: size,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          // 1. Continuous Wave Visualizer:
-                          // Positioned directly at the bottom edge of the card, projecting downwards.
-                          // Stack paint order places this behind the card. In NowPlayingScreen,
-                          // subsequent flex children (song title/controls) paint on top of this overflow!
-                          Positioned(
-                            top: size - 1.0,
-                            left: 0,
-                            width: size,
-                            height: _visualizerHeight,
-                            child: CustomPaint(
-                              size: Size(size, _visualizerHeight),
-                              painter: WaveVisualizerPainter(
-                                bands: displayBands,
-                                color: waveColor,
-                                cornerRadius: _cornerRadius,
-                              ),
-                            ),
+                Widget cardStack = SizedBox(
+                  width: size,
+                  height: size,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // 1. Continuous Wave Visualizer
+                      Positioned(
+                        top: size - 1.0,
+                        left: 0,
+                        width: size,
+                        height: _visualizerHeight,
+                        child: CustomPaint(
+                          size: Size(size, _visualizerHeight),
+                          painter: WaveVisualizerPainter(
+                            bands: displayBands,
+                            color: waveColor,
+                            cornerRadius: _cornerRadius,
                           ),
-
-                          // 2. The Album Art container (fully rounded 4 corners, sits on top of wave dock)
-                          Container(
-                            width: size,
-                            height: size,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(_cornerRadius),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(_cornerRadius),
-                              child: cachedHeroChild,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+
+                      // 2. The Album Art container (fully rounded 4 corners, sits on top of wave dock)
+                      Container(
+                        width: size,
+                        height: size,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(_cornerRadius),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(_cornerRadius),
+                          child: cachedHeroChild,
+                        ),
+                      ),
+                    ],
                   ),
                 );
+
+                if (scale != 1.0) {
+                  cardStack = Transform.scale(scale: scale, child: cardStack);
+                }
+                if (_dragOffset != 0.0) {
+                  cardStack = Transform.translate(
+                    offset: Offset(_dragOffset.clamp(-120.0, 120.0), 0.0),
+                    child: cardStack,
+                  );
+                }
+                return cardStack;
               },
               child: Hero(
                 tag: 'now_playing_art_$filePath',

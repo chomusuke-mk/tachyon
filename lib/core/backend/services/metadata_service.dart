@@ -409,83 +409,94 @@ class MetadataService {
         return;
       }
 
-      // Etapa 5: Insertando...
-      sendProgress(const ScanProgress(stage: ScanStage.inserting), force: true);
+      final hasMutations =
+          extractedTracks.isNotEmpty || toDeleteStored.isNotEmpty;
 
-      if (extractedTracks.isNotEmpty) {
-        try {
-          database.upsertTracks(extractedTracks);
-        } catch (e) {
-          debugPrint('[MetadataService] upsertTracks error: $e');
-        }
-      }
-
-      // Liberar memoria inmediatamente
-      toExtract.clear();
-      extractedTracks.clear();
-
-      if (scanToken.isCancelled) {
+      if (hasMutations) {
+        // Etapa 5: Insertando...
         sendProgress(
-          const ScanProgress(stage: ScanStage.cancelled),
+          const ScanProgress(stage: ScanStage.inserting),
           force: true,
         );
-        if (!controller.isClosed) controller.close();
-        return;
-      }
 
-      // Etapa 6: Limpiando orphan...
-      sendProgress(
-        const ScanProgress(stage: ScanStage.cleaningOrphans),
-        force: true,
-      );
-
-      try {
-        database.deleteTracksAndPurgeOrphans(
-          toDeleteStored.map((t) => t.id).toList(),
-        );
-      } catch (e) {
-        debugPrint('[MetadataService] deleteTracksAndPurgeOrphans error: $e');
-      }
-
-      if (scanToken.isCancelled) {
-        sendProgress(
-          const ScanProgress(stage: ScanStage.cancelled),
-          force: true,
-        );
-        if (!controller.isClosed) controller.close();
-        return;
-      }
-
-      // Etapa 7: Limpiando thumbnails...
-      sendProgress(
-        const ScanProgress(stage: ScanStage.cleaningThumbnails),
-        force: true,
-      );
-
-      try {
-        final activeHashes = database.getAllThumbnailHashes();
-
-        final coverFiles = MetadataUtils.listCachedCoverFiles();
-
-        final validHashes = activeHashes
-            .where((h) => h.trim().isNotEmpty)
-            .toSet();
-
-        final orphanedFiles = <File>[];
-        for (final file in coverFiles) {
-          final hash = MetadataUtils.extractHashFromThumbnailPath(file.path);
-          if (!validHashes.contains(hash)) {
-            orphanedFiles.add(file);
+        if (extractedTracks.isNotEmpty) {
+          try {
+            database.upsertTracks(extractedTracks);
+          } catch (e) {
+            debugPrint('[MetadataService] upsertTracks error: $e');
           }
         }
 
-        for (final file in orphanedFiles) {
-          try {
-            file.deleteSync();
-          } catch (_) {}
+        // Liberar memoria inmediatamente
+        toExtract.clear();
+        extractedTracks.clear();
+
+        if (scanToken.isCancelled) {
+          sendProgress(
+            const ScanProgress(stage: ScanStage.cancelled),
+            force: true,
+          );
+          if (!controller.isClosed) controller.close();
+          return;
         }
-      } catch (e) {
-        debugPrint('[MetadataService] cleaningThumbnails error: $e');
+
+        // Etapa 6: Limpiando orphan...
+        sendProgress(
+          const ScanProgress(stage: ScanStage.cleaningOrphans),
+          force: true,
+        );
+
+        try {
+          database.deleteTracksAndPurgeOrphans(
+            toDeleteStored.map((t) => t.id).toList(),
+          );
+        } catch (e) {
+          debugPrint('[MetadataService] deleteTracksAndPurgeOrphans error: $e');
+        }
+
+        if (scanToken.isCancelled) {
+          sendProgress(
+            const ScanProgress(stage: ScanStage.cancelled),
+            force: true,
+          );
+          if (!controller.isClosed) controller.close();
+          return;
+        }
+
+        // Etapa 7: Limpiando thumbnails...
+        sendProgress(
+          const ScanProgress(stage: ScanStage.cleaningThumbnails),
+          force: true,
+        );
+
+        try {
+          final activeHashes = database.getAllThumbnailHashes();
+
+          final coverFiles = MetadataUtils.listCachedCoverFiles();
+
+          final validHashes = activeHashes
+              .where((h) => h.trim().isNotEmpty)
+              .toSet();
+
+          final orphanedFiles = <File>[];
+          for (final file in coverFiles) {
+            final hash = MetadataUtils.extractHashFromThumbnailPath(file.path);
+            if (!validHashes.contains(hash)) {
+              orphanedFiles.add(file);
+            }
+          }
+
+          for (final file in orphanedFiles) {
+            try {
+              file.deleteSync();
+            } catch (_) {}
+          }
+        } catch (e) {
+          debugPrint('[MetadataService] cleaningThumbnails error: $e');
+        }
+      } else {
+        toExtract.clear();
+        extractedTracks.clear();
       }
 
       sendProgress(
@@ -493,6 +504,7 @@ class MetadataService {
           stage: ScanStage.completed,
           progressLabel: '$extractedCount/$totalExtract',
           progressValue: 1.0,
+          catalogModified: hasMutations,
         ),
         force: true,
       );
@@ -524,11 +536,14 @@ Stream<DiscoveredAudioFile> _discoverFilesLocal(
   List<String> directories, {
   CancellationToken? cancellationToken,
 }) async* {
+  await Future<void>.delayed(Duration.zero);
+  int processedSinceYield = 0;
+
   for (final dirPath in directories) {
     if (cancellationToken?.isCancelled ?? false) break;
 
     final dir = Directory(dirPath);
-    if (!await dir.exists()) continue;
+    if (!dir.existsSync()) continue;
 
     Stream<FileSystemEntity> entityStream;
     try {
@@ -544,22 +559,31 @@ Stream<DiscoveredAudioFile> _discoverFilesLocal(
       if (cancellationToken?.isCancelled ?? false) break;
       if (entity is! File) continue;
 
-      final filename = p.basename(entity.path);
+      final path = entity.path;
+      final filename = p.basename(path);
       if (filename.startsWith('.')) continue;
 
-      final ext = p.extension(entity.path).toLowerCase().replaceAll('.', '');
+      final dotIndex = filename.lastIndexOf('.');
+      if (dotIndex <= 0 || dotIndex == filename.length - 1) continue;
+      final ext = filename.substring(dotIndex + 1).toLowerCase();
       if (!AppDefaults.supportedAudioExtensions.contains(ext)) continue;
 
       try {
-        final stat = await entity.stat();
+        final stat = entity.statSync();
         if (stat.size <= 0) continue;
         yield DiscoveredAudioFile(
-          path: entity.path,
+          path: path,
           size: stat.size,
           modifiedAt: stat.modified.millisecondsSinceEpoch,
         );
       } catch (_) {
         continue;
+      }
+
+      processedSinceYield++;
+      if (processedSinceYield >= 64) {
+        processedSinceYield = 0;
+        await Future<void>.delayed(Duration.zero);
       }
     }
   }

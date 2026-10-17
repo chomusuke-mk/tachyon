@@ -17,7 +17,6 @@ class AlbumArtImage extends StatelessWidget {
 
   static final Map<String, String> _resolvedPaths = <String, String>{};
 
-  @visibleForTesting
   static void clearExistenceCache() {
     _resolvedPaths.clear();
   }

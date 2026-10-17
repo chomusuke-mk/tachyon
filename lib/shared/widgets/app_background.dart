@@ -10,6 +10,18 @@ class AppBackground extends StatelessWidget {
   final double blurSigma;
   final double dimOpacity;
 
+  static String? _cachedCheckedPath;
+  static bool _cachedPathExists = false;
+
+  /// Checks whether [path] exists on disk, caching the result for repeated builds.
+  static bool fileExists(String? path) {
+    if (path == null || path.isEmpty) return false;
+    if (path == _cachedCheckedPath) return _cachedPathExists;
+    _cachedCheckedPath = path;
+    _cachedPathExists = File(path).existsSync();
+    return _cachedPathExists;
+  }
+
   const AppBackground({
     super.key,
     required this.imagePath,
@@ -19,11 +31,9 @@ class AppBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (imagePath == null) return const SizedBox.shrink();
+    if (!fileExists(imagePath)) return const SizedBox.shrink();
 
     final file = File(imagePath!);
-    if (!file.existsSync()) return const SizedBox.shrink();
-
     final colorScheme = Theme.of(context).colorScheme;
 
     return RepaintBoundary(

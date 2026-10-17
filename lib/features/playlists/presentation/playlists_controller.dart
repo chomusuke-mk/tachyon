@@ -26,10 +26,9 @@ class PlaylistsController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // State Fields
   // ---------------------------------------------------------------------------
-  List<Playlist> _playlists = [];
+  List<Playlist> _playlists = const [];
   Playlist? _selectedPlaylist;
   List<Track> _selectedPlaylistTracks = [];
-  final Set<int> _likedTrackIds = <int>{};
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -37,7 +36,7 @@ class PlaylistsController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Getters
   // ---------------------------------------------------------------------------
-  List<Playlist> get playlists => List.unmodifiable(_playlists);
+  List<Playlist> get playlists => _playlists;
   Playlist? get selectedPlaylist => _selectedPlaylist;
   List<Track> get selectedPlaylistTracks =>
       List.unmodifiable(_selectedPlaylistTracks);
@@ -68,8 +67,6 @@ class PlaylistsController extends ChangeNotifier {
   void _syncFromStore() {
     final s = _store;
     _playlists = s.playlists;
-    _likedTrackIds.clear();
-    _likedTrackIds.addAll(s.likedTrackIds);
 
     if (_selectedPlaylist != null && _selectedPlaylist!.id != null) {
       final found = s.getPlaylistById(_selectedPlaylist!.id!);
@@ -195,9 +192,6 @@ class PlaylistsController extends ChangeNotifier {
 
   Future<void> addTrackToPlaylist(int playlistId, int trackId) async {
     _store.addTrackToPlaylist(playlistId, trackId);
-    if (playlistId == AppDatabase.likedSongsPlaylistId) {
-      _likedTrackIds.add(trackId);
-    }
     _syncFromStore();
     notifyListeners();
 
@@ -211,9 +205,6 @@ class PlaylistsController extends ChangeNotifier {
   Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) async {
     if (trackIds.isEmpty) return;
     _store.addTracksToPlaylist(playlistId, trackIds);
-    if (playlistId == AppDatabase.likedSongsPlaylistId) {
-      _likedTrackIds.addAll(trackIds);
-    }
     _syncFromStore();
     notifyListeners();
 
@@ -226,9 +217,6 @@ class PlaylistsController extends ChangeNotifier {
 
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) async {
     _store.removeTrackFromPlaylist(playlistId, trackId);
-    if (playlistId == AppDatabase.likedSongsPlaylistId) {
-      _likedTrackIds.remove(trackId);
-    }
     _syncFromStore();
     notifyListeners();
 
@@ -264,11 +252,6 @@ class PlaylistsController extends ChangeNotifier {
   Future<bool> toggleLike(int trackId, [String? filePath]) async {
     final wasLiked = isTrackLiked(trackId);
     final nowLiked = !wasLiked;
-    if (nowLiked) {
-      _likedTrackIds.add(trackId);
-    } else {
-      _likedTrackIds.remove(trackId);
-    }
     _store.setTrackLiked(trackId, nowLiked);
     _syncFromStore();
     notifyListeners();
@@ -276,22 +259,12 @@ class PlaylistsController extends ChangeNotifier {
     try {
       final isLiked = await _backend.toggleLikeTrack(trackId, filePath);
       if (isLiked != nowLiked) {
-        if (isLiked) {
-          _likedTrackIds.add(trackId);
-        } else {
-          _likedTrackIds.remove(trackId);
-        }
         _store.setTrackLiked(trackId, isLiked);
         _syncFromStore();
         notifyListeners();
       }
       return isLiked;
     } catch (e) {
-      if (wasLiked) {
-        _likedTrackIds.add(trackId);
-      } else {
-        _likedTrackIds.remove(trackId);
-      }
       _store.setTrackLiked(trackId, wasLiked);
       _syncFromStore();
       notifyListeners();

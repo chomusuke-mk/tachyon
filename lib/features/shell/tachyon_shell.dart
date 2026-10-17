@@ -152,7 +152,7 @@ class _TachyonShellState extends State<TachyonShell> {
                   Expanded(
                     child: Stack(
                       children: [
-                        IndexedStack(index: _currentIndex, children: _screens),
+                        _screens[_currentIndex],
                         const Positioned(
                           right: 16,
                           bottom: 16,
@@ -186,7 +186,7 @@ class _TachyonShellState extends State<TachyonShell> {
           Expanded(
             child: Stack(
               children: [
-                IndexedStack(index: _currentIndex, children: _screens),
+                _screens[_currentIndex],
                 const Positioned(
                   right: 16,
                   bottom: 16,

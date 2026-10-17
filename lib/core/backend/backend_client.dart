@@ -131,6 +131,9 @@ abstract class TachyonBackendClient {
     required List<String> rawLines,
   });
 
+  // --- System / Lifecycle ---
+  Future<void> setMinimized(bool minimized);
+
   Future<void> dispose();
 }
 
@@ -677,6 +680,10 @@ class TachyonIsolateBackendClient implements TachyonBackendClient {
     }
     return null;
   }
+
+  @override
+  Future<void> setMinimized(bool minimized) =>
+      _send(BackendMethods.systemSetMinimized, {'minimized': minimized});
 
   @override
   Future<void> dispose() async {
