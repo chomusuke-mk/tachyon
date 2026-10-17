@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Do not remove this test for UTF-8: if “Ω” doesn’t appear as greek uppercase omega letter
+enclosed in quotation marks, you should use an editor that supports UTF-8, not this one. -->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <!-- == PACKAGE SPECIFIC SECTION == -->
+    <id>tachyon</id>
+    <version>__APP_VERSION__</version>
+    <packageSourceUrl>https://github.com/chomusuke-mk/tachyon/tree/main/choco/tachyon</packageSourceUrl>
+    <owners>Chomusuke</owners>
+
+    <!-- == SOFTWARE SPECIFIC SECTION == -->
+    <!-- This section is about the software itself -->
+    <title>Tachyon</title>
+    <authors>Chomusuke</authors>
+    <projectUrl>https://github.com/chomusuke-mk/tachyon</projectUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/chomusuke-mk/tachyon@__APP_VERSION__/assets/icon/icon.webp</iconUrl>
+    <copyright>2026 Chomusuke</copyright>
+    <licenseUrl>https://github.com/chomusuke-mk/tachyon/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <docsUrl>https://github.com/chomusuke-mk/tachyon/tree/main/docs</docsUrl>
+    <bugTrackerUrl>https://github.com/chomusuke-mk/tachyon/issues</bugTrackerUrl>
+    <tags>tachyon music player audio crossfade crossfeed equalizer reverb dsp lyrics flac mp3 foss</tags>
+    <summary>Ultra-fast, lightweight modern music player with continuous crossfade and advanced DSP audio effects.</summary>
+    <description>
+      Meet Tachyon, an ultra-fast, modern, and lightweight open-source music player designed for audiophiles and power users who demand high fidelity, fluid performance, and an elegant Material 3 interface.
+
+      Key Features:
+      - Ultra-Low Resource Usage: Built-in minimized mode suspends rendering, purges graphics memory, and throttles background timers, consuming less than 0.8% CPU and less than 10MB RAM during playback on Windows.
+      - High-Fidelity Audio Engine: Seamless continuous 25ms crossfade with Equal-Power and Linear curves, true gapless playback, and volume boost up to 200%.
+      - Studio-Grade DSP Effects: Real-time 10-band equalizer, Bauer Crossfeed (bs2b) for natural, fatigue-free headphone listening, stereo widener / spatializer, Freeverb algorithmic reverb with customizable room acoustics, true-peak limiter, pitch shifting, and variable speed control (0.5x–1.5x).
+      - In-Memory Relational Graph: Instantaneous O(1) library navigation powered by a unified relational graph (LibraryStore) with zero UI jank and pure Dart isolate metadata extraction.
+      - Synchronized Lyrics: Hierarchical multi-source lyrics resolution (embedded tags, local .lrc files, LRCLIB, and lyrics.ovh) with real-time O(log n) scrolling, tap-to-seek, and automated translation.
+      - Modern Adaptive UI: Material 3 design with dynamic color schemes, pure OLED dark mode, responsive layout, and complete multi-language support (i18n).
+      - Privacy-Focused &amp; 100% FOSS: Completely offline-first with zero telemetry, zero analytics, and no ads.
+    </description>
+    <releaseNotes>https://github.com/chomusuke-mk/tachyon/releases/latest</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

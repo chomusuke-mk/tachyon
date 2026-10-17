@@ -281,10 +281,15 @@ def run_benchmark(
 
 
 def main():
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    default_binary = os.path.join(
+        repo_root, "build", "linux", "x64", "release", "bundle", "tachyon"
+    )
+
     parser = argparse.ArgumentParser(description="Tachyon Linux Performance Benchmark")
     parser.add_argument(
         "--binary",
-        default="/mnt/Proyectos/tachyon/build/linux/x64/release/bundle/tachyon",
+        default=default_binary,
         help="Path to Tachyon release executable bundle",
     )
     parser.add_argument(

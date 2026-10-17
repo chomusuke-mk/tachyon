@@ -38,18 +38,6 @@ jobs:
         with:
           channel: "stable"
 
-      - name: Download FFmpeg (Android)
-        run: |
-          for ABI in "arm64-v8a" "x86_64" "armeabi-v7a"; do
-            wget -qO ffmpeg_${ABI}.zip https://github.com/chomusuke-mk/vidra-ffmpeg/releases/latest/download/ffmpeg-android-${ABI}.zip
-            unzip -q ffmpeg_${ABI}.zip -d ffmpeg_${ABI}
-            
-            OUT_DIR="android/app/src/main/jniLibs/$ABI"
-            mkdir -p "$OUT_DIR"
-            cp ffmpeg_${ABI}/ffmpeg "$OUT_DIR/libffmpeg.so"
-            cp ffmpeg_${ABI}/ffprobe "$OUT_DIR/libffprobe.so"
-          done
-
       - name: Configure Android signing
         env:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
@@ -107,15 +95,6 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: "stable"
-
-      - name: Download FFmpeg (Linux)
-        run: |
-          wget -qO ffmpeg.zip https://github.com/chomusuke-mk/vidra-ffmpeg/releases/latest/download/ffmpeg-linux-x86_64.zip
-          unzip -q ffmpeg.zip -d ffmpeg_ext
-          mkdir -p linux
-          cp ffmpeg_ext/ffmpeg linux/ffmpeg
-          cp ffmpeg_ext/ffprobe linux/ffprobe
-          chmod +x linux/ffmpeg linux/ffprobe
 
       - name: Build Flutter Linux
         run: flutter build linux --release
@@ -176,14 +155,6 @@ jobs:
         with:
           channel: "stable"
 
-      - name: Download FFmpeg (Windows)
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/chomusuke-mk/vidra-ffmpeg/releases/latest/download/ffmpeg-windows-x86_64.zip" -OutFile "ffmpeg.zip"
-          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_ext" -Force
-          New-Item -ItemType Directory -Force -Path "windows"
-          Copy-Item "ffmpeg_ext\ffmpeg.exe" -Destination "windows\ffmpeg.exe"
-          Copy-Item "ffmpeg_ext\ffprobe.exe" -Destination "windows\ffprobe.exe"
-
       - name: Build Flutter Windows
         run: flutter build windows --release
 
@@ -211,15 +182,6 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: "stable"
-
-      - name: Download FFmpeg (Linux)
-        run: |
-          wget -qO ffmpeg.zip https://github.com/chomusuke-mk/vidra-ffmpeg/releases/latest/download/ffmpeg-linux-x86_64.zip
-          unzip -q ffmpeg.zip -d ffmpeg_ext
-          mkdir -p linux
-          cp ffmpeg_ext/ffmpeg linux/ffmpeg
-          cp ffmpeg_ext/ffprobe linux/ffprobe
-          chmod +x linux/ffmpeg linux/ffprobe
 
       - name: Build Snap
         uses: snapcore/action-build@v1
@@ -270,8 +232,6 @@ jobs:
           VERSION: ${{ needs.get-version.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          FFMPEG_TAG=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/chomusuke-mk/vidra-ffmpeg/releases/latest | jq -r .tag_name)
-
 
           cat <<EOF > RELEASE_NOTES.md
 
@@ -285,13 +245,6 @@ jobs:
           | Windows  | tachyon-windows.exe                                                                                                   |
           | Linux    | tachyon-x86_64.AppImage <br> tachyon-linux.deb <br> tachyon-linux.snap                                                    |
           | Android  | tachyon-android.apk <br> tachyon-android-arm64-v8a.apk <br> tachyon-android-x86_64.apk <br> tachyon-android-armeabi-v7a.apk |
-
-          ## 📌 Backend and Native Dependencies
-          This release was dynamically built using the following versions of external dependencies:
-
-          | Component           | Version            | Release Link                                                                              |
-          | ------------------- | ------------------ | ----------------------------------------------------------------------------------------- |
-          | **Vidra FFmpeg**    | \`${FFMPEG_TAG}\`  | [View Release](https://github.com/chomusuke-mk/vidra-ffmpeg/releases/tag/${FFMPEG_TAG})   |
 
           ## 🎯 Changelog
           You can view the full history of changes for this release in the [CHANGELOG.md](https://github.com/chomusuke-mk/tachyon/blob/${VERSION}/CHANGELOG.md) file of this repository.
@@ -367,7 +320,7 @@ jobs:
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         with:
-          snap: snap-artifact/vidra-linux.snap
+          snap: snap-artifact/tachyon-linux.snap
           release: stable
 
   publish-choco:

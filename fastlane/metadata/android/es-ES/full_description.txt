@@ -1,0 +1,35 @@
+Descubre Tachyon, un reproductor de música moderno, ultrarrápido y de código abierto diseñado para audiófilos y usuarios exigentes que buscan máxima fidelidad sonora, transiciones fluidas y una elegante interfaz Material 3.
+
+Desarrollado con una arquitectura desacoplada de alto rendimiento en Flutter y motor nativo a medida (miniaudio_player con FFI en C), Tachyon ofrece una experiencia con cero caídas de cuadros (0 jank), navegación instantánea O(1) en tu biblioteca y una eficiencia insuperable en CPU y memoria RAM.
+
+🎧 Motor de Audio de Alta Fidelidad
+- Crossfade Continuo Real: Superposición continua impulsada por un ticker de 25 ms con curvas Equal-Power y Linear para transiciones perfectas sin interrupciones.
+- Reproducción Gapless: Disfruta de tus álbumes favoritos de principio a fin sin pausas ni silencios entre pistas.
+- Control de Tono, Velocidad y Volumen: Ajusta la velocidad (0.5x–1.5x) y tono (pitch) en tiempo real, con amplificación de volumen (Volume Boost) de hasta el 200%.
+
+🎛️ Efectos de Audio DSP de Estudio
+- Ecualizador Gráfico de 10 Bandas: Calibra tu sonido con preajustes para diversos géneros o personalízalo a tu gusto.
+- Bauer Crossfeed (bs2b): Simula el sonido de altavoces en auriculares (perfiles Chu Moy y predeterminado) reduciendo drásticamente la fatiga auditiva.
+- Amplitud Estéreo (Spatializer): Ensancha o estrecha el campo estéreo (0.0x a 2.0x) para una escena sonora envolvente.
+- Reverb Algorítmica Freeverb: Añade profundidad acústica con múltiples salas (Sala Pequeña, Estudio, Sala de Conciertos, Catedral, Placa, Ambiente) o ajusta el tamaño, amortiguación y mezcla wet/dry.
+- Limitador True-Peak: Protege la señal de saturaciones y distorsión digital a volúmenes altos.
+
+📜 Subsistema Inteligente de Letras Sincronizadas
+- Búsqueda Jerárquica Multiorigen: Detección automática en tags embebidos (USLT), archivos .lrc locales, LRCLIB y respaldo en lyrics.ovh.
+- Desplazamiento Sincronizado en Tiempo Real: Seguimiento O(log n) de la línea activa con auto-scroll suave, salto interactivo (tap-to-seek) y traducción automática.
+
+⚡ Rendimiento Ultraligero y Optimizado
+- Mínimo Consumo de Recursos: Modo minimizado que suspende renderizado, purga memoria gráfica y reduce temporizadores en segundo plano para maximizar la autonomía de la batería.
+- Escaneo 100% en Dart Isolates: Extracción concurrente de metadatos para FLAC, MP3, M4A, OGG y OPUS sin requerir binarios externos como FFmpeg.
+- Grafo Relacional en Memoria: Navegación instantánea en O(1) entre artistas, álbumes, canciones y listas de reproducción.
+
+🎨 Diseño Material 3 Adaptativo
+- Interfaz responsiva adaptada a móviles, tablets y escritorios.
+- Temas dinámicos con soporte completo para modo oscuro y negro puro (OLED).
+- Soporte Multiidioma: Internacionalización completa (i18n) con cambio dinámico de idioma y sin cadenas hardcodeadas.
+
+🔒 Privacidad Total y 100% Libre
+- Funcionamiento offline-first: cero telemetría, cero analíticas y sin anuncios publicitarios.
+- Software libre y de código abierto bajo licencia GPL-3.0.
+
+¡Lleva tu música al siguiente nivel con Tachyon, el reproductor definitivo de alta fidelidad!

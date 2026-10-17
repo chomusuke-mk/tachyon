@@ -44,19 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Vidra files
+# Tachyon files
 /temp/
-/linux/ffmpeg
-/linux/ffprobe
-/linux/quickjs
-/windows/ffmpeg.exe
-/windows/ffprobe.exe
-/windows/quickjs.exe
-/android/app/src/main/jniLibs/**
 /app/src/
 /venv/
-/.serious_python/
-/.serious_python_tmp/
 /dist/
 /.agents/
 /app/src_old/
@@ -65,6 +56,3 @@ app.*.map.json
 .widget_preview/
 /JSON/
 /rust/
-/docs/
-/AGENTS.md
-/PERFORMANCE.md

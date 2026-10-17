@@ -106,6 +106,7 @@ words:
   - dists
   - docstates
   - dontwarn
+  - downmix
   - doxxing
   - DPICHANGED
   - dpkg
@@ -152,7 +153,9 @@ words:
   - FONTCHANGE
   - FORCEFILESYSTEM
   - FOSS
+  - Freeverb
   - FSML
+  - Gapless
   - gboolean
   - gchar
   - gint
@@ -165,6 +168,7 @@ words:
   - hardcodeados
   - hashear
   - haudiotagger
+  - headerbar
   - healthcheck
   - herunterladen
   - heurística
@@ -266,6 +270,7 @@ words:
   - LTWH
   - lyricsovh
   - lzma
+  - madvise
   - malloc
   - márcalo
   - Menlo
@@ -499,12 +504,12 @@ words:
   - venv
   - VERSIONINFO
   - VERYSILENT
-  - vidra
   - viewports
   - vimeo
   - vivaldi
   - volcándola
   - VSACL
+  - wakeups
   - wasapi
   - WASAPI
   - wayland

@@ -85,7 +85,6 @@ class LyricsOvhResponse {
 /// - Discriminated response: FOUND, NOT_FOUND, TEMPORARY_ERROR.
 /// - Handles HTTP 404, 5xx server errors, rate limits, timeouts, and connection drops.
 /// - Normalizes Windows CRLF line endings.
-/// - Provides [getPlainLyrics] helper matching PROJECT.md interface contract.
 class LyricsOvhClient {
   static const String defaultBaseUrl = 'https://api.lyrics.ovh/v1';
   static const String defaultUserAgent =

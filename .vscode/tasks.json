@@ -11,10 +11,6 @@
       ],
       "options": {
         "cwd": "${workspaceFolder}/android",
-        "env": {
-          "SERIOUS_PYTHON_SITE_PACKAGES": "${workspaceFolder}/.serious_python/site-packages",
-          "SERIOUS_PYTHON_APP": "${workspaceFolder}/.serious_python/app",
-        }
       },
       "group": "build",
       "problemMatcher": []
@@ -30,14 +26,7 @@
       ],
       "options": {
         "cwd": "${workspaceFolder}",
-        "env": {
-          "SERIOUS_PYTHON_SITE_PACKAGES": "${workspaceFolder}/.serious_python/site-packages",
-          "SERIOUS_PYTHON_APP": "${workspaceFolder}/.serious_python/app",
-        }
       },
-      "dependsOn": [
-        "Prepare: Create site-packages directory"
-      ],
       "presentation": {
         "reveal": "always",
         "panel": "shared"

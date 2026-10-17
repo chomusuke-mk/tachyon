@@ -1,15 +1,18 @@
 name: tachyon
 title: Tachyon
 adopt-info: tachyon
-summary: The ultimate, lightning-fast music player
+summary: Ultra-optimized music player with continuous crossfade and DSP effects
 description: |
-  Meet Tachyon, the ultimate open-source music player designed for power users who demand speed, reliability, and a beautiful interface. Tachyon brings a premium listening experience right to your desktop!
+  Meet Tachyon, an ultra-fast, modern, and lightweight open-source music player designed for audiophiles and power users who demand high fidelity, fluid performance, and an elegant Material 3 interface.
 
-  Features:
-  - Lightning-Fast & Reliable: 
-  - Advanced Processing: Integrated FFmpeg handles complex media processing tasks effortlessly in the background.
-  - Privacy-Focused & Open Source: Zero telemetry, offline-first, and 100% Free and Open-Source Software (FOSS).
-  - Always Up-to-Date (OTA): Built-in Over-The-Air updates ensure your core engines are always running the latest versions.
+  Key Features:
+  - Ultra-Low Resource Usage: Built-in minimized mode suspends rendering, purges graphics memory, and throttles background timers for maximum efficiency and minimal resource consumption.
+  - High-Fidelity Audio Engine: Custom-built miniaudio_player native C-FFI engine with seamless continuous 25ms crossfade (Equal-Power and Linear curves), true gapless playback, and volume boost up to 200%.
+  - Studio-Grade DSP Effects: Real-time 10-band equalizer, Bauer Crossfeed (bs2b) for natural, fatigue-free headphone listening, stereo widener / spatializer, Freeverb algorithmic reverb with customizable room acoustics, true-peak limiter, pitch shifting, and variable speed control (0.5x–1.5x).
+  - In-Memory Relational Graph: Instantaneous O(1) library navigation powered by a unified relational graph (LibraryStore) with zero UI jank and pure Dart isolate metadata extraction.
+  - Synchronized Lyrics: Hierarchical multi-source lyrics resolution (embedded tags, local .lrc files, LRCLIB, and lyrics.ovh) with real-time O(log n) scrolling, tap-to-seek, and automated translation.
+  - Modern Adaptive UI: Material 3 design with dynamic color schemes, pure OLED dark mode, responsive desktop layout, and complete multi-language support (i18n).
+  - Privacy-Focused & 100% FOSS: Completely offline-first with zero telemetry, zero analytics, and no ads.
 
 contact: https://github.com/chomusuke-mk/tachyon/issues
 license: GPL-3.0-or-later
@@ -19,7 +22,7 @@ website: https://chomusuke.dev
 donation:
   - https://patreon.com/chomusuke_dev
   - https://buymeacoffee.com/chomusuke
-icon: assets/icon/icon512.png
+icon: snap/gui/tachyon.png
 type: app
 
 grade: stable
@@ -28,7 +31,7 @@ compression: xz
 base: core24
 
 apps:
-  vidra:
+  tachyon:
     command: tachyon
     extensions: [gnome]
     plugs:
@@ -44,7 +47,7 @@ apps:
       FLUTTER_ASSET_DIR: $SNAP/data/flutter_assets
 
 parts:
-  vidra:
+  tachyon:
     plugin: flutter
     source: .
     flutter-target: lib/main.dart
@@ -53,21 +56,3 @@ parts:
       VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1 | xargs)
       craftctl set version="$VERSION"
       craftctl default
-
-  ffmpeg-dependencies:
-    plugin: nil
-    stage-packages:
-      - libbz2-1.0 # Para libbz2.so.1.0
-      - libnuma1 # Para libnuma.so.1
-      - libva-x11-2 # Para libva-x11.so.2
-      - libgomp1 # Para libgomp.so.1
-      - libva2 # Para libva.so.2
-      - libdrm2 # Para libdrm.so.2
-      - libx11-6 # Para libX11.so.6
-      - libxext6 # Para libXext.so.6
-      - libxfixes3 # Para libXfixes.so.3
-      - libx11-xcb1 # Para libX11-xcb.so.1
-      - libxcb1 # Para libxcb.so.1
-      - libxcb-dri3-0 # Para libxcb-dri3.so.0
-      - libxau6 # Para libXau.so.6
-      - libxdmcp6 # Para libXdmcp.so.6

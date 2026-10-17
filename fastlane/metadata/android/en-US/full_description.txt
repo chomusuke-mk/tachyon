@@ -1,0 +1,35 @@
+Meet Tachyon, an ultra-fast, modern, and lightweight open-source music player designed for audiophiles and power users who demand pristine audio quality, seamless playback, and an elegant Material 3 interface.
+
+Built with a decoupled, high-performance architecture in Flutter and custom native audio FFI (miniaudio_player), Tachyon delivers zero UI jank, instant O(1) library navigation, and unmatched CPU and RAM efficiency.
+
+🎧 High-Fidelity Audio Engine
+- Seamless Continuous Crossfade: Real 25ms crossfade ticker with Equal-Power and Linear curves for perfectly smooth transitions between tracks.
+- True Gapless Playback: Enjoy uninterrupted listening with zero delay between consecutive songs.
+- Volume Boost & Pitch Control: Boost audio gain up to 200% and fine-tune playback speed (0.5x–1.5x) and pitch in real time.
+
+🎛️ Studio-Grade DSP Audio Effects
+- 10-Band Graphic Equalizer: Fine-tune your sound with rich presets and manual controls.
+- Bauer Crossfeed (bs2b): Experience speaker-like spatial sound on headphones (Chu Moy & Default presets) to drastically reduce listening fatigue.
+- Stereo Widener & Spatializer: Expand or narrow your stereo image (0.0x to 2.0x).
+- Freeverb Algorithmic Reverb: Immerse yourself with presets (Small Room, Studio, Concert Hall, Cathedral, Plate, Ambient) or customize room size, damping, width, wet, and dry mix.
+- True-Peak Limiter: Prevent digital clipping and distortion at high volumes.
+
+📜 Smart Synchronized Lyrics
+- Hierarchical Multi-Source Engine: Resolves lyrics from embedded audio tags (USLT), contiguous local .lrc files, LRCLIB, and lyrics.ovh fallback.
+- Real-Time Synced Scrolling: O(log n) active line tracking with smooth auto-scroll, tap-to-seek, and automatic translation support.
+
+⚡ Ultra-Optimized Performance
+- Minimized Resource Footprint: Built-in minimized mode suspends rendering, clears GPU image caches, and throttles background timers for maximum battery life and responsiveness.
+- Pure Dart Isolate Tag Scanning: Concurrent recursive metadata extraction for FLAC, MP3, M4A, OGG, and OPUS without heavy external CLI binaries.
+- 100% In-Memory Relational Graph: Instantaneous browsing and search across artists, albums, tracks, and playlists.
+
+🎨 Modern Material 3 UI
+- Adaptive layout for phones, tablets, and desktop.
+- Dynamic color themes with OLED true black mode.
+- Multi-Language Support: Extensible internationalization (i18n) with dynamic switching and zero hardcoded strings.
+
+🔒 Privacy-Focused & 100% FOSS
+- Completely offline-first with zero telemetry, no hidden analytics, and zero ads.
+- Free and Open-Source Software licensed under GPL-3.0.
+
+Elevate your listening experience today with Tachyon – the ultimate lightweight music player!

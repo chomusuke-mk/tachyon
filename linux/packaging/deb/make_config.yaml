@@ -1,0 +1,56 @@
+display_name: Tachyon
+package_name: tachyon
+
+maintainer:
+  name: chomusuke.dev
+  email: 7k9mc4urn@mozmail.com
+
+priority: optional
+section: sound
+installed_size: 250000
+essential: false
+icon: snap/gui/tachyon.png
+
+postinstall_scripts:
+  - mkdir -p /etc/apt/keyrings
+  - if wget --quiet --timeout=5 --tries=2 -O /etc/apt/keyrings/chomusuke.asc https://apt.chomusuke.dev/public.key; then echo "deb [signed-by=/etc/apt/keyrings/chomusuke.asc] https://apt.chomusuke.dev/ stable main" > /etc/apt/sources.list.d/chomusuke.list; else rm -f /etc/apt/keyrings/chomusuke.asc; fi || true
+  - gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+  - update-desktop-database -q /usr/share/applications || true
+
+postuninstall_scripts:
+  - gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+  - update-desktop-database -q /usr/share/applications || true
+
+description: |
+  Tachyon is an ultra-fast, lightweight modern music player for Linux.
+  Built with Flutter and high-performance native audio FFI, Tachyon features continuous
+  25ms crossfade, advanced DSP effects (Bauer crossfeed, 10-band equalizer,
+  reverb, limiter, speed and pitch control), synchronized lyrics with real-time
+  scrolling, and an in-memory relational graph for zero UI jank and minimal CPU and RAM usage.
+
+keywords:
+  - Tachyon
+  - Music
+  - Player
+  - Audio
+  - Crossfade
+  - Crossfeed
+  - Equalizer
+  - Reverb
+  - DSP
+  - Lyrics
+  - FLAC
+  - MP3
+  - Flutter
+
+generic_name: Music Player
+
+categories:
+  - AudioVideo
+  - Audio
+  - Player
+  - Music
+
+startup_notify: true
+startup_wm_class: dev.chomusuke.tachyon
+metainfo: linux/packaging/dev.chomusuke.tachyon.appdata.xml

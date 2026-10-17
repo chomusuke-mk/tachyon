@@ -1,0 +1,69 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<!-- Copyright 2026 Chomusuke <7k9mc4urn@mozmail.com> -->
+<component type="desktop-application">
+  <id>dev.chomusuke.tachyon</id>
+  <name>Tachyon</name>
+  <summary>Ultra-fast, lightweight music player with continuous crossfade and DSP effects</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <description>
+    <p>Tachyon is an ultra-fast, modern, and lightweight open-source music player designed for audiophiles and power users who demand high audio fidelity, fluid performance, and an elegant Material 3 interface.</p>
+    <p>Engineered with a clean, decoupled architecture between the visual UI and the background audio service isolate, Tachyon delivers zero UI jank, instant O(1) library navigation via an in-memory relational graph, and industry-leading resource efficiency. In minimized mode, it automatically suspends heavy rendering, purges graphics memory, and throttles background timers to maintain minimal CPU and RAM usage.</p>
+    <p>Key features include:</p>
+    <ul>
+      <li>Custom-built high-fidelity audio engine (miniaudio_player) with seamless continuous 25ms crossfade (Equal-Power and Linear curves) and gapless playback.</li>
+      <li>Studio-grade DSP audio suite: 10-band equalizer, Bauer Crossfeed (bs2b) for fatigue-free headphone listening, stereo widener, Freeverb algorithmic reverb, true-peak limiter, pitch shifting, and playback speed control (0.5x–1.5x).</li>
+      <li>Hierarchical synchronized lyrics with real-time O(log n) scrolling, tap-to-seek, multi-source fallback (embedded USLT, local .lrc files, LRCLIB, and lyrics.ovh), and automated translation.</li>
+      <li>Pure Dart isolate metadata extraction and smart album art cache without external CLI binaries or FFmpeg dependencies.</li>
+      <li>Adaptive Material 3 UI with dynamic color scheme, pure OLED black mode, and complete multi-language support (i18n).</li>
+      <li>100% offline-first and privacy-focused: zero telemetry, zero analytics, no ads, and FOSS (GPL-3.0).</li>
+    </ul>
+  </description>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Player</category>
+    <category>Music</category>
+  </categories>
+
+  <keywords>
+    <keyword>music</keyword>
+    <keyword>player</keyword>
+    <keyword>audio</keyword>
+    <keyword>crossfade</keyword>
+    <keyword>crossfeed</keyword>
+    <keyword>equalizer</keyword>
+    <keyword>reverb</keyword>
+    <keyword>dsp</keyword>
+    <keyword>lyrics</keyword>
+    <keyword>flac</keyword>
+    <keyword>mp3</keyword>
+  </keywords>
+
+  <provides>
+    <binary>tachyon</binary>
+  </provides>
+
+  <launchable type="desktop-id">tachyon.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/chomusuke-mk/tachyon/refs/heads/main/assets/screenshots/linux-screenshot-1.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/chomusuke-mk/tachyon/refs/heads/main/assets/screenshots/linux-screenshot-2.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/chomusuke-mk/tachyon/refs/heads/main/assets/screenshots/linux-screenshot-3.png</image>
+    </screenshot>
+  </screenshots>
+  
+  <url type="homepage">https://github.com/chomusuke-mk/tachyon</url>
+  <url type="bugtracker">https://github.com/chomusuke-mk/tachyon/issues</url>
+  <url type="donation">https://www.buymeacoffee.com/chomusuke</url>
+  
+  <developer_name>Chomusuke</developer_name>
+  
+  <content_rating type="oars-1.1"/>
+</component>
