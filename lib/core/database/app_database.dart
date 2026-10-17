@@ -603,13 +603,13 @@ class AppDatabase {
     return list.isNotEmpty ? list.first : null;
   }
 
-  List<Track> getTracksByIds(List<int> ids) {
+  List<Track> getTracksByIds(List<int> ids, {bool includeWaveform = true}) {
     if (ids.isEmpty) return const [];
     final placeholders = List.filled(ids.length, '?').join(',');
-    final rows = db.select(
-      'SELECT id, file_path, title, duration_ms, replay_gain_track_gain, replay_gain_track_peak, waveform_data FROM tracks WHERE id IN ($placeholders);',
-      ids,
-    );
+    final sql = includeWaveform
+        ? 'SELECT id, file_path, title, duration_ms, replay_gain_track_gain, replay_gain_track_peak, waveform_data FROM tracks WHERE id IN ($placeholders);'
+        : 'SELECT id, file_path, title, duration_ms, replay_gain_track_gain, replay_gain_track_peak FROM tracks WHERE id IN ($placeholders);';
+    final rows = db.select(sql, ids);
     final byId = {
       for (final r in rows)
         (r['id'] as int): Track(
@@ -617,7 +617,7 @@ class AppDatabase {
           durationMs: r['duration_ms'] as int, fileSize: 0, modifiedAt: 0,
           replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
           replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
-          waveform: WaveformCodec.decode(r['waveform_data'] as String?),
+          waveform: includeWaveform ? WaveformCodec.decode(r['waveform_data'] as String?) : null,
         ),
     };
     return ids.map((id) => byId[id]).whereType<Track>().toList();

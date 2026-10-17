@@ -21,7 +21,6 @@ import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart'
     show CrossfadeCurve;
-
 /// In-process direct implementation of [TachyonBackendClient].
 /// Useful for unit testing and test suites where spawning a background isolate
 /// is not necessary.
@@ -216,7 +215,9 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     bool play = true,
     bool shuffle = false,
   }) async {
-    final tracks = database?.getTracksByIds(trackIds) ?? const <Track>[];
+    final tracks =
+        database?.getTracksByIds(trackIds, includeWaveform: false) ??
+        const <Track>[];
     final entries = [
       for (int i = 0; i < tracks.length; i++)
         PlaylistEntry.forQueue(id: i, position: i, track: tracks[i]),
@@ -236,7 +237,9 @@ class DirectTachyonBackendClient implements TachyonBackendClient {
     bool play = true,
     bool shuffle = false,
   }) async {
-    final tracks = database?.getTracksByIds(trackIds) ?? const <Track>[];
+    final tracks =
+        database?.getTracksByIds(trackIds, includeWaveform: false) ??
+        const <Track>[];
     final entries = [
       for (int i = 0; i < tracks.length; i++)
         PlaylistEntry.forQueue(id: i, position: i, track: tracks[i]),

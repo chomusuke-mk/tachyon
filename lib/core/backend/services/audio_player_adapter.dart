@@ -104,7 +104,7 @@ class AudioPlayerAdapter {
       if (_rate != 1.0) await p.action.setRate(_rate);
       if (_pitch != 1.0) await p.action.setPitch(_pitch);
       if (_equalizer != Equalizer.flat) await p.action.setEqualizer(_equalizer);
-      if (_reverb != Reverb.off) await p.action.setReverb(_reverb);
+      //if (_reverb != Reverb.off) await p.action.setReverb(_reverb);
       if (_skipSilence) {
         await p.action.setSkipSilence(true, mode: SilenceSkipMode.all);
       }
@@ -339,7 +339,7 @@ class AudioPlayerAdapter {
     final p = _player;
     if (p == null) return;
     try {
-      await p.action.setReverb(config);
+      //await p.action.setReverb(config);
     } catch (_) {}
   }
 
@@ -384,7 +384,7 @@ class AudioPlayerAdapter {
       _player?.stream.equalizer ?? const Stream.empty();
 
   Stream<Reverb> get reverbStream =>
-      _player?.stream.reverb ?? const Stream.empty();
+      /*_player?.stream.reverb ??*/ const Stream.empty();
 
   Stream<AudioDevice> get audioDeviceStream =>
       _player?.stream.audioDevice ?? const Stream.empty();
@@ -416,7 +416,7 @@ class AudioPlayerAdapter {
 
   Equalizer get equalizer => _player?.state.equalizer ?? _equalizer;
 
-  Reverb get reverb => _player?.state.reverb ?? _reverb;
+  Reverb get reverb => /*_player?.state.reverb ?? */_reverb;
 
   AudioDevice get audioDevice => _player?.state.audioDevice ?? _audioDevice;
 

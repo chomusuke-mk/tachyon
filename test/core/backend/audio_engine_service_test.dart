@@ -8,7 +8,6 @@ import 'package:tachyon/features/playback/domain/crossfade_config.dart';
 import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode, Reverb;
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
-
 import 'crossfade_manager_test.dart';
 
 void main() {
@@ -1006,6 +1005,31 @@ void main() {
       expect(playerB.currentReverb.enabled, isTrue);
       expect(playerB.currentReverb.roomSize, equals(0.5));
     });
+
+    test(
+      'open (_hardLoad) and next/skipToIndex (_crossfadeTo) never emit intermediate playing=false states',
+      () async {
+        final emittedStates = <bool>[];
+        final sub = service.stateStream.skip(1).listen((state) {
+          emittedStates.add(state.playing);
+        });
+
+        await service.open(testItems, index: 0, play: true);
+        await service.next();
+        await service.skipToIndex(3, play: true);
+        await service.previous();
+
+        await sub.cancel();
+
+        expect(emittedStates, isNotEmpty);
+        expect(
+          emittedStates.every((playing) => playing == true),
+          isTrue,
+          reason:
+              'Track loads and transitions with play=true must never emit intermediate playing=false states: $emittedStates',
+        );
+      },
+    );
   });
 }
 

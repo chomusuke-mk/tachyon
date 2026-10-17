@@ -3,7 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:miniaudio_player/miniaudio_player.dart'
-    show AudioDevice, CrossfeedMode, Equalizer, Reverb, VisualizerData;
+    show AudioDevice, CrossfeedMode, Equalizer, VisualizerData, Reverb;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/library/domain/playlist.dart';
 import 'package:tachyon/features/library/domain/track.dart';
@@ -103,6 +103,7 @@ class AudioEngineService {
   bool _autoStartScheduled = false;
   PlaylistEntry? _failedAutoTarget;
   bool _queueEnded = false;
+  bool _isLoadingTrack = false;
 
   CrossfadeConfig _crossfadeConfig = const CrossfadeConfig();
   double _masterVolume = AppDefaults.volumeDefault;
@@ -679,12 +680,20 @@ class AudioEngineService {
 
   Future<bool> _hardLoad(PlaylistEntry item, {required bool play}) async {
     _bumpSession();
-    final ok = await _openOn(
-      _activePlayer,
-      item,
-      play: play,
-      volume: _masterVolume,
-    );
+    _unbindActivePlayer();
+    _isLoadingTrack = true;
+    final bool ok;
+    try {
+      ok = await _openOn(
+        _activePlayer,
+        item,
+        play: play,
+        volume: _masterVolume,
+      );
+    } finally {
+      _isLoadingTrack = false;
+    }
+    _bindActivePlayer();
     _emitState();
     return ok;
   }
@@ -696,46 +705,58 @@ class AudioEngineService {
     final outgoing = _activePlayer;
     final incoming = _standbyPlayer;
 
-    if (!await _openOn(incoming, item, play: false, volume: 0.0)) {
-      await _silence(incoming);
-      return false;
+    _isLoadingTrack = true;
+    try {
+      if (!await _openOn(incoming, item, play: false, volume: 0.0)) {
+        await _silence(incoming);
+        return false;
+      }
+
+      // Transitions are committed immediately: the queue already points
+      // at [item], so the UI and the streams follow the incoming player.
+      final transition = _Transition(
+        kind: _TransitionKind.manual,
+        target: item,
+        outgoing: outgoing,
+        incoming: incoming,
+      );
+      _transition = transition;
+      _activePlayer = incoming;
+      _standbyPlayer = outgoing;
+      _bumpSession();
+      _unbindActivePlayer();
+
+      final targetDur =
+          isManual ? _crossfadeConfig.manualDuration : _crossfadeConfig.duration;
+      final duration = _clampCrossfadeDuration(
+        outgoingDuration: outgoing.duration,
+        outgoingRemaining: outgoing.duration - outgoing.position,
+        targetDuration: targetDur,
+        incomingDuration: incoming.duration > Duration.zero
+            ? incoming.duration
+            : (item.track?.duration ?? Duration.zero),
+      );
+
+      await _crossfadeManager.cross(
+        playerOut: outgoing,
+        playerIn: incoming,
+        targetDuration: duration,
+        curve: _crossfadeConfig.curve,
+        masterVolume: _masterVolume,
+        playbackRate: _playbackRate,
+        onCrossEnd: () => _onCrossEnd(transition),
+      );
+
+      // For direct cuts (<= 100ms), cross() completes the transition
+      // synchronously before returning; clear _transition so the scheduled
+      // _onCrossEnd callback does not emit a duplicate state.
+      if (!_crossfadeManager.isActive && identical(_transition, transition)) {
+        _transition = null;
+      }
+    } finally {
+      _isLoadingTrack = false;
     }
-
-    // Transitions are committed immediately: the queue already points
-    // at [item], so the UI and the streams follow the incoming player.
-    final transition = _Transition(
-      kind: _TransitionKind.manual,
-      target: item,
-      outgoing: outgoing,
-      incoming: incoming,
-    );
-    _transition = transition;
-    _activePlayer = incoming;
-    _standbyPlayer = outgoing;
-    _bumpSession();
     _bindActivePlayer();
-    _emitState();
-
-    final targetDur =
-        isManual ? _crossfadeConfig.manualDuration : _crossfadeConfig.duration;
-    final duration = _clampCrossfadeDuration(
-      outgoingDuration: outgoing.duration,
-      outgoingRemaining: outgoing.duration - outgoing.position,
-      targetDuration: targetDur,
-      incomingDuration: incoming.duration > Duration.zero
-          ? incoming.duration
-          : (item.track?.duration ?? Duration.zero),
-    );
-
-    await _crossfadeManager.cross(
-      playerOut: outgoing,
-      playerIn: incoming,
-      targetDuration: duration,
-      curve: _crossfadeConfig.curve,
-      masterVolume: _masterVolume,
-      playbackRate: _playbackRate,
-      onCrossEnd: () => _onCrossEnd(transition),
-    );
     _emitState();
     return true;
   }
@@ -744,10 +765,17 @@ class AudioEngineService {
     await _abortTransition();
     _bumpSession();
     _queueEnded = false;
-    await _activePlayer.seek(Duration.zero);
-    if (play && !_activePlayer.isPlaying) {
-      await _activePlayer.play();
+    _unbindActivePlayer();
+    _isLoadingTrack = true;
+    try {
+      await _activePlayer.seek(Duration.zero);
+      if (play && !_activePlayer.isPlaying) {
+        await _activePlayer.play();
+      }
+    } finally {
+      _isLoadingTrack = false;
     }
+    _bindActivePlayer();
     _emitState();
   }
 
@@ -839,7 +867,7 @@ class AudioEngineService {
   }
 
   void _onQueueMutated() {
-    if (_disposed) return;
+    if (_disposed || _isLoadingTrack) return;
     _emitState();
     _maybeScheduleAutoCrossfade(_activePlayer.position);
   }
@@ -1092,21 +1120,21 @@ class AudioEngineService {
 
   Future<void> _configurePlayerProperties(AudioPlayerAdapter player) async {
     try {
-      await player.setRate(_playbackRate);
-      await player.setPitch(_playbackPitch);
-      await player.setEqualizer(_equalizer);
-      await player.setReverb(_reverb);
-      await player.setSkipSilence(_skipSilence);
-      await player.setPreamp(_preampDb);
-      await player.setBalance(_balance);
-      await player.setMono(_mono);
-      await player.setCrossfeed(_crossfeedMode);
-      await player.setSpatializer(_spatializerWidth);
-      await player.setLimiter(_limiterEnabled);
       final device = _currentDevice;
-      if (device != null) {
-        await player.setDevice(device);
-      }
+      await Future.wait([
+        player.setRate(_playbackRate),
+        player.setPitch(_playbackPitch),
+        player.setEqualizer(_equalizer),
+        player.setReverb(_reverb),
+        player.setSkipSilence(_skipSilence),
+        player.setPreamp(_preampDb),
+        player.setBalance(_balance),
+        player.setMono(_mono),
+        player.setCrossfeed(_crossfeedMode),
+        player.setSpatializer(_spatializerWidth),
+        player.setLimiter(_limiterEnabled),
+        if (device != null) player.setDevice(device),
+      ]);
     } catch (_) {}
   }
 
@@ -1141,11 +1169,15 @@ class AudioEngineService {
   // Stream & State Management
   // --------------------------------------------------------------------------
 
-  void _bindActivePlayer() {
+  void _unbindActivePlayer() {
     for (final sub in _playerSubscriptions) {
       sub.cancel();
     }
     _playerSubscriptions.clear();
+  }
+
+  void _bindActivePlayer() {
+    _unbindActivePlayer();
     if (_disposed) return;
 
     final player = _activePlayer;

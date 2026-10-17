@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:flutter/foundation.dart';
@@ -18,25 +19,29 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   final PlaybackController playbackController;
 
   bool _isDisposed = false;
-  String? _lastEmittedTrackPath;
+  String? _lastEmittedMediaSignature;
   List<PlaylistEntry>? _lastSyncedPlayables;
-  StreamSubscription<PlaybackState>? _backendStateSub;
-  StreamSubscription<Duration>? _backendPositionSub;
   DateTime? _lastPositionUpdateTime;
   Duration _lastEmittedPosition = Duration.zero;
+
+  // Deduplication fields for PlaybackState
+  bool? _lastPlaying;
+  as_lib.AudioProcessingState? _lastProcessingState;
+  double? _lastSpeed;
+  as_lib.AudioServiceRepeatMode? _lastRepeatMode;
+  as_lib.AudioServiceShuffleMode? _lastShuffleMode;
 
   TachyonAudioHandler({
     required this.backend,
     required this.playbackController,
   }) {
     playbackController.addListener(_syncFromPlaybackController);
-    _backendStateSub = backend.playbackStateStream.listen((state) {
-      _syncFromPlaybackState(state, position: state.position);
-    });
-    _backendPositionSub = backend.positionStream.listen((pos) {
-      _onPositionUpdate(pos);
-    });
+    playbackController.positionListenable.addListener(_onPositionChanged);
     _syncFromPlaybackController();
+  }
+
+  void _onPositionChanged() {
+    _onPositionUpdate(playbackController.position);
   }
 
   void _onPositionUpdate(Duration pos) {
@@ -50,7 +55,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
       _lastPositionUpdateTime = now;
       _lastEmittedPosition = pos;
       final current = playbackState.value;
-      if (current.playing) {
+      if (current.playing || jumped) {
         playbackState.add(
           current.copyWith(
             updatePosition: pos,
@@ -69,46 +74,46 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     );
   }
 
+  static Uri? resolveLowQualityArtUri(
+    String? thumbnailHash, [
+    String? albumThumbnailHash,
+  ]) {
+    if (MetadataUtils.thumbnailsDirectory == null) return null;
+    final hash = (thumbnailHash != null && thumbnailHash.isNotEmpty)
+        ? thumbnailHash
+        : ((albumThumbnailHash != null && albumThumbnailHash.isNotEmpty)
+            ? albumThumbnailHash
+            : null);
+    if (hash == null) return null;
+    return Uri.file(
+      MetadataUtils.getThumbnailFilePath(
+        hash,
+        quality: ThumbnailQuality.low,
+      ),
+    );
+  }
+
   void _syncFromPlaybackState(PlaybackState state, {Duration? position}) {
     if (_isDisposed) return;
     final track = state.currentTrack;
 
-    // 1. Sync Current MediaItem (using small / crisp thumbnail)
-    if (track?.filePath != _lastEmittedTrackPath) {
-      _lastEmittedTrackPath = track?.filePath;
-      Uri? uri;
-      if (track != null) {
-        if (track.thumbnailHash != null && track.thumbnailHash!.isNotEmpty) {
-          final mediumFile = File(
-            MetadataUtils.getThumbnailFilePath(
-              track.thumbnailHash!,
-              quality: ThumbnailQuality.medium,
-            ),
-          );
-          final lowFile = File(
-            MetadataUtils.getThumbnailFilePath(
-              track.thumbnailHash!,
-              quality: ThumbnailQuality.low,
-            ),
-          );
-          final highFile = File(
-            MetadataUtils.getThumbnailFilePath(
-              track.thumbnailHash!,
-              quality: ThumbnailQuality.high,
-            ),
-          );
-          final coverFile =
-              (mediumFile.existsSync() && mediumFile.lengthSync() > 0)
-                  ? mediumFile
-                  : ((lowFile.existsSync() && lowFile.lengthSync() > 0)
-                      ? lowFile
-                      : ((highFile.existsSync() && highFile.lengthSync() > 0)
-                          ? highFile
-                          : null));
-          uri = coverFile?.uri;
-        }
+    // 1. Sync Current MediaItem (using O(1) in-memory hydrated low-quality thumbnail)
+    if (track != null) {
+      final artistNames = track.artists.map((a) => a.name).join(', ');
+      final albumName = track.album?.name ?? '';
+      final hash = (track.thumbnailHash != null &&
+              track.thumbnailHash!.isNotEmpty)
+          ? track.thumbnailHash!
+          : (track.album?.thumbnailHash ?? '');
+      final signature =
+          '${track.filePath}|${track.title}|$artistNames|$albumName|${track.durationMs}|$hash';
 
-        final artistNames = track.artists.map((a) => a.name).join(', ');
+      if (signature != _lastEmittedMediaSignature) {
+        _lastEmittedMediaSignature = signature;
+        final uri = resolveLowQualityArtUri(
+          track.thumbnailHash,
+          track.album?.thumbnailHash,
+        );
 
         mediaItem.add(
           as_lib.MediaItem(
@@ -120,60 +125,54 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
             artUri: uri,
           ),
         );
-      } else {
-        mediaItem.add(null);
       }
+    } else if (_lastEmittedMediaSignature != null) {
+      _lastEmittedMediaSignature = null;
+      mediaItem.add(null);
     }
 
-    // 2. Sync Queue only when queue structure actually mutates (prevents UI isolate disk I/O on pause/skip)
+    // 2. Sync Queue only when queue structure actually mutates and platform supports/needs it.
+    // Desktop OS integrations (Linux MPRIS & Windows SMTC) have no queue consumer and only
+    // read mediaItem; serializing large queues over the method channel causes heavy UI freezes.
+    // On mobile (Android/iOS), window the queue to a safe limit (<= 50 items) without blocking disk I/O
+    // to prevent Android Binder TransactionTooLargeException.
     if (_lastSyncedPlayables == null ||
         (!identical(state.playables, _lastSyncedPlayables) &&
             !listEquals(state.playables, _lastSyncedPlayables))) {
-      _lastSyncedPlayables = List<PlaylistEntry>.unmodifiable(state.playables);
-      final queueItems = state.playables
-          .map((entry) {
-            final t = entry.track;
-            if (t == null) return null;
-            final artists = t.artists.map((a) => a.name).join(', ');
-            Uri? uri;
-            if (t.thumbnailHash != null && t.thumbnailHash!.isNotEmpty) {
-              final mediumFile = File(
-                MetadataUtils.getThumbnailFilePath(
-                  t.thumbnailHash!,
-                  quality: ThumbnailQuality.medium,
-                ),
-              );
-              final lowFile = File(
-                MetadataUtils.getThumbnailFilePath(
-                  t.thumbnailHash!,
-                  quality: ThumbnailQuality.low,
-                ),
-              );
-              final cover =
-                  (mediumFile.existsSync() && mediumFile.lengthSync() > 0)
-                      ? mediumFile
-                      : ((lowFile.existsSync() && lowFile.lengthSync() > 0)
-                          ? lowFile
-                          : null);
-              uri = cover?.uri;
-            }
-
-            return as_lib.MediaItem(
+      _lastSyncedPlayables = state.playables;
+      final bool shouldSyncQueue =
+          !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+      if (shouldSyncQueue) {
+        final total = state.playables.length;
+        final curr = state.index.clamp(0, total > 0 ? total - 1 : 0);
+        final start = math.max(0, curr - 10);
+        final end = math.min(total, curr + 40);
+        final queueItems = <as_lib.MediaItem>[];
+        for (var i = start; i < end; i++) {
+          final entry = state.playables[i];
+          final t = entry.track;
+          if (t == null) continue;
+          final artists = t.artists.map((a) => a.name).join(', ');
+          final uri = resolveLowQualityArtUri(
+            t.thumbnailHash,
+            t.album?.thumbnailHash,
+          );
+          queueItems.add(
+            as_lib.MediaItem(
               id: t.filePath,
               title: t.title,
               artist: artists.isNotEmpty ? artists : null,
               album: t.album?.name,
               duration: Duration(milliseconds: t.durationMs),
               artUri: uri,
-            );
-          })
-          .whereType<as_lib.MediaItem>()
-          .toList();
-
-      queue.add(queueItems);
+            ),
+          );
+        }
+        queue.add(queueItems);
+      }
     }
 
-    // 3. Sync PlaybackState
+    // 3. Sync PlaybackState (deduplicated)
     final isPlaying = state.isPlaying;
     final isBuffering = state.buffering;
 
@@ -187,6 +186,38 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     } else {
       processingState = as_lib.AudioProcessingState.ready;
     }
+
+    final asRepeatMode = switch (state.loop) {
+      Loop.off => as_lib.AudioServiceRepeatMode.none,
+      Loop.one => as_lib.AudioServiceRepeatMode.one,
+      Loop.all => as_lib.AudioServiceRepeatMode.all,
+    };
+
+    final asShuffleMode = state.shuffle
+        ? as_lib.AudioServiceShuffleMode.all
+        : as_lib.AudioServiceShuffleMode.none;
+
+    final speed = isPlaying ? state.rate : 0.0;
+    final livePosition = position ?? state.position;
+    final positionJumped =
+        (livePosition - _lastEmittedPosition).abs() > const Duration(seconds: 2);
+
+    if (_lastPlaying == isPlaying &&
+        _lastProcessingState == processingState &&
+        _lastSpeed == speed &&
+        _lastRepeatMode == asRepeatMode &&
+        _lastShuffleMode == asShuffleMode &&
+        !positionJumped) {
+      return;
+    }
+
+    _lastPlaying = isPlaying;
+    _lastProcessingState = processingState;
+    _lastSpeed = speed;
+    _lastRepeatMode = asRepeatMode;
+    _lastShuffleMode = asShuffleMode;
+    _lastEmittedPosition = livePosition;
+    _lastPositionUpdateTime = DateTime.now();
 
     final controls = <as_lib.MediaControl>[
       as_lib.MediaControl.skipToPrevious,
@@ -203,20 +234,6 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
       as_lib.MediaAction.setShuffleMode,
     };
 
-    final asRepeatMode = switch (state.loop) {
-      Loop.off => as_lib.AudioServiceRepeatMode.none,
-      Loop.one => as_lib.AudioServiceRepeatMode.one,
-      Loop.all => as_lib.AudioServiceRepeatMode.all,
-    };
-
-    final asShuffleMode = state.shuffle
-        ? as_lib.AudioServiceShuffleMode.all
-        : as_lib.AudioServiceShuffleMode.none;
-
-    final livePosition = position ?? state.position;
-    _lastEmittedPosition = livePosition;
-    _lastPositionUpdateTime = DateTime.now();
-
     playbackState.add(
       as_lib.PlaybackState(
         controls: controls,
@@ -226,7 +243,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
         playing: isPlaying,
         updatePosition: livePosition,
         bufferedPosition: livePosition,
-        speed: isPlaying ? state.rate : 0.0,
+        speed: speed,
         repeatMode: asRepeatMode,
         shuffleMode: asShuffleMode,
       ),
@@ -297,8 +314,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
   void dispose() {
     _isDisposed = true;
-    _backendStateSub?.cancel();
-    _backendPositionSub?.cancel();
+    playbackController.positionListenable.removeListener(_onPositionChanged);
     playbackController.removeListener(_syncFromPlaybackController);
   }
 }

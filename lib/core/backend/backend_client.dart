@@ -20,7 +20,6 @@ import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/domain/playback_state.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart'
     show CrossfadeCurve;
-
 /// Abstract client interface consumed exclusively by UI controllers.
 /// The UI isolate contains ZERO database queries, ZERO audio player adapters,
 /// and ZERO metadata/image decoders. All operations are dispatched through this client.

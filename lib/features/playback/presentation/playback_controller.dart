@@ -194,6 +194,7 @@ class PlaybackController extends ChangeNotifier {
       }
     }
 
+    var anyChanged = false;
     final resolvedPlayables = List<PlaylistEntry>.generate(
       raw.playables.length,
       (i) {
@@ -204,6 +205,7 @@ class PlaybackController extends ChangeNotifier {
             (t.id != null ? store.getTrackById(t.id!) : null) ??
             store.getTrackByPath(t.filePath);
         if (resolved != null && !identical(resolved, t)) {
+          anyChanged = true;
           return item.copyWith(track: resolved);
         }
         return item;
@@ -211,7 +213,7 @@ class PlaybackController extends ChangeNotifier {
       growable: false,
     );
 
-    return raw.copyWith(playables: resolvedPlayables);
+    return anyChanged ? raw.copyWith(playables: resolvedPlayables) : raw;
   }
 
   // ---------------------------------------------------------------------------

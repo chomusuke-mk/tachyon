@@ -9,7 +9,6 @@ import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 export 'package:miniaudio_player/miniaudio_player.dart'
     show CrossfeedMode, Reverb;
-
 typedef LoopMode = Loop;
 
 @immutable

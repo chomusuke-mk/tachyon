@@ -41,7 +41,7 @@ dependencies:
   flutter_markdown_plus: ^1.0.12
   haudiotagger: ^3.1.0
   sqlite3: ^3.7.1
-  miniaudio_player: ^2.1.0
+  miniaudio_player: ^2.0.1
   audio_service: ^0.18.19
   smtc_windows: ^1.1.0
   dbus: ^0.8.0

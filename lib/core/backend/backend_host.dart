@@ -27,7 +27,6 @@ import 'package:tachyon/features/playback/domain/lyric_source.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart'
     show CrossfadeCurve;
 import 'package:tachyon/shared/utils/metadata_utils.dart';
-
 /// Configuration passed from the UI Isolate when spawning the Core Service Isolate.
 class CoreInitConfig {
   final SendPort uiSendPort;
@@ -286,7 +285,7 @@ class TachyonBackendHost {
         final startIndex = params['startIndex'] as int?;
         final autoPlay = params['play'] as bool? ?? true;
         final shuffle = params['shuffle'] as bool? ?? false;
-        final tracks = _database.getTracksByIds(trackIds);
+        final tracks = _database.getTracksByIds(trackIds, includeWaveform: false);
         final entries = [
           for (int i = 0; i < tracks.length; i++)
             PlaylistEntry.forQueue(id: i, position: i, track: tracks[i]),

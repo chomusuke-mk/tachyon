@@ -34,34 +34,18 @@ class AlbumArtImage extends StatelessWidget {
     this.fallback,
   });
 
-  /// UI utility: validates that the thumbnail file exists on disk and has length > 0.
-  /// Returns the path if valid, or null otherwise.
+  /// UI utility: returns the resolved thumbnail file path for [coverHash] if non-empty.
   static Future<String?> getThumbnail(
     String? coverHash, {
     ThumbnailQuality quality = ThumbnailQuality.low,
   }) async {
-    if (coverHash == null || coverHash.trim().isEmpty) return null;
-    final cleanHash = coverHash.trim();
-    final lookupKey = '${quality.name}:$cleanHash';
-
-    final cached = _resolvedPaths[lookupKey];
-    if (cached != null) {
-      final f = File(cached);
-      if (f.existsSync() && f.lengthSync() > 0) {
-        return cached;
-      }
-      _resolvedPaths.remove(lookupKey);
+    if (coverHash == null ||
+        coverHash.trim().isEmpty ||
+        MetadataUtils.thumbnailsDirectory == null) {
+      return null;
     }
-
-    try {
-      final f = File(MetadataUtils.getThumbnailFilePath(cleanHash, quality: quality));
-      if (await f.exists() && await f.length() > 0) {
-        _resolvedPaths[lookupKey] = f.path;
-        return f.path;
-      }
-    } catch (_) {}
-
-    return null;
+    final cleanHash = coverHash.trim();
+    return MetadataUtils.getThumbnailFilePath(cleanHash, quality: quality);
   }
 
   @override
@@ -84,9 +68,11 @@ class AlbumArtImage extends StatelessWidget {
     );
     final effectiveFallback = fallback ?? defaultFallback;
 
-    // If thumbnailHash is null or empty, synchronously return fallback!
+    // If thumbnailHash is null, empty or MetadataUtils is not initialized, synchronously return fallback!
     final hash = thumbnailHash?.trim();
-    if (hash == null || hash.isEmpty) {
+    if (hash == null ||
+        hash.isEmpty ||
+        MetadataUtils.thumbnailsDirectory == null) {
       if (borderRadius != null) {
         return ClipRRect(borderRadius: borderRadius!, child: effectiveFallback);
       }
@@ -135,30 +121,11 @@ class AlbumArtImage extends StatelessWidget {
       );
     }
 
-    final lookupKey = '${quality.name}:$hash';
-    if (_resolvedPaths.containsKey(lookupKey)) {
-      final cachedPath = _resolvedPaths[lookupKey]!;
-      final image = buildImage(File(cachedPath));
-      if (borderRadius != null) {
-        return ClipRRect(borderRadius: borderRadius!, child: image);
-      }
-      return image;
-    }
-
-    final Widget imageWidget = FutureBuilder<String?>(
-      future: getThumbnail(hash, quality: quality),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done &&
-            snapshot.data != null) {
-          return buildImage(File(snapshot.data!));
-        }
-        return effectiveFallback;
-      },
-    );
-
+    final filePath = MetadataUtils.getThumbnailFilePath(hash, quality: quality);
+    final image = buildImage(File(filePath));
     if (borderRadius != null) {
-      return ClipRRect(borderRadius: borderRadius!, child: imageWidget);
+      return ClipRRect(borderRadius: borderRadius!, child: image);
     }
-    return imageWidget;
+    return image;
   }
 }

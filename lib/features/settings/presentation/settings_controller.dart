@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:miniaudio_player/miniaudio_player.dart'
-    show Equalizer, Reverb;
+    show Equalizer;
 import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/playback/domain/crossfade_config.dart';
@@ -11,7 +11,6 @@ import 'package:tachyon/features/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 import 'package:tachyon/shared/utils/folder_utils.dart';
-
 class SettingsController extends ChangeNotifier {
   final SettingsRepository _repository;
   final TachyonBackendClient _backend;
