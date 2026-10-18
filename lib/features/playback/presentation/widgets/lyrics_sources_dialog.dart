@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import 'package:tachyon/core/constants/languages.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
 enum LyricsDialogTab { sources, translation }
@@ -11,13 +10,59 @@ enum LyricsDialogTab { sources, translation }
 /// Modal dialog for configuring active lyrics sources (Local, lrclib.net, lyrics.ovh)
 /// and lyrics translation (source language, target language).
 class LyricsSourcesDialog extends StatefulWidget {
-  const LyricsSourcesDialog({super.key});
+  final bool initialEnableLocal;
+  final bool initialEnableLrclib;
+  final bool initialEnableLyricsOvh;
+  final bool hasLyrics;
+  final bool isTranslated;
+  final void Function({bool? local, bool? lrclib, bool? lyricsOvh})?
+      onSourcesChanged;
+  final Future<void> Function()? onForceReSearch;
+  final Future<void> Function({
+    String? sourceLanguage,
+    required String targetLanguage,
+  })? onRetranslate;
+
+  const LyricsSourcesDialog({
+    super.key,
+    this.initialEnableLocal = true,
+    this.initialEnableLrclib = true,
+    this.initialEnableLyricsOvh = true,
+    this.hasLyrics = false,
+    this.isTranslated = false,
+    this.onSourcesChanged,
+    this.onForceReSearch,
+    this.onRetranslate,
+  });
 
   /// Displays the [LyricsSourcesDialog] as an adaptive Material 3 dialog.
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(
+    BuildContext context, {
+    bool initialEnableLocal = true,
+    bool initialEnableLrclib = true,
+    bool initialEnableLyricsOvh = true,
+    bool hasLyrics = false,
+    bool isTranslated = false,
+    void Function({bool? local, bool? lrclib, bool? lyricsOvh})?
+        onSourcesChanged,
+    Future<void> Function()? onForceReSearch,
+    Future<void> Function({
+      String? sourceLanguage,
+      required String targetLanguage,
+    })? onRetranslate,
+  }) {
     return showDialog<void>(
       context: context,
-      builder: (context) => const LyricsSourcesDialog(),
+      builder: (context) => LyricsSourcesDialog(
+        initialEnableLocal: initialEnableLocal,
+        initialEnableLrclib: initialEnableLrclib,
+        initialEnableLyricsOvh: initialEnableLyricsOvh,
+        hasLyrics: hasLyrics,
+        isTranslated: isTranslated,
+        onSourcesChanged: onSourcesChanged,
+        onForceReSearch: onForceReSearch,
+        onRetranslate: onRetranslate,
+      ),
     );
   }
 
@@ -34,40 +79,38 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
   @override
   void initState() {
     super.initState();
-    final controller = context.read<LyricsController>();
-    _enableLocal = controller.enableLocalSources;
-    _enableLrclib = controller.enableLrclib;
-    _enableLyricsOvh = controller.enableLyricsOvh;
+    _enableLocal = widget.initialEnableLocal;
+    _enableLrclib = widget.initialEnableLrclib;
+    _enableLyricsOvh = widget.initialEnableLyricsOvh;
   }
 
   void _updateLocal(bool value) {
     // Invariant: At least one source must remain enabled
     if (!value && !_enableLrclib && !_enableLyricsOvh) return;
     setState(() => _enableLocal = value);
-    context.read<LyricsController>().setSourcesConfig(local: value);
+    widget.onSourcesChanged?.call(local: value);
   }
 
   void _updateLrclib(bool value) {
     if (!value && !_enableLocal && !_enableLyricsOvh) return;
     setState(() => _enableLrclib = value);
-    context.read<LyricsController>().setSourcesConfig(lrclib: value);
+    widget.onSourcesChanged?.call(lrclib: value);
   }
 
   void _updateLyricsOvh(bool value) {
     if (!value && !_enableLocal && !_enableLrclib) return;
     setState(() => _enableLyricsOvh = value);
-    context.read<LyricsController>().setSourcesConfig(lyricsOvh: value);
+    widget.onSourcesChanged?.call(lyricsOvh: value);
   }
 
   Future<void> _handleReSearch() async {
-    final controller = context.read<LyricsController>();
-    controller.setSourcesConfig(
+    widget.onSourcesChanged?.call(
       local: _enableLocal,
       lrclib: _enableLrclib,
       lyricsOvh: _enableLyricsOvh,
     );
     Navigator.of(context).pop();
-    await controller.forceReSearch();
+    await widget.onForceReSearch?.call();
   }
 
   Future<void> _showLanguagePicker({
@@ -249,7 +292,6 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final settings = context.watch<SettingsController>();
-    final lyricsController = context.watch<LyricsController>();
 
     final hasAnySource = _enableLocal || _enableLrclib || _enableLyricsOvh;
 
@@ -466,15 +508,13 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
                           includeDefault: false,
                           onSelected: (code) async {
                             await settings.setLyricsTranslationSourceLang(code);
-                            if (lyricsController.isTranslated &&
-                                lyricsController.hasLyrics) {
+                            if (widget.isTranslated && widget.hasLyrics) {
                               final effectiveTarget = (targetCode == 'defaultOption')
                                   ? currentLocale
                                   : targetCode;
-                              await lyricsController.translateLyrics(
+                              await widget.onRetranslate?.call(
                                 sourceLanguage: code,
                                 targetLanguage: effectiveTarget,
-                                force: true,
                               );
                             }
                           },
@@ -528,14 +568,12 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
                           includeDefault: true,
                           onSelected: (code) async {
                             await settings.setLyricsTranslationTargetLang(code);
-                            if (lyricsController.isTranslated &&
-                                lyricsController.hasLyrics) {
+                            if (widget.isTranslated && widget.hasLyrics) {
                               final effectiveTarget = (code == 'defaultOption')
                                   ? currentLocale
                                   : code;
-                              await lyricsController.translateLyrics(
+                              await widget.onRetranslate?.call(
                                 targetLanguage: effectiveTarget,
-                                force: true,
                               );
                             }
                           },
@@ -561,16 +599,15 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
             icon: const Icon(Icons.refresh_rounded, size: 18),
             label: Text(strings.npLyricsSourcesResearchBtn),
           )
-        else if (lyricsController.hasLyrics)
+        else if (widget.hasLyrics)
           FilledButton.icon(
             onPressed: () async {
               Navigator.of(context).pop();
               final effectiveTarget = (targetCode == 'defaultOption')
                   ? currentLocale
                   : targetCode;
-              await lyricsController.translateLyrics(
+              await widget.onRetranslate?.call(
                 targetLanguage: effectiveTarget,
-                force: true,
               );
             },
             icon: const Icon(Icons.translate_rounded, size: 18),

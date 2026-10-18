@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/backend/direct_backend_client.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 void main() {

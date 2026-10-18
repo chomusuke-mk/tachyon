@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
 
 void main() {

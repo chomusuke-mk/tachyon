@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 
 /// Intercepts PC/Desktop shortcuts (ESC key, browser back key, Alt+Left,
 /// mouse back button, and numeric seek 0-9) to navigate back, minimize active players,

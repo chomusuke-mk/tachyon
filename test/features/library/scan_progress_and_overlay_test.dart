@@ -7,17 +7,16 @@ import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tachyon/core/backend/direct_backend_client.dart';
-import 'package:tachyon/core/backend/services/metadata_service.dart';
+import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/scan_progress.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/shell/scan_progress_overlay.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 
 class _TestLocaleRepository extends LocaleRepository {
   @override
@@ -27,6 +26,32 @@ class _TestLocaleRepository extends LocaleRepository {
     final content = file.readAsStringSync();
     final json = jsoncDecode(content) as Map<String, dynamic>;
     return json.map((key, value) => MapEntry(key, value.toString().trim()));
+  }
+}
+
+class _ControllableMetadataService extends MetadataService {
+  final StreamController<ScanProgress> _controller =
+      StreamController<ScanProgress>.broadcast();
+
+  _ControllableMetadataService({required super.database});
+
+  @override
+  Stream<ScanProgress> get progressStream => _controller.stream;
+
+  void emitProgress(ScanProgress progress) {
+    _controller.add(progress);
+  }
+
+  @override
+  Stream<ScanProgress> scanDirectories(
+    List<String> directories, {
+    CancellationToken? cancellationToken,
+  }) {
+    return _controller.stream;
+  }
+
+  void disposeService() {
+    _controller.close();
   }
 }
 
@@ -110,21 +135,24 @@ void main() {
   group('MetadataService & Concurrency Guard', () {
     late Directory tempDir;
     late AppDatabase database;
+    late LibraryStore store;
     late MetadataService metadataService;
 
     setUp(() {
       tempDir = Directory.systemTemp.createTempSync('tachyon_scan_test_');
       MetadataUtils.init(tempDir.path, tempDir.path);
       database = AppDatabase.inMemory();
+      store = LibraryStore(database);
       metadataService = MetadataService(
         database: database,
+        store: store,
         customWorkerCount: 2,
       );
     });
 
-    tearDown(() {
+    tearDown(() async {
       metadataService.cancelScan();
-      database.close();
+      await database.close();
       if (tempDir.existsSync()) {
         tempDir.deleteSync(recursive: true);
       }
@@ -152,7 +180,7 @@ void main() {
 
     test('Scanning empty directories purges stored tracks', () async {
       // Seed a track in database
-      database.upsertTracks([
+      await database.upsertTracks([
         ExtractedTrackData(
           filePath: '/fake/music/song1.mp3',
           title: 'Song 1',
@@ -162,20 +190,22 @@ void main() {
           modifiedAt: 100,
         ),
       ]);
-      expect(database.getCatalogSnapshot().tracks.length, 1);
+      await store.reloadFromDatabase();
+      expect((await database.getCatalogSnapshot()).tracks.length, 1);
 
       // Scan empty list of directories
       final events = await metadataService.scanDirectories([]).toList();
       expect(events.last.stage, ScanStage.completed);
 
       // Verify track was purged
-      expect(database.getCatalogSnapshot().tracks, isEmpty);
+      expect((await database.getCatalogSnapshot()).tracks, isEmpty);
     });
   });
 
   group('LibraryController Concurrency & Empty List', () {
     late AppDatabase database;
-    late DirectTachyonBackendClient backend;
+    late LibraryStore store;
+    late MetadataService metadataService;
     late LibraryController libraryController;
     late Directory tempDir;
     late SettingsRepository settingsRepository;
@@ -188,32 +218,29 @@ void main() {
       settingsRepository = SettingsRepository(prefs);
 
       database = AppDatabase.inMemory();
-      final metadataService = MetadataService(
+      store = LibraryStore(database);
+      metadataService = MetadataService(
         database: database,
+        store: store,
         customWorkerCount: 1,
       );
-      backend = DirectTachyonBackendClient(
-        database: database,
-        metadataService: metadataService,
-      );
       libraryController = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
-        store: LibraryStore(),
+        store: store,
+        metadataService: metadataService,
       );
     });
 
-    tearDown(() {
+    tearDown(() async {
       libraryController.dispose();
-      backend.dispose();
-      database.close();
+      await database.close();
       if (tempDir.existsSync()) {
         tempDir.deleteSync(recursive: true);
       }
     });
 
     test('scanDirectories() with empty settings does not return early and executes scan', () async {
-      database.upsertTracks([
+      await database.upsertTracks([
         ExtractedTrackData(
           filePath: '/fake/music/song.mp3',
           title: 'Song',
@@ -223,7 +250,8 @@ void main() {
           modifiedAt: 100,
         ),
       ]);
-      expect(database.getCatalogSnapshot().tracks.length, 1);
+      await store.reloadFromDatabase();
+      expect((await database.getCatalogSnapshot()).tracks.length, 1);
 
       await settingsRepository.saveSettings(
         settingsRepository.getSettings().copyWith(musicDirectories: []),
@@ -232,7 +260,7 @@ void main() {
 
       // Wait for completion
       await Future<void>.delayed(const Duration(milliseconds: 200));
-      expect(database.getCatalogSnapshot().tracks, isEmpty);
+      expect((await database.getCatalogSnapshot()).tracks, isEmpty);
     });
 
     test('scanDirectories ignores subsequent calls while scanning', () async {
@@ -260,7 +288,7 @@ void main() {
     });
 
     test('scanDirectories() executes scan with empty list when musicDirectories is empty to purge library', () async {
-      database.upsertTracks([
+      await database.upsertTracks([
         ExtractedTrackData(
           filePath: '/fake/music/song.mp3',
           title: 'Song',
@@ -270,7 +298,8 @@ void main() {
           modifiedAt: 100,
         ),
       ]);
-      expect(database.getCatalogSnapshot().tracks.length, 1);
+      await store.reloadFromDatabase();
+      expect((await database.getCatalogSnapshot()).tracks.length, 1);
 
       await settingsRepository.saveSettings(
         settingsRepository.getSettings().copyWith(musicDirectories: []),
@@ -280,14 +309,14 @@ void main() {
 
       // Wait for completion
       await Future<void>.delayed(const Duration(milliseconds: 200));
-      expect(database.getCatalogSnapshot().tracks, isEmpty);
+      expect((await database.getCatalogSnapshot()).tracks, isEmpty);
     });
   });
 
   group('ScanProgressOverlay Widget Tests', () {
     late LocaleController localeController;
     late AppDatabase database;
-    late DirectTachyonBackendClient backend;
+    late _ControllableMetadataService controllableMetadataService;
     late LibraryController libraryController;
     late Directory tempDir;
     late SettingsRepository settingsRepository;
@@ -303,18 +332,20 @@ void main() {
       await localeController.whenReady;
 
       database = AppDatabase.inMemory();
-      backend = DirectTachyonBackendClient(database: database);
+      controllableMetadataService = _ControllableMetadataService(
+        database: database,
+      );
       libraryController = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
-        store: LibraryStore(),
+        store: LibraryStore(database),
+        metadataService: controllableMetadataService,
       );
     });
 
-    tearDown(() {
+    tearDown(() async {
       libraryController.dispose();
-      backend.dispose();
-      database.close();
+      controllableMetadataService.disposeService();
+      await database.close();
       if (tempDir.existsSync()) {
         tempDir.deleteSync(recursive: true);
       }
@@ -362,7 +393,7 @@ void main() {
       await tester.pump();
 
       // Simulate scan progress event
-      backend.emitScanProgress(
+      controllableMetadataService.emitProgress(
         const ScanProgress(
           stage: ScanStage.extracting,
           progressLabel: '15/100',

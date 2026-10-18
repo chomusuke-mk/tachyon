@@ -10,7 +10,7 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/audio_effects_sheet.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart'
     show CrossfeedMode;

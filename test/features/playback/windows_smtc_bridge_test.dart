@@ -6,16 +6,16 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/core/backend/backend_client.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
-import 'package:tachyon/features/library/domain/scan_progress.dart';
-import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/features/playback/domain/playback_state.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
-import 'package:tachyon/features/playback/services/tachyon_audio_handler.dart';
-import 'package:tachyon/features/playback/services/windows_smtc_bridge.dart';
+import 'package:tachyon/core/store/domain/artist.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:tachyon/core/metadata/domain/scan_progress.dart';
+import 'package:tachyon/core/store/domain/track.dart';
+import 'package:tachyon/core/playback/domain/playback_state.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
+import 'package:tachyon/core/playback/windows_smtc_bridge.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 
 class _FakeBackendClient implements TachyonBackendClient {
   final StreamController<PlaybackState> _stateController =

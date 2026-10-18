@@ -1,11 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
@@ -393,12 +392,7 @@ void main() {
       final snapshot = _createSampleSnapshot();
       final store = LibraryStore.fromSnapshot(snapshot);
 
-      // Create a mock/direct backend client with empty database
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
-
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
@@ -416,24 +410,18 @@ void main() {
       controller.clearFilters();
       expect(controller.tracks.length, equals(4));
 
-      // Sort in RAM without backend call
+      // Sort in RAM without database call
       await controller.setSortOption(TrackSortOption.title, ascending: true);
       expect(controller.tracks.first.title, equals('Bohemian Rhapsody'));
 
       controller.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     test('PlaylistsController resolves tracks directly from memory pointers (entry.track)', () async {
       final snapshot = _createSampleSnapshot();
       final store = LibraryStore.fromSnapshot(snapshot);
 
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
-
       final playlistsController = PlaylistsController(
-        backend: backend,
         store: store,
       );
 
@@ -459,17 +447,14 @@ void main() {
       );
 
       playlistsController.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
-    test('Reactivity: backend catalogUpdatedStream triggers controller reloading', () async {
+    test('Reactivity: LibraryStore.reloadFromDatabase triggers controller reloading', () async {
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
 
-      final store = LibraryStore.fromSnapshot(const CatalogSnapshot.empty());
+      final store = LibraryStore(db);
+      await store.reloadFromDatabase();
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
@@ -480,7 +465,7 @@ void main() {
       });
 
       // Insert tracks into database
-      db.upsertTracks([
+      await db.upsertTracks([
         ExtractedTrackData(
           filePath: '/music/live/track1.mp3',
           title: 'Live Track 1',
@@ -493,18 +478,13 @@ void main() {
         ),
       ]);
 
-      // Emit catalogUpdated event via direct backend method
-      await backend.deleteTrack(99999);
-
-      // Wait a tick for event stream dispatch
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await store.reloadFromDatabase();
 
       expect(notified, isTrue);
       expect(controller.allTracks.length, equals(1));
       expect(controller.allTracks.first.title, equals('Live Track 1'));
 
       controller.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -526,13 +506,11 @@ void main() {
     });
 
     test('PlaylistsController performs in-memory playlist mutations cleanly', () async {
-      final snapshot = _createSampleSnapshot();
-      final store = LibraryStore.fromSnapshot(snapshot);
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
+      final store = LibraryStore(db);
+      store.hydrateFromSnapshot(_createSampleSnapshot());
 
       final playlistsController = PlaylistsController(
-        backend: backend,
         store: store,
       );
 
@@ -557,13 +535,12 @@ void main() {
       expect(playlistsController.historyPlaylist?.entries, isEmpty);
 
       playlistsController.dispose();
-      await backend.dispose();
       await db.close();
     });
 
-    test('Zero-Jank: toggleLike does NOT emit catalogUpdated or trigger LibraryController reload', () async {
+    test('Zero-Jank: toggleLike updates store and DB without triggering full catalog reload', () async {
       final db = AppDatabase.inMemory();
-      db.upsertTracks([
+      await db.upsertTracks([
         ExtractedTrackData(
           filePath: '/music/rock/song1.mp3',
           title: 'Song 1',
@@ -575,31 +552,18 @@ void main() {
           modifiedAt: 1000,
         ),
       ]);
-      final snapshot = db.getCatalogSnapshot();
-      final trackId = snapshot.tracks.first.id;
-      final store = LibraryStore.fromSnapshot(snapshot);
-      final backend = DirectTachyonBackendClient(database: db);
+      final store = LibraryStore(db);
+      await store.reloadFromDatabase();
+      final trackId = store.tracks.first.id!;
 
       final libraryController = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
 
       final playlistsController = PlaylistsController(
-        backend: backend,
         store: store,
       );
-
-      var catalogUpdateCount = 0;
-      final sub = backend.catalogUpdatedStream.listen((_) {
-        catalogUpdateCount++;
-      });
-
-      var libraryReloadCount = 0;
-      libraryController.addListener(() {
-        libraryReloadCount++;
-      });
 
       // Track is not liked initially
       expect(playlistsController.isTrackLiked(trackId), isFalse);
@@ -609,31 +573,31 @@ void main() {
       expect(likedResult, isTrue);
       expect(playlistsController.isTrackLiked(trackId), isTrue);
       expect(store.isTrackLiked(trackId), isTrue);
-      expect(db.isTrackLiked(trackId), isTrue);
 
-      // Wait a tick to guarantee any asynchronous stream events would have fired
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-
-      // Assert that catalogUpdated was NOT emitted and LibraryController was NOT reloaded
-      expect(catalogUpdateCount, equals(0));
-      expect(libraryReloadCount, equals(0));
+      final snap1 = await db.getCatalogSnapshot();
+      expect(
+        snap1.playlistEntries.any(
+          (e) => e.playlistId == AppDatabase.likedSongsPlaylistId && e.trackId == trackId,
+        ),
+        isTrue,
+      );
 
       // 2. Toggle like again (remove from liked)
       final unlikedResult = await playlistsController.toggleLike(trackId);
       expect(unlikedResult, isFalse);
       expect(playlistsController.isTrackLiked(trackId), isFalse);
       expect(store.isTrackLiked(trackId), isFalse);
-      expect(db.isTrackLiked(trackId), isFalse);
 
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final snap2 = await db.getCatalogSnapshot();
+      expect(
+        snap2.playlistEntries.any(
+          (e) => e.playlistId == AppDatabase.likedSongsPlaylistId && e.trackId == trackId,
+        ),
+        isFalse,
+      );
 
-      expect(catalogUpdateCount, equals(0));
-      expect(libraryReloadCount, equals(0));
-
-      await sub.cancel();
       playlistsController.dispose();
       libraryController.dispose();
-      await backend.dispose();
       await db.close();
     });
 

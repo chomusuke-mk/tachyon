@@ -6,15 +6,14 @@ import 'package:jsonc/jsonc.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/presentation/folders_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
@@ -69,7 +68,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AppDatabase db;
-  late DirectTachyonBackendClient backend;
   late SettingsRepository settingsRepo;
   late SettingsController settingsController;
   late _FileSystemLocaleRepository localeRepo;
@@ -82,27 +80,24 @@ void main() {
     settingsRepo = SettingsRepository(prefs);
 
     db = AppDatabase.inMemory();
-    backend = DirectTachyonBackendClient(database: db);
+
+    playbackController = PlaybackController(
+      settingsRepository: settingsRepo,
+    );
 
     settingsController = SettingsController(
       repository: settingsRepo,
-      backend: backend,
+      playbackController: playbackController,
     );
 
     localeRepo = _FileSystemLocaleRepository();
     localeController = LocaleController(localeRepo, 'en');
     await localeController.whenReady;
-
-    playbackController = PlaybackController(
-      backend: backend,
-      settingsRepository: settingsRepo,
-    );
   });
 
   tearDown(() async {
     playbackController.dispose();
     settingsController.dispose();
-    backend.dispose();
     await db.close();
   });
 
@@ -191,7 +186,6 @@ void main() {
       );
 
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: store,
       );
@@ -254,7 +248,6 @@ void main() {
       await settingsController.addMusicDirectory(dirA.path);
 
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: LibraryStore(),
       );
@@ -280,7 +273,6 @@ void main() {
   group('FoldersScreen Widget Tests', () {
     testWidgets('shows empty state when no music directories are configured', (tester) async {
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: LibraryStore(),
       );
@@ -303,7 +295,6 @@ void main() {
       await settingsController.init();
 
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: LibraryStore(),
       );
@@ -362,7 +353,6 @@ void main() {
       );
 
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: store,
       );
@@ -400,7 +390,6 @@ void main() {
 
     testWidgets('rescan button in AppBar triggers scanDirectories with localized tooltip', (tester) async {
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: LibraryStore(),
       );

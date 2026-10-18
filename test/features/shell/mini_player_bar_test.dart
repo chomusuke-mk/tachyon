@@ -5,22 +5,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/album.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
-import 'package:tachyon/features/library/domain/genre.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
-import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/store/domain/album.dart';
+import 'package:tachyon/core/store/domain/artist.dart';
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/domain/genre.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/genre_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlist_detail_screen.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
@@ -39,7 +38,7 @@ class _TestLocaleRepo extends LocaleRepository {
 
 class _TestPlaybackController extends PlaybackController {
   _TestPlaybackController({
-    required super.backend,
+    super.store,
     required super.settingsRepository,
   });
 
@@ -155,18 +154,15 @@ void main() {
 
   group('MiniPlayerBar widget tests', () {
     late AppDatabase db;
-    late DirectTachyonBackendClient backend;
     late _TestPlaybackController playback;
 
     setUp(() {
       db = AppDatabase.inMemory();
-      backend = DirectTachyonBackendClient(database: db);
-      playback = _TestPlaybackController(backend: backend, settingsRepository: settingsRepo);
+      playback = _TestPlaybackController(settingsRepository: settingsRepo);
     });
 
     tearDown(() async {
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -426,7 +422,7 @@ void main() {
         trackGenres: const [],
       );
       final store = LibraryStore.fromSnapshot(snapshot);
-      final library = LibraryController(backend: backend, settingsRepository: settingsRepo, store: store);
+      final library = LibraryController(settingsRepository: settingsRepo, store: store);
 
       await tester.pumpWidget(
         MultiProvider(
@@ -522,7 +518,7 @@ void main() {
         trackGenres: const [],
       );
       final store = LibraryStore.fromSnapshot(snapshot);
-      final library = LibraryController(backend: backend, settingsRepository: settingsRepo, store: store);
+      final library = LibraryController(settingsRepository: settingsRepo, store: store);
 
       await tester.pumpWidget(
         MultiProvider(
@@ -562,7 +558,7 @@ void main() {
       );
       playback.setMockTrack(track);
 
-      final playlistsCtrl = PlaylistsController(backend: backend);
+      final playlistsCtrl = PlaylistsController(store: LibraryStore());
 
       await tester.pumpWidget(
         MultiProvider(

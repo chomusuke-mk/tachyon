@@ -1,35 +1,44 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 
-import 'package:tachyon/core/backend/services/lrc_parser.dart';
+import 'package:tachyon/core/lyrics/domain/lyric_line.dart';
+import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
+import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
+import 'package:tachyon/core/lyrics/lrc_parser.dart';
+import 'package:tachyon/core/lyrics/lyrics_manager.dart';
+import 'package:tachyon/core/lyrics/lyrics_translation_client.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
-import 'package:tachyon/features/playback/domain/lyric_line.dart';
-import 'package:tachyon/features/playback/domain/lyric_source.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
-import 'lyrics_controller.dart';
 import 'widgets/lyrics_sources_dialog.dart';
 import 'widgets/lyrics_threshold_banner.dart';
 
 /// Synchronized lyrics list view widget.
 ///
-/// Features:
-/// - Highlights active line in O(log n) time and auto-centers.
-/// - Outer Stack layout ensuring top controls bar and 429 threshold banner
-///   remain accessible even when loading or empty.
-/// - Frosted glass top controls bar: Source badge, translation mode menu,
-///   sources configuration dialog trigger, and manual re-search button.
-/// - Multi-mode translation display: Original, Translated, and Interleaved.
-/// - Manual scroll lock with 5-second auto-resume and localized sync button.
+/// Owns all visual lyrics state (active line index, auto-scroll lock,
+/// display mode, translation state, and source toggles) while requesting
+/// lyrics on-demand from [LyricsManager].
 class LyricsView extends StatefulWidget {
   final String filePath;
+  final int? trackId;
+  final Track? track;
   final ValueChanged<Duration>? onSeek;
 
-  const LyricsView({super.key, required this.filePath, this.onSeek});
+  const LyricsView({
+    super.key,
+    required this.filePath,
+    this.trackId,
+    this.track,
+    this.onSeek,
+  });
 
   @override
   State<LyricsView> createState() => _LyricsViewState();
@@ -44,65 +53,420 @@ class _LyricsViewState extends State<LyricsView> {
   /// Contexts of the currently built lines, keyed by line index.
   final Map<int, BuildContext> _lineContexts = {};
 
-  late final LyricsController _controller;
+  late final LyricsManager _lyricsManager;
+  PlaybackController? _playback;
+  SettingsRepository? _settingsRepository;
+  LocaleController? _localeController;
+  SettingsController? _settingsController;
+  StreamSubscription<int?>? _thresholdSub;
 
-  // Last observed controller state, used to decide when to re-center.
-  ParsedLrc? _lastLyrics;
-  int _lastIndex = -1;
-  LyricsDisplayMode? _lastMode;
-  List<String>? _lastTranslated;
-  bool _lastLocked = false;
+  int? _lastObservedTrackId;
+  String? _lastObservedTrackPath;
+  String? _lastTargetLang;
+
+  // Visual state owned by LyricsView
+  ParsedLrc? _lyrics;
+  LyricsSource? _currentLyricsSource;
+  int? _currentLyricsId;
+  String? _currentLyricsLang;
+  bool _isLoading = false;
+  int _currentIndex = 0;
+  bool _isUserScrollLocked = false;
+
+  bool _enableLocalSources = true;
+  bool _enableLrclib = true;
+  bool _enableLyricsOvh = true;
+
+  LyricsDisplayMode _displayMode = LyricsDisplayMode.original;
+  bool _isTranslating = false;
+  List<String> _translatedLines = const [];
+  String? _translationError;
 
   bool _centerScheduled = false;
   bool _centerAnimated = true;
+  int _viewRequestGen = 0;
+
+  bool get _hasLyrics => _lyrics != null && _lyrics!.isNotEmpty;
+  bool get _isSynced => _lyrics?.isSynced ?? false;
+  List<LyricLine> get _lines => _lyrics?.lines ?? const [];
+  bool get _isTranslated => _displayMode != LyricsDisplayMode.original;
+  bool get _isInterleaved => _displayMode == LyricsDisplayMode.interleaved;
 
   @override
   void initState() {
     super.initState();
-    _controller = context.read<LyricsController>();
-    _controller.addListener(_onControllerChanged);
+    _lyricsManager = context.read<LyricsManager>();
+
+    try {
+      _playback = context.read<PlaybackController>();
+    } catch (_) {
+      _playback = null;
+    }
+
+    try {
+      _settingsRepository = context.read<SettingsRepository>();
+      _displayMode = _settingsRepository!.getLyricsDisplayMode();
+      _lastTargetLang = _settingsRepository!.getLyricsTranslationTargetLang();
+    } catch (_) {
+      _settingsRepository = null;
+    }
+
+    try {
+      _localeController = context.read<LocaleController>();
+      _localeController!.addListener(_onLocaleOrSettingsChanged);
+    } catch (_) {
+      _localeController = null;
+    }
+
+    try {
+      _settingsController = context.read<SettingsController>();
+      _settingsController!.addListener(_onLocaleOrSettingsChanged);
+    } catch (_) {
+      _settingsController = null;
+    }
+
+    _thresholdSub = _lyricsManager.thresholdStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+
+    final playback = _playback;
+    if (playback != null) {
+      _lastObservedTrackId = playback.currentTrack?.id;
+      _lastObservedTrackPath = playback.currentTrack?.filePath;
+      playback.addListener(_onPlaybackChanged);
+      playback.positionListenable.addListener(_onPositionChanged);
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _controller.onLyricsViewMounted();
-      _rememberState();
-      _scheduleCenter(animated: false);
+      _loadLyricsForCurrentTrack(immediate: true);
     });
   }
 
   @override
-  void dispose() {
-    _controller.removeListener(_onControllerChanged);
-    _scrollController.dispose();
-    super.dispose();
+  void didUpdateWidget(covariant LyricsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filePath != widget.filePath ||
+        oldWidget.trackId != widget.trackId ||
+        oldWidget.track?.id != widget.track?.id) {
+      _loadLyricsForCurrentTrack(immediate: false);
+    }
   }
 
-  void _rememberState() {
-    _lastLyrics = _controller.lyrics;
-    _lastIndex = _controller.currentIndex;
-    _lastMode = _controller.displayMode;
-    _lastTranslated = _controller.translatedLines;
-    _lastLocked = _controller.isUserScrollLocked;
+  void _onPlaybackChanged() {
+    final playback = _playback;
+    if (playback == null || !mounted) return;
+    final currentTrack = playback.currentTrack;
+    final currentId = currentTrack?.id;
+    final currentPath = currentTrack?.filePath;
+    if (currentId != _lastObservedTrackId ||
+        currentPath != _lastObservedTrackPath) {
+      _lastObservedTrackId = currentId;
+      _lastObservedTrackPath = currentPath;
+      _loadLyricsForCurrentTrack(immediate: false);
+    }
   }
 
-  void _onControllerChanged() {
-    final c = _controller;
-    final lyricsChanged = !identical(c.lyrics, _lastLyrics);
-    final needsCenter =
-        c.currentIndex != _lastIndex ||
-        c.displayMode != _lastMode ||
-        !identical(c.translatedLines, _lastTranslated) ||
-        (_lastLocked && !c.isUserScrollLocked);
-    _rememberState();
-    if (lyricsChanged) {
-      _scheduleCenter(animated: false);
-    } else if (needsCenter) {
+  void _onPositionChanged() {
+    final playback = _playback;
+    if (playback == null || !mounted || !_isSynced) return;
+    final newIndex = _lyrics!.activeIndexAt(playback.position);
+    if (newIndex != _currentIndex) {
+      setState(() {
+        _currentIndex = newIndex;
+      });
       _scheduleCenter(animated: true);
     }
   }
 
+  void _onLocaleOrSettingsChanged() {
+    if (!mounted || !_isTranslated || !_hasLyrics) return;
+    final savedTarget =
+        _settingsRepository?.getLyricsTranslationTargetLang() ??
+        'defaultOption';
+    if (savedTarget != _lastTargetLang || savedTarget == 'defaultOption') {
+      _lastTargetLang = savedTarget;
+      _translateCurrentLyrics(forceRefresh: true);
+    }
+  }
+
+  Track? _resolveCurrentTrack() {
+    if (widget.track != null) return widget.track;
+    final pbTrack = _playback?.currentTrack;
+    if (pbTrack != null) return pbTrack;
+    if (widget.trackId != null) {
+      final byId = _lyricsManager.store.getTrackById(widget.trackId!);
+      if (byId != null) return byId;
+    }
+    if (widget.filePath.isNotEmpty) {
+      return _lyricsManager.store.getTrackByPath(widget.filePath);
+    }
+    return null;
+  }
+
+  Future<void> _loadLyricsForCurrentTrack({
+    bool forceRefresh = false,
+    bool immediate = false,
+  }) async {
+    final track = _resolveCurrentTrack();
+    final trackId = widget.trackId ?? track?.id;
+    final filePath = track?.filePath ?? widget.filePath;
+    final gen = ++_viewRequestGen;
+
+    setState(() {
+      _isLoading = true;
+      _isUserScrollLocked = false;
+      _lyrics = null;
+      _currentLyricsSource = null;
+      _currentLyricsId = null;
+      _currentIndex = 0;
+      _translatedLines = const [];
+      _translationError = null;
+      _isTranslating = false;
+    });
+
+    try {
+      final LyricsResult result;
+      if (trackId != null) {
+        result = await _lyricsManager.getLyrics(
+          trackId,
+          track: track,
+          enableLocal: _enableLocalSources,
+          enableLrclib: _enableLrclib,
+          enableLyricsOvh: _enableLyricsOvh,
+          forceRefresh: forceRefresh,
+          debounceOverride: (immediate || forceRefresh) ? Duration.zero : null,
+          onThresholdRetryResolved: (retryRes) {
+            if (!mounted || gen != _viewRequestGen || retryRes.isCancelled) {
+              return;
+            }
+            _applyLyricsResult(retryRes, gen);
+          },
+        );
+      } else {
+        result = await _lyricsManager.getLyricsForTrack(
+          trackId: null,
+          filePath: filePath,
+          title: track?.title ?? '',
+          artist: track != null
+              ? track.artists.map((a) => a.name).join(', ')
+              : '',
+          album: track?.album?.name,
+          durationSeconds: track != null && track.durationMs > 0
+              ? (track.durationMs / 1000).round()
+              : null,
+          enableLocal: _enableLocalSources,
+          enableLrclib: _enableLrclib,
+          enableLyricsOvh: _enableLyricsOvh,
+          forceRefresh: forceRefresh,
+        );
+      }
+
+      if (!mounted || gen != _viewRequestGen || result.isCancelled) return;
+      _applyLyricsResult(result, gen);
+    } catch (_) {
+      if (!mounted || gen != _viewRequestGen) return;
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _applyLyricsResult(LyricsResult result, int gen) {
+    if (!mounted || gen != _viewRequestGen) return;
+    if (result.isThresholdWaiting) {
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    final pos = _playback?.position ?? Duration.zero;
+    final initialIndex = result.lrc.isSynced
+        ? result.lrc.activeIndexAt(pos)
+        : 0;
+
+    setState(() {
+      _lyrics = result.lrc;
+      _currentLyricsSource = result.source;
+      _currentLyricsId = result.lyricsId;
+      _currentIndex = initialIndex;
+      _isLoading = false;
+    });
+
+    _scheduleCenter(animated: false);
+
+    if (_isTranslated && _hasLyrics) {
+      unawaited(_translateCurrentLyrics());
+    }
+  }
+
+  String _resolveEffectiveTargetLang() {
+    final saved =
+        _settingsRepository?.getLyricsTranslationTargetLang() ??
+        'defaultOption';
+    if (saved == 'defaultOption' || saved.trim().isEmpty) {
+      final locale = _localeController?.currentLocaleCode ?? 'en';
+      return locale.trim().isEmpty ? 'en' : locale.trim().toLowerCase();
+    }
+    return saved.trim().toLowerCase();
+  }
+
+  String _resolveEffectiveSourceLang() {
+    final saved =
+        _settingsRepository?.getLyricsTranslationSourceLang() ?? 'autodetect';
+    return saved.trim().isEmpty ? 'autodetect' : saved.trim().toLowerCase();
+  }
+
+  Future<void> _translateCurrentLyrics({
+    String? sourceLanguage,
+    String? targetLanguage,
+    bool forceRefresh = false,
+  }) async {
+    if (!_hasLyrics || !mounted) return;
+    final targetLang = (targetLanguage ?? _resolveEffectiveTargetLang())
+        .trim()
+        .toLowerCase();
+    final sourceLang = (sourceLanguage ?? _resolveEffectiveSourceLang())
+        .trim()
+        .toLowerCase();
+    final langKey = sourceLang == 'autodetect'
+        ? targetLang
+        : '$sourceLang->$targetLang';
+
+    if (!forceRefresh &&
+        _translatedLines.length == _lines.length &&
+        _currentLyricsLang == langKey &&
+        _translationError == null) {
+      return;
+    }
+
+    final gen = _viewRequestGen;
+    setState(() {
+      _isTranslating = true;
+      _translationError = null;
+    });
+
+    try {
+      final rawLines = _lines.map((l) => l.text).toList(growable: false);
+      final translated = await _lyricsManager.translateLyrics(
+        lyricsId: _currentLyricsId,
+        lines: rawLines,
+        targetLanguage: targetLang,
+        sourceLanguage: sourceLang,
+        forceRefresh: forceRefresh,
+      );
+      if (!mounted || gen != _viewRequestGen) return;
+      if (translated.isNotEmpty) {
+        setState(() {
+          _translatedLines = translated;
+          _currentLyricsLang = langKey;
+          _isTranslating = false;
+          _translationError = null;
+        });
+        _scheduleCenter(animated: true);
+      } else {
+        setState(() {
+          _isTranslating = false;
+        });
+      }
+    } on LyricsTranslationException catch (e) {
+      if (!mounted || gen != _viewRequestGen) return;
+      setState(() {
+        _isTranslating = false;
+        _translationError = e.isRateLimited ? 'rate_limit' : 'error';
+      });
+    } catch (_) {
+      if (!mounted || gen != _viewRequestGen) return;
+      setState(() {
+        _isTranslating = false;
+        _translationError = 'error';
+      });
+    }
+  }
+
+  Future<void> _setTranslationDisplayMode(LyricsDisplayMode mode) async {
+    if (_displayMode == mode && _translationError == null) return;
+    setState(() {
+      _displayMode = mode;
+    });
+    await _settingsRepository?.setLyricsDisplayMode(mode);
+
+    if (mode == LyricsDisplayMode.original) {
+      setState(() {
+        _translationError = null;
+        _isTranslating = false;
+      });
+      _scheduleCenter(animated: true);
+      return;
+    }
+
+    await _translateCurrentLyrics(
+      forceRefresh: _translationError != null,
+    );
+  }
+
+  void _setSourcesConfig({bool? local, bool? lrclib, bool? lyricsOvh}) {
+    final nextLocal = local ?? _enableLocalSources;
+    final nextLrclib = lrclib ?? _enableLrclib;
+    final nextOvh = lyricsOvh ?? _enableLyricsOvh;
+    if (!nextLocal && !nextLrclib && !nextOvh) return;
+    setState(() {
+      _enableLocalSources = nextLocal;
+      _enableLrclib = nextLrclib;
+      _enableLyricsOvh = nextOvh;
+    });
+  }
+
+  void _onUserScroll() {
+    if (!_isSynced || _isUserScrollLocked) return;
+    setState(() {
+      _isUserScrollLocked = true;
+    });
+  }
+
+  void _resumeAutoScroll() {
+    if (!_isUserScrollLocked) return;
+    setState(() {
+      _isUserScrollLocked = false;
+    });
+    _scheduleCenter(animated: true);
+  }
+
+  void _seekToLine(int index) {
+    if (index < 0 || index >= _lines.length) return;
+    final line = _lines[index];
+    setState(() {
+      _currentIndex = index;
+      _isUserScrollLocked = false;
+    });
+    _scheduleCenter(animated: true);
+    if (line.isSynced) {
+      if (widget.onSeek != null) {
+        widget.onSeek!(line.timestamp);
+      } else {
+        _playback?.seek(line.timestamp);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _viewRequestGen++;
+    _thresholdSub?.cancel();
+    _playback?.removeListener(_onPlaybackChanged);
+    _playback?.positionListenable.removeListener(_onPositionChanged);
+    _localeController?.removeListener(_onLocaleOrSettingsChanged);
+    _settingsController?.removeListener(_onLocaleOrSettingsChanged);
+    _lyricsManager.cancelPending();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   /// Centers the active line after the pending rebuild has been laid out.
   void _scheduleCenter({required bool animated}) {
-    _centerAnimated = _centerScheduled ? (_centerAnimated && animated) : animated;
+    _centerAnimated =
+        _centerScheduled ? (_centerAnimated && animated) : animated;
     if (_centerScheduled) return;
     _centerScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -114,16 +478,15 @@ class _LyricsViewState extends State<LyricsView> {
 
   void _centerActiveLine({required bool animated, int attempt = 0}) {
     if (!mounted || !_scrollController.hasClients) return;
-    final c = _controller;
     final position = _scrollController.position;
-    if (!c.hasLyrics) return;
-    if (!c.isSynced) {
+    if (!_hasLyrics) return;
+    if (!_isSynced) {
       if (!animated) position.jumpTo(position.minScrollExtent);
       return;
     }
-    if (c.isUserScrollLocked) return;
+    if (_isUserScrollLocked) return;
 
-    final index = c.currentIndex;
+    final index = _currentIndex;
     final target = _lineContexts[index]?.findRenderObject();
     if (target != null && target.attached) {
       position.ensureVisible(
@@ -184,14 +547,13 @@ class _LyricsViewState extends State<LyricsView> {
 
   @override
   Widget build(BuildContext context) {
-    final lyricsController = context.watch<LyricsController>();
     final strings = context.watch<LocaleController>().localeStrings;
     final colorScheme = Theme.of(context).colorScheme;
 
     Widget body;
-    if (lyricsController.isLoading) {
+    if (_isLoading) {
       body = const Center(child: CircularProgressIndicator.adaptive());
-    } else if (!lyricsController.hasLyrics) {
+    } else if (!_hasLyrics) {
       body = Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -212,7 +574,7 @@ class _LyricsViewState extends State<LyricsView> {
         ),
       );
     } else {
-      body = _buildLyricsList(context, lyricsController, strings, colorScheme);
+      body = _buildLyricsList(context, strings, colorScheme);
     }
 
     return Stack(
@@ -230,29 +592,18 @@ class _LyricsViewState extends State<LyricsView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildTopControlsBar(
-                  context,
-                  lyricsController,
-                  strings,
-                  colorScheme,
-                ),
-                if (lyricsController.isThresholdWaiting)
+                _buildTopControlsBar(context, strings, colorScheme),
+                if (_lyricsManager.isThresholdWaiting)
                   const LyricsThresholdBanner(),
-                if (lyricsController.isTranslated &&
-                    lyricsController.translationError != null)
-                  _buildTranslationErrorBanner(
-                    context,
-                    lyricsController,
-                    strings,
-                    colorScheme,
-                  ),
+                if (_isTranslated && _translationError != null)
+                  _buildTranslationErrorBanner(context, strings, colorScheme),
               ],
             ),
           ),
         ),
 
         // 3. Floating "Sync" Pill displayed when user has manually scrolled synced lyrics
-        if (lyricsController.isSynced && lyricsController.isUserScrollLocked)
+        if (_isSynced && _isUserScrollLocked)
           Positioned(
             bottom: 16,
             right: 16,
@@ -260,7 +611,7 @@ class _LyricsViewState extends State<LyricsView> {
               backgroundColor: colorScheme.primaryContainer,
               foregroundColor: colorScheme.onPrimaryContainer,
               tooltip: strings.npLyricsResumeSync,
-              onPressed: () => lyricsController.resumeAutoScroll(),
+              onPressed: _resumeAutoScroll,
               child: const Icon(Icons.sync_rounded, size: 20),
             ),
           ),
@@ -270,22 +621,21 @@ class _LyricsViewState extends State<LyricsView> {
 
   Widget _buildLyricsList(
     BuildContext context,
-    LyricsController lyricsController,
     AppStringKey strings,
     ColorScheme colorScheme,
   ) {
-    final lines = lyricsController.lines;
-    final activeIndex = lyricsController.currentIndex;
-    final isSynced = lyricsController.isSynced;
-    final isTranslated = lyricsController.isTranslated;
-    final isInterleaved = lyricsController.isInterleaved;
-    final translatedLines = lyricsController.translatedLines;
+    final lines = _lines;
+    final activeIndex = _currentIndex;
+    final isSynced = _isSynced;
+    final isTranslated = _isTranslated;
+    final isInterleaved = _isInterleaved;
+    final translatedLines = _translatedLines;
 
     return RepaintBoundary(
       child: NotificationListener<ScrollNotification>(
         onNotification: (notification) {
           if (notification is UserScrollNotification) {
-            lyricsController.onUserScroll();
+            _onUserScroll();
           }
           return false;
         },
@@ -326,8 +676,7 @@ class _LyricsViewState extends State<LyricsView> {
                   isTranslated: isTranslated,
                   isInterleaved: isInterleaved,
                   colorScheme: colorScheme,
-                  lyricsController: lyricsController,
-                  onSeek: widget.onSeek,
+                  onTapLine: _seekToLine,
                   onMounted: _registerLine,
                   onUnmounted: _unregisterLine,
                 );
@@ -341,7 +690,6 @@ class _LyricsViewState extends State<LyricsView> {
 
   Widget _buildTopControlsBar(
     BuildContext context,
-    LyricsController lyricsController,
     AppStringKey strings,
     ColorScheme colorScheme,
   ) {
@@ -366,18 +714,13 @@ class _LyricsViewState extends State<LyricsView> {
             ),
             child: Row(
               children: [
-                _buildSourceBadge(lyricsController, strings, colorScheme),
+                _buildSourceBadge(strings, colorScheme),
                 const Spacer(),
-                _buildTranslationButton(
-                  context,
-                  lyricsController,
-                  strings,
-                  colorScheme,
-                ),
+                _buildTranslationButton(context, strings, colorScheme),
                 const SizedBox(width: 4),
                 _buildSourcesButton(context, strings, colorScheme),
                 const SizedBox(width: 4),
-                _buildResearchButton(lyricsController, strings, colorScheme),
+                _buildResearchButton(strings, colorScheme),
               ],
             ),
           ),
@@ -387,15 +730,14 @@ class _LyricsViewState extends State<LyricsView> {
   }
 
   Widget _buildSourceBadge(
-    LyricsController controller,
     AppStringKey strings,
     ColorScheme colorScheme,
   ) {
-    if (!controller.hasLyrics) {
+    if (!_hasLyrics) {
       return const SizedBox.shrink();
     }
 
-    final (serverName, fullTooltip) = switch (controller.currentLyricsSource) {
+    final (serverName, fullTooltip) = switch (_currentLyricsSource) {
       LyricsSource.embedded => ('Tags', strings.npLyricsSourceEmbedded),
       LyricsSource.file => ('.lrc', strings.npLyricsSourceFile),
       LyricsSource.lrclib => ('lrclib.net', strings.npLyricsSourceLrclib),
@@ -403,7 +745,7 @@ class _LyricsViewState extends State<LyricsView> {
       null => ('', strings.npLyricsSourceNone),
     };
 
-    final isSynced = controller.isSynced;
+    final isSynced = _isSynced;
 
     return Tooltip(
       message: fullTooltip,
@@ -446,11 +788,10 @@ class _LyricsViewState extends State<LyricsView> {
 
   Widget _buildTranslationButton(
     BuildContext context,
-    LyricsController controller,
     AppStringKey strings,
     ColorScheme colorScheme,
   ) {
-    if (controller.isTranslating) {
+    if (_isTranslating) {
       return RepaintBoundary(
         child: SizedBox(
           width: 15,
@@ -463,8 +804,8 @@ class _LyricsViewState extends State<LyricsView> {
       );
     }
 
-    final isTranslated = controller.isTranslated;
-    final isInterleaved = controller.isInterleaved;
+    final isTranslated = _isTranslated;
+    final isInterleaved = _isInterleaved;
 
     final tooltip = isTranslated
         ? (isInterleaved
@@ -474,11 +815,9 @@ class _LyricsViewState extends State<LyricsView> {
 
     return PopupMenuButton<LyricsDisplayMode>(
       tooltip: tooltip,
-      // make the button smaller and more compact
       splashRadius: 20,
-      // make the icon smaller
       style: ButtonStyle(
-        padding: WidgetStateProperty.all<EdgeInsets>(EdgeInsets.all(6.0)),
+        padding: WidgetStateProperty.all<EdgeInsets>(const EdgeInsets.all(6.0)),
         minimumSize: WidgetStateProperty.all<Size>(Size.zero),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
@@ -489,7 +828,7 @@ class _LyricsViewState extends State<LyricsView> {
             ? colorScheme.primary
             : colorScheme.onSurfaceVariant,
       ),
-      onSelected: (mode) => controller.setTranslationDisplayMode(mode),
+      onSelected: _setTranslationDisplayMode,
       itemBuilder: (context) => [
         PopupMenuItem(
           value: LyricsDisplayMode.original,
@@ -498,7 +837,7 @@ class _LyricsViewState extends State<LyricsView> {
               Icon(
                 Icons.notes_rounded,
                 size: 18,
-                color: controller.displayMode == LyricsDisplayMode.original
+                color: _displayMode == LyricsDisplayMode.original
                     ? colorScheme.primary
                     : colorScheme.onSurfaceVariant,
               ),
@@ -514,7 +853,7 @@ class _LyricsViewState extends State<LyricsView> {
               Icon(
                 Icons.translate_rounded,
                 size: 18,
-                color: controller.displayMode == LyricsDisplayMode.translated
+                color: _displayMode == LyricsDisplayMode.translated
                     ? colorScheme.primary
                     : colorScheme.onSurfaceVariant,
               ),
@@ -530,7 +869,7 @@ class _LyricsViewState extends State<LyricsView> {
               Icon(
                 Icons.horizontal_split_rounded,
                 size: 18,
-                color: controller.displayMode == LyricsDisplayMode.interleaved
+                color: _displayMode == LyricsDisplayMode.interleaved
                     ? colorScheme.primary
                     : colorScheme.onSurfaceVariant,
               ),
@@ -552,13 +891,30 @@ class _LyricsViewState extends State<LyricsView> {
       icon: const Icon(Icons.tune_rounded, size: 20),
       tooltip: strings.npLyricsSources,
       color: colorScheme.onSurfaceVariant,
-      onPressed: () => LyricsSourcesDialog.show(context),
+      onPressed: () => LyricsSourcesDialog.show(
+        context,
+        initialEnableLocal: _enableLocalSources,
+        initialEnableLrclib: _enableLrclib,
+        initialEnableLyricsOvh: _enableLyricsOvh,
+        hasLyrics: _hasLyrics,
+        isTranslated: _isTranslated,
+        onSourcesChanged: _setSourcesConfig,
+        onForceReSearch: () => _loadLyricsForCurrentTrack(
+          forceRefresh: true,
+          immediate: true,
+        ),
+        onRetranslate: ({sourceLanguage, required targetLanguage}) =>
+            _translateCurrentLyrics(
+              sourceLanguage: sourceLanguage,
+              targetLanguage: targetLanguage,
+              forceRefresh: true,
+            ),
+      ),
       visualDensity: VisualDensity.compact,
     );
   }
 
   Widget _buildResearchButton(
-    LyricsController controller,
     AppStringKey strings,
     ColorScheme colorScheme,
   ) {
@@ -566,18 +922,22 @@ class _LyricsViewState extends State<LyricsView> {
       icon: const Icon(Icons.refresh_rounded, size: 20),
       tooltip: strings.npLyricsResearch,
       color: colorScheme.onSurfaceVariant,
-      onPressed: controller.isLoading ? null : () => controller.forceReSearch(),
+      onPressed: _isLoading
+          ? null
+          : () => _loadLyricsForCurrentTrack(
+              forceRefresh: true,
+              immediate: true,
+            ),
       visualDensity: VisualDensity.compact,
     );
   }
 
   Widget _buildTranslationErrorBanner(
     BuildContext context,
-    LyricsController controller,
     AppStringKey strings,
     ColorScheme colorScheme,
   ) {
-    final isRateLimit = controller.translationError == 'rate_limit';
+    final isRateLimit = _translationError == 'rate_limit';
     final message = isRateLimit
         ? strings.npLyricsRateLimitError
         : strings.npLyricsTranslateError;
@@ -625,8 +985,7 @@ class _LyricLineItem extends StatefulWidget {
   final bool isTranslated;
   final bool isInterleaved;
   final ColorScheme colorScheme;
-  final LyricsController lyricsController;
-  final ValueChanged<Duration>? onSeek;
+  final ValueChanged<int> onTapLine;
   final void Function(int index, BuildContext context) onMounted;
   final void Function(int index, BuildContext context) onUnmounted;
 
@@ -641,10 +1000,9 @@ class _LyricLineItem extends StatefulWidget {
     required this.isTranslated,
     required this.isInterleaved,
     required this.colorScheme,
-    required this.lyricsController,
+    required this.onTapLine,
     required this.onMounted,
     required this.onUnmounted,
-    this.onSeek,
   });
 
   @override
@@ -677,12 +1035,7 @@ class _LyricLineItemState extends State<_LyricLineItem> {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () {
-        widget.lyricsController.seekToLine(widget.index);
-        if (widget.onSeek != null && widget.line.isSynced) {
-          widget.onSeek!(widget.line.timestamp);
-        }
-      },
+      onTap: () => widget.onTapLine(widget.index),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 8.0),
         child: _buildContent(),

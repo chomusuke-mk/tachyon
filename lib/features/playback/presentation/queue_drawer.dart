@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 
-import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/shared/widgets/track_action_helper.dart';
 
-import 'playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 
 /// Modal bottom sheet representation of the playback queue on Mobile.
 class QueueDrawerSheet extends StatelessWidget {

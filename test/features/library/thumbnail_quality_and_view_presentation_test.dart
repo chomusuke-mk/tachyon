@@ -7,14 +7,12 @@ import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tachyon/core/backend/backend_client.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/shared/utils/parse_utils.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/presentation/albums_screen.dart';
 import 'package:tachyon/features/library/presentation/artists_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
@@ -22,7 +20,7 @@ import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
@@ -237,7 +235,6 @@ void main() {
 
   group('Presentation View Modes (List vs Cards) UI Integration', () {
     late AppDatabase db;
-    late DirectTachyonBackendClient backendClient;
     late SettingsRepository settings;
     late PlaylistsController playlists;
     late PlaybackController playback;
@@ -249,18 +246,16 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       db = AppDatabase.inMemory();
-      backendClient = DirectTachyonBackendClient(database: db);
       settings = SettingsRepository(prefs);
+      libraryStore = LibraryStore.fromSnapshot(_createSampleSnapshot());
       playlists = PlaylistsController(
-        backend: backendClient,
+        store: libraryStore,
       );
       playback = PlaybackController(
-        backend: backendClient,
+        store: libraryStore,
         settingsRepository: settings,
       );
-      libraryStore = LibraryStore.fromSnapshot(_createSampleSnapshot());
       libraryController = LibraryController(
-        backend: backendClient,
         settingsRepository: settings,
         store: libraryStore,
       );
@@ -274,14 +269,12 @@ void main() {
       libraryController.dispose();
       playback.dispose();
       playlists.dispose();
-      await backendClient.dispose();
       await db.close();
     });
 
     Widget createTestWidget(Widget child) {
       return MultiProvider(
         providers: [
-          Provider<TachyonBackendClient>.value(value: backendClient),
           Provider<SettingsRepository>.value(value: settings),
           ChangeNotifierProvider<PlaylistsController>.value(value: playlists),
           ChangeNotifierProvider<PlaybackController>.value(value: playback),

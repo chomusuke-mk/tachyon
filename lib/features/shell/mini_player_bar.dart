@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/text_link.dart';
 

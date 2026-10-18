@@ -7,18 +7,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/album.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
-import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/store/domain/album.dart';
+import 'package:tachyon/core/store/domain/artist.dart';
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/genres_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 

@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tachyon/core/backend/services/audio_engine_service.dart';
-import 'package:tachyon/core/backend/services/crossfade_manager.dart';
-import 'package:tachyon/core/backend/services/queue_manager.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
-import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/features/playback/domain/crossfade_config.dart';
-import 'package:tachyon/features/playback/domain/loop_mode.dart';
+import 'package:tachyon/core/playback/legacy/audio_engine_service.dart';
+import 'package:tachyon/core/playback/legacy/crossfade_manager.dart';
+import 'package:tachyon/core/playback/legacy/queue_manager.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:tachyon/core/store/domain/track.dart';
+import 'package:tachyon/core/playback/domain/crossfade_config.dart';
+import 'package:tachyon/core/playback/domain/loop_mode.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode, Reverb;
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
 import 'crossfade_manager_test.dart';

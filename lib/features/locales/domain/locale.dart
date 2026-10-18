@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:tachyon/features/library/domain/scan_progress.dart';
+import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 
 /// Central domain class managing localized string lookups for Tachyon.
 ///

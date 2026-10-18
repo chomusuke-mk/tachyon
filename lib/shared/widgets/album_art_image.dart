@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 
 class AlbumArtImage extends StatelessWidget {
   final String? thumbnailHash;

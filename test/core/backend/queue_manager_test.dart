@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tachyon/core/backend/services/queue_manager.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
-import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/features/playback/domain/playback_state.dart';
+import 'package:tachyon/core/playback/legacy/queue_manager.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:tachyon/core/store/domain/track.dart';
+import 'package:tachyon/core/playback/domain/playback_state.dart';
 
 void main() {
   group('QueueManager Proactive Lookahead Prefetch Tests', () {

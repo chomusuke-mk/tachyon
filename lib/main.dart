@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -8,22 +9,23 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/app.dart';
+import 'package:tachyon/core/constants/languages.dart';
+import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/lyrics/lyrics_manager.dart';
+import 'package:tachyon/core/metadata/metadata_service.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/playback/system_media_service.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/locales/data/locale_repository.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
+import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
 import 'package:tachyon/shared/utils/permission_utils.dart';
-
-import 'core/backend/backend.dart';
-import 'core/constants/languages.dart';
-import 'features/library/presentation/library_controller.dart';
-import 'features/locales/data/locale_repository.dart';
-import 'features/locales/presentation/locale_controller.dart';
-import 'features/playback/presentation/lyrics_controller.dart';
-import 'features/playback/presentation/playback_controller.dart';
-import 'features/playback/services/system_media_service.dart';
-import 'features/playlists/presentation/playlists_controller.dart';
-import 'features/search/presentation/tachyon_search_controller.dart';
-import 'features/settings/data/settings_repository.dart';
-import 'features/settings/presentation/settings_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,20 +51,39 @@ Future<void> main() async {
     p.join(cacheDirectory.path, 'covers'),
   );
 
-  // Spawn and initialize the Core Service Isolate
-  final backendClient = TachyonIsolateBackendClient();
-  await backendClient.initialize(
-    dbPath: dbPath,
-    cacheDirPath: cacheDirectory.path,
-    appSupportDirPath: appSupportDir.path,
+  // 1. Initialize Block 3 (BD) and Block 2 (Store)
+  final appDatabase = AppDatabase(dbPath: dbPath);
+  await appDatabase.init();
+
+  final libraryStore = LibraryStore(appDatabase);
+  await libraryStore.reloadFromDatabase();
+
+  // 2. Initialize Block 5 (Metadata)
+  final metadataService = MetadataService(
+    database: appDatabase,
+    store: libraryStore,
   );
 
   final settingsRepository = SettingsRepository(sharedPreferences);
   final localeRepository = LocaleRepository();
 
+  // 3. Initialize Block 4 (Play Manager)
+  final playbackController = PlaybackController(
+    store: libraryStore,
+    settingsRepository: settingsRepository,
+  );
+
+  // 4. Initialize Presentation Controllers (Block 1: UI)
+  final libraryController = LibraryController(
+    settingsRepository: settingsRepository,
+    store: libraryStore,
+    metadataService: metadataService,
+  );
+
   final settingsController = SettingsController(
     repository: settingsRepository,
-    backend: backendClient,
+    playbackController: playbackController,
+    libraryController: libraryController,
   );
   await settingsController.init();
 
@@ -92,85 +113,33 @@ Future<void> main() async {
   final permissionsGranted = await PermissionUtils.areAllGranted();
   if (permissionsGranted) {
     await settingsController.ensureDefaultMusicDirectory();
+    unawaited(libraryController.scanDirectories());
   }
 
-  final libraryController = LibraryController(
-    backend: backendClient,
-    settingsRepository: settingsRepository,
-  )..loadLibrary(autoScan: permissionsGranted);
-
-  final playlistsController = PlaylistsController(
-    backend: backendClient,
-    store: libraryController.store,
-  );
-
-  final searchController = TachyonSearchController(
-    storeSupplier: () => libraryController.store,
-  );
-
-  final playbackController = PlaybackController(
-    backend: backendClient,
-    settingsRepository: settingsRepository,
-    libraryStoreSupplier: () => libraryController.store,
-  );
-
-  libraryController.addListener(() {
-    if (!identical(playlistsController.store, libraryController.store)) {
-      playlistsController.updateStore(libraryController.store);
-      playbackController.onLibraryStoreUpdated();
-    }
-  });
+  final playlistsController = PlaylistsController(store: libraryStore);
+  final searchController = TachyonSearchController(store: libraryStore);
 
   final systemMediaService = await SystemMediaService.initialize(
-    backendClient: backendClient,
     playbackController: playbackController,
   );
 
-  final lyricsController = LyricsController(
-    backendClient: backendClient,
-    playbackController: playbackController,
-    settingsRepository: settingsRepository,
-    localeSupplier: () => localeController.currentLocaleCode,
+  // 5. Initialize Block 6 (Lyrics)
+  final lyricsManager = LyricsManager(
+    database: appDatabase,
+    store: libraryStore,
   );
-
-  localeController.addListener(() {
-    if (lyricsController.isTranslated && lyricsController.hasLyrics) {
-      final savedTarget = settingsRepository.getLyricsTranslationTargetLang();
-      if (savedTarget == 'defaultOption') {
-        lyricsController.translateLyrics(
-          targetLanguage: localeController.currentLocaleCode,
-          force: true,
-        );
-      }
-    }
-  });
-
-  String lastTargetLang = settingsRepository.getLyricsTranslationTargetLang();
-  settingsController.addListener(() {
-    final currentTargetLang = settingsRepository
-        .getLyricsTranslationTargetLang();
-    if (currentTargetLang != lastTargetLang) {
-      lastTargetLang = currentTargetLang;
-      if (lyricsController.isTranslated && lyricsController.hasLyrics) {
-        final effectiveTarget = currentTargetLang == 'defaultOption'
-            ? localeController.currentLocaleCode
-            : currentTargetLang;
-        lyricsController.translateLyrics(
-          targetLanguage: effectiveTarget,
-          force: true,
-        );
-      }
-    }
-  });
 
   runApp(
     MultiProvider(
       providers: [
         Provider<SharedPreferences>.value(value: sharedPreferences),
-        Provider<TachyonBackendClient>.value(value: backendClient),
+        Provider<AppDatabase>.value(value: appDatabase),
+        ChangeNotifierProvider<LibraryStore>.value(value: libraryStore),
+        Provider<MetadataService>.value(value: metadataService),
         Provider<SettingsRepository>.value(value: settingsRepository),
         Provider<LocaleRepository>.value(value: localeRepository),
         Provider<SystemMediaService>.value(value: systemMediaService),
+        Provider<LyricsManager>.value(value: lyricsManager),
         ChangeNotifierProvider<SettingsController>.value(
           value: settingsController,
         ),
@@ -187,7 +156,6 @@ Future<void> main() async {
         ChangeNotifierProvider<PlaybackController>.value(
           value: playbackController,
         ),
-        ChangeNotifierProvider<LyricsController>.value(value: lyricsController),
       ],
       child: App(permissionsGranted: permissionsGranted),
     ),

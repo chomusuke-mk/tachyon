@@ -5,15 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
@@ -36,7 +35,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AppDatabase db;
-  late DirectTachyonBackendClient backend;
   late SettingsRepository settingsRepo;
   late _FileSystemLocaleRepository localeRepo;
   late LocaleController localeControllerEn;
@@ -48,7 +46,6 @@ void main() {
     settingsRepo = SettingsRepository(prefs);
 
     db = AppDatabase.inMemory();
-    backend = DirectTachyonBackendClient(database: db);
 
     localeRepo = _FileSystemLocaleRepository();
     localeControllerEn = LocaleController(localeRepo, 'en');
@@ -59,14 +56,12 @@ void main() {
   });
 
   tearDown(() async {
-    backend.dispose();
     await db.close();
   });
 
   group('LibraryController Loading State', () {
     test('initializes isLoading to true when no store is provided', () {
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
       );
 
@@ -79,7 +74,6 @@ void main() {
     test('initializes isLoading to false when store is provided', () {
       final store = LibraryStore();
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: store,
       );
@@ -92,7 +86,6 @@ void main() {
 
     test('loadLibrary transitions isLoading true -> false on completion', () async {
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
       );
 
@@ -111,7 +104,6 @@ void main() {
       );
 
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
       );
 
@@ -130,7 +122,6 @@ void main() {
       );
 
       final controller = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
       );
 
@@ -150,11 +141,10 @@ void main() {
       required LocaleController localeCtrl,
     }) {
       final playbackCtrl = PlaybackController(
-        backend: backend,
+        store: libraryCtrl.store,
         settingsRepository: settingsRepo,
       );
       final playlistsCtrl = PlaylistsController(
-        backend: backend,
         store: libraryCtrl.store,
       );
 
@@ -174,7 +164,6 @@ void main() {
     testWidgets('displays centered loading text and horizontal loader while loading with empty tracks', (tester) async {
       // Create controller with store == null so isLoading is true
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
       );
 
@@ -202,7 +191,6 @@ void main() {
 
     testWidgets('displays Spanish localized message "Cargando canciones..." when in Spanish locale', (tester) async {
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
       );
 
@@ -224,7 +212,6 @@ void main() {
     testWidgets('displays empty state when loading is finished and library has no tracks', (tester) async {
       // Store provided, isLoading == false
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: LibraryStore(),
       );
@@ -270,7 +257,6 @@ void main() {
 
       final store = LibraryStore.fromSnapshot(snapshot);
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: store,
       );
@@ -298,7 +284,6 @@ void main() {
         (tester) async {
       final store = LibraryStore();
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: store,
       );
@@ -366,7 +351,6 @@ void main() {
 
       final store = LibraryStore.fromSnapshot(snapshot);
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: store,
       );
@@ -395,7 +379,6 @@ void main() {
 
     testWidgets('shuffle FAB does not appear when tracks are empty', (tester) async {
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: LibraryStore(),
       );
@@ -436,7 +419,6 @@ void main() {
 
       final store = LibraryStore.fromSnapshot(snapshot);
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepo,
         store: store,
       );

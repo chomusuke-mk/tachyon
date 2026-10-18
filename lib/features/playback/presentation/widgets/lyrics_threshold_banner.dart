@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
 
 /// Non-invasive HTTP 429 rate limit countdown banner for lrclib.net.
 ///
-/// Displays a live countdown whenever [LyricsController.isThresholdWaiting] is true
+/// Displays a live countdown whenever [LyricsManager.isThresholdWaiting] is true
 /// and remaining seconds are <= 10s. Automatically animates out when the countdown
 /// expires or when the retry succeeds. Includes a manual dismiss button for non-invasive UX.
 class LyricsThresholdBanner extends StatefulWidget {
@@ -28,18 +28,18 @@ class _LyricsThresholdBannerState extends State<LyricsThresholdBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final lyricsController = context.watch<LyricsController>();
+    final lyricsManager = context.read<LyricsManager>();
 
     return StreamBuilder<int?>(
-      stream: lyricsController.thresholdStream,
-      initialData: lyricsController.thresholdCountdownSeconds,
+      stream: lyricsManager.thresholdStream,
+      initialData: lyricsManager.thresholdCountdownSeconds,
       builder: (context, snapshot) {
         final remainingSeconds =
-            snapshot.data ?? lyricsController.thresholdCountdownSeconds;
+            snapshot.data ?? lyricsManager.thresholdCountdownSeconds;
         final hasActiveSeconds =
             remainingSeconds != null && remainingSeconds > 0;
         final isWaiting =
-            lyricsController.isThresholdWaiting && hasActiveSeconds;
+            lyricsManager.isThresholdWaiting && hasActiveSeconds;
 
         if (!isWaiting) {
           _dismissedByUser = false;

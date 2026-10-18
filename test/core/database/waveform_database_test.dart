@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
+import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
 
 void main() {
@@ -15,7 +15,7 @@ void main() {
       await database.close();
     });
 
-    test('upsertTracks persists waveform_data and getCatalogSnapshot returns it in RawTrackDto', () {
+    test('upsertTracks persists waveform_data and getCatalogSnapshot returns it in RawTrackDto', () async {
       final sampleWaveform = List.generate(50, (i) => i / 49.0);
       final encodedWaveform = WaveformCodec.encode(sampleWaveform);
 
@@ -33,9 +33,9 @@ void main() {
         replayGainTrackPeak: 0.95,
       );
 
-      database.upsertTracks([trackData]);
+      await database.upsertTracks([trackData]);
 
-      final snapshot = database.getCatalogSnapshot();
+      final snapshot = await database.getCatalogSnapshot();
       expect(snapshot.tracks.length, equals(1));
 
       final rawTrack = snapshot.tracks.first;
@@ -57,19 +57,19 @@ void main() {
       expect(hydratedTrack.replayGainTrackGain, equals(-6.5));
       expect(hydratedTrack.replayGainTrackPeak, equals(0.95));
 
-      // Test getRandomTracks and getTracksByIds preserve waveform
-      final randomTracks = database.getRandomTracks(1);
+      // Test LibraryStore.getRandomTracks preserves waveform
+      final randomTracks = store.getRandomTracks(1);
       expect(randomTracks.length, equals(1));
       expect(randomTracks.first.waveform, isNotNull);
       expect(randomTracks.first.waveform!.length, equals(50));
 
-      final tracksByIds = database.getTracksByIds([hydratedTrack.id!]);
-      expect(tracksByIds.length, equals(1));
-      expect(tracksByIds.first.waveform, isNotNull);
-      expect(tracksByIds.first.waveform!.length, equals(50));
+      final byId = store.getTrackById(hydratedTrack.id!);
+      expect(byId, isNotNull);
+      expect(byId!.waveform, isNotNull);
+      expect(byId.waveform!.length, equals(50));
     });
 
-    test('upsertTracks handles null waveform_data gracefully', () {
+    test('upsertTracks handles null waveform_data gracefully', () async {
       final trackData = ExtractedTrackData(
         filePath: '/music/plain_track.mp3',
         title: 'Plain Track',
@@ -81,9 +81,9 @@ void main() {
         waveformData: null,
       );
 
-      database.upsertTracks([trackData]);
+      await database.upsertTracks([trackData]);
 
-      final snapshot = database.getCatalogSnapshot();
+      final snapshot = await database.getCatalogSnapshot();
       expect(snapshot.tracks.first.waveformData, isNull);
 
       final store = LibraryStore();

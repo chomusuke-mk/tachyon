@@ -4,42 +4,38 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:tachyon/core/backend/backend.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/album.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/genre.dart';
-import 'package:tachyon/features/library/domain/scan_progress.dart';
-import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/features/library/domain/track_sort_option.dart';
+import 'package:tachyon/core/metadata/domain/scan_progress.dart';
+import 'package:tachyon/core/metadata/metadata_service.dart';
+import 'package:tachyon/core/store/domain/album.dart';
+import 'package:tachyon/core/store/domain/artist.dart';
+import 'package:tachyon/core/store/domain/genre.dart';
+import 'package:tachyon/core/store/domain/track.dart';
+import 'package:tachyon/core/store/domain/track_sort_option.dart';
+import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
 
-export 'package:tachyon/features/library/domain/track_sort_option.dart';
+export 'package:tachyon/core/store/domain/track_sort_option.dart';
 
 class LibraryController extends ChangeNotifier {
-  final TachyonBackendClient backend;
   final SettingsRepository settingsRepository;
-  TachyonBackendClient get _backend => backend;
+  final MetadataService? metadataService;
   SettingsRepository get _settingsRepository => settingsRepository;
 
-  LibraryStore _store;
-  StreamSubscription<void>? _catalogSubscription;
+  final LibraryStore _store;
 
   LibraryController({
-    required this.backend,
     required this.settingsRepository,
     LibraryStore? store,
+    this.metadataService,
   }) : _store = store ?? LibraryStore(),
        _isLoading = store == null {
     _sortOption = _settingsRepository.getTrackSortOption();
     _sortAscending = _settingsRepository.getTrackSortAscending();
 
-    _catalogSubscription = _backend.catalogUpdatedStream.listen((_) {
-      loadLibrary();
-    });
+    _store.addListener(_onStoreChanged);
 
-    _scanSubscription = _backend.scanProgressStream.listen((progress) {
+    _scanSubscription = metadataService?.progressStream.listen((progress) {
       final wasRunning = _scanProgressNotifier.value.isRunning;
       _scanProgressNotifier.value = progress;
 
@@ -48,9 +44,8 @@ class LibraryController extends ChangeNotifier {
       }
 
       if (progress.stage == ScanStage.completed) {
-        if (progress.catalogModified) {
-          loadLibrary();
-        }
+        _syncFromStore();
+        notifyListeners();
         MemoryOptimizer.trim();
       }
     });
@@ -58,6 +53,12 @@ class LibraryController extends ChangeNotifier {
     if (store != null) {
       _syncFromStore();
     }
+  }
+
+  void _onStoreChanged() {
+    if (_isDisposed) return;
+    _syncFromStore();
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
@@ -172,8 +173,7 @@ class LibraryController extends ChangeNotifier {
     }
 
     try {
-      final snapshot = await _backend.getCatalogSnapshot();
-      _store = LibraryStore.fromSnapshot(snapshot);
+      await _store.reloadFromDatabase();
       _syncFromStore();
       MemoryOptimizer.trim();
 
@@ -295,7 +295,6 @@ class LibraryController extends ChangeNotifier {
   List<Album> searchAlbums(String query) => _store.searchAlbums(query);
   List<Artist> searchArtists(String query) => _store.searchArtists(query);
 
-  // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
   // Folder Explorer & Navigation Stack
   // ---------------------------------------------------------------------------
@@ -477,12 +476,15 @@ class LibraryController extends ChangeNotifier {
   /// Scans the user's configured music directories from [SettingsRepository].
   /// When all directories have been removed, scans with an empty list to purge removed tracks.
   Future<void> scanDirectories() async {
+    if (isScanning) return;
     final directories = _settingsRepository.getSettings().musicDirectories;
     _scanProgressNotifier.value = const ScanProgress(
       stage: ScanStage.gettingDatabase,
     );
     notifyListeners();
-    await _backend.startScanDirectories(directories);
+    if (metadataService != null) {
+      await metadataService!.scanDirectories(directories).drain<void>();
+    }
   }
 
   void cancelScan() {
@@ -490,16 +492,31 @@ class LibraryController extends ChangeNotifier {
       stage: ScanStage.cancelled,
     );
     notifyListeners();
-    _backend.cancelScan();
+    metadataService?.cancelScan();
   }
 
   Future<void> deleteTrack(Track track) async {
     if (track.id == null) return;
     try {
-      await _backend.deleteTrack(track.id!);
-      await loadLibrary();
+      await _store.deleteTrackInStore(track.id!);
+      _syncFromStore();
+      if (_folderNavigationStack.isNotEmpty) {
+        await _loadCurrentFolderContent();
+      }
+      notifyListeners();
     } catch (e) {
       _errorMessage = 'Failed to delete track: $e';
+      notifyListeners();
+    }
+  }
+
+  Future<void> clearLibrary() async {
+    try {
+      await _store.clearAllDataInStore();
+      _syncFromStore();
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to clear library: $e';
       notifyListeners();
     }
   }
@@ -514,8 +531,7 @@ class LibraryController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
-    _catalogSubscription?.cancel();
-    _catalogSubscription = null;
+    _store.removeListener(_onStoreChanged);
     _scanSubscription?.cancel();
     _scanSubscription = null;
     _scanProgressNotifier.dispose();

@@ -6,18 +6,16 @@ import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tachyon/core/backend/backend_client.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/presentation/albums_screen.dart';
 import 'package:tachyon/features/library/presentation/artists_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/search/presentation/search_screen.dart';
 import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
@@ -70,7 +68,6 @@ void main() {
   late LocaleController localeController;
   late LocaleController esLocaleController;
   late AppDatabase db;
-  late DirectTachyonBackendClient backend;
   late LibraryStore libraryStore;
   late LibraryController libraryController;
   late PlaybackController playbackController;
@@ -91,27 +88,26 @@ void main() {
     await esLocaleController.whenReady;
 
     db = AppDatabase.inMemory();
-    backend = DirectTachyonBackendClient(database: db);
     libraryStore = LibraryStore.fromSnapshot(_createSampleSnapshot());
 
-    settingsController = SettingsController(
-      repository: settingsRepo,
-      backend: backend,
+    playbackController = PlaybackController(
+      store: libraryStore,
+      settingsRepository: settingsRepo,
     );
     libraryController = LibraryController(
-      backend: backend,
       settingsRepository: settingsRepo,
       store: libraryStore,
     );
-    playbackController = PlaybackController(
-      backend: backend,
-      settingsRepository: settingsRepo,
+    settingsController = SettingsController(
+      repository: settingsRepo,
+      playbackController: playbackController,
+      libraryController: libraryController,
     );
     playlistsController = PlaylistsController(
-      backend: backend,
+      store: libraryStore,
     );
     searchController = TachyonSearchController(
-      storeSupplier: () => libraryController.store,
+      store: libraryController.store,
     );
   });
 
@@ -121,7 +117,6 @@ void main() {
     playbackController.dispose();
     playlistsController.dispose();
     searchController.dispose();
-    await backend.dispose();
     await db.close();
   });
 
@@ -129,7 +124,6 @@ void main() {
     final effectiveController = controller ?? localeController;
     Widget app = MultiProvider(
       providers: [
-        Provider<TachyonBackendClient>.value(value: backend),
         Provider<SettingsRepository>.value(value: settingsRepo),
         ChangeNotifierProvider<SettingsController>.value(value: settingsController),
         ChangeNotifierProvider<LocaleController>.value(value: effectiveController),

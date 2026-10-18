@@ -4,10 +4,10 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:tachyon/core/backend/services/metadata_service.dart';
+import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/domain/scan_progress.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/core/metadata/domain/scan_progress.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
-import 'package:tachyon/features/settings/domain/app_settings.dart'
-    show CrossfeedMode;
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
 /// Modal bottom sheet or dialog presenting advanced audio controls and effects:

@@ -6,19 +6,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/backend/backend.dart';
-import 'package:tachyon/core/backend/services/lrc_parser.dart';
-import 'package:tachyon/core/backend/services/lyrics_service.dart';
+import 'package:tachyon/core/lyrics/lrc_parser.dart';
+import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/network/lyrics_rate_limiter.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/core/lyrics/lyrics_rate_limiter.dart';
+import 'package:tachyon/core/store/domain/artist.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/domain/lyric_source.dart';
-import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
-import 'package:tachyon/features/playback/presentation/lyrics_controller.dart';
+import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
+import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
+import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_view.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 String _lrc(String prefix, int count, {int stepSeconds = 4}) {

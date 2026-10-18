@@ -5,10 +5,10 @@ import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/shared/utils/toast_utils.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
-import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/shared/utils/file_picker_service.dart';
 
 import 'library_controller.dart';

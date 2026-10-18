@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
-import 'package:tachyon/features/library/domain/track_sort_option.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/domain/track_sort_option.dart';
 
 void main() {
   group('LibraryStore Adversarial Stress Tests (Milestone 2 Challenger)', () {

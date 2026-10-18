@@ -5,17 +5,17 @@ import 'package:dbus/dbus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/backend/backend_client.dart';
-import 'package:tachyon/features/library/domain/album.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
-import 'package:tachyon/features/library/domain/scan_progress.dart';
-import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/features/playback/domain/playback_state.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
-import 'package:tachyon/features/playback/services/linux_mpris_bridge.dart';
-import 'package:tachyon/features/playback/services/tachyon_audio_handler.dart';
+import 'package:tachyon/core/store/domain/album.dart';
+import 'package:tachyon/core/store/domain/artist.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:tachyon/core/metadata/domain/scan_progress.dart';
+import 'package:tachyon/core/store/domain/track.dart';
+import 'package:tachyon/core/playback/domain/playback_state.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/playback/linux_mpris_bridge.dart';
+import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 
 class _BenchmarkBackendClient implements TachyonBackendClient {
   final StreamController<PlaybackState> _stateController =

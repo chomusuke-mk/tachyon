@@ -13,14 +13,11 @@ void main() {
       await database.close();
     });
 
-    // ------------------------------------------------------------------------
-    // 1. EMPTY LIST HANDLING
-    // ------------------------------------------------------------------------
     group('1. Empty list handling', () {
-      test('upsertTracks with empty list on empty database does not fail', () {
-        expect(() => database.upsertTracks([]), returnsNormally);
+      test('upsertTracks with empty list on empty database does not fail', () async {
+        await expectLater(database.upsertTracks([]), completes);
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks, isEmpty);
         expect(snapshot.albums, isEmpty);
         expect(snapshot.artists, isEmpty);
@@ -28,11 +25,10 @@ void main() {
         expect(snapshot.trackArtists, isEmpty);
         expect(snapshot.trackGenres, isEmpty);
         expect(snapshot.playlistEntries, isEmpty);
-        // Default playlists (Liked Songs, History)
         expect(snapshot.playlists.length, 2);
       });
 
-      test('upsertTracks with empty list on populated database preserves data', () {
+      test('upsertTracks with empty list on populated database preserves data', () async {
         final track = ExtractedTrackData(
           filePath: '/music/track.mp3',
           title: 'Track One',
@@ -43,14 +39,13 @@ void main() {
           fileSize: 1000,
           modifiedAt: 100,
         );
-        database.upsertTracks([track]);
+        await database.upsertTracks([track]);
 
-        expect(database.getCatalogSnapshot().tracks.length, 1);
+        expect((await database.getCatalogSnapshot()).tracks.length, 1);
 
-        // Call with empty list
-        database.upsertTracks([]);
+        await database.upsertTracks([]);
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 1);
         expect(snapshot.artists.length, 1);
         expect(snapshot.albums.length, 1);
@@ -58,13 +53,9 @@ void main() {
       });
     });
 
-    // ------------------------------------------------------------------------
-    // 2. LARGE BATCH HANDLING (250+ TRACKS)
-    // ------------------------------------------------------------------------
     group('2. Large batch handling (250+ tracks)', () {
-      test('upserts 250 tracks with shared artists, albums, genres atomically', () {
+      test('upserts 250 tracks with shared artists, albums, genres atomically', () async {
         final tracks = <ExtractedTrackData>[];
-        // 25 artists, 10 albums, 5 genres
         for (var i = 1; i <= 250; i++) {
           final albumIndex = (i % 10) + 1;
           final primaryArtist = 'Artist $albumIndex';
@@ -95,24 +86,20 @@ void main() {
         }
 
         final stopwatch = Stopwatch()..start();
-        database.upsertTracks(tracks);
+        await database.upsertTracks(tracks);
         stopwatch.stop();
 
-        // Ensure performance is acceptable (< 1000ms for 250 tracks in-memory)
         expect(stopwatch.elapsedMilliseconds, lessThan(3000));
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 250);
         expect(snapshot.artists.length, 25);
         expect(snapshot.albums.length, 10);
         expect(snapshot.genres.length, 5);
 
-        // Every track should have exactly 2 artist links (or 1 if artistIndex1 == artistIndex2, but they differ)
         expect(snapshot.trackArtists.length, 250 * 2);
-        // Every track should have 1 genre link
         expect(snapshot.trackGenres.length, 250);
 
-        // Verify zero lyrics in snapshot
         for (final t in snapshot.tracks) {
           expect(t.filePath.startsWith('/music/album_'), isTrue);
           expect(t.title.startsWith('Track Title #'), isTrue);
@@ -121,14 +108,10 @@ void main() {
       });
     });
 
-    // ------------------------------------------------------------------------
-    // 3. UPDATING EXISTING TRACKS (UPSERT SEMANTICS)
-    // ------------------------------------------------------------------------
     group('3. Updating existing tracks (upsert semantics)', () {
-      test('updates existing track and replaces artist/genre relations without zombie links', () {
+      test('updates existing track and replaces artist/genre relations without zombie links', () async {
         const filePath = '/music/mutable_song.mp3';
 
-        // 1. Initial insert
         final initial = ExtractedTrackData(
           filePath: filePath,
           title: 'Initial Title',
@@ -141,9 +124,9 @@ void main() {
           modifiedAt: 1000,
           embeddedLyrics: '[00:01.00] Original lyrics',
         );
-        database.upsertTracks([initial]);
+        await database.upsertTracks([initial]);
 
-        var snapshot = database.getCatalogSnapshot();
+        var snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 1);
         final initialTrack = snapshot.tracks.first;
         final initialTrackId = initialTrack.id;
@@ -162,24 +145,21 @@ void main() {
             .toList();
         expect(initialGenreIds.length, 2);
 
-        // 2. Update with modified properties, new album, completely different artists and genres
-        // Notice embeddedLyrics is null: should PRESERVE existing lyrics via COALESCE
         final update = ExtractedTrackData(
-          filePath: filePath, // Same primary file path
+          filePath: filePath,
           title: 'Updated Title',
-          artistNames: ['Artist Gamma'], // Replaced artists
-          albumName: 'Album Gamma',      // Replaced album
-          genreNames: ['Jazz'],          // Replaced genres
+          artistNames: ['Artist Gamma'],
+          albumName: 'Album Gamma',
+          genreNames: ['Jazz'],
           trackNumber: 5,
           durationMs: 250000,
           fileSize: 4000000,
           modifiedAt: 2000,
-          embeddedLyrics: null,          // Null lyrics: should retain original
+          embeddedLyrics: null,
         );
-        database.upsertTracks([update]);
+        await database.upsertTracks([update]);
 
-        snapshot = database.getCatalogSnapshot();
-        // Still exactly 1 track
+        snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 1);
         final updatedTrack = snapshot.tracks.first;
         expect(updatedTrack.id, initialTrackId, reason: 'Track ID must be preserved on update');
@@ -187,11 +167,9 @@ void main() {
         expect(updatedTrack.durationMs, 250000);
         expect(updatedTrack.trackNumber, 5);
 
-        // Verify album updated
         final albumGamma = snapshot.albums.firstWhere((a) => a.name == 'Album Gamma');
         expect(updatedTrack.albumId, albumGamma.id);
 
-        // Verify artist relations: should ONLY contain Artist Gamma now
         final artistGamma = snapshot.artists.firstWhere((a) => a.name == 'Artist Gamma');
         final updatedTrackArtists = snapshot.trackArtists
             .where((ta) => ta.trackId == initialTrackId)
@@ -199,7 +177,6 @@ void main() {
             .toList();
         expect(updatedTrackArtists, [artistGamma.id], reason: 'Old artist links must be cleared');
 
-        // Verify genre relations: should ONLY contain Jazz now
         final genreJazz = snapshot.genres.firstWhere((g) => g.name == 'Jazz');
         final updatedTrackGenres = snapshot.trackGenres
             .where((tg) => tg.trackId == initialTrackId)
@@ -207,11 +184,15 @@ void main() {
             .toList();
         expect(updatedTrackGenres, [genreJazz.id], reason: 'Old genre links must be cleared');
 
-        // Embedded lyrics mirror the file's tags: a re-scan without the tag removes the row
-        String? embeddedRaw() => database.getLyricsEntry(trackId: initialTrackId, source: 'embedded')?['raw_lrc'] as String?;
-        expect(embeddedRaw(), isNull, reason: 'Re-scan without embedded tag must remove stale embedded lyrics');
+        Future<String?> embeddedRaw() async {
+          final rows = await database.getLyricsForTrack(initialTrackId);
+          for (final r in rows) {
+            if (r['source'] == 'embedded') return r['raw_lrc'] as String?;
+          }
+          return null;
+        }
+        expect(await embeddedRaw(), isNull, reason: 'Re-scan without embedded tag must remove stale embedded lyrics');
 
-        // 3. Update with NEW explicit lyrics stores them in the lyrics table
         final updateLyrics = ExtractedTrackData(
           filePath: filePath,
           title: 'Updated Title',
@@ -223,19 +204,15 @@ void main() {
           modifiedAt: 3000,
           embeddedLyrics: '[00:05.00] Overwritten lyrics',
         );
-        database.upsertTracks([updateLyrics]);
+        await database.upsertTracks([updateLyrics]);
 
-        expect(embeddedRaw(), '[00:05.00] Overwritten lyrics');
+        expect(await embeddedRaw(), '[00:05.00] Overwritten lyrics');
       });
     });
 
-    // ------------------------------------------------------------------------
-    // 4. SPECIAL CHARACTERS & ADVERSARIAL INPUTS
-    // ------------------------------------------------------------------------
     group('4. Special characters & adversarial inputs', () {
-      test('handles quotes, SQL injection payloads, multiline strings, emojis, and unicode', () {
+      test('handles quotes, SQL injection payloads, multiline strings, emojis, and unicode', () async {
         final specialTracks = <ExtractedTrackData>[
-          // SQL Injection attempts
           ExtractedTrackData(
             filePath: "/music/inject'; DROP TABLE tracks; --.mp3",
             title: "Robert'); DROP TABLE tracks;--",
@@ -246,7 +223,6 @@ void main() {
             fileSize: 1000,
             modifiedAt: 1,
           ),
-          // Emojis & Symbols
           ExtractedTrackData(
             filePath: '/music/🎵/track_🔥_✨.mp3',
             title: '🔥 Fire & Ice ❄️ (feat. 🎤 Singer)',
@@ -257,7 +233,6 @@ void main() {
             fileSize: 2000,
             modifiedAt: 2,
           ),
-          // Unicode (Japanese, Cyrillic, Spanish)
           ExtractedTrackData(
             filePath: '/music/日本語/夜に駆ける/01. 怪物 (Monster) [2024 Remaster].flac',
             title: '夜に駆ける (Racing into the Night)',
@@ -290,12 +265,11 @@ void main() {
           ),
         ];
 
-        expect(() => database.upsertTracks(specialTracks), returnsNormally);
+        await expectLater(database.upsertTracks(specialTracks), completes);
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 5);
 
-        // Verify the SQL injection strings were saved literally without altering schema
         final sqlInjTrack = snapshot.tracks.firstWhere(
           (t) => t.filePath == "/music/inject'; DROP TABLE tracks; --.mp3",
         );
@@ -309,26 +283,24 @@ void main() {
         );
         expect(sqlInjAlbum, isNotNull);
 
-        // Verify Japanese characters
         final jpnTrack = snapshot.tracks.firstWhere(
           (t) => t.filePath.contains('夜に駆ける'),
         );
         expect(jpnTrack.title, '夜に駆ける (Racing into the Night)');
 
-        // Verify Emojis
         final emojiTrack = snapshot.tracks.firstWhere(
           (t) => t.filePath == '/music/🎵/track_🔥_✨.mp3',
         );
         expect(emojiTrack.title, '🔥 Fire & Ice ❄️ (feat. 🎤 Singer)');
       });
 
-      test('handles whitespace trimming, empty strings, and missing optional fields', () {
+      test('handles whitespace trimming, empty strings, and missing optional fields', () async {
         final edgeCaseTrack = ExtractedTrackData(
           filePath: '/music/sparse_track.mp3',
           title: 'Sparse Track',
-          artistNames: ['', '   ', 'Valid Artist', '   Valid Artist   '], // Empty, duplicate, whitespace
-          albumName: '   ', // Only whitespace: should resolve to null album
-          genreNames: ['', '  ', 'Pop', 'Pop'], // Duplicates and empty
+          artistNames: ['', '   ', 'Valid Artist', '   Valid Artist   '],
+          albumName: '   ',
+          genreNames: ['', '  ', 'Pop', 'Pop'],
           trackNumber: null,
           discNumber: null,
           year: null,
@@ -344,35 +316,29 @@ void main() {
           embeddedLyrics: null,
         );
 
-        expect(() => database.upsertTracks([edgeCaseTrack]), returnsNormally);
+        await expectLater(database.upsertTracks([edgeCaseTrack]), completes);
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 1);
         final track = snapshot.tracks.first;
         expect(track.albumId, isNull);
         expect(track.trackNumber, isNull);
-        expect(track.discNumber, 1); // Defaults to 1 in DB schema
+        expect(track.discNumber, 1);
         expect(track.durationMs, 0);
 
-        // Only "Valid Artist" should be in artists
         expect(snapshot.artists.length, 1);
         expect(snapshot.artists.first.name, 'Valid Artist');
 
-        // Only "Pop" should be in genres
         expect(snapshot.genres.length, 1);
         expect(snapshot.genres.first.name, 'Pop');
 
-        // Relations should not have duplicates
         expect(snapshot.trackArtists.length, 1);
         expect(snapshot.trackGenres.length, 1);
       });
     });
 
-    // ------------------------------------------------------------------------
-    // 5. CASE SENSITIVITY & DUPLICATION TESTS
-    // ------------------------------------------------------------------------
     group('5. Case insensitivity in artists, albums, genres', () {
-      test('case variations in artist names across batches', () {
+      test('case variations in artist names across batches', () async {
         final track1 = ExtractedTrackData(
           filePath: '/music/t1.mp3',
           title: 'Track 1',
@@ -381,25 +347,24 @@ void main() {
           fileSize: 1000,
           modifiedAt: 1,
         );
-        database.upsertTracks([track1]);
+        await database.upsertTracks([track1]);
 
         final track2 = ExtractedTrackData(
           filePath: '/music/t2.mp3',
           title: 'Track 2',
-          artistNames: ['QUEEN'], // Different casing in second batch
+          artistNames: ['QUEEN'],
           durationMs: 1000,
           fileSize: 1000,
           modifiedAt: 2,
         );
-        database.upsertTracks([track2]);
+        await database.upsertTracks([track2]);
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 2);
-        // Desired behavior: case insensitivity deduplicates to 1 artist
         expect(snapshot.artists.length, 1, reason: 'Artist names should be case-insensitive (Queen vs QUEEN)');
       });
 
-      test('case variations in genre names across batches', () {
+      test('case variations in genre names across batches', () async {
         final track1 = ExtractedTrackData(
           filePath: '/music/g1.mp3',
           title: 'Track 1',
@@ -409,24 +374,24 @@ void main() {
           fileSize: 1000,
           modifiedAt: 1,
         );
-        database.upsertTracks([track1]);
+        await database.upsertTracks([track1]);
 
         final track2 = ExtractedTrackData(
           filePath: '/music/g2.mp3',
           title: 'Track 2',
           artistNames: ['Artist 1'],
-          genreNames: ['ROCK'], // Different casing in second batch
+          genreNames: ['ROCK'],
           durationMs: 1000,
           fileSize: 1000,
           modifiedAt: 2,
         );
-        database.upsertTracks([track2]);
+        await database.upsertTracks([track2]);
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.genres.length, 1, reason: 'Genre names should be case-insensitive (Rock vs ROCK)');
       });
 
-      test('case variations in album names across batches', () {
+      test('case variations in album names across batches', () async {
         final track1 = ExtractedTrackData(
           filePath: '/music/a1.mp3',
           title: 'Track 1',
@@ -436,24 +401,24 @@ void main() {
           fileSize: 1000,
           modifiedAt: 1,
         );
-        database.upsertTracks([track1]);
+        await database.upsertTracks([track1]);
 
         final track2 = ExtractedTrackData(
           filePath: '/music/a2.mp3',
           title: 'Track 2',
           artistNames: ['Artist 1'],
-          albumName: 'GREATEST HITS', // Different casing in second batch
+          albumName: 'GREATEST HITS',
           durationMs: 1000,
           fileSize: 1000,
           modifiedAt: 2,
         );
-        database.upsertTracks([track2]);
+        await database.upsertTracks([track2]);
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.albums.length, 1, reason: 'Album names should be case-insensitive (Greatest Hits vs GREATEST HITS)');
       });
 
-      test('tracks in same album with different artists but same albumArtistName resolve to single album', () {
+      test('tracks in same album with different artists but same albumArtistName resolve to single album', () async {
         final track1 = ExtractedTrackData(
           filePath: '/music/comp1.mp3',
           title: 'Track One',
@@ -476,16 +441,15 @@ void main() {
           modifiedAt: 2,
         );
 
-        database.upsertTracks([track1, track2]);
+        await database.upsertTracks([track1, track2]);
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 2);
-        // Desired behavior: Summer Hits 2024 is ONE album
         expect(snapshot.albums.length, 1, reason: 'Album with same albumArtistName should not be split across tracks');
         expect(snapshot.tracks[0].albumId, snapshot.tracks[1].albumId);
       });
 
-      test('multiple tracks with null artist_id for same album name do not create duplicate album rows across batches', () {
+      test('multiple tracks with null artist_id for same album name do not create duplicate album rows across batches', () async {
         final track1 = ExtractedTrackData(
           filePath: '/music/no_artist1.mp3',
           title: 'Track One',
@@ -495,7 +459,7 @@ void main() {
           fileSize: 1000,
           modifiedAt: 1,
         );
-        database.upsertTracks([track1]);
+        await database.upsertTracks([track1]);
 
         final track2 = ExtractedTrackData(
           filePath: '/music/no_artist2.mp3',
@@ -506,9 +470,9 @@ void main() {
           fileSize: 1000,
           modifiedAt: 2,
         );
-        database.upsertTracks([track2]);
+        await database.upsertTracks([track2]);
 
-        final snapshot = database.getCatalogSnapshot();
+        final snapshot = await database.getCatalogSnapshot();
         expect(snapshot.tracks.length, 2);
         expect(snapshot.albums.length, 1, reason: 'Multiple tracks with null artist_id for same album should not duplicate album');
         expect(snapshot.albums.first.artistId, isNull);

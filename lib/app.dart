@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/core/playback/system_media_service.dart';
 import 'package:tachyon/features/permissions/presentation/permissions_gate.dart';
-import 'package:tachyon/features/playback/services/system_media_service.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/features/shell/tachyon_shell.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';

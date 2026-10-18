@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:miniaudio_player/miniaudio_player.dart'
     show CrossfeedMode, Reverb;
-import 'package:tachyon/features/library/domain/track_sort_option.dart';
-import 'package:tachyon/features/playback/domain/lyrics_display_mode.dart';
-import 'package:tachyon/features/playback/domain/loop_mode.dart';
+import 'package:tachyon/core/store/domain/track_sort_option.dart';
+import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
+import 'package:tachyon/core/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 export 'package:miniaudio_player/miniaudio_player.dart'

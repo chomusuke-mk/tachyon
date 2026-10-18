@@ -1,21 +1,17 @@
+// ignore_for_file: prefer_initializing_formals
+import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/domain/playlist.dart' show PlaylistType;
 
-export 'package:tachyon/shared/utils/metadata_utils.dart'
-    show ExtractedTrackData;
-import 'package:tachyon/shared/utils/metadata_utils.dart'
-    show ExtractedTrackData;
-import 'package:tachyon/core/backend/services/metadata_service.dart' show TrackFileMeta;
-import 'package:tachyon/features/library/domain/album.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
-import 'package:tachyon/features/library/domain/playlist.dart' show PlaylistType;
-import 'package:tachyon/features/library/domain/track.dart';
-import 'package:tachyon/shared/utils/waveform_codec.dart';
-typedef StoredTrackInfo = ({int id, String filePath, int modifiedAt});
+export 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
 
 abstract final class AppDatabaseSchema {
   static const List<String> createTables = [
@@ -49,144 +45,226 @@ abstract final class AppDatabaseSchema {
   ];
 }
 
+/// Concise, centralized SQLite persistence service using an asynchronous FIFO
+/// serialization queue and ephemeral [Isolate.run] workers on disk.
 class AppDatabase {
   static const int likedSongsPlaylistId = 1;
   static const int historyPlaylistId = 2;
 
-  Database? _db;
-  Database get db => _db ?? (throw StateError('AppDatabase is not initialized.'));
+  String? _dbPath;
+  Database? _inMemoryDb;
+  Future<void> _queue = Future.value();
 
-  AppDatabase();
-
-  factory AppDatabase.inMemory() {
-    final appDb = AppDatabase();
-    appDb._initInMemory();
-    return appDb;
-  }
-
+  AppDatabase({String? dbPath}) : _dbPath = dbPath;
+  factory AppDatabase.inMemory() => AppDatabase.forTesting(sqlite3.openInMemory());
   factory AppDatabase.forTesting(Database db) {
-    final appDb = AppDatabase().._db = db;
-    db.execute('PRAGMA foreign_keys = ON;');
-    appDb._executeSchema(db);
+    final appDb = AppDatabase();
+    _configurePragmas(db);
+    _executeSchema(db);
+    appDb._inMemoryDb = db;
     return appDb;
   }
 
-  void _initInMemory() {
-    _db = sqlite3.openInMemory()..execute('PRAGMA foreign_keys = ON;');
-    _executeSchema(_db!);
+  /// Exposes the in-memory [Database] handle for unit test assertions.
+  Database get db => _inMemoryDb ?? (throw StateError('AppDatabase is not in-memory.'));
+
+  Future<String> _resolveDbPath() async {
+    if (_dbPath != null) return _dbPath!;
+    final dir = await getApplicationSupportDirectory();
+    return _dbPath = p.join(dir.path, 'music.db');
   }
 
-  Future<void> initInMemory() async {
-    if (_db == null) _initInMemory();
+  Future<T> _enqueue<T>(FutureOr<T> Function() task) {
+    final completer = Completer<T>();
+    _queue = _queue.then((_) async {
+      try {
+        completer.complete(await task());
+      } catch (e, st) {
+        completer.completeError(e, st);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<T> _runTask<T>(T Function(Database db) action) => _enqueue<T>(() async {
+        final mem = _inMemoryDb;
+        if (mem != null) return action(mem);
+        final path = await _resolveDbPath();
+        return _executeInIsolate(path, action);
+      });
+
+  static Future<T> _executeInIsolate<T>(String dbPath, T Function(Database db) action) =>
+      Isolate.run<T>(() {
+        final db = sqlite3.open(dbPath, mode: OpenMode.readWriteCreate);
+        try {
+          _configurePragmas(db);
+          return action(db);
+        } finally {
+          db.close();
+        }
+      });
+
+  static void _configurePragmas(Database db) {
+    db.execute('PRAGMA foreign_keys = ON;');
+    db.execute('PRAGMA journal_mode = WAL;');
+    db.execute('PRAGMA synchronous = NORMAL;');
+    db.execute('PRAGMA cache_size = -500;');
+    db.execute('PRAGMA mmap_size = 0;');
+  }
+
+  static void _executeSchema(Database db) {
+    for (final sql in AppDatabaseSchema.createTables) {
+      db.execute(sql);
+    }
+    for (final sql in AppDatabaseSchema.indexes) {
+      db.execute(sql);
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    db.execute(
+      'INSERT OR IGNORE INTO playlists (id, name, created_at, type) VALUES (?, ?, ?, ?);',
+      [likedSongsPlaylistId, 'Liked Songs', now, PlaylistType.liked.value],
+    );
+    db.execute(
+      'INSERT OR IGNORE INTO playlists (id, name, created_at, type) VALUES (?, ?, ?, ?);',
+      [historyPlaylistId, 'History', now, PlaylistType.history.value],
+    );
   }
 
   Future<void> init([String? dbPathOverride]) async {
-    if (_db != null) return;
-    final dbPath = dbPathOverride ?? p.join((await getApplicationSupportDirectory()).path, 'music.db');
-    _db = sqlite3.open(dbPath, mode: OpenMode.readWriteCreate);
-    _db!.execute('PRAGMA foreign_keys = ON;');
-    _db!.execute('PRAGMA journal_mode = WAL;');
-    _db!.execute('PRAGMA synchronous = NORMAL;');
-    _db!.execute('PRAGMA cache_size = -500;');
-    _db!.execute('PRAGMA mmap_size = 0;');
-    _executeSchema(_db!);
+    if (_inMemoryDb != null) return;
+    if (dbPathOverride != null) _dbPath = dbPathOverride;
+    await _runTask(_executeSchema);
   }
 
-  /// Commands SQLite to release statement caches, page cache pages, and memory buffers.
-  void shrinkMemory() {
-    try {
-      _db?.execute('PRAGMA shrink_memory;');
-    } catch (_) {}
-  }
+  Future<void> close() => _enqueue(() {
+        _inMemoryDb?.close();
+        _inMemoryDb = null;
+      });
 
-  void _executeSchema(Database db) {
-    for (final sql in AppDatabaseSchema.createTables) { db.execute(sql); }
-    for (final sql in AppDatabaseSchema.indexes) { db.execute(sql); }
-    final now = DateTime.now().millisecondsSinceEpoch;
-    db.execute('INSERT OR IGNORE INTO playlists (id, name, created_at, type) VALUES (?, ?, ?, ?);', [likedSongsPlaylistId, 'Liked Songs', now, PlaylistType.liked.value]);
-    db.execute('INSERT OR IGNORE INTO playlists (id, name, created_at, type) VALUES (?, ?, ?, ?);', [historyPlaylistId, 'History', now, PlaylistType.history.value]);
-  }
+  Future<CatalogSnapshot> getCatalogSnapshot() => _runTask(_getCatalogSnapshotSync);
 
-  CatalogSnapshot getCatalogSnapshot() {
+  static CatalogSnapshot _getCatalogSnapshotSync(Database db) {
     db.execute('BEGIN TRANSACTION;');
     try {
-      final artists = db.select('SELECT id, name, thumbnail_hash FROM artists ORDER BY name COLLATE NOCASE;')
-          .map((r) => RawArtistDto(id: r['id'] as int, name: r['name'] as String, thumbnailHash: r['thumbnail_hash'] as String?)).toList();
-
-      final albums = db.select('SELECT id, name, year, artist_id, thumbnail_hash FROM albums ORDER BY name COLLATE NOCASE;')
-          .map((r) => RawAlbumDto(id: r['id'] as int, name: r['name'] as String, year: r['year'] as int?, artistId: r['artist_id'] as int?, thumbnailHash: r['thumbnail_hash'] as String?)).toList();
-
-      final genres = db.select('SELECT id, name FROM genres ORDER BY name COLLATE NOCASE;')
-          .map((r) => RawGenreDto(id: r['id'] as int, name: r['name'] as String)).toList();
-
-      final tracks = db.select('SELECT id, file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, thumbnail_hash FROM tracks ORDER BY title COLLATE NOCASE;')
+      final artists = db
+          .select('SELECT id, name, thumbnail_hash FROM artists ORDER BY name COLLATE NOCASE;')
+          .map((r) => RawArtistDto(id: r['id'] as int, name: r['name'] as String, thumbnailHash: r['thumbnail_hash'] as String?))
+          .toList();
+      final albums = db
+          .select('SELECT id, name, year, artist_id, thumbnail_hash FROM albums ORDER BY name COLLATE NOCASE;')
+          .map((r) => RawAlbumDto(id: r['id'] as int, name: r['name'] as String, year: r['year'] as int?, artistId: r['artist_id'] as int?, thumbnailHash: r['thumbnail_hash'] as String?))
+          .toList();
+      final genres = db
+          .select('SELECT id, name FROM genres ORDER BY name COLLATE NOCASE;')
+          .map((r) => RawGenreDto(id: r['id'] as int, name: r['name'] as String))
+          .toList();
+      final tracks = db
+          .select('SELECT id, file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, thumbnail_hash FROM tracks ORDER BY title COLLATE NOCASE;')
           .map((r) => RawTrackDto(
-            id: r['id'] as int, filePath: r['file_path'] as String, title: r['title'] as String,
-            trackNumber: r['track_number'] as int?, discNumber: r['disc_number'] as int?, year: r['year'] as int?,
-            durationMs: r['duration_ms'] as int, bitrate: r['bitrate'] as int?, sampleRate: r['sample_rate'] as int?,
-            channels: r['channels'] as int?, codec: r['codec'] as String?, fileSize: r['file_size'] as int,
-            modifiedAt: r['modified_at'] as int,
-            replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
-            replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
-            waveformData: r['waveform_data'] as String?,
-            albumId: r['album_id'] as int?,
-            thumbnailHash: r['thumbnail_hash'] as String?,
-          )).toList();
-
-      final trackArtists = db.select('SELECT track_id, artist_id FROM track_artists;')
-          .map((r) => TrackArtistPair(trackId: r['track_id'] as int, artistId: r['artist_id'] as int)).toList();
-
-      final trackGenres = db.select('SELECT track_id, genre_id FROM track_genres;')
-          .map((r) => TrackGenrePair(trackId: r['track_id'] as int, genreId: r['genre_id'] as int)).toList();
-
-      final playlists = db.select('SELECT id, name, created_at, type FROM playlists ORDER BY type DESC, created_at ASC;')
-          .map((r) => RawPlaylistDto(id: r['id'] as int, name: r['name'] as String, createdAt: r['created_at'] as int, type: r['type'] as int? ?? 0)).toList();
-
-      final playlistEntries = db.select('SELECT id, playlist_id, track_id, position, added_at FROM playlist_entries ORDER BY playlist_id, position ASC;')
-          .map((r) => RawPlaylistEntryDto(id: r['id'] as int, playlistId: r['playlist_id'] as int, trackId: r['track_id'] as int, position: r['position'] as int, addedAt: r['added_at'] as int)).toList();
-
+                id: r['id'] as int,
+                filePath: r['file_path'] as String,
+                title: r['title'] as String,
+                trackNumber: r['track_number'] as int?,
+                discNumber: r['disc_number'] as int?,
+                year: r['year'] as int?,
+                durationMs: r['duration_ms'] as int,
+                bitrate: r['bitrate'] as int?,
+                sampleRate: r['sample_rate'] as int?,
+                channels: r['channels'] as int?,
+                codec: r['codec'] as String?,
+                fileSize: r['file_size'] as int,
+                modifiedAt: r['modified_at'] as int,
+                replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
+                replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
+                waveformData: r['waveform_data'] as String?,
+                albumId: r['album_id'] as int?,
+                thumbnailHash: r['thumbnail_hash'] as String?,
+              ))
+          .toList();
+      final trackArtists = db
+          .select('SELECT track_id, artist_id FROM track_artists;')
+          .map((r) => TrackArtistPair(trackId: r['track_id'] as int, artistId: r['artist_id'] as int))
+          .toList();
+      final trackGenres = db
+          .select('SELECT track_id, genre_id FROM track_genres;')
+          .map((r) => TrackGenrePair(trackId: r['track_id'] as int, genreId: r['genre_id'] as int))
+          .toList();
+      final playlists = db
+          .select('SELECT id, name, created_at, type FROM playlists ORDER BY type DESC, created_at ASC;')
+          .map((r) => RawPlaylistDto(id: r['id'] as int, name: r['name'] as String, createdAt: r['created_at'] as int, type: r['type'] as int? ?? 0))
+          .toList();
+      final playlistEntries = db
+          .select('SELECT id, playlist_id, track_id, position, added_at FROM playlist_entries ORDER BY playlist_id, position ASC;')
+          .map((r) => RawPlaylistEntryDto(id: r['id'] as int, playlistId: r['playlist_id'] as int, trackId: r['track_id'] as int, position: r['position'] as int, addedAt: r['added_at'] as int))
+          .toList();
       db.execute('COMMIT;');
       return CatalogSnapshot(
-        tracks: tracks, albums: albums, artists: artists, genres: genres,
-        playlists: playlists, playlistEntries: playlistEntries,
-        trackArtists: trackArtists, trackGenres: trackGenres,
+        tracks: tracks,
+        albums: albums,
+        artists: artists,
+        genres: genres,
+        playlists: playlists,
+        playlistEntries: playlistEntries,
+        trackArtists: trackArtists,
+        trackGenres: trackGenres,
       );
     } catch (e) {
       try { db.execute('ROLLBACK;'); } catch (_) {}
       debugPrint('[AppDatabase] Error in getCatalogSnapshot: $e');
       return const CatalogSnapshot.empty();
-    } finally {
-      shrinkMemory();
     }
   }
 
-  void upsertTracks(List<ExtractedTrackData> tracks) {
+  /// Atomically applies track upserts and stale track deletions.
+  Future<void> applyScanMutations({
+    List<ExtractedTrackData> toUpsert = const [],
+    List<int> trackIdsToDelete = const [],
+  }) {
+    if (toUpsert.isEmpty && trackIdsToDelete.isEmpty) return Future.value();
+    return _runTask((db) {
+      if (toUpsert.isNotEmpty) _upsertTracksSync(db, toUpsert);
+      if (trackIdsToDelete.isNotEmpty) _deleteTracksAndPurgeOrphansSync(db, trackIdsToDelete);
+    });
+  }
+
+  Future<void> upsertTracks(List<ExtractedTrackData> tracks) =>
+      tracks.isEmpty ? Future.value() : _runTask((db) => _upsertTracksSync(db, tracks));
+
+  static void _upsertTracksSync(Database db, List<ExtractedTrackData> tracks) {
     if (tracks.isEmpty) return;
     db.execute('BEGIN TRANSACTION;');
     final stmts = <PreparedStatement>[];
+    PreparedStatement prep(String sql) {
+      final s = db.prepare(sql);
+      stmts.add(s);
+      return s;
+    }
+
     try {
       final artistCache = <String, int>{};
       final albumCache = <String, int>{};
       final genreCache = <String, int>{};
 
-      final stmtInsertArtist = db.prepare('INSERT OR IGNORE INTO artists (name, thumbnail_hash) VALUES (?, ?);'); stmts.add(stmtInsertArtist);
-      final stmtSelectArtist = db.prepare('SELECT id, thumbnail_hash FROM artists WHERE name = ? COLLATE NOCASE LIMIT 1;'); stmts.add(stmtSelectArtist);
-      final stmtUpdateArtistThumbnail = db.prepare('UPDATE artists SET thumbnail_hash = ? WHERE id = ? AND thumbnail_hash IS NULL;'); stmts.add(stmtUpdateArtistThumbnail);
-      final stmtInsertAlbum = db.prepare('INSERT OR IGNORE INTO albums (name, artist_id, year, thumbnail_hash) VALUES (?, ?, ?, ?);'); stmts.add(stmtInsertAlbum);
-      final stmtSelectAlbum = db.prepare('SELECT id, thumbnail_hash FROM albums WHERE name = ? COLLATE NOCASE AND (artist_id = ? OR (? IS NULL AND artist_id IS NULL)) LIMIT 1;'); stmts.add(stmtSelectAlbum);
-      final stmtUpdateAlbumThumbnail = db.prepare('UPDATE albums SET thumbnail_hash = ? WHERE id = ? AND thumbnail_hash IS NULL;'); stmts.add(stmtUpdateAlbumThumbnail);
-      final stmtInsertGenre = db.prepare('INSERT OR IGNORE INTO genres (name) VALUES (?);'); stmts.add(stmtInsertGenre);
-      final stmtSelectGenre = db.prepare('SELECT id FROM genres WHERE name = ? COLLATE NOCASE LIMIT 1;'); stmts.add(stmtSelectGenre);
-
-      final stmtUpsertTrack = db.prepare('INSERT INTO tracks (file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, thumbnail_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET title = excluded.title, track_number = excluded.track_number, disc_number = excluded.disc_number, year = excluded.year, duration_ms = excluded.duration_ms, bitrate = excluded.bitrate, sample_rate = excluded.sample_rate, channels = excluded.channels, codec = excluded.codec, file_size = excluded.file_size, modified_at = excluded.modified_at, replay_gain_track_gain = excluded.replay_gain_track_gain, replay_gain_track_peak = excluded.replay_gain_track_peak, waveform_data = excluded.waveform_data, album_id = excluded.album_id, thumbnail_hash = excluded.thumbnail_hash RETURNING id;');
-      stmts.add(stmtUpsertTrack);
-      final stmtDeleteEmbeddedLyrics = db.prepare("DELETE FROM lyrics WHERE track_id = ? AND source = 'embedded';"); stmts.add(stmtDeleteEmbeddedLyrics);
-      final stmtInsertEmbeddedLyrics = db.prepare("INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, updated_at) VALUES (?, 'embedded', 'FOUND', ?, ?, ?);"); stmts.add(stmtInsertEmbeddedLyrics);
-
-      final stmtDeleteTrackArtists = db.prepare('DELETE FROM track_artists WHERE track_id = ?;'); stmts.add(stmtDeleteTrackArtists);
-      final stmtInsertTrackArtist = db.prepare('INSERT OR IGNORE INTO track_artists (track_id, artist_id) VALUES (?, ?);'); stmts.add(stmtInsertTrackArtist);
-      final stmtDeleteTrackGenres = db.prepare('DELETE FROM track_genres WHERE track_id = ?;'); stmts.add(stmtDeleteTrackGenres);
-      final stmtInsertTrackGenre = db.prepare('INSERT OR IGNORE INTO track_genres (track_id, genre_id) VALUES (?, ?);'); stmts.add(stmtInsertTrackGenre);
+      final stmtInsertArtist = prep('INSERT OR IGNORE INTO artists (name, thumbnail_hash) VALUES (?, ?);');
+      final stmtSelectArtist = prep('SELECT id, thumbnail_hash FROM artists WHERE name = ? COLLATE NOCASE LIMIT 1;');
+      final stmtUpdateArtistThumbnail = prep('UPDATE artists SET thumbnail_hash = ? WHERE id = ? AND thumbnail_hash IS NULL;');
+      final stmtInsertAlbum = prep('INSERT OR IGNORE INTO albums (name, artist_id, year, thumbnail_hash) VALUES (?, ?, ?, ?);');
+      final stmtSelectAlbum = prep('SELECT id, thumbnail_hash FROM albums WHERE name = ? COLLATE NOCASE AND (artist_id = ? OR (? IS NULL AND artist_id IS NULL)) LIMIT 1;');
+      final stmtUpdateAlbumThumbnail = prep('UPDATE albums SET thumbnail_hash = ? WHERE id = ? AND thumbnail_hash IS NULL;');
+      final stmtInsertGenre = prep('INSERT OR IGNORE INTO genres (name) VALUES (?);');
+      final stmtSelectGenre = prep('SELECT id FROM genres WHERE name = ? COLLATE NOCASE LIMIT 1;');
+      final stmtUpsertTrack = prep(
+        'INSERT INTO tracks (file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, thumbnail_hash) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+        'ON CONFLICT(file_path) DO UPDATE SET title = excluded.title, track_number = excluded.track_number, disc_number = excluded.disc_number, year = excluded.year, duration_ms = excluded.duration_ms, bitrate = excluded.bitrate, sample_rate = excluded.sample_rate, channels = excluded.channels, codec = excluded.codec, file_size = excluded.file_size, modified_at = excluded.modified_at, replay_gain_track_gain = excluded.replay_gain_track_gain, replay_gain_track_peak = excluded.replay_gain_track_peak, waveform_data = excluded.waveform_data, album_id = excluded.album_id, thumbnail_hash = excluded.thumbnail_hash '
+        'RETURNING id;',
+      );
+      final stmtDeleteEmbeddedLyrics = prep("DELETE FROM lyrics WHERE track_id = ? AND source = 'embedded';");
+      final stmtInsertEmbeddedLyrics = prep("INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, updated_at) VALUES (?, 'embedded', 'FOUND', ?, ?, ?);");
+      final stmtDeleteTrackArtists = prep('DELETE FROM track_artists WHERE track_id = ?;');
+      final stmtInsertTrackArtist = prep('INSERT OR IGNORE INTO track_artists (track_id, artist_id) VALUES (?, ?);');
+      final stmtDeleteTrackGenres = prep('DELETE FROM track_genres WHERE track_id = ?;');
+      final stmtInsertTrackGenre = prep('INSERT OR IGNORE INTO track_genres (track_id, genre_id) VALUES (?, ?);');
 
       int? resolveArtist(String name, {String? artistThumbnailHash}) {
         final clean = name.trim();
@@ -197,8 +275,7 @@ class AppDatabase {
           final rows = stmtSelectArtist.select([clean]);
           if (rows.isNotEmpty) {
             id = rows.first['id'] as int;
-            final existingHash = rows.first['thumbnail_hash'] as String?;
-            if (existingHash == null && artistThumbnailHash != null) {
+            if (rows.first['thumbnail_hash'] == null && artistThumbnailHash != null) {
               stmtUpdateArtistThumbnail.execute([artistThumbnailHash, id]);
             }
           } else {
@@ -246,24 +323,24 @@ class AppDatabase {
               ? resolveArtist(t.albumArtistName!, artistThumbnailHash: t.artistThumbnailHash)
               : null;
           final primaryArtistId = albumArtistId ?? resolvedArtistIds.firstOrNull;
+          final albumThumb = t.albumThumbnailHash ?? t.thumbnailHash;
           final cacheKey = '${alClean.toLowerCase()}|$primaryArtistId';
           resolvedAlbumId = albumCache[cacheKey];
           if (resolvedAlbumId == null) {
             final rows = stmtSelectAlbum.select([alClean, primaryArtistId, primaryArtistId]);
             if (rows.isNotEmpty) {
               resolvedAlbumId = rows.first['id'] as int;
-              final existingHash = rows.first['thumbnail_hash'] as String?;
-              if (existingHash == null && t.thumbnailHash != null) {
-                stmtUpdateAlbumThumbnail.execute([t.thumbnailHash, resolvedAlbumId]);
+              if (rows.first['thumbnail_hash'] == null && albumThumb != null) {
+                stmtUpdateAlbumThumbnail.execute([albumThumb, resolvedAlbumId]);
               }
             } else {
-              stmtInsertAlbum.execute([alClean, primaryArtistId, t.year, t.thumbnailHash]);
+              stmtInsertAlbum.execute([alClean, primaryArtistId, t.year, albumThumb]);
               final ins = stmtSelectAlbum.select([alClean, primaryArtistId, primaryArtistId]);
               if (ins.isNotEmpty) resolvedAlbumId = ins.first['id'] as int;
             }
             if (resolvedAlbumId != null) albumCache[cacheKey] = resolvedAlbumId;
-          } else if (t.thumbnailHash != null) {
-            stmtUpdateAlbumThumbnail.execute([t.thumbnailHash, resolvedAlbumId]);
+          } else if (albumThumb != null) {
+            stmtUpdateAlbumThumbnail.execute([albumThumb, resolvedAlbumId]);
           }
         }
 
@@ -281,7 +358,9 @@ class AppDatabase {
         }
 
         stmtDeleteTrackArtists.execute([trackId]);
-        for (final aId in resolvedArtistIds) { stmtInsertTrackArtist.execute([trackId, aId]); }
+        for (final aId in resolvedArtistIds) {
+          stmtInsertTrackArtist.execute([trackId, aId]);
+        }
 
         stmtDeleteTrackGenres.execute([trackId]);
         for (final gName in t.genreNames) {
@@ -294,21 +373,16 @@ class AppDatabase {
       db.execute('ROLLBACK;');
       rethrow;
     } finally {
-      for (final s in stmts) { s.close(); }
-      shrinkMemory();
+      for (final s in stmts) {
+        s.close();
+      }
     }
   }
 
-  List<StoredTrackInfo> getStoredTracks() {
-    final rows = db.select('SELECT id, file_path, modified_at FROM tracks;');
-    return rows.map((r) => (
-      id: r['id'] as int,
-      filePath: r['file_path'] as String,
-      modifiedAt: r['modified_at'] as int,
-    )).toList();
-  }
+  Future<void> deleteTracksAndPurgeOrphans(List<int> trackIds) =>
+      _runTask((db) => _deleteTracksAndPurgeOrphansSync(db, trackIds));
 
-  void deleteTracksAndPurgeOrphans(List<int> trackIds) {
+  static void _deleteTracksAndPurgeOrphansSync(Database db, List<int> trackIds) {
     db.execute('BEGIN TRANSACTION;');
     try {
       if (trackIds.isNotEmpty) {
@@ -320,15 +394,9 @@ class AppDatabase {
           db.execute('DELETE FROM tracks WHERE id IN ($placeholders);', chunk);
         }
       }
-      db.execute(
-        'DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE album_id IS NOT NULL);',
-      );
-      db.execute(
-        'DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM track_artists);',
-      );
-      db.execute(
-        'DELETE FROM genres WHERE id NOT IN (SELECT DISTINCT genre_id FROM track_genres);',
-      );
+      db.execute('DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE album_id IS NOT NULL);');
+      db.execute('DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM track_artists);');
+      db.execute('DELETE FROM genres WHERE id NOT IN (SELECT DISTINCT genre_id FROM track_genres);');
       db.execute('COMMIT;');
     } catch (_) {
       db.execute('ROLLBACK;');
@@ -336,90 +404,82 @@ class AppDatabase {
     }
   }
 
-  Set<String> getAllThumbnailHashes() {
-    final rows = db.select(
-      "SELECT thumbnail_hash FROM tracks WHERE thumbnail_hash IS NOT NULL AND thumbnail_hash != '' "
-      'UNION '
-      "SELECT thumbnail_hash FROM albums WHERE thumbnail_hash IS NOT NULL AND thumbnail_hash != '' "
-      'UNION '
-      "SELECT thumbnail_hash FROM artists WHERE thumbnail_hash IS NOT NULL AND thumbnail_hash != '';",
-    );
-    return rows.map((r) => r['thumbnail_hash'] as String).toSet();
-  }
+  Future<void> clearAllData() => _runTask(_clearAllDataSync);
 
-  Map<String, TrackFileMeta> getExistingTrackMetas() {
-    final rows = db.select('SELECT file_path, modified_at, file_size FROM tracks;');
-    final map = <String, TrackFileMeta>{};
-    for (final r in rows) {
-      map[r['file_path'] as String] = (modifiedAt: r['modified_at'] as int, fileSize: r['file_size'] as int);
-    }
-    return map;
-  }
-
-  void updateTrackThumbnailHash(String filePath, String? thumbnailHash) {
-    db.execute('UPDATE tracks SET thumbnail_hash = ? WHERE file_path = ?;', [thumbnailHash, filePath]);
-  }
-
-  void deleteTrack(int trackId) {
+  static void _clearAllDataSync(Database db) {
+    db.execute('BEGIN TRANSACTION;');
     try {
-      db.execute('DELETE FROM tracks WHERE id = ?;', [trackId]);
-    } catch (e) {
-      debugPrint('[AppDatabase] Ignored error in deleteTrack: $e');
-    }
-  }
-
-  int createPlaylist(String name) {
-    try {
-      db.execute('INSERT INTO playlists (name, created_at, type) VALUES (?, ?, ?);', [name.trim(), DateTime.now().millisecondsSinceEpoch, PlaylistType.user.value]);
-      return db.lastInsertRowId;
-    } catch (e) {
-      debugPrint('[AppDatabase] Ignored error in createPlaylist: $e');
-      return -1;
-    }
-  }
-
-  void deletePlaylist(int playlistId) {
-    try {
-      db.execute('DELETE FROM playlists WHERE id = ? AND type = ?;', [playlistId, PlaylistType.user.value]);
-    } catch (e) {
-      debugPrint('[AppDatabase] Ignored error in deletePlaylist: $e');
-    }
-  }
-
-  void renamePlaylist(int playlistId, String name) {
-    try {
-      db.execute('UPDATE playlists SET name = ? WHERE id = ?;', [name.trim(), playlistId]);
-    } catch (e) {
-      debugPrint('[AppDatabase] Ignored error in renamePlaylist: $e');
-    }
-  }
-
-  void addTrackToPlaylist(int playlistId, int trackId, [String? filePath]) {
-    try {
-      final trackExists = db.select('SELECT 1 FROM tracks WHERE id = ? LIMIT 1;', [trackId]).isNotEmpty;
-      if (!trackExists) {
-        debugPrint('[AppDatabase] Warning: Cannot add non-existent track (id: $trackId) to playlist $playlistId');
-        return;
+      for (final table in [
+        'lyrics_translations', 'lyrics', 'playlist_entries', 'track_genres',
+        'track_artists', 'tracks', 'albums', 'artists', 'genres',
+      ]) {
+        db.execute('DELETE FROM $table;');
       }
-      final playlistExists = db.select('SELECT 1 FROM playlists WHERE id = ? LIMIT 1;', [playlistId]).isNotEmpty;
-      if (!playlistExists) {
-        debugPrint('[AppDatabase] Warning: Cannot add track to non-existent playlist (id: $playlistId)');
-        return;
-      }
+      db.execute('DELETE FROM playlists WHERE type = ?;', [PlaylistType.user.value]);
+      db.execute('COMMIT;');
+    } catch (_) {
+      db.execute('ROLLBACK;');
+      rethrow;
+    }
+  }
+
+  Future<int> createPlaylist(String name) => _runTask((db) {
+        try {
+          db.execute(
+            'INSERT INTO playlists (name, created_at, type) VALUES (?, ?, ?);',
+            [name.trim(), DateTime.now().millisecondsSinceEpoch, PlaylistType.user.value],
+          );
+          return db.lastInsertRowId;
+        } catch (e) {
+          debugPrint('[AppDatabase] Ignored error in createPlaylist: $e');
+          return -1;
+        }
+      });
+
+  Future<void> deletePlaylist(int playlistId) => _runTask((db) {
+        try {
+          db.execute('DELETE FROM playlists WHERE id = ? AND type = ?;', [playlistId, PlaylistType.user.value]);
+        } catch (e) {
+          debugPrint('[AppDatabase] Ignored error in deletePlaylist: $e');
+        }
+      });
+
+  Future<void> renamePlaylist(int playlistId, String name) => _runTask((db) {
+        try {
+          db.execute('UPDATE playlists SET name = ? WHERE id = ?;', [name.trim(), playlistId]);
+        } catch (e) {
+          debugPrint('[AppDatabase] Ignored error in renamePlaylist: $e');
+        }
+      });
+
+  Future<void> addTrackToPlaylist(int playlistId, int trackId, [String? filePath]) =>
+      _runTask((db) => _addTrackToPlaylistSync(db, playlistId, trackId));
+
+  static void _addTrackToPlaylistSync(Database db, int playlistId, int trackId) {
+    try {
+      if (db.select('SELECT 1 FROM tracks WHERE id = ? LIMIT 1;', [trackId]).isEmpty) return;
+      if (db.select('SELECT 1 FROM playlists WHERE id = ? LIMIT 1;', [playlistId]).isEmpty) return;
       final posRes = db.select('SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM playlist_entries WHERE playlist_id = ?;', [playlistId]);
       final nextPos = (posRes.first['next_pos'] as int?) ?? 0;
-      db.execute('INSERT INTO playlist_entries (playlist_id, track_id, position, added_at) VALUES (?, ?, ?, ?);', [playlistId, trackId, nextPos, DateTime.now().millisecondsSinceEpoch]);
+      db.execute(
+        'INSERT INTO playlist_entries (playlist_id, track_id, position, added_at) VALUES (?, ?, ?, ?);',
+        [playlistId, trackId, nextPos, DateTime.now().millisecondsSinceEpoch],
+      );
     } catch (e) {
-      debugPrint('[AppDatabase] Ignored error in addTrackToPlaylist(playlist: $playlistId, track: $trackId): $e');
+      debugPrint('[AppDatabase] Ignored error in addTrackToPlaylist: $e');
     }
   }
 
-  void addTracksToPlaylist(int playlistId, List<int> trackIds) {
-    if (trackIds.isEmpty) return;
+  Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) =>
+      trackIds.isEmpty ? Future.value() : _runTask((db) => _addTracksToPlaylistSync(db, playlistId, trackIds));
+
+  static void _addTracksToPlaylistSync(Database db, int playlistId, List<int> trackIds) {
     try {
       db.execute('BEGIN TRANSACTION;');
       try {
-        for (final id in trackIds) { addTrackToPlaylist(playlistId, id); }
+        for (final id in trackIds) {
+          _addTrackToPlaylistSync(db, playlistId, id);
+        }
         db.execute('COMMIT;');
       } catch (e) {
         try { db.execute('ROLLBACK;'); } catch (_) {}
@@ -430,7 +490,10 @@ class AppDatabase {
     }
   }
 
-  void removeTrackFromPlaylist(int playlistId, int trackId) {
+  Future<void> removeTrackFromPlaylist(int playlistId, int trackId) =>
+      _runTask((db) => _removeTrackFromPlaylistSync(db, playlistId, trackId));
+
+  static void _removeTrackFromPlaylistSync(Database db, int playlistId, int trackId) {
     try {
       db.execute('BEGIN TRANSACTION;');
       try {
@@ -438,7 +501,9 @@ class AppDatabase {
         final remaining = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? ORDER BY position ASC;', [playlistId]);
         final stmt = db.prepare('UPDATE playlist_entries SET position = ? WHERE id = ?;');
         try {
-          for (var i = 0; i < remaining.length; i++) { stmt.execute([i, remaining[i]['id']]); }
+          for (var i = 0; i < remaining.length; i++) {
+            stmt.execute([i, remaining[i]['id']]);
+          }
         } finally {
           stmt.close();
         }
@@ -452,7 +517,10 @@ class AppDatabase {
     }
   }
 
-  void reorderPlaylistEntries(int playlistId, int fromIndex, int toIndex) {
+  Future<void> reorderPlaylistEntries(int playlistId, int fromIndex, int toIndex) =>
+      _runTask((db) => _reorderPlaylistEntriesSync(db, playlistId, fromIndex, toIndex));
+
+  static void _reorderPlaylistEntriesSync(Database db, int playlistId, int fromIndex, int toIndex) {
     try {
       db.execute('BEGIN TRANSACTION;');
       try {
@@ -465,7 +533,9 @@ class AppDatabase {
         ids.insert(toIndex, ids.removeAt(fromIndex));
         final stmt = db.prepare('UPDATE playlist_entries SET position = ? WHERE id = ?;');
         try {
-          for (var i = 0; i < ids.length; i++) { stmt.execute([i, ids[i]]); }
+          for (var i = 0; i < ids.length; i++) {
+            stmt.execute([i, ids[i]]);
+          }
         } finally {
           stmt.close();
         }
@@ -479,152 +549,76 @@ class AppDatabase {
     }
   }
 
-  void toggleLikeTrack(int trackId, [String? filePath]) {
-    try {
-      final rows = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? AND track_id = ? LIMIT 1;', [likedSongsPlaylistId, trackId]);
-      if (rows.isNotEmpty) {
-        removeTrackFromPlaylist(likedSongsPlaylistId, trackId);
-      } else {
-        addTrackToPlaylist(likedSongsPlaylistId, trackId, filePath);
-      }
-    } catch (e) {
-      debugPrint('[AppDatabase] Ignored error in toggleLikeTrack: $e');
-    }
-  }
+  Future<void> toggleLikeTrack(int trackId, [String? filePath]) => _runTask((db) {
+        try {
+          final rows = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? AND track_id = ? LIMIT 1;', [likedSongsPlaylistId, trackId]);
+          if (rows.isNotEmpty) {
+            _removeTrackFromPlaylistSync(db, likedSongsPlaylistId, trackId);
+          } else {
+            _addTrackToPlaylistSync(db, likedSongsPlaylistId, trackId);
+          }
+        } catch (e) {
+          debugPrint('[AppDatabase] Ignored error in toggleLikeTrack: $e');
+        }
+      });
 
-  void clearHistory() {
-    try {
-      db.execute('DELETE FROM playlist_entries WHERE playlist_id = ?;', [historyPlaylistId]);
-    } catch (e) {
-      debugPrint('[AppDatabase] Ignored error in clearHistory: $e');
-    }
-  }
+  Future<void> clearHistory() => _runTask((db) {
+        try {
+          db.execute('DELETE FROM playlist_entries WHERE playlist_id = ?;', [historyPlaylistId]);
+        } catch (e) {
+          debugPrint('[AppDatabase] Ignored error in clearHistory: $e');
+        }
+      });
 
-  List<int> getTrackIdsForPlaylist(int playlistId) {
-    return db.select('SELECT track_id FROM playlist_entries WHERE playlist_id = ? ORDER BY position ASC;', [playlistId]).map((r) => r['track_id'] as int).toList();
-  }
+  Future<List<Map<String, dynamic>>> getLyricsForTrack(int trackId) => _runTask((db) {
+        final rows = db.select('SELECT id, track_id, source, state, raw_lrc, is_synced, lang, updated_at FROM lyrics WHERE track_id = ?;', [trackId]);
+        return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+      });
 
-  bool isTrackLiked(int trackId) {
-    return db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? AND track_id = ? LIMIT 1;', [likedSongsPlaylistId, trackId]).isNotEmpty;
-  }
+  Future<int> saveLyricsEntry({
+    required int trackId,
+    required String source,
+    required String state,
+    String? rawLrc,
+    bool isSynced = false,
+    String? lang,
+    int? updatedAt,
+  }) =>
+      _runTask((db) {
+        final ts = updatedAt ?? DateTime.now().millisecondsSinceEpoch;
+        final res = db.select(
+          'INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, lang, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) '
+          'ON CONFLICT(track_id, source) DO UPDATE SET state = excluded.state, raw_lrc = excluded.raw_lrc, '
+          'is_synced = excluded.is_synced, lang = COALESCE(excluded.lang, lyrics.lang), updated_at = excluded.updated_at RETURNING id;',
+          [trackId, source, state, rawLrc, isSynced ? 1 : 0, lang, ts],
+        );
+        final lyricsId = res.first['id'] as int;
+        db.execute('DELETE FROM lyrics_translations WHERE lyrics_id = ?;', [lyricsId]);
+        return lyricsId;
+      });
 
-  Map<String, dynamic>? getBestLyricsForTrack(int trackId) {
-    final rows = db.select(
-      "SELECT id, track_id, source, state, raw_lrc, is_synced, updated_at FROM lyrics "
-      "WHERE track_id = ? AND state = 'FOUND' AND raw_lrc IS NOT NULL "
-      "ORDER BY CASE source WHEN 'embedded' THEN 1 WHEN 'file' THEN 2 WHEN 'lrclib' THEN 3 WHEN 'lyrics_ovh' THEN 4 ELSE 5 END ASC LIMIT 1;",
-      [trackId],
-    );
-    return rows.isEmpty ? null : rows.first;
-  }
+  Future<void> deleteLyrics(int lyricsId) => _runTask((db) => db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]));
 
-  int saveLyricsEntry({
-    required int trackId, required String source, required String state,
-    String? rawLrc, bool isSynced = false, String? lang, int? updatedAt,
-  }) {
-    final ts = updatedAt ?? DateTime.now().millisecondsSinceEpoch;
-    final res = db.select(
-      'INSERT INTO lyrics (track_id, source, state, raw_lrc, is_synced, lang, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) '
-      'ON CONFLICT(track_id, source) DO UPDATE SET state = excluded.state, raw_lrc = excluded.raw_lrc, '
-      'is_synced = excluded.is_synced, lang = COALESCE(excluded.lang, lyrics.lang), updated_at = excluded.updated_at RETURNING id;',
-      [trackId, source, state, rawLrc, isSynced ? 1 : 0, lang, ts],
-    );
-    final lyricsId = res.first['id'] as int;
-    db.execute('DELETE FROM lyrics_translations WHERE lyrics_id = ?;', [lyricsId]);
-    return lyricsId;
-  }
+  Future<List<String>?> getLyricsTranslation({required int lyricsId, required String lang}) => _runTask((db) {
+        final rows = db.select('SELECT translated_lines FROM lyrics_translations WHERE lyrics_id = ? AND lang = ? LIMIT 1;', [lyricsId, lang]);
+        if (rows.isEmpty) return null;
+        try {
+          return (jsonDecode(rows.first['translated_lines'] as String) as List<dynamic>).map((e) => e.toString()).toList();
+        } catch (_) {
+          return null;
+        }
+      });
 
-  Map<String, dynamic>? getLyricsEntry({required int trackId, required String source}) {
-    final rows = db.select('SELECT id, track_id, source, state, raw_lrc, is_synced, lang, updated_at FROM lyrics WHERE track_id = ? AND source = ? LIMIT 1;', [trackId, source]);
-    return rows.isEmpty ? null : rows.first;
-  }
-
-  void updateLyricsLang(int lyricsId, String lang) {
-    db.execute('UPDATE lyrics SET lang = ? WHERE id = ?;', [lang, lyricsId]);
-  }
-
-  String? getLyricsLang(int lyricsId) {
-    final rows = db.select('SELECT lang FROM lyrics WHERE id = ? LIMIT 1;', [lyricsId]);
-    return rows.isEmpty ? null : rows.first['lang'] as String?;
-  }
-
-  void deleteLyrics(int lyricsId) {
-    db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]);
-  }
-
-  List<String>? getLyricsTranslation({required int lyricsId, required String lang}) {
-    final rows = db.select('SELECT translated_lines FROM lyrics_translations WHERE lyrics_id = ? AND lang = ? LIMIT 1;', [lyricsId, lang]);
-    if (rows.isEmpty) return null;
-    try {
-      return (jsonDecode(rows.first['translated_lines'] as String) as List<dynamic>).map((e) => e.toString()).toList();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  void saveLyricsTranslation({required int lyricsId, required String lang, required List<String> translatedLines}) {
-    db.execute(
-      'INSERT INTO lyrics_translations (lyrics_id, lang, translated_lines, updated_at) VALUES (?, ?, ?, ?) '
-      'ON CONFLICT(lyrics_id, lang) DO UPDATE SET translated_lines = excluded.translated_lines, updated_at = excluded.updated_at;',
-      [lyricsId, lang, jsonEncode(translatedLines), DateTime.now().millisecondsSinceEpoch],
-    );
-  }
-
-  List<Track> getRandomTracks(int limit) {
-    final rows = db.select(
-      "SELECT t.id, t.file_path, t.title, t.track_number, t.disc_number, t.year, "
-      "t.duration_ms, t.bitrate, t.sample_rate, t.channels, t.codec, t.file_size, "
-      "t.modified_at, t.replay_gain_track_gain, t.replay_gain_track_peak, t.waveform_data, t.thumbnail_hash, al.name AS album_name, "
-      "(SELECT GROUP_CONCAT(ar.name, ';;;') FROM track_artists ta JOIN artists ar ON ta.artist_id = ar.id WHERE ta.track_id = t.id) AS artist_names "
-      "FROM tracks t LEFT JOIN albums al ON t.album_id = al.id ORDER BY RANDOM() LIMIT ?;",
-      [limit],
-    );
-    return rows.map((r) {
-      final al = r['album_name'] as String?;
-      final art = r['artist_names'] as String?;
-      return Track(
-        id: r['id'] as int?, filePath: r['file_path'] as String, title: r['title'] as String,
-        trackNumber: r['track_number'] as int?, discNumber: r['disc_number'] as int?, year: r['year'] as int?,
-        durationMs: r['duration_ms'] as int, bitrate: r['bitrate'] as int?, sampleRate: r['sample_rate'] as int?,
-        channels: r['channels'] as int?, codec: r['codec'] as String?, fileSize: r['file_size'] as int,
-        modifiedAt: r['modified_at'] as int,
-        replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
-        replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
-        waveform: WaveformCodec.decode(r['waveform_data'] as String?),
-        thumbnailHash: r['thumbnail_hash'] as String?,
-        album: al != null ? Album(name: al) : null,
-        artists: (art != null && art.isNotEmpty) ? art.split(';;;').map((n) => Artist(name: n.trim())).toList() : const [],
-      );
-    }).toList();
-  }
-
-  Track? getTrackById(int id) {
-    final list = getTracksByIds([id]);
-    return list.isNotEmpty ? list.first : null;
-  }
-
-  List<Track> getTracksByIds(List<int> ids, {bool includeWaveform = true}) {
-    if (ids.isEmpty) return const [];
-    final placeholders = List.filled(ids.length, '?').join(',');
-    final sql = includeWaveform
-        ? 'SELECT id, file_path, title, duration_ms, replay_gain_track_gain, replay_gain_track_peak, waveform_data FROM tracks WHERE id IN ($placeholders);'
-        : 'SELECT id, file_path, title, duration_ms, replay_gain_track_gain, replay_gain_track_peak FROM tracks WHERE id IN ($placeholders);';
-    final rows = db.select(sql, ids);
-    final byId = {
-      for (final r in rows)
-        (r['id'] as int): Track(
-          id: r['id'] as int?, filePath: r['file_path'] as String, title: r['title'] as String,
-          durationMs: r['duration_ms'] as int, fileSize: 0, modifiedAt: 0,
-          replayGainTrackGain: (r['replay_gain_track_gain'] as num?)?.toDouble(),
-          replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
-          waveform: includeWaveform ? WaveformCodec.decode(r['waveform_data'] as String?) : null,
-        ),
-    };
-    return ids.map((id) => byId[id]).whereType<Track>().toList();
-  }
-
-  Future<void> close() async {
-    _db?.close();
-    _db = null;
-  }
+  Future<void> saveLyricsTranslation({
+    required int lyricsId,
+    required String lang,
+    required List<String> translatedLines,
+  }) =>
+      _runTask((db) {
+        db.execute(
+          'INSERT INTO lyrics_translations (lyrics_id, lang, translated_lines, updated_at) VALUES (?, ?, ?, ?) '
+          'ON CONFLICT(lyrics_id, lang) DO UPDATE SET translated_lines = excluded.translated_lines, updated_at = excluded.updated_at;',
+          [lyricsId, lang, jsonEncode(translatedLines), DateTime.now().millisecondsSinceEpoch],
+        );
+      });
 }

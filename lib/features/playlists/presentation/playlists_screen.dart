@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
 
 import 'playlist_cover_helper.dart';
 import 'playlist_detail_screen.dart';

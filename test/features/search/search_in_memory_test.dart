@@ -5,27 +5,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/backend_client.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/catalog_snapshot.dart';
-import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/core/store/library_store.dart';
+import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/playback_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/search/presentation/search_screen.dart';
 import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
-import 'dart:async';
 
-import 'package:tachyon/features/playback/domain/playback_state.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/shared/widgets/album_card.dart';
 import 'package:tachyon/shared/widgets/artist_card.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
@@ -104,46 +100,19 @@ CatalogSnapshot _createSampleSnapshot() {
   );
 }
 
-class _TestBackendClient extends DirectTachyonBackendClient {
-  _TestBackendClient({required super.database, this.storeSupplier});
+class _TestPlaybackController extends PlaybackController {
+  _TestPlaybackController({
+    required LibraryStore super.store,
+    required super.settingsRepository,
+  }) : _store = store;
 
-  final LibraryStore Function()? storeSupplier;
+  final LibraryStore _store;
   List<PlaylistEntry>? openedItems;
   int? openedIndex;
-  final StreamController<PlaybackState> _stateCtrl =
-      StreamController<PlaybackState>.broadcast();
+  Track? _activeTrack;
 
   @override
-  Stream<PlaybackState> get playbackStateStream => _stateCtrl.stream;
-
-  @override
-  Future<void> open(
-    List<int> trackIds, {
-    int? index,
-    bool play = true,
-    bool shuffle = false,
-  }) async {
-    final tracks = database?.getTracksByIds(trackIds) ?? [];
-    final trackMap = {for (final t in tracks) t.id: t};
-    final store = storeSupplier?.call();
-    int pos = 0;
-    final resolvedItems = trackIds.map((id) {
-      final t = trackMap[id] ?? store?.getTrackById(id);
-      if (t != null) {
-        return PlaylistEntry.forQueue(id: pos, position: pos++, track: t);
-      }
-      return null;
-    }).whereType<PlaylistEntry>().toList();
-
-    openedItems = resolvedItems;
-    openedIndex = index ?? 0;
-    final state = PlaybackState(
-      playables: resolvedItems,
-      index: index ?? 0,
-      playing: true,
-    );
-    _stateCtrl.add(state);
-  }
+  Track? get currentTrack => _activeTrack ?? super.currentTrack;
 
   @override
   Future<void> playQueue(
@@ -152,34 +121,23 @@ class _TestBackendClient extends DirectTachyonBackendClient {
     bool play = true,
     bool shuffle = false,
   }) async {
-    final dbTracks = database?.getTracksByIds(trackIds) ?? [];
-    final trackMap = {for (final t in dbTracks) t.id: t};
-    final store = storeSupplier?.call();
     int pos = 0;
     final items = trackIds
-        .map((id) => trackMap[id] ?? store?.getTrackById(id))
+        .map((id) => _store.getTrackById(id))
         .whereType<Track>()
         .map((t) => PlaylistEntry.forQueue(id: pos, position: pos++, track: t))
         .toList();
     openedItems = items;
     openedIndex = startIndex ?? 0;
-    final state = PlaybackState(
-      playables: items,
-      index: startIndex ?? 0,
-      playing: play,
-    );
-    _stateCtrl.add(state);
+    if (items.isNotEmpty && openedIndex! < items.length) {
+      _activeTrack = items[openedIndex!].track;
+    }
+    notifyListeners();
   }
 
   @override
   Future<void> playTrack(int trackId, {bool play = true}) async {
     await playQueue([trackId], play: play);
-  }
-
-  @override
-  Future<void> dispose() async {
-    await _stateCtrl.close();
-    await super.dispose();
   }
 }
 
@@ -188,12 +146,11 @@ void main() {
 
   late LocaleController localeController;
   late AppDatabase db;
-  late _TestBackendClient backend;
   late SettingsRepository settingsRepo;
   late SettingsController settingsController;
   late LibraryStore libraryStore;
   late LibraryController libraryController;
-  late PlaybackController playbackController;
+  late _TestPlaybackController playbackController;
   late PlaylistsController playlistsController;
   late TachyonSearchController searchController;
 
@@ -207,30 +164,25 @@ void main() {
 
     db = AppDatabase.inMemory();
     libraryStore = LibraryStore.fromSnapshot(_createSampleSnapshot());
-    backend = _TestBackendClient(
-      database: db,
-      storeSupplier: () => libraryStore,
-    );
 
-    settingsController = SettingsController(
-      repository: settingsRepo,
-      backend: backend,
+    playbackController = _TestPlaybackController(
+      store: libraryStore,
+      settingsRepository: settingsRepo,
     );
     libraryController = LibraryController(
-      backend: backend,
       settingsRepository: settingsRepo,
       store: libraryStore,
     );
-    playbackController = PlaybackController(
-      backend: backend,
-      settingsRepository: settingsRepo,
-      libraryStoreSupplier: () => libraryStore,
+    settingsController = SettingsController(
+      repository: settingsRepo,
+      playbackController: playbackController,
+      libraryController: libraryController,
     );
     playlistsController = PlaylistsController(
-      backend: backend,
+      store: libraryStore,
     );
     searchController = TachyonSearchController(
-      storeSupplier: () => libraryController.store,
+      store: libraryController.store,
     );
   });
 
@@ -240,14 +192,12 @@ void main() {
     playbackController.dispose();
     playlistsController.dispose();
     searchController.dispose();
-    await backend.dispose();
     await db.close();
   });
 
   Widget buildApp(Widget child) {
     return MultiProvider(
       providers: [
-        Provider<TachyonBackendClient>.value(value: backend),
         Provider<SettingsRepository>.value(value: settingsRepo),
         ChangeNotifierProvider<SettingsController>.value(value: settingsController),
         ChangeNotifierProvider<LocaleController>.value(value: localeController),
@@ -482,7 +432,7 @@ void main() {
       await tester.tap(find.text('Radio Ga Ga'));
       await tester.pumpAndSettle();
 
-      expect(backend.openedItems?.firstOrNull?.track?.title, 'Radio Ga Ga');
+      expect(playbackController.openedItems?.firstOrNull?.track?.title, 'Radio Ga Ga');
       expect(playbackController.currentTrack?.title, 'Radio Ga Ga');
     });
 

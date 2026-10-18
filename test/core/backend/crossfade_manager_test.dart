@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miniaudio_player/miniaudio_player.dart'
     show AudioDevice, CrossfeedMode, Equalizer, ReplayGainConfig, VisualizerData, Reverb;
-import 'package:tachyon/core/backend/services/audio_player_adapter.dart';
-import 'package:tachyon/core/backend/services/crossfade_manager.dart';
+import 'package:tachyon/core/playback/legacy/audio_player_adapter.dart';
+import 'package:tachyon/core/playback/legacy/crossfade_manager.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart' show CrossfadeCurve;
 
 class MockAudioPlayerAdapter implements AudioPlayerAdapter {

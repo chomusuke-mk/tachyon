@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:tachyon/features/library/data/library_store.dart';
-import 'package:tachyon/features/library/domain/album.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/domain/track.dart';
+import 'package:tachyon/core/store/domain/album.dart';
+import 'package:tachyon/core/store/domain/artist.dart';
+import 'package:tachyon/core/store/domain/track.dart';
+import 'package:tachyon/core/store/library_store.dart';
 
 enum SearchFilterCategory { all, tracks, albums, artists }
 

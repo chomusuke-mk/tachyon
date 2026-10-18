@@ -3,26 +3,25 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/playback/system_media_service.dart';
+import 'package:tachyon/core/store/domain/artist.dart';
+import 'package:tachyon/core/store/domain/track.dart';
+import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
+import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
 import 'package:tachyon/shared/widgets/text_link.dart';
-import 'package:tachyon/features/library/domain/artist.dart';
-import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/library/domain/track.dart';
 import 'package:tachyon/shared/widgets/track_action_helper.dart';
 
 import 'audio_effects_sheet.dart';
 import 'lyrics_view.dart';
-import 'playback_controller.dart';
-import 'lyrics_controller.dart';
 import 'queue_drawer.dart';
 import 'waveform_slider.dart';
 import 'widgets/now_playing_cover_art.dart';
-import '../services/system_media_service.dart';
 
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
@@ -60,8 +59,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   bool _showLyrics = false;
   bool _showQueue = false;
+  bool _isAppActive = true;
   bool _hasInitializedViewSettings = false;
-  LyricsController? _lyricsController;
   double _lastUnmutedVolume = AppDefaults.volumeDefault;
 
   final ValueNotifier<double> _screenDragOffset = ValueNotifier<double>(0.0);
@@ -139,7 +138,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _lyricsController = context.read<LyricsController>();
     if (!_hasInitializedViewSettings) {
       _hasInitializedViewSettings = true;
       try {
@@ -148,13 +146,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         _showQueue = settings.getPlaybackShowQueue();
       } catch (_) {
         // Fallback if SettingsRepository is not provided (e.g. in isolated widget tests)
-      }
-      if (_showLyrics) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _showLyrics) {
-            _lyricsController?.setLyricsViewVisible(true);
-          }
-        });
       }
     }
   }
@@ -200,7 +191,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         _showQueue = false;
       }
     });
-    _lyricsController?.setLyricsViewVisible(_showLyrics);
     try {
       final settings = context.read<SettingsRepository>();
       settings.setPlaybackShowLyrics(_showLyrics);
@@ -209,17 +199,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   }
 
   void _toggleQueue() {
-    bool shouldHideLyrics = false;
     setState(() {
       _showQueue = !_showQueue;
       if (_showQueue && _showLyrics) {
         _showLyrics = false;
-        shouldHideLyrics = true;
       }
     });
-    if (shouldHideLyrics) {
-      _lyricsController?.setLyricsViewVisible(false);
-    }
     try {
       final settings = context.read<SettingsRepository>();
       settings.setPlaybackShowLyrics(_showLyrics);
@@ -228,20 +213,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   }
 
   void _onMinimizedChanged() {
-    if (_showLyrics) {
-      _lyricsController?.setLyricsViewVisible(!SystemMediaService.isMinimized);
+    if (_showLyrics && mounted) {
+      setState(() {});
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_showLyrics) {
-      if (state == AppLifecycleState.hidden ||
-          state == AppLifecycleState.paused ||
-          state == AppLifecycleState.detached) {
-        _lyricsController?.setLyricsViewVisible(false);
-      } else if (state == AppLifecycleState.resumed) {
-        _lyricsController?.setLyricsViewVisible(true);
+    final active = state != AppLifecycleState.hidden &&
+        state != AppLifecycleState.paused &&
+        state != AppLifecycleState.detached;
+    if (_isAppActive != active) {
+      _isAppActive = active;
+      if (_showLyrics && mounted) {
+        setState(() {});
       }
     }
   }
@@ -254,12 +239,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       _onMinimizedChanged,
     );
     WidgetsBinding.instance.removeObserver(this);
-    final lyricsController = _lyricsController;
-    if (lyricsController != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        lyricsController.setLyricsViewVisible(false);
-      });
-    }
     super.dispose();
   }
 
@@ -391,7 +370,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               Expanded(child: QueueView()),
             ],
           )
-        : currentWidth >= 588 && _showLyrics
+        : currentWidth >= 588 &&
+              _showLyrics &&
+              !SystemMediaService.isMinimized &&
+              _isAppActive
         ? Row(
             key: const ValueKey('lyrics_and_player'),
             children: [
@@ -415,6 +397,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 child: LyricsView(
                   key: const ValueKey('lyrics_view'),
                   filePath: currentTrack.filePath,
+                  trackId: currentTrack.id,
+                  track: currentTrack,
                   onSeek: playback.seek,
                 ),
               ),
@@ -783,10 +767,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   duration: const Duration(milliseconds: 300),
                   child: !hideQueue && _showQueue
                       ? QueueView(key: const ValueKey('queue_view'))
-                      : !hideLyrics && _showLyrics
+                      : !hideLyrics &&
+                            _showLyrics &&
+                            !SystemMediaService.isMinimized &&
+                            _isAppActive
                       ? LyricsView(
                           key: const ValueKey('lyrics_view'),
                           filePath: currentTrack.filePath,
+                          trackId: currentTrack.id,
+                          track: currentTrack,
                           onSeek: playback.seek,
                         )
                       : const NowPlayingCoverArt(
@@ -808,10 +797,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   duration: const Duration(milliseconds: 300),
                   child: !hideQueue && _showQueue
                       ? QueueView(key: const ValueKey('queue_view'))
-                      : !hideLyrics && _showLyrics
+                      : !hideLyrics &&
+                            _showLyrics &&
+                            !SystemMediaService.isMinimized &&
+                            _isAppActive
                       ? LyricsView(
                           key: const ValueKey('lyrics_view'),
                           filePath: currentTrack.filePath,
+                          trackId: currentTrack.id,
+                          track: currentTrack,
                           onSeek: playback.seek,
                         )
                       : const NowPlayingCoverArt(
@@ -829,10 +823,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           duration: const Duration(milliseconds: 300),
           child: !hideQueue && _showQueue
               ? QueueView(key: const ValueKey('queue_view'))
-              : !hideLyrics && _showLyrics
+              : !hideLyrics &&
+                    _showLyrics &&
+                    !SystemMediaService.isMinimized &&
+                    _isAppActive
               ? LyricsView(
                   key: const ValueKey('lyrics_view'),
                   filePath: currentTrack.filePath,
+                  trackId: currentTrack.id,
+                  track: currentTrack,
                   onSeek: playback.seek,
                 )
               : Column(

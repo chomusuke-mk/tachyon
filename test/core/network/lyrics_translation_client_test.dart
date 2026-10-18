@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:tachyon/core/network/lyrics_translation_client.dart';
+import 'package:tachyon/core/lyrics/lyrics_translation_client.dart';
 
 class MockHttpClient extends http.BaseClient {
   final Future<http.Response> Function(http.Request request) handler;

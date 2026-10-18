@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:tachyon/features/library/domain/playlist.dart';
-import 'package:tachyon/shared/utils/metadata_utils.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 /// Builds the leading art widget for a playlist tile in the playlists list view.
