@@ -11,6 +11,7 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/shared/utils/file_picker_service.dart';
 import 'package:tachyon/shared/utils/toast_utils.dart';
+import 'package:tachyon/shared/widgets/app_icon.dart';
 import 'package:tachyon/shared/widgets/setting_row.dart';
 
 import 'settings_controller.dart';
@@ -316,9 +317,12 @@ class SettingsScreen extends StatelessWidget {
     final currentLocale = localeController.currentLocaleCode;
     final settings = context.watch<SettingsController>();
     final colorScheme = Theme.of(context).colorScheme;
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.sTitle)),
+      appBar: AppBar(
+        title: Row(children: [if (!isDesktop) AppIcon(), Text(strings.sTitle)]),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
