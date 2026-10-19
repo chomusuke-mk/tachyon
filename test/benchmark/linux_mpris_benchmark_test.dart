@@ -1,14 +1,11 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:dbus/dbus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/backend_client.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
-import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
@@ -17,63 +14,57 @@ import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 
-class _BenchmarkBackendClient implements TachyonBackendClient {
-  final StreamController<PlaybackState> _stateController =
-      StreamController<PlaybackState>.broadcast();
-  final StreamController<Duration> _posController =
-      StreamController<Duration>.broadcast();
-  final StreamController<List<double>> _visController =
-      StreamController<List<double>>.broadcast();
-  final StreamController<List<AudioDevice>> _devController =
-      StreamController<List<AudioDevice>>.broadcast();
-  final StreamController<void> _catController =
-      StreamController<void>.broadcast();
-  final StreamController<ScanProgress> _scanController =
-      StreamController<ScanProgress>.broadcast();
+class _BenchmarkPlaybackController extends PlaybackController {
+  _BenchmarkPlaybackController({
+    required super.settingsRepository,
+  });
 
-  PlaybackState _currentState = const PlaybackState.initial();
+  PlaybackState _benchmarkState = const PlaybackState.initial();
 
   @override
-  Stream<PlaybackState> get playbackStateStream => _stateController.stream;
-  @override
-  Stream<Duration> get positionStream => _posController.stream;
-  @override
-  Stream<List<double>> get visualizerStream => _visController.stream;
-  @override
-  Stream<List<AudioDevice>> get devicesStream => _devController.stream;
-  @override
-  Stream<void> get catalogUpdatedStream => _catController.stream;
-  @override
-  Stream<ScanProgress> get scanProgressStream => _scanController.stream;
+  PlaybackState get state => _benchmarkState;
 
   @override
-  Future<PlaybackState> getPlaybackState() async => _currentState;
+  Track? get currentTrack => _benchmarkState.currentTrack;
 
-  void emitState(PlaybackState state) {
-    _currentState = state;
-    _stateController.add(state);
+  @override
+  bool get isPlaying => _benchmarkState.playing;
+
+  @override
+  Duration get position => positionNotifier.value;
+
+  @override
+  Duration get duration => _benchmarkState.duration;
+
+  @override
+  bool get isShuffled => _benchmarkState.shuffle;
+
+  @override
+  Loop get loopMode => _benchmarkState.loop;
+
+  @override
+  double get rate => _benchmarkState.rate;
+
+  @override
+  double get volume => _benchmarkState.volume;
+
+  void emitState(PlaybackState newState) {
+    _benchmarkState = newState;
+    positionNotifier.value = newState.position;
+    notifyListeners();
   }
 
   void emitPosition(Duration pos) {
-    _posController.add(pos);
-  }
-
-  @override
-  Future<void> play() async {
-    emitState(_currentState.copyWith(playing: true));
-  }
-
-  @override
-  Future<void> pause() async {
-    emitState(_currentState.copyWith(playing: false));
+    _benchmarkState = _benchmarkState.copyWith(position: pos);
+    positionNotifier.value = pos;
   }
 
   @override
   Future<void> next() async {
-    if (_currentState.playables.isEmpty) return;
-    final nextIdx = (_currentState.index + 1) % _currentState.playables.length;
+    if (_benchmarkState.playables.isEmpty) return;
+    final nextIdx = (_benchmarkState.index + 1) % _benchmarkState.playables.length;
     emitState(
-      _currentState.copyWith(
+      _benchmarkState.copyWith(
         index: nextIdx,
         position: Duration.zero,
         playing: true,
@@ -83,12 +74,12 @@ class _BenchmarkBackendClient implements TachyonBackendClient {
 
   @override
   Future<void> previous() async {
-    if (_currentState.playables.isEmpty) return;
+    if (_benchmarkState.playables.isEmpty) return;
     final prevIdx =
-        (_currentState.index - 1 + _currentState.playables.length) %
-        _currentState.playables.length;
+        (_benchmarkState.index - 1 + _benchmarkState.playables.length) %
+        _benchmarkState.playables.length;
     emitState(
-      _currentState.copyWith(
+      _benchmarkState.copyWith(
         index: prevIdx,
         position: Duration.zero,
         playing: true,
@@ -97,64 +88,44 @@ class _BenchmarkBackendClient implements TachyonBackendClient {
   }
 
   @override
-  Future<void> skipToIndex(int index) async {
-    emitState(
-      _currentState.copyWith(
-        index: index,
-        position: Duration.zero,
-        playing: true,
-      ),
-    );
+  Future<void> play() async {
+    emitState(_benchmarkState.copyWith(playing: true));
   }
 
   @override
-  Future<void> seek(Duration pos) async {
-    emitState(_currentState.copyWith(position: pos));
+  Future<void> pause() async {
+    emitState(_benchmarkState.copyWith(playing: false));
   }
 
   @override
   Future<void> stop() async {
-    emitState(_currentState.copyWith(playing: false));
+    emitState(_benchmarkState.copyWith(playing: false));
   }
 
   @override
-  Future<void> setVolume(double volume) async {
-    emitState(_currentState.copyWith(volume: volume));
-  }
-
-  @override
-  Future<void> setLoopMode(Loop loop) async {
-    emitState(_currentState.copyWith(loop: loop));
+  Future<void> seek(Duration pos) async {
+    emitState(_benchmarkState.copyWith(position: pos));
   }
 
   @override
   Future<void> setShuffle(bool shuffle) async {
-    emitState(_currentState.copyWith(shuffle: shuffle));
+    emitState(_benchmarkState.copyWith(shuffle: shuffle));
+  }
+
+  @override
+  Future<void> setLoopMode(Loop loop) async {
+    emitState(_benchmarkState.copyWith(loop: loop));
   }
 
   @override
   Future<void> setRate(double rate) async {
-    emitState(_currentState.copyWith(rate: rate));
+    emitState(_benchmarkState.copyWith(rate: rate));
   }
 
   @override
-  Future<void> addTracksToPlaylist(int id, List<int> ids) async {}
-
-  @override
-  Future<List<AudioDevice>> getAudioDevices() async => const [];
-
-  @override
-  Future<void> dispose() async {
-    await _stateController.close();
-    await _posController.close();
-    await _visController.close();
-    await _devController.close();
-    await _catController.close();
-    await _scanController.close();
+  Future<void> setVolume(double volume) async {
+    emitState(_benchmarkState.copyWith(volume: volume));
   }
-
-  @override
-  dynamic noSuchMethod(Invocation inv) => super.noSuchMethod(inv);
 }
 
 void main() {
@@ -163,26 +134,22 @@ void main() {
   group('Linux MPRIS Bridge Performance & Coalescing Benchmarks', () {
     late Directory tempDir;
     late SettingsRepository settingsRepo;
-    late _BenchmarkBackendClient backend;
-    late PlaybackController controller;
+    late _BenchmarkPlaybackController controller;
     late TachyonAudioHandler handler;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       settingsRepo = SettingsRepository(prefs);
-      backend = _BenchmarkBackendClient();
 
       tempDir = await Directory.systemTemp.createTemp('linux_mpris_bench');
       MetadataUtils.init(tempDir.path, tempDir.path);
 
-      controller = PlaybackController(
-        backend: backend,
+      controller = _BenchmarkPlaybackController(
         settingsRepository: settingsRepo,
       );
 
       handler = TachyonAudioHandler(
-        backend: backend,
         playbackController: controller,
       );
     });
@@ -190,7 +157,6 @@ void main() {
     tearDown(() async {
       handler.dispose();
       controller.dispose();
-      await backend.dispose();
       try {
         if (tempDir.existsSync()) {
           tempDir.deleteSync(recursive: true);
@@ -224,7 +190,7 @@ void main() {
           album: album,
         );
 
-        backend.emitState(
+        controller.emitState(
           PlaybackState(
             index: 0,
             playables: [PlaylistEntry.forQueue(id: 1, track: track)],
@@ -310,7 +276,7 @@ void main() {
             .toList(growable: false);
 
         // 1. Start playback on Track 0 (NoTrack -> Track 0, Stopped -> Playing).
-        backend.emitState(
+        controller.emitState(
           PlaybackState(
             index: 0,
             playables: playables,
@@ -328,7 +294,7 @@ void main() {
         // 2. Simulate 25Hz position stream updates for 1 second: must emit 0 MPRIS signals.
         final signalsBeforePositionTicks = mpris.emittedSignalCount;
         for (int tick = 1; tick <= 25; tick++) {
-          backend.emitPosition(Duration(milliseconds: tick * 40));
+          controller.emitPosition(Duration(milliseconds: tick * 40));
         }
         await Future<void>.delayed(const Duration(milliseconds: 25));
         expect(

@@ -57,11 +57,11 @@ class AudioEngineService {
   final List<StreamSubscription<dynamic>> _playerSubscriptions = [];
   StreamSubscription<PlaylistEntry?>? _queueSubscription;
 
-  Future<void> _commandTail = Future<void>.value();
+  Future<void>? _commandTail;
   bool _disposed = false;
 
   _Transition? _transition;
-  Future<void> _pendingRestore = Future<void>.value();
+  Future<void>? _pendingRestore;
 
   int _playbackSession = 0;
   int? _scheduledCompletionSession;
@@ -508,11 +508,29 @@ class AudioEngineService {
 
   Future<void> _serialize(Future<void> Function() action) {
     if (_disposed) return Future<void>.value();
-    final run = _commandTail.then<void>((_) async {
-      if (_disposed) return;
-      await action();
-    });
-    _commandTail = run.then<void>((_) {}, onError: (Object _) {});
+    final prev = _commandTail;
+    final Future<void> run;
+    if (prev == null) {
+      run = Future<void>.sync(() async {
+        if (_disposed) return;
+        await action();
+      });
+    } else {
+      run = prev.then<void>((_) async {
+        if (_disposed) return;
+        await action();
+      });
+    }
+    late final Future<void> tail;
+    tail = run.then<void>(
+      (_) {
+        if (identical(_commandTail, tail)) _commandTail = null;
+      },
+      onError: (Object _) {
+        if (identical(_commandTail, tail)) _commandTail = null;
+      },
+    );
+    _commandTail = tail;
     return run;
   }
 
@@ -524,7 +542,7 @@ class AudioEngineService {
     );
   }
 
-  Future<void> _settle() => _pendingRestore;
+  Future<void> _settle() => _pendingRestore ?? Future<void>.value();
 
   Future<void> _openImpl(
     List<PlaylistEntry> playables, {
@@ -725,7 +743,7 @@ class AudioEngineService {
 
   Future<void> _abortTransition() {
     final transition = _transition;
-    if (transition == null) return _pendingRestore;
+    if (transition == null) return _pendingRestore ?? Future<void>.value();
     _transition = null;
     _crossfadeManager.cancel();
 
@@ -737,8 +755,13 @@ class AudioEngineService {
           standby.setVolume(0.0),
           standby.stop(),
         ]).then<void>(
-          (_) {},
-          onError: (Object e) => debugPrint('[AudioEngine] Restore failed: $e'),
+          (_) {
+            _pendingRestore = null;
+          },
+          onError: (Object e) {
+            _pendingRestore = null;
+            debugPrint('[AudioEngine] Restore failed: $e');
+          },
         );
     _pendingRestore = restore;
 

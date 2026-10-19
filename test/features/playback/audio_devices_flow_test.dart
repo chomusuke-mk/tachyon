@@ -1,31 +1,54 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
+import 'package:tachyon/core/playback/legacy/audio_engine_service.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
+
+class _FakeAudioEngineService extends AudioEngineService {
+  final StreamController<List<AudioDevice>> _devController =
+      StreamController<List<AudioDevice>>.broadcast();
+
+  @override
+  Stream<List<AudioDevice>> get devicesStream => _devController.stream;
+
+  @override
+  Future<List<AudioDevice>> getAudioDevices() async => const [];
+
+  void emitAudioDevices(List<AudioDevice> devices) {
+    _devController.add(devices);
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _devController.close();
+    await super.dispose();
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('AudioDevice reactive flow and miniaudio_player 2.0.0 integration', () {
     late SettingsRepository settingsRepo;
-    late DirectTachyonBackendClient backend;
+    late _FakeAudioEngineService audioEngine;
     late PlaybackController controller;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       settingsRepo = SettingsRepository(prefs);
-      backend = DirectTachyonBackendClient();
+      audioEngine = _FakeAudioEngineService();
       controller = PlaybackController(
-        backend: backend,
+        audioEngine: audioEngine,
         settingsRepository: settingsRepo,
       );
     });
 
-    tearDown(() {
+    tearDown(() async {
       controller.dispose();
-      backend.dispose();
+      await audioEngine.dispose();
     });
 
     test('AudioDevice properties and displayName', () {
@@ -69,7 +92,7 @@ void main() {
         ),
       ];
 
-      backend.emitAudioDevices(devices);
+      audioEngine.emitAudioDevices(devices);
       await Future<void>.delayed(Duration.zero);
 
       expect(controller.audioDevices.length, equals(2));
@@ -93,7 +116,7 @@ void main() {
         ),
       ];
 
-      backend.emitAudioDevices(devices);
+      audioEngine.emitAudioDevices(devices);
       await Future<void>.delayed(Duration.zero);
 
       expect(controller.currentDevice?.id, equals('headphone_1'));

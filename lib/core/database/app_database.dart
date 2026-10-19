@@ -53,7 +53,7 @@ class AppDatabase {
 
   String? _dbPath;
   Database? _inMemoryDb;
-  Future<void> _queue = Future.value();
+  Future<void>? _queue;
 
   AppDatabase({String? dbPath}) : _dbPath = dbPath;
   factory AppDatabase.inMemory() => AppDatabase.forTesting(sqlite3.openInMemory());
@@ -76,13 +76,23 @@ class AppDatabase {
 
   Future<T> _enqueue<T>(FutureOr<T> Function() task) {
     final completer = Completer<T>();
-    _queue = _queue.then((_) async {
+    final prev = _queue;
+    Future<void> run() async {
       try {
         completer.complete(await task());
       } catch (e, st) {
         completer.completeError(e, st);
       }
+    }
+
+    final next = prev == null ? Future<void>.sync(run) : prev.then((_) => run());
+    late final Future<void> tail;
+    tail = next.catchError((Object _) {}).whenComplete(() {
+      if (identical(_queue, tail)) {
+        _queue = null;
+      }
     });
+    _queue = tail;
     return completer.future;
   }
 

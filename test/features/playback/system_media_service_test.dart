@@ -1,14 +1,12 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:dbus/dbus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/backend_client.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
-import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
@@ -18,19 +16,10 @@ import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 
-class FakeTachyonBackendClient implements TachyonBackendClient {
-  final StreamController<PlaybackState> _playbackStateController =
-      StreamController<PlaybackState>.broadcast();
-  final StreamController<Duration> _positionController =
-      StreamController<Duration>.broadcast();
-  final StreamController<List<double>> _visualizerController =
-      StreamController<List<double>>.broadcast();
-  final StreamController<List<AudioDevice>> _devicesController =
-      StreamController<List<AudioDevice>>.broadcast();
-  final StreamController<void> _catalogUpdatedController =
-      StreamController<void>.broadcast();
-  final StreamController<ScanProgress> _scanProgressController =
-      StreamController<ScanProgress>.broadcast();
+class FakePlaybackController extends PlaybackController {
+  FakePlaybackController({
+    required super.settingsRepository,
+  });
 
   int playCount = 0;
   int pauseCount = 0;
@@ -39,110 +28,90 @@ class FakeTachyonBackendClient implements TachyonBackendClient {
   bool? lastShuffle;
   void Function(bool)? onSetMinimized;
 
-  PlaybackState _currentState = const PlaybackState.initial();
+  PlaybackState _fakeState = const PlaybackState.initial();
+  final ValueNotifier<Duration> _fakePositionNotifier =
+      ValueNotifier<Duration>(Duration.zero);
 
   @override
-  Stream<PlaybackState> get playbackStateStream =>
-      _playbackStateController.stream;
+  PlaybackState get state => _fakeState;
 
   @override
-  Stream<Duration> get positionStream => _positionController.stream;
+  Track? get currentTrack => _fakeState.currentTrack;
 
   @override
-  Stream<List<double>> get visualizerStream => _visualizerController.stream;
+  bool get isPlaying => _fakeState.playing;
 
   @override
-  Stream<List<AudioDevice>> get devicesStream => _devicesController.stream;
+  Duration get position => _fakeState.position;
 
   @override
-  Stream<void> get catalogUpdatedStream => _catalogUpdatedController.stream;
+  Duration get duration => _fakeState.duration;
 
   @override
-  Stream<ScanProgress> get scanProgressStream => _scanProgressController.stream;
+  ValueNotifier<Duration> get positionNotifier => _fakePositionNotifier;
+
+  @override
+  ValueListenable<Duration> get positionListenable => _fakePositionNotifier;
+
+  @override
+  bool get isShuffled => _fakeState.shuffle;
+
+  @override
+  Loop get loopMode => _fakeState.loop;
+
+  @override
+  double get rate => _fakeState.rate;
+
+  @override
+  double get volume => _fakeState.volume;
 
   void emitPlaybackState(PlaybackState state) {
-    _currentState = state;
-    _playbackStateController.add(state);
+    _fakeState = state;
+    _fakePositionNotifier.value = state.position;
+    notifyListeners();
   }
-
-  @override
-  Future<PlaybackState> getPlaybackState() async => _currentState;
 
   @override
   Future<void> play() async {
     playCount++;
-    emitPlaybackState(_currentState.copyWith(playing: true));
+    emitPlaybackState(_fakeState.copyWith(playing: true));
   }
 
   @override
   Future<void> pause() async {
     pauseCount++;
-    emitPlaybackState(_currentState.copyWith(playing: false));
+    emitPlaybackState(_fakeState.copyWith(playing: false));
+  }
+
+  @override
+  Future<void> stop() async {
+    pauseCount++;
+    emitPlaybackState(_fakeState.copyWith(playing: false));
   }
 
   @override
   Future<void> seek(Duration position) async {
     lastSeekPosition = position;
-    emitPlaybackState(_currentState.copyWith(position: position));
+    emitPlaybackState(_fakeState.copyWith(position: position));
   }
 
   @override
   Future<void> setLoopMode(Loop loop) async {
     lastSetLoop = loop;
-    emitPlaybackState(_currentState.copyWith(loop: loop));
+    emitPlaybackState(_fakeState.copyWith(loop: loop));
   }
 
   @override
   Future<void> setShuffle(bool shuffle) async {
     lastShuffle = shuffle;
-    emitPlaybackState(_currentState.copyWith(shuffle: shuffle));
+    emitPlaybackState(_fakeState.copyWith(shuffle: shuffle));
   }
 
   @override
-  Future<void> next() async {}
-
-  @override
-  Future<void> previous() async {}
-
-  @override
-  Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) async {}
-
-  Future<void> saveLastPlaybackState({
-    required String filePath,
-    required int positionMs,
-  }) async {}
-
-  @override
-  Future<List<AudioDevice>> getAudioDevices() async => const [];
-
-  @override
-  Future<void> stop() async {
-    pauseCount++;
-    emitPlaybackState(_currentState.copyWith(playing: false));
-  }
-
-  Future<void> initialize({
-    required String dbPath,
-    required String cacheDirPath,
-  }) async {}
-
-  @override
-  Future<void> setMinimized(bool minimized) async {
+  void setMinimized(bool minimized) {
+    super.setMinimized(minimized);
     onSetMinimized?.call(minimized);
   }
-
-  @override
-  Future<void> dispose() async {
-    await _playbackStateController.close();
-    await _positionController.close();
-    await _visualizerController.close();
-    await _devicesController.close();
-    await _catalogUpdatedController.close();
-    await _scanProgressController.close();
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
@@ -150,8 +119,7 @@ void main() {
 
   group('TachyonAudioHandler & System Media Service Unit Tests', () {
     late SettingsRepository settingsRepo;
-    late FakeTachyonBackendClient backend;
-    late PlaybackController controller;
+    late FakePlaybackController controller;
     late TachyonAudioHandler handler;
     late Directory tempCacheDir;
 
@@ -159,17 +127,14 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       settingsRepo = SettingsRepository(prefs);
-      backend = FakeTachyonBackendClient();
       tempCacheDir = await Directory.systemTemp.createTemp('tachyon_cover_test');
       MetadataUtils.init(tempCacheDir.path, tempCacheDir.path);
 
-      controller = PlaybackController(
-        backend: backend,
+      controller = FakePlaybackController(
         settingsRepository: settingsRepo,
       );
 
       handler = TachyonAudioHandler(
-        backend: backend,
         playbackController: controller,
       );
     });
@@ -177,7 +142,6 @@ void main() {
     tearDown(() async {
       handler.dispose();
       controller.dispose();
-      await backend.dispose();
       try {
         if (tempCacheDir.existsSync()) {
           tempCacheDir.deleteSync(recursive: true);
@@ -206,7 +170,7 @@ void main() {
         artists: [artist],
       );
 
-      backend.emitPlaybackState(
+      controller.emitPlaybackState(
         PlaybackState(
           index: 0,
           playables: [
@@ -238,23 +202,23 @@ void main() {
       expect(pbState.shuffleMode, equals(as_lib.AudioServiceShuffleMode.all));
     });
 
-    test('Handler play, pause, seek, and loop calls delegate to backend/controller', () async {
+    test('Handler play, pause, seek, and loop calls delegate to controller', () async {
       await handler.play();
-      expect(backend.playCount, equals(1));
+      expect(controller.playCount, equals(1));
 
       await handler.pause();
-      expect(backend.pauseCount, equals(1));
+      expect(controller.pauseCount, equals(1));
 
       await handler.seek(const Duration(seconds: 90));
-      expect(backend.lastSeekPosition, equals(const Duration(seconds: 90)));
+      expect(controller.lastSeekPosition, equals(const Duration(seconds: 90)));
 
       await handler.setRepeatMode(as_lib.AudioServiceRepeatMode.one);
-      expect(backend.lastSetLoop, equals(Loop.one));
+      expect(controller.lastSetLoop, equals(Loop.one));
     });
 
     test('onTaskRemoved stops playback only when not playing', () async {
       // 1. When not playing: onTaskRemoved should call stop
-      backend.emitPlaybackState(const PlaybackState(playing: false));
+      controller.emitPlaybackState(const PlaybackState(playing: false));
       await Future<void>.delayed(Duration.zero);
 
       await handler.onTaskRemoved();
@@ -264,7 +228,7 @@ void main() {
       );
 
       // 2. When playing: onTaskRemoved preserves playing state for headless mode
-      backend.emitPlaybackState(const PlaybackState(playing: true));
+      controller.emitPlaybackState(const PlaybackState(playing: true));
       await Future<void>.delayed(Duration.zero);
 
       await handler.onTaskRemoved();
@@ -289,7 +253,7 @@ void main() {
         artists: [artist],
       );
 
-      backend.emitPlaybackState(
+      controller.emitPlaybackState(
         PlaybackState(
           index: 0,
           playables: [
@@ -310,7 +274,7 @@ void main() {
       expect(mpris.metadata, isNotNull);
 
       await mpris.pause();
-      expect(backend.pauseCount, equals(1));
+      expect(controller.pauseCount, equals(1));
     });
 
     test('TachyonMprisObject returns full property maps via getAllProperties', () async {
@@ -335,23 +299,23 @@ void main() {
       expect(playerMap['Metadata'], isNotNull);
     });
 
-    test('Minimized Mode updates isMinimizedListenable and notifies backend client', () async {
-      bool? lastMinimizedSentToBackend;
-      backend.onSetMinimized = (minimized) {
-        lastMinimizedSentToBackend = minimized;
+    test('Minimized Mode updates isMinimizedListenable and notifies playback controller', () async {
+      bool? lastMinimizedSentToController;
+      controller.onSetMinimized = (minimized) {
+        lastMinimizedSentToController = minimized;
       };
 
       expect(SystemMediaService.isMinimized, isFalse);
 
-      SystemMediaService.updateMinimizedState(true, backendClient: backend);
+      SystemMediaService.updateMinimizedState(true, playbackController: controller);
       expect(SystemMediaService.isMinimized, isTrue);
       expect(SystemMediaService.isMinimizedListenable.value, isTrue);
-      expect(lastMinimizedSentToBackend, isTrue);
+      expect(lastMinimizedSentToController, isTrue);
 
-      SystemMediaService.updateMinimizedState(false, backendClient: backend);
+      SystemMediaService.updateMinimizedState(false, playbackController: controller);
       expect(SystemMediaService.isMinimized, isFalse);
       expect(SystemMediaService.isMinimizedListenable.value, isFalse);
-      expect(lastMinimizedSentToBackend, isFalse);
+      expect(lastMinimizedSentToController, isFalse);
     });
   });
 }

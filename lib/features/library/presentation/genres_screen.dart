@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/app_icon.dart';
 
 import 'genre_detail_screen.dart';
 import 'library_controller.dart';
@@ -16,11 +18,14 @@ class GenresScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     final genres = library.genres;
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.gTitle)),
+      appBar: AppBar(
+        title: Row(children: [if (!isDesktop) AppIcon(), Text(strings.gTitle)]),
+      ),
       body: genres.isEmpty
           ? Center(
               child: Column(

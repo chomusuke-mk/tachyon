@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/shared/widgets/app_icon.dart';
 import 'package:tachyon/shared/widgets/artist_card.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
@@ -71,12 +73,15 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     final artists = _getSortedArtists(library.artists);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.arTitle),
+        title: Row(
+          children: [if (!isDesktop) AppIcon(), Text(strings.arTitle)],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search_rounded),

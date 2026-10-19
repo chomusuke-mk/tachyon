@@ -38,7 +38,6 @@ class _TestLocaleRepo extends LocaleRepository {
 
 class _TestPlaybackController extends PlaybackController {
   _TestPlaybackController({
-    super.store,
     required super.settingsRepository,
   });
 

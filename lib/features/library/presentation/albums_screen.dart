@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/widgets/album_card.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/features/search/presentation/search_screen.dart';
 import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
+import 'package:tachyon/shared/widgets/app_icon.dart';
 
 import 'album_detail_screen.dart';
 import 'library_controller.dart';
@@ -80,12 +82,15 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     final albums = _getSortedAlbums(library.albums);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.alTitle),
+        title: Row(
+          children: [if (!isDesktop) AppIcon(), Text(strings.alTitle)],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search_rounded),

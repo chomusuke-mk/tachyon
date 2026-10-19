@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/utils/toast_utils.dart';
+import 'package:tachyon/shared/widgets/app_icon.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
@@ -28,10 +30,11 @@ class FoldersScreen extends StatelessWidget {
 
     final musicDirs = settings.musicDirectories;
     final isAtRoot = library.isAtFolderRoot;
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.fTitle),
+        title: Row(children: [if (!isDesktop) AppIcon(), Text(strings.fTitle)]),
         actions: [
           IconButton(
             icon: Icon(

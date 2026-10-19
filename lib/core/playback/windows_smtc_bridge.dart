@@ -28,7 +28,7 @@ class WindowsSmtcBridge {
   StreamSubscription? _mediaItemSub;
   StreamSubscription? _playbackStateSub;
 
-  Future<void> _commandLane = Future<void>.value();
+  Future<void>? _commandLane;
 
   // Deduplication state
   PlaybackStatus? _lastStatus;
@@ -48,14 +48,22 @@ class WindowsSmtcBridge {
   int? get coverServerPort => _coverServer?.port;
 
   void _enqueue(Future<void> Function() action) {
-    _commandLane = _commandLane.then((_) async {
+    final prev = _commandLane;
+    Future<void> run() async {
       if (_smtc == null) return;
       try {
         await action();
       } catch (e) {
         debugPrint('[WindowsSmtcBridge] Action failed: $e');
       }
+    }
+
+    final next = prev == null ? Future<void>.sync(run) : prev.then((_) => run());
+    late final Future<void> tail;
+    tail = next.whenComplete(() {
+      if (identical(_commandLane, tail)) _commandLane = null;
     });
+    _commandLane = tail;
   }
 
   Future<bool> initialize({ExternalLibrary? externalLibrary}) async {

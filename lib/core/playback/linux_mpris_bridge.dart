@@ -27,7 +27,7 @@ class LinuxMprisBridge {
   StreamSubscription? _mediaItemSub;
   StreamSubscription? _playbackStateSub;
   Timer? _syncTimer;
-  Future<void> _emitLane = Future<void>.value();
+  Future<void>? _emitLane;
   bool _isDisposed = false;
   bool _pendingMetadataCheck = false;
   String? _registeredBusName;
@@ -280,7 +280,8 @@ class LinuxMprisBridge {
     final obj = _mprisObject;
     if (_isDisposed || obj == null || changedProperties.isEmpty) return;
     _emittedSignalCount++;
-    _emitLane = _emitLane.then((_) {
+    final prev = _emitLane;
+    Future<void> run() async {
       if (_isDisposed || _mprisObject == null) return;
       try {
         obj.emitPropertiesChanged(
@@ -288,7 +289,14 @@ class LinuxMprisBridge {
           changedProperties: changedProperties,
         );
       } catch (_) {}
+    }
+
+    final next = prev == null ? Future<void>.sync(run) : prev.then((_) => run());
+    late final Future<void> tail;
+    tail = next.whenComplete(() {
+      if (identical(_emitLane, tail)) _emitLane = null;
     });
+    _emitLane = tail;
   }
 
   /// Flushes any pending coalesced/debounced D-Bus signals immediately and waits
@@ -299,7 +307,9 @@ class LinuxMprisBridge {
       _syncTimer?.cancel();
       _flushPendingChanges();
     }
-    await _emitLane;
+    if (_emitLane != null) {
+      await _emitLane;
+    }
   }
 
   Future<void> initialize() async {

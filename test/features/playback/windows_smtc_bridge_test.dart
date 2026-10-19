@@ -1,14 +1,12 @@
-import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tachyon/core/backend/backend_client.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
-import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
@@ -17,57 +15,69 @@ import 'package:tachyon/core/playback/windows_smtc_bridge.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 
-class _FakeBackendClient implements TachyonBackendClient {
-  final StreamController<PlaybackState> _stateController =
-      StreamController<PlaybackState>.broadcast();
-  final StreamController<Duration> _posController =
-      StreamController<Duration>.broadcast();
-  final StreamController<List<double>> _visController =
-      StreamController<List<double>>.broadcast();
-  final StreamController<List<AudioDevice>> _devController =
-      StreamController<List<AudioDevice>>.broadcast();
-  final StreamController<void> _catController =
-      StreamController<void>.broadcast();
-  final StreamController<ScanProgress> _scanController =
-      StreamController<ScanProgress>.broadcast();
+class _FakePlaybackController extends PlaybackController {
+  _FakePlaybackController({
+    required super.settingsRepository,
+  });
 
-  PlaybackState _currentState = const PlaybackState.initial();
+  PlaybackState _fakeState = const PlaybackState.initial();
+  final ValueNotifier<Duration> _fakePositionNotifier =
+      ValueNotifier<Duration>(Duration.zero);
 
   @override
-  Stream<PlaybackState> get playbackStateStream => _stateController.stream;
-  @override
-  Stream<Duration> get positionStream => _posController.stream;
-  @override
-  Stream<List<double>> get visualizerStream => _visController.stream;
-  @override
-  Stream<List<AudioDevice>> get devicesStream => _devController.stream;
-  @override
-  Stream<void> get catalogUpdatedStream => _catController.stream;
-  @override
-  Stream<ScanProgress> get scanProgressStream => _scanController.stream;
+  PlaybackState get state => _fakeState;
 
   @override
-  Future<PlaybackState> getPlaybackState() async => _currentState;
+  Track? get currentTrack => _fakeState.currentTrack;
+
+  @override
+  bool get isPlaying => _fakeState.playing;
+
+  @override
+  Duration get position => _fakeState.position;
+
+  @override
+  Duration get duration => _fakeState.duration;
+
+  @override
+  ValueNotifier<Duration> get positionNotifier => _fakePositionNotifier;
+
+  @override
+  ValueListenable<Duration> get positionListenable => _fakePositionNotifier;
+
+  @override
+  bool get isShuffled => _fakeState.shuffle;
+
+  @override
+  Loop get loopMode => _fakeState.loop;
+
+  @override
+  double get rate => _fakeState.rate;
+
+  @override
+  double get volume => _fakeState.volume;
 
   void emitState(PlaybackState state) {
-    _currentState = state;
-    _stateController.add(state);
+    _fakeState = state;
+    _fakePositionNotifier.value = state.position;
+    notifyListeners();
   }
 
   @override
   Future<void> play() async {
-    emitState(_currentState.copyWith(playing: true));
+    emitState(_fakeState.copyWith(playing: true));
   }
 
   @override
   Future<void> pause() async {
-    emitState(_currentState.copyWith(playing: false));
+    emitState(_fakeState.copyWith(playing: false));
   }
 
   @override
   Future<void> next() async {
-    final nextIdx = (_currentState.index + 1) % _currentState.playables.length;
-    emitState(_currentState.copyWith(
+    if (_fakeState.playables.isEmpty) return;
+    final nextIdx = (_fakeState.index + 1) % _fakeState.playables.length;
+    emitState(_fakeState.copyWith(
       index: nextIdx,
       position: Duration.zero,
       playing: true,
@@ -76,24 +86,16 @@ class _FakeBackendClient implements TachyonBackendClient {
 
   @override
   Future<void> previous() async {}
+
   @override
   Future<void> seek(Duration pos) async {
-    emitState(_currentState.copyWith(position: pos));
+    emitState(_fakeState.copyWith(position: pos));
   }
 
   @override
   Future<void> stop() async {
-    emitState(_currentState.copyWith(playing: false));
+    emitState(_fakeState.copyWith(playing: false));
   }
-
-  @override
-  Future<void> addTracksToPlaylist(int id, List<int> ids) async {}
-
-  @override
-  Future<List<AudioDevice>> getAudioDevices() async => const [];
-
-  @override
-  dynamic noSuchMethod(Invocation inv) => super.noSuchMethod(inv);
 }
 
 void main() {
@@ -102,26 +104,22 @@ void main() {
   group('WindowsSmtcBridge & TachyonAudioHandler 30 Skips Verification', () {
     late Directory tempDir;
     late SettingsRepository settingsRepo;
-    late _FakeBackendClient backend;
-    late PlaybackController controller;
+    late _FakePlaybackController controller;
     late TachyonAudioHandler handler;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       settingsRepo = SettingsRepository(prefs);
-      backend = _FakeBackendClient();
 
       tempDir = await Directory.systemTemp.createTemp('smtc_verify_test');
       MetadataUtils.init(tempDir.path, tempDir.path);
 
-      controller = PlaybackController(
-        backend: backend,
+      controller = _FakePlaybackController(
         settingsRepository: settingsRepo,
       );
 
       handler = TachyonAudioHandler(
-        backend: backend,
         playbackController: controller,
       );
     });
@@ -152,7 +150,7 @@ void main() {
         modifiedAt: 1000,
       );
 
-      backend.emitState(PlaybackState(
+      controller.emitState(PlaybackState(
         index: 0,
         playables: [PlaylistEntry.forQueue(id: 1, track: track)],
         playing: true,
@@ -190,7 +188,7 @@ void main() {
           .map((t) => PlaylistEntry.forQueue(id: t.id!, track: t))
           .toList();
 
-      backend.emitState(PlaybackState(
+      controller.emitState(PlaybackState(
         index: 0,
         playables: playables,
         playing: true,

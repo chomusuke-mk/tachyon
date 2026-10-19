@@ -102,11 +102,10 @@ CatalogSnapshot _createSampleSnapshot() {
 
 class _TestPlaybackController extends PlaybackController {
   _TestPlaybackController({
-    required LibraryStore super.store,
+    required super.store,
     required super.settingsRepository,
-  }) : _store = store;
+  });
 
-  final LibraryStore _store;
   List<PlaylistEntry>? openedItems;
   int? openedIndex;
   Track? _activeTrack;
@@ -115,29 +114,16 @@ class _TestPlaybackController extends PlaybackController {
   Track? get currentTrack => _activeTrack ?? super.currentTrack;
 
   @override
-  Future<void> playQueue(
-    List<int> trackIds, {
-    int? startIndex,
-    bool play = true,
-    bool shuffle = false,
-  }) async {
-    int pos = 0;
-    final items = trackIds
-        .map((id) => _store.getTrackById(id))
-        .whereType<Track>()
-        .map((t) => PlaylistEntry.forQueue(id: pos, position: pos++, track: t))
-        .toList();
-    openedItems = items;
-    openedIndex = startIndex ?? 0;
-    if (items.isNotEmpty && openedIndex! < items.length) {
-      _activeTrack = items[openedIndex!].track;
-    }
+  Future<void> playTrack(Track track, {List<Track>? contextTracks}) async {
+    final list = contextTracks ?? [track];
+    openedItems = [
+      for (int i = 0; i < list.length; i++)
+        PlaylistEntry.forQueue(id: i, position: i, track: list[i]),
+    ];
+    openedIndex = list.indexOf(track);
+    if (openedIndex == -1) openedIndex = 0;
+    _activeTrack = track;
     notifyListeners();
-  }
-
-  @override
-  Future<void> playTrack(int trackId, {bool play = true}) async {
-    await playQueue([trackId], play: play);
   }
 }
 

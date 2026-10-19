@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,6 +27,20 @@ enum ShellDestination {
   settings,
 }
 
+class _DestinationSpec {
+  final int index;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+
+  const _DestinationSpec({
+    required this.index,
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+  });
+}
+
 class TachyonShell extends StatefulWidget {
   final VoidCallback? onOpenNowPlaying;
 
@@ -36,6 +52,12 @@ class TachyonShell extends StatefulWidget {
 
 class _TachyonShellState extends State<TachyonShell> {
   int _currentIndex = 0;
+
+  static const double _minMobileItemWidth = 62.0;
+  static const double _railLeadingHeight = 76.0;
+  static const double _railItemHeight = 66.0;
+  static const double _railSettingsHeight = 64.0;
+  static const double _railOverflowButtonHeight = 56.0;
 
   static const List<Widget> _screens = [
     TracksScreen(key: PageStorageKey('tracks_screen')),
@@ -57,92 +79,378 @@ class _TachyonShellState extends State<TachyonShell> {
     NowPlayingScreen.open(context);
   }
 
+  List<_DestinationSpec> _getDestinations(dynamic strings) {
+    return [
+      _DestinationSpec(
+        index: 0,
+        icon: Icons.music_note_outlined,
+        selectedIcon: Icons.music_note_rounded,
+        label: strings.trTitle,
+      ),
+      _DestinationSpec(
+        index: 1,
+        icon: Icons.album_outlined,
+        selectedIcon: Icons.album_rounded,
+        label: strings.alTitle,
+      ),
+      _DestinationSpec(
+        index: 2,
+        icon: Icons.person_outline,
+        selectedIcon: Icons.person_rounded,
+        label: strings.arTitle,
+      ),
+      _DestinationSpec(
+        index: 3,
+        icon: Icons.playlist_play_outlined,
+        selectedIcon: Icons.playlist_play_rounded,
+        label: strings.plTitle,
+      ),
+      _DestinationSpec(
+        index: 4,
+        icon: Icons.category_outlined,
+        selectedIcon: Icons.category_rounded,
+        label: strings.gTitle,
+      ),
+      _DestinationSpec(
+        index: 5,
+        icon: Icons.folder_outlined,
+        selectedIcon: Icons.folder_rounded,
+        label: strings.fTitle,
+      ),
+      _DestinationSpec(
+        index: 6,
+        icon: Icons.settings_outlined,
+        selectedIcon: Icons.settings_rounded,
+        label: strings.sTitle,
+      ),
+    ];
+  }
+
+  Widget _buildOverflowPopupButton({
+    required BuildContext context,
+    required List<_DestinationSpec> allSpecs,
+    required List<int> overflowIndices,
+    required bool isDesktopRail,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isOverflowSelected = overflowIndices.contains(_currentIndex);
+
+    return Center(
+      child: PopupMenuButton<int>(
+        tooltip: MaterialLocalizations.of(context).moreButtonTooltip,
+        position: PopupMenuPosition.over,
+        offset: isDesktopRail ? const Offset(60, 0) : const Offset(0, -48),
+        constraints: const BoxConstraints(minWidth: 150, maxWidth: 210),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        onSelected: _onDestinationSelected,
+        // Diseño tipo píldora M3 para evitar que Expanded lo estire en NavigationBar
+        icon: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: isDesktopRail ? 56 : 64,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isOverflowSelected
+                ? colorScheme.secondaryContainer
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(
+            Icons.more_vert_rounded,
+            color: isOverflowSelected
+                ? colorScheme.onSecondaryContainer
+                : colorScheme.onSurfaceVariant,
+          ),
+        ),
+        itemBuilder: (context) {
+          final entries = <PopupMenuEntry<int>>[];
+
+          for (int i = 0; i < overflowIndices.length; i++) {
+            final itemIndex = overflowIndices[i];
+            final spec = allSpecs[itemIndex];
+            final isSelected = _currentIndex == itemIndex;
+
+            // Separador antes de Settings si hay otros elementos antes en el menú
+            if (itemIndex == 6 && i > 0) {
+              entries.add(const PopupMenuDivider(height: 8));
+            }
+
+            entries.add(
+              PopupMenuItem<int>(
+                value: itemIndex,
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isSelected ? spec.selectedIcon : spec.icon,
+                      size: 20,
+                      color: isSelected
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        spec.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isSelected
+                              ? colorScheme.primary
+                              : colorScheme.onSurface,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          return entries;
+        },
+      ),
+    );
+  }
+
+  Widget _buildDesktopRail(
+    BuildContext context,
+    List<_DestinationSpec> specs,
+    dynamic strings,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxHeight = constraints.maxHeight;
+        const libraryCount = 6; // Índices 0..5 (Settings es 6)
+
+        // Altura necesaria para mostrar los 6 iconos + Settings abajo
+        const fullRequiredHeight =
+            _railLeadingHeight +
+            (libraryCount * _railItemHeight) +
+            _railSettingsHeight;
+
+        int visibleLibraryCount;
+        bool includeSettingsInOverflow = false;
+
+        if (maxHeight >= fullRequiredHeight) {
+          visibleLibraryCount = libraryCount;
+        } else {
+          // Calculamos cuántos caben dejando espacio para el botón de overflow y Settings
+          final availableWithSettings =
+              maxHeight -
+              _railLeadingHeight -
+              _railSettingsHeight -
+              _railOverflowButtonHeight;
+          final fitCount = (availableWithSettings / _railItemHeight).floor();
+
+          if (fitCount >= 2) {
+            // NavigationRail requiere al menos 2 destinos; máximo 5 porque 1 slot es el menú
+            visibleLibraryCount = fitCount.clamp(2, libraryCount - 1);
+          } else {
+            // Si la altura es muy reducida, movemos también Settings dentro del PopupMenu
+            includeSettingsInOverflow = true;
+            final availableWithoutSettings =
+                maxHeight - _railLeadingHeight - _railOverflowButtonHeight;
+            visibleLibraryCount = (availableWithoutSettings / _railItemHeight)
+                .floor()
+                .clamp(2, libraryCount - 1);
+          }
+        }
+
+        final overflowIndices = <int>[
+          for (int i = visibleLibraryCount; i < libraryCount; i++) i,
+          if (includeSettingsInOverflow) 6,
+        ];
+
+        final desktopSelectedIndex = _currentIndex < visibleLibraryCount
+            ? _currentIndex
+            : null;
+
+        // Altura mínima de seguridad para que nunca ocurra RenderFlex overflow en ventanas diminutas
+        final minSafeHeight =
+            _railLeadingHeight +
+            (visibleLibraryCount * _railItemHeight) +
+            (overflowIndices.isNotEmpty ? _railOverflowButtonHeight : 0) +
+            (!includeSettingsInOverflow ? _railSettingsHeight : 0);
+
+        final needsScrollFallback = maxHeight < minSafeHeight;
+
+        final rail = NavigationRail(
+          selectedIndex: desktopSelectedIndex,
+          onDestinationSelected: _onDestinationSelected,
+          leading: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                child: Image.asset(
+                  'assets/icon/icon_small.webp',
+                  cacheHeight: 100,
+                  cacheWidth: 100,
+                  width: 50,
+                  height: 50,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+          destinations: [
+            for (int i = 0; i < visibleLibraryCount; i++)
+              NavigationRailDestination(
+                icon: Icon(specs[i].icon),
+                selectedIcon: Icon(specs[i].selectedIcon),
+                label: Text(
+                  specs[i].label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          trailing: Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (overflowIndices.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: _buildOverflowPopupButton(
+                      context: context,
+                      allSpecs: specs,
+                      overflowIndices: overflowIndices,
+                      isDesktopRail: true,
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
+                if (!includeSettingsInOverflow)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: IconButton(
+                      icon: Icon(
+                        _currentIndex == 6
+                            ? Icons.settings_rounded
+                            : Icons.settings_outlined,
+                        color: _currentIndex == 6
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant,
+                      ),
+                      tooltip: strings.sTitle,
+                      onPressed: () => _onDestinationSelected(6),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+        if (needsScrollFallback) {
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: math.max(maxHeight, minSafeHeight),
+              ),
+              child: IntrinsicHeight(child: rail),
+            ),
+          );
+        }
+
+        return rail;
+      },
+    );
+  }
+
+  Widget _buildMobileBottomBar(
+    BuildContext context,
+    List<_DestinationSpec> specs,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalItems = specs.length;
+        final maxSlots = (constraints.maxWidth / _minMobileItemWidth)
+            .floor()
+            .clamp(2, totalItems);
+
+        // Si caben todos los iconos, los colocamos todos sin PopupMenu
+        final showAll = maxSlots >= totalItems;
+        final visibleCount = showAll ? totalItems : maxSlots - 1;
+
+        final overflowIndices = showAll
+            ? const <int>[]
+            : <int>[for (int i = visibleCount; i < totalItems; i++) i];
+
+        // Si el ítem activo está en el menú, apuntamos al slot del menú para no marcar otro icono por error
+        final mobileSelectedIndex = _currentIndex < visibleCount
+            ? _currentIndex
+            : visibleCount;
+
+        final navBarTheme = NavigationBarTheme.of(context);
+
+        return NavigationBarTheme(
+          data: navBarTheme.copyWith(
+            labelTextStyle: WidgetStateProperty.resolveWith((states) {
+              final baseStyle =
+                  navBarTheme.labelTextStyle?.resolve(states) ??
+                  Theme.of(context).textTheme.labelMedium ??
+                  const TextStyle();
+              return baseStyle.copyWith(overflow: TextOverflow.ellipsis);
+            }),
+          ),
+          child: DefaultTextStyle.merge(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            child: NavigationBar(
+              selectedIndex: mobileSelectedIndex,
+              onDestinationSelected: (index) {
+                if (index < visibleCount) {
+                  _onDestinationSelected(index);
+                }
+              },
+              destinations: [
+                for (int i = 0; i < visibleCount; i++)
+                  NavigationDestination(
+                    icon: Icon(specs[i].icon),
+                    selectedIcon: Icon(specs[i].selectedIcon),
+                    label: specs[i].label,
+                  ),
+                if (!showAll)
+                  _buildOverflowPopupButton(
+                    context: context,
+                    allSpecs: specs,
+                    overflowIndices: overflowIndices,
+                    isDesktopRail: false,
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final isDesktop = TachyonBreakpoints.isDesktop(context);
-    final colorScheme = Theme.of(context).colorScheme;
+    final specs = _getDestinations(strings);
 
     // Desktop Layout (>= 720dp)
     if (isDesktop) {
-      final desktopSelectedIndex = _currentIndex <= 5 ? _currentIndex : null;
       return Scaffold(
         body: Row(
           children: [
             // Left NavigationRail
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 80),
-              child: NavigationRail(
-                selectedIndex: desktopSelectedIndex,
-                onDestinationSelected: _onDestinationSelected,
-                leading: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        width: 50,
-                        height: 50,
-                        child: const Image(
-                          image: AssetImage('assets/icon/icon_small.webp'),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                trailing: Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: IconButton(
-                        icon: Icon(
-                          _currentIndex == 6
-                              ? Icons.settings_rounded
-                              : Icons.settings_outlined,
-                          color: _currentIndex == 6
-                              ? colorScheme.primary
-                              : colorScheme.onSurfaceVariant,
-                        ),
-                        tooltip: strings.sTitle,
-                        onPressed: () => _onDestinationSelected(6),
-                      ),
-                    ),
-                  ),
-                ),
-                destinations: [
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.music_note_outlined),
-                    selectedIcon: const Icon(Icons.music_note_rounded),
-                    label: Text(strings.trTitle),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.album_outlined),
-                    selectedIcon: const Icon(Icons.album_rounded),
-                    label: Text(strings.alTitle),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.person_outline),
-                    selectedIcon: const Icon(Icons.person_rounded),
-                    label: Text(strings.arTitle),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.playlist_play_outlined),
-                    selectedIcon: const Icon(Icons.playlist_play_rounded),
-                    label: Text(strings.plTitle),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.category_outlined),
-                    selectedIcon: const Icon(Icons.category_rounded),
-                    label: Text(strings.gTitle),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.folder_outlined),
-                    selectedIcon: const Icon(Icons.folder_rounded),
-                    label: Text(strings.fTitle),
-                  ),
-                ],
-              ),
+              child: _buildDesktopRail(context, specs, strings),
             ),
             const VerticalDivider(width: 1, thickness: 1),
             // Main Content Area & Docked Desktop Mini Player
@@ -177,9 +485,6 @@ class _TachyonShellState extends State<TachyonShell> {
       );
     }
 
-    // Mobile Layout (< 720dp)
-    final mobileSelectedIndex = _currentIndex <= 3 ? _currentIndex : 0;
-
     return Scaffold(
       body: Column(
         children: [
@@ -203,69 +508,7 @@ class _TachyonShellState extends State<TachyonShell> {
           ),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: mobileSelectedIndex,
-        onDestinationSelected: (index) => _onDestinationSelected(index),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.music_note_outlined),
-            selectedIcon: const Icon(Icons.music_note_rounded),
-            label: strings.trTitle,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.album_outlined),
-            selectedIcon: const Icon(Icons.album_rounded),
-            label: strings.alTitle,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.person_outline),
-            selectedIcon: const Icon(Icons.person_rounded),
-            label: strings.arTitle,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.playlist_play_outlined),
-            selectedIcon: const Icon(Icons.playlist_play_rounded),
-            label: strings.plTitle,
-          ),
-          PopupMenuButton<int>(
-            icon: const Icon(Icons.more_vert_rounded),
-            onSelected: (index) => _onDestinationSelected(index),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 4,
-                child: Row(
-                  children: [
-                    const Icon(Icons.category_rounded, size: 20),
-                    const SizedBox(width: 12),
-                    Text(strings.gTitle),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 5,
-                child: Row(
-                  children: [
-                    const Icon(Icons.folder_rounded, size: 20),
-                    const SizedBox(width: 12),
-                    Text(strings.fTitle),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                value: 6,
-                child: Row(
-                  children: [
-                    const Icon(Icons.settings_rounded, size: 20),
-                    const SizedBox(width: 12),
-                    Text(strings.sTitle),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      bottomNavigationBar: _buildMobileBottomBar(context, specs),
     );
   }
 }

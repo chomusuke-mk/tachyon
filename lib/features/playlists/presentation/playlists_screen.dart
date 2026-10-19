@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/shared/widgets/app_icon.dart';
 
 import 'playlist_cover_helper.dart';
 import 'playlist_detail_screen.dart';
@@ -120,6 +122,7 @@ class PlaylistsScreen extends StatelessWidget {
     final strings = context.watch<LocaleController>().localeStrings;
     final playlistsCtrl = context.watch<PlaylistsController>();
     final colorScheme = Theme.of(context).colorScheme;
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     final likedPlaylist = playlistsCtrl.likedSongsPlaylist;
     final historyPlaylist = playlistsCtrl.historyPlaylist;
@@ -127,7 +130,9 @@ class PlaylistsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.plTitle),
+        title: Row(
+          children: [if (!isDesktop) AppIcon(), Text(strings.plTitle)],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.add_rounded),
@@ -153,10 +158,15 @@ class PlaylistsScreen extends StatelessWidget {
                         child: Material(
                           type: MaterialType.transparency,
                           child: ListTile(
-                            leading: buildPlaylistLeading(context, likedPlaylist),
+                            leading: buildPlaylistLeading(
+                              context,
+                              likedPlaylist,
+                            ),
                             title: Text(
                               strings.plLikedSongs,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             subtitle: Text(
                               strings.plTracksCountFormatted(
@@ -167,8 +177,9 @@ class PlaylistsScreen extends StatelessWidget {
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
-                                  builder: (_) =>
-                                      PlaylistDetailScreen(playlist: likedPlaylist),
+                                  builder: (_) => PlaylistDetailScreen(
+                                    playlist: likedPlaylist,
+                                  ),
                                 ),
                               );
                             },
@@ -184,10 +195,15 @@ class PlaylistsScreen extends StatelessWidget {
                         child: Material(
                           type: MaterialType.transparency,
                           child: ListTile(
-                            leading: buildPlaylistLeading(context, historyPlaylist),
+                            leading: buildPlaylistLeading(
+                              context,
+                              historyPlaylist,
+                            ),
                             title: Text(
                               strings.plHistory,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             subtitle: Text(
                               strings.plTracksCountFormatted(
