@@ -7,7 +7,9 @@ import 'package:path/path.dart' as p;
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/store/domain/album.dart';
+import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
+import 'package:tachyon/core/store/domain/artist_sort_option.dart';
 import 'package:tachyon/core/store/domain/genre.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
@@ -15,6 +17,8 @@ import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
 
+export 'package:tachyon/core/store/domain/album_sort_option.dart';
+export 'package:tachyon/core/store/domain/artist_sort_option.dart';
 export 'package:tachyon/core/store/domain/track_sort_option.dart';
 
 class LibraryController extends ChangeNotifier {
@@ -32,6 +36,10 @@ class LibraryController extends ChangeNotifier {
        _isLoading = store == null {
     _sortOption = _settingsRepository.getTrackSortOption();
     _sortAscending = _settingsRepository.getTrackSortAscending();
+    _albumSortOption = _settingsRepository.getAlbumSortOption();
+    _albumSortAscending = _settingsRepository.getAlbumSortAscending();
+    _artistSortOption = _settingsRepository.getArtistSortOption();
+    _artistSortAscending = _settingsRepository.getArtistSortAscending();
 
     _store.addListener(_onStoreChanged);
 
@@ -76,6 +84,10 @@ class LibraryController extends ChangeNotifier {
 
   TrackSortOption _sortOption = TrackSortOption.title;
   bool _sortAscending = true;
+  AlbumSortOption _albumSortOption = AlbumSortOption.title;
+  bool _albumSortAscending = true;
+  ArtistSortOption _artistSortOption = ArtistSortOption.name;
+  bool _artistSortAscending = true;
 
   Genre? _selectedGenre;
   Artist? _selectedArtist;
@@ -115,7 +127,15 @@ class LibraryController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   TrackSortOption get sortOption => _sortOption;
+  TrackSortOption get trackSortOption => _sortOption;
   bool get sortAscending => _sortAscending;
+  bool get trackSortAscending => _sortAscending;
+
+  AlbumSortOption get albumSortOption => _albumSortOption;
+  bool get albumSortAscending => _albumSortAscending;
+
+  ArtistSortOption get artistSortOption => _artistSortOption;
+  bool get artistSortAscending => _artistSortAscending;
 
   Genre? get selectedGenre => _selectedGenre;
   Artist? get selectedArtist => _selectedArtist;
@@ -197,8 +217,20 @@ class LibraryController extends ChangeNotifier {
         ascending: _sortAscending,
       ),
     );
-    _albums = _store.allAlbums;
-    _artists = _store.allArtists;
+    _albums = List<Album>.unmodifiable(
+      _store.sortAlbums(
+        _store.allAlbums,
+        _albumSortOption,
+        ascending: _albumSortAscending,
+      ),
+    );
+    _artists = List<Artist>.unmodifiable(
+      _store.sortArtists(
+        _store.allArtists,
+        _artistSortOption,
+        ascending: _artistSortAscending,
+      ),
+    );
     _genres = _store.allGenres;
 
     if (_selectedAlbum != null && _selectedAlbum!.id != null) {
@@ -235,6 +267,63 @@ class LibraryController extends ChangeNotifier {
       ),
     );
     _applyFilters();
+    notifyListeners();
+  }
+
+  Future<void> setTrackSortOption(
+    TrackSortOption option, {
+    bool? ascending,
+  }) => setSortOption(option, ascending: ascending);
+
+  Future<void> setAlbumSortOption(
+    AlbumSortOption option, {
+    bool? ascending,
+  }) async {
+    if (_albumSortOption == option && ascending == null) {
+      _albumSortAscending = !_albumSortAscending;
+    } else {
+      _albumSortOption = option;
+      if (ascending != null) {
+        _albumSortAscending = ascending;
+      }
+    }
+
+    _settingsRepository.setAlbumSortOption(_albumSortOption);
+    _settingsRepository.setAlbumSortAscending(_albumSortAscending);
+
+    _albums = List<Album>.unmodifiable(
+      _store.sortAlbums(
+        _store.allAlbums,
+        _albumSortOption,
+        ascending: _albumSortAscending,
+      ),
+    );
+    notifyListeners();
+  }
+
+  Future<void> setArtistSortOption(
+    ArtistSortOption option, {
+    bool? ascending,
+  }) async {
+    if (_artistSortOption == option && ascending == null) {
+      _artistSortAscending = !_artistSortAscending;
+    } else {
+      _artistSortOption = option;
+      if (ascending != null) {
+        _artistSortAscending = ascending;
+      }
+    }
+
+    _settingsRepository.setArtistSortOption(_artistSortOption);
+    _settingsRepository.setArtistSortAscending(_artistSortAscending);
+
+    _artists = List<Artist>.unmodifiable(
+      _store.sortArtists(
+        _store.allArtists,
+        _artistSortOption,
+        ascending: _artistSortAscending,
+      ),
+    );
     notifyListeners();
   }
 

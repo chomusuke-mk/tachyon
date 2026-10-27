@@ -62,19 +62,29 @@ class _TracksScreenState extends State<TracksScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 0.0),
+        centerTitle: false,
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             if (!isDesktop) AppIcon(),
-            Text(
-              _isSelectionMode
-                  ? strings.selSelectedCountFormatted(_selectedTrackIds.length)
-                  : strings.trTitle,
+            Flexible(
+              flex: 2,
+              fit: FlexFit.tight,
+              child: Text(
+                _isSelectionMode
+                    ? strings.selSelectedCountFormatted(
+                        _selectedTrackIds.length,
+                      )
+                    : strings.trTitle,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
         actions: [
           if (_isSelectionMode) ...[
-            TextButton(
+            IconButton(
               onPressed: () {
                 final selectedTracks = tracks
                     .where(
@@ -86,7 +96,9 @@ class _TracksScreenState extends State<TracksScreen> {
                 }
                 _toggleSelectionMode();
               },
-              child: Text(strings.npPlay),
+              icon: const Icon(Icons.play_arrow_rounded),
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+              tooltip: strings.npPlay,
             ),
             IconButton(
               icon: const Icon(Icons.close_rounded),

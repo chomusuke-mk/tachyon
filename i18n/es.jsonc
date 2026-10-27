@@ -291,6 +291,8 @@
   "s_audio_output_desc": "Selecciona la tarjeta o controlador de sonido para la salida.",
   "s_exclusive_audio": "Modo de audio exclusivo",
   "s_exclusive_audio_desc": "Bloquea el dispositivo para audio bit-perfect en Windows (omite el mezclador del SO).",
+  "s_pause_on_device_change": "Pausar al cambiar de dispositivo",
+  "s_pause_on_device_change_desc": "Pausa automáticamente la reproducción al desconectar auriculares o cambiar de dispositivo de audio.",
   "s_replay_gain_mode": "Normalización ReplayGain",
   "s_replay_gain_mode_desc": "Iguala automáticamente el volumen percibido entre pistas y álbumes.",
   "s_replay_gain_preamp": "Preamplificador ReplayGain",

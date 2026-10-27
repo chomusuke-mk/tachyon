@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
@@ -149,6 +150,8 @@ void main() {
 
   testWidgets('QueueView allows reordering items with itemExtent', (tester) async {
     final mockPlayback = MockPlaybackController();
+    mockPlayback.queue = mockPlayback.queue.take(5).toList();
+    mockPlayback.currentIndex = 0;
     final localeRepo = _FileSystemLocaleRepository();
     final localeController = LocaleController(localeRepo, 'en');
     await localeController.whenReady;
@@ -180,11 +183,15 @@ void main() {
     final dragHandleFinder = find.byType(ReorderableDragStartListener).first;
     expect(dragHandleFinder, findsOneWidget);
 
-    // Drag it down
-    await tester.drag(dragHandleFinder, const Offset(0, 150), warnIfMissed: false);
+    final gesture = await tester.startGesture(tester.getCenter(dragHandleFinder));
+    await tester.pump(kPressTimeout);
+    await gesture.moveBy(const Offset(0, 150));
+    await tester.pump();
+    await gesture.up();
     await tester.pumpAndSettle();
 
-    debugPrint('Reorder tested successfully (from $reorderFrom to $reorderTo)');
+    expect(reorderFrom, greaterThanOrEqualTo(0));
+    expect(reorderTo, greaterThanOrEqualTo(0));
   });
 
   testWidgets('QueueView displays Add to Playlist button beside infinity mix with localized tooltip', (tester) async {

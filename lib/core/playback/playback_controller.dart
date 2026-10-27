@@ -3,14 +3,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:miniaudio_player/miniaudio_player.dart'
-    show AudioDevice, CrossfeedMode, Equalizer, Reverb;
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 
 import 'package:tachyon/core/database/app_database.dart' show AppDatabase;
 import 'package:tachyon/core/playback/domain/crossfade_config.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
-import 'package:tachyon/core/playback/legacy/audio_engine_service.dart';
-import 'package:tachyon/core/playback/legacy/queue_manager.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/library_store.dart';
@@ -23,20 +20,21 @@ export 'package:tachyon/core/playback/domain/loop_mode.dart';
 class PlaybackController extends ChangeNotifier {
   final LibraryStore? _store;
   final SettingsRepository _settingsRepository;
-  final AudioEngineService _audioEngine;
-  final bool _ownsAudioEngine;
+  ma.MiniaudioEngine<Track>? _engine;
+  final bool _ownsEngine;
 
-  late StreamSubscription<PlaybackState> _engineSubscription;
+  final List<StreamSubscription<dynamic>> _engineSubscriptions = [];
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<dynamic>? _visualizerSubscription;
-  StreamSubscription<List<AudioDevice>>? _devicesSubscription;
+  StreamSubscription<List<ma.AudioDevice>>? _devicesSubscription;
   PlaybackState _state = const PlaybackState.initial();
 
-  Equalizer _equalizer = Equalizer.flat;
-  AudioDevice? _currentDevice;
-  List<AudioDevice> _audioDevices = const [];
+  ma.Equalizer _equalizer = ma.Equalizer.flat;
+  ma.AudioDevice? _currentDevice;
+  List<ma.AudioDevice> _audioDevices = const [];
   bool _isInfiniteMixEnabled = false;
   bool _isMinimized = false;
+  bool _pauseOnDeviceChange = true;
   int _lastPositionEmitTimestamp = 0;
   int _lastEmittedPositionMs = -1;
 
@@ -66,41 +64,112 @@ class PlaybackController extends ChangeNotifier {
   PlaybackController({
     LibraryStore? store,
     required SettingsRepository settingsRepository,
-    AudioEngineService? audioEngine,
+    ma.MiniaudioEngine<Track>? engine,
+    dynamic audioEngine,
+    Stream<List<ma.AudioDevice>>? devicesStream,
   }) : _store = store,
        _settingsRepository = settingsRepository,
-       _ownsAudioEngine = audioEngine == null,
-       _audioEngine =
-           audioEngine ??
-           AudioEngineService(
-             queueManager: QueueManager(
-               libraryTrackProvider: (count) =>
-                   store?.getRandomTracks(count) ?? const <Track>[],
-             ),
-           ) {
-    _audioEngine.setVisualizerEnabled(false);
-    _state = _audioEngine.state;
-    _isInfiniteMixEnabled = _state.isInfiniteMixEnabled;
-    _positionNotifier.value = _state.position;
+       _ownsEngine = engine == null && audioEngine == null {
+    _pauseOnDeviceChange = _settingsRepository.getPauseOnDeviceChange();
 
-    _engineSubscription = _audioEngine.stateStream.listen((newState) {
-      final oldState = _state;
-      _state = newState;
-      _isInfiniteMixEnabled = newState.isInfiniteMixEnabled;
+    if (engine != null) {
+      _engine = engine;
+      _bindEngine(engine);
+      engine.action.setPauseOnDeviceChange(_pauseOnDeviceChange);
+    } else if (audioEngine is ma.MiniaudioEngine<Track>) {
+      _engine = audioEngine;
+      _bindEngine(audioEngine);
+      audioEngine.action.setPauseOnDeviceChange(_pauseOnDeviceChange);
+    }
 
-      if (_positionNotifier.value != newState.position) {
-        _positionNotifier.value = newState.position;
-      }
+    final devStream =
+        devicesStream ??
+        (audioEngine != null && audioEngine is! ma.MiniaudioEngine
+            ? (audioEngine.devicesStream as Stream<List<ma.AudioDevice>>?)
+            : null) ??
+        _safeGetAudioDevicesStream();
 
-      _checkHistoryLogging(newState);
-      _checkStatePersistence(oldState, newState);
-
-      if (_hasDiscreteStateChanged(oldState, newState)) {
+    _devicesSubscription = devStream?.listen((devices) {
+      if (!_isDisposed) {
+        _audioDevices = devices;
+        _applySavedDeviceIfAvailable(devices);
         notifyListeners();
       }
     });
 
-    _positionSubscription = _audioEngine.positionStream.listen((pos) {
+    final savedDeviceId =
+        _settingsRepository.getSettings().audioOutputDeviceId;
+    if (kIsWeb ||
+        !Platform.isAndroid ||
+        (savedDeviceId != null && savedDeviceId.isNotEmpty)) {
+      getAudioDevices();
+    }
+  }
+
+  static Stream<List<ma.AudioDevice>>? _safeGetAudioDevicesStream() {
+    try {
+      return ma.MiniaudioPlayer.getAudioDevicesStream();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  ma.MiniaudioEngine<Track> get engine {
+    if (_engine == null) {
+      final eng = ma.MiniaudioEngine<Track>(
+        pauseOnDeviceChange: _pauseOnDeviceChange,
+        infiniteMixProvider: (count) async {
+          final tracks = _store?.getRandomTracks(count) ?? const <Track>[];
+          return [
+            for (final t in tracks)
+              ma.EngineItem<Track>.file(t.filePath, data: t),
+          ];
+        },
+      );
+      _engine = eng;
+      _bindEngine(eng);
+    }
+    return _engine!;
+  }
+
+  void _bindEngine(ma.MiniaudioEngine<Track> eng) {
+    eng.action.setVisualizerEnabled(false);
+    _syncStateFromEngine(eng);
+    _isInfiniteMixEnabled = eng.state.infiniteMixEnabled;
+    _positionNotifier.value = eng.state.position;
+
+    _engineSubscriptions.add(
+      eng.stream.playbackState.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.playing.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.buffering.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.completed.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.duration.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.queue.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.currentIndex.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.shuffle.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.loopMode.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.infiniteMixEnabled.listen((_) => _syncStateFromEngine(eng)),
+    );
+
+    _positionSubscription = eng.stream.position.listen((pos) {
       final now = DateTime.now().millisecondsSinceEpoch;
       final deltaMs = now - _lastPositionEmitTimestamp;
       final minIntervalMs = _isMinimized ? 5000 : 40;
@@ -124,7 +193,7 @@ class PlaybackController extends ChangeNotifier {
       }
     });
 
-    _visualizerSubscription = _audioEngine.visualizerStream.listen((vis) {
+    _visualizerSubscription = eng.stream.visualizer.listen((vis) {
       if (!_visualizerEnabled || _isMinimized) return;
       _visualizerNotifier.value = <double>[
         vis.rms,
@@ -134,36 +203,56 @@ class PlaybackController extends ChangeNotifier {
         ...vis.bands,
       ];
     });
-
-    _devicesSubscription = _audioEngine.devicesStream.listen((devices) {
-      if (!_isDisposed) {
-        _audioDevices = devices;
-        _applySavedDeviceIfAvailable(devices);
-        notifyListeners();
-      }
-    });
-
-    final savedDeviceId =
-        _settingsRepository.getSettings().audioOutputDeviceId;
-    if (kIsWeb ||
-        !Platform.isAndroid ||
-        (savedDeviceId != null && savedDeviceId.isNotEmpty)) {
-      _audioEngine.getAudioDevices().then((devices) {
-        if (!_isDisposed && devices.isNotEmpty) {
-          _audioDevices = devices;
-          _applySavedDeviceIfAvailable(devices);
-          notifyListeners();
-        }
-      }).catchError((e) {
-        debugPrint(
-          '[PlaybackController] Error getting initial audio devices: $e',
-        );
-      });
-    }
   }
 
-  AudioEngineService get audioEngine => _audioEngine;
-  QueueManager get queueManager => _audioEngine.queueManager;
+  void _syncStateFromEngine(ma.MiniaudioEngine<Track> eng) {
+    final oldState = _state;
+    final engState = eng.state;
+    final queueItems = engState.queue;
+
+    final playables = <PlaylistEntry>[
+      for (int i = 0; i < queueItems.length; i++)
+        if (queueItems[i].data != null)
+          PlaylistEntry.forQueue(
+            id: queueItems[i].id ?? i,
+            position: i,
+            track: queueItems[i].data!,
+          ),
+    ];
+
+    _state = PlaybackState(
+      index: engState.currentIndex,
+      playables: playables,
+      playing: engState.playing,
+      buffering: engState.buffering,
+      completed: engState.completed,
+      position: _positionNotifier.value,
+      duration: engState.duration,
+      rate: engState.rate,
+      pitch: engState.pitch,
+      volume: engState.volume * 100.0,
+      shuffle: engState.shuffle,
+      loop: _unmapLoopMode(engState.loopMode),
+      crossfadeDuration: engState.crossfadeConfig.duration,
+      skipSilence: engState.skipSilence,
+      volumeNormalization: engState.volumeNormalization,
+      isInfiniteMixEnabled: engState.infiniteMixEnabled,
+      preampDb: engState.preamp,
+      balance: engState.balance,
+      mono: engState.mono,
+      crossfeedMode: engState.crossfeed,
+      spatializerWidth: engState.spatializerWidth,
+      limiterEnabled: engState.limiterEnabled,
+    );
+
+    _isInfiniteMixEnabled = engState.infiniteMixEnabled;
+    _checkHistoryLogging(_state);
+    _checkStatePersistence(oldState, _state);
+
+    if (_hasDiscreteStateChanged(oldState, _state)) {
+      notifyListeners();
+    }
+  }
 
   Track _canonicalTrack(Track track) {
     final store = _store;
@@ -181,13 +270,14 @@ class PlaybackController extends ChangeNotifier {
   PlaybackState get state => _state;
   PlaylistEntry? get currentEntry => _state.currentEntry;
   Track? get currentTrack => _state.currentTrack;
-  bool isCurrentTrack(Track? track) =>
-      track != null &&
-      (_state.currentTrack == track ||
-          (_state.currentTrack?.id != null &&
-              _state.currentTrack?.id == track.id) ||
-          (_state.currentTrack?.filePath.isNotEmpty == true &&
-              _state.currentTrack?.filePath == track.filePath));
+  bool isCurrentTrack(Track? track) {
+    final cur = currentTrack;
+    return track != null &&
+        (cur == track ||
+            (cur?.id != null && cur?.id == track.id) ||
+            (cur?.filePath.isNotEmpty == true &&
+                cur?.filePath == track.filePath));
+  }
   bool get isPlaying => _state.playing;
   bool get isBuffering => _state.buffering;
   bool get isCompleted => _state.completed;
@@ -210,23 +300,27 @@ class PlaybackController extends ChangeNotifier {
         }
       });
     }
-    _audioEngine.setVisualizerEnabled(enabled && !_isMinimized);
+    if (_engine != null) {
+      _engine!.action.setVisualizerEnabled(enabled && !_isMinimized);
+    }
   }
 
   void setMinimized(bool minimized) {
     if (_isMinimized == minimized) return;
     _isMinimized = minimized;
-    if (minimized) {
-      _audioEngine.setVisualizerEnabled(false);
-    } else {
-      if (_visualizerEnabled) {
-        _audioEngine.setVisualizerEnabled(true);
-      }
-      final livePos = _audioEngine.state.position;
-      _lastPositionEmitTimestamp = DateTime.now().millisecondsSinceEpoch;
-      _lastEmittedPositionMs = livePos.inMilliseconds;
-      if (_positionNotifier.value != livePos) {
-        _positionNotifier.value = livePos;
+    if (_engine != null) {
+      if (minimized) {
+        _engine!.action.setVisualizerEnabled(false);
+      } else {
+        if (_visualizerEnabled) {
+          _engine!.action.setVisualizerEnabled(true);
+        }
+        final livePos = _engine!.state.position;
+        _lastPositionEmitTimestamp = DateTime.now().millisecondsSinceEpoch;
+        _lastEmittedPositionMs = livePos.inMilliseconds;
+        if (_positionNotifier.value != livePos) {
+          _positionNotifier.value = livePos;
+        }
       }
     }
   }
@@ -259,9 +353,9 @@ class PlaybackController extends ChangeNotifier {
   double get balance => _state.balance;
   double get spatializerWidth => _state.spatializerWidth;
   bool get mono => _state.mono;
-  CrossfeedMode get crossfeedMode => _state.crossfeedMode;
+  ma.CrossfeedMode get crossfeedMode => _state.crossfeedMode;
   bool get limiterEnabled => _state.limiterEnabled;
-  Reverb get reverb => _audioEngine.reverb;
+  ma.Reverb get reverb => _engine?.state.reverb ?? ma.Reverb.off;
 
   // ---------------------------------------------------------------------------
   // High-Level Track Selection & Queue Actions
@@ -273,20 +367,23 @@ class PlaybackController extends ChangeNotifier {
     bool shuffle = false,
   }) async {
     if (tracks.isEmpty) return;
-    final entries = [
+    final items = [
       for (int i = 0; i < tracks.length; i++)
-        PlaylistEntry.forQueue(
+        ma.EngineItem<Track>.file(
+          tracks[i].filePath,
+          data: _canonicalTrack(tracks[i]),
           id: i,
           position: i,
-          track: _canonicalTrack(tracks[i]),
         ),
     ];
-    await _audioEngine.open(
-      entries,
-      index: startIndex,
-      play: play,
+    await engine.action.open(
+      items,
+      startIndex: startIndex,
       shuffle: shuffle,
     );
+    if (play) {
+      await engine.action.play();
+    }
   }
 
   Future<void> playTrack(Track track, {List<Track>? contextTracks}) async {
@@ -329,12 +426,11 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> playNext(Track track) async {
     try {
-      final entry = PlaylistEntry.forQueue(
-        id: 0,
-        position: 0,
-        track: _canonicalTrack(track),
+      final item = ma.EngineItem<Track>.file(
+        track.filePath,
+        data: _canonicalTrack(track),
       );
-      await _audioEngine.insertNext(entry);
+      await engine.action.insertNext(item);
     } catch (e) {
       debugPrint('[PlaybackController] Error in playNext: $e');
     }
@@ -347,15 +443,11 @@ class PlaybackController extends ChangeNotifier {
   Future<void> appendTracks(List<Track> tracks) async {
     if (tracks.isEmpty) return;
     try {
-      final entries = [
-        for (int i = 0; i < tracks.length; i++)
-          PlaylistEntry.forQueue(
-            id: i,
-            position: i,
-            track: _canonicalTrack(tracks[i]),
-          ),
+      final items = [
+        for (final t in tracks)
+          ma.EngineItem<Track>.file(t.filePath, data: _canonicalTrack(t)),
       ];
-      await _audioEngine.append(entries);
+      await engine.action.append(items);
     } catch (e) {
       debugPrint('[PlaybackController] Error in appendTracks: $e');
     }
@@ -363,7 +455,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> removeFromQueue(int index) async {
     try {
-      await _audioEngine.remove(index);
+      await engine.action.removeAt(index);
     } catch (e) {
       debugPrint('[PlaybackController] Error in removeFromQueue: $e');
     }
@@ -371,7 +463,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> reorderQueue(int from, int to) async {
     try {
-      await _audioEngine.reorder(from, to);
+      await engine.action.reorder(from, to);
     } catch (e) {
       debugPrint('[PlaybackController] Error in reorderQueue: $e');
     }
@@ -379,7 +471,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> clearQueue() async {
     try {
-      await _audioEngine.clearQueue();
+      await engine.action.clearQueue();
     } catch (e) {
       debugPrint('[PlaybackController] Error in clearQueue: $e');
     }
@@ -388,7 +480,7 @@ class PlaybackController extends ChangeNotifier {
   Future<void> skipToQueueIndex(int index) async {
     if (index < 0 || index >= _state.queue.length) return;
     try {
-      await _audioEngine.skipToIndex(index);
+      await engine.action.skipToIndex(index);
     } catch (e) {
       debugPrint('[PlaybackController] Error in skipToQueueIndex: $e');
     }
@@ -396,12 +488,13 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> playTrackAtIndex(int index) => skipToQueueIndex(index);
 
-  Equalizer get equalizer => _equalizer;
-  AudioDevice? get currentDevice => _currentDevice;
-  List<AudioDevice> get audioDevices => _audioDevices;
-  Stream<List<AudioDevice>> get devicesStream => _audioEngine.devicesStream;
+  ma.Equalizer get equalizer => _equalizer;
+  ma.AudioDevice? get currentDevice => _currentDevice;
+  List<ma.AudioDevice> get audioDevices => _audioDevices;
+  Stream<List<ma.AudioDevice>> get devicesStream =>
+      _safeGetAudioDevicesStream() ?? const Stream.empty();
 
-  void _applySavedDeviceIfAvailable(List<AudioDevice> devices) {
+  void _applySavedDeviceIfAvailable(List<ma.AudioDevice> devices) {
     final savedId = _settingsRepository.getSettings().audioOutputDeviceId;
     if (savedId != null && savedId.isNotEmpty && _currentDevice == null) {
       final match = devices.where((d) => d.id == savedId).firstOrNull;
@@ -411,32 +504,29 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Future<void> setEqualizer(Equalizer equalizer) async {
+  Future<void> setEqualizer(ma.Equalizer equalizer) async {
     _equalizer = equalizer;
     try {
-      await _audioEngine.setEqualizer(equalizer);
+      await engine.action.setEqualizer(equalizer);
     } catch (e) {
       debugPrint('[PlaybackController] setEqualizer error: $e');
     }
-    notifyListeners();
   }
 
-  Future<void> setReverb(Reverb reverb) async {
+  Future<void> setReverb(ma.Reverb reverb) async {
     try {
-      await _audioEngine.setReverb(reverb);
+      await engine.action.setReverb(reverb);
     } catch (e) {
       debugPrint('[PlaybackController] setReverb error: $e');
     }
-    notifyListeners();
   }
 
-  Future<List<AudioDevice>> getAudioDevices() async {
+  Future<List<ma.AudioDevice>> getAudioDevices() async {
     try {
-      final devices = await _audioEngine.getAudioDevices();
+      final devices = await ma.MiniaudioPlayer.getAudioDevices();
       if (!_isDisposed && devices.isNotEmpty) {
         _audioDevices = devices;
         _applySavedDeviceIfAvailable(devices);
-        notifyListeners();
       }
       return devices;
     } catch (e) {
@@ -445,16 +535,23 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Future<bool> setAudioDevice(AudioDevice device) async {
+  Future<bool> setAudioDevice(ma.AudioDevice device) async {
     _currentDevice = device;
     try {
-      final ok = await _audioEngine.setDevice(device);
-      notifyListeners();
-      return ok;
+      await engine.action.setDevice(device);
+      return true;
     } catch (e) {
       debugPrint('[PlaybackController] setAudioDevice error: $e');
-      notifyListeners();
       return false;
+    }
+  }
+
+  bool get pauseOnDeviceChange => _pauseOnDeviceChange;
+
+  Future<void> setPauseOnDeviceChange(bool pause) async {
+    _pauseOnDeviceChange = pause;
+    if (_engine != null) {
+      _engine!.action.setPauseOnDeviceChange(pause);
     }
   }
 
@@ -463,7 +560,7 @@ class PlaybackController extends ChangeNotifier {
   void setInfiniteMix(bool enabled) {
     _isInfiniteMixEnabled = enabled;
     try {
-      _audioEngine.setInfiniteMix(enabled);
+      engine.action.setInfiniteMix(enabled);
     } catch (e) {
       debugPrint('[PlaybackController] setInfiniteMix error: $e');
     }
@@ -479,7 +576,7 @@ class PlaybackController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   Future<void> play() async {
     try {
-      await _audioEngine.play();
+      await engine.action.play();
     } catch (e) {
       debugPrint('[PlaybackController] play error: $e');
     }
@@ -487,7 +584,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> pause() async {
     try {
-      await _audioEngine.pause();
+      await engine.action.pause();
     } catch (e) {
       debugPrint('[PlaybackController] pause error: $e');
     }
@@ -503,7 +600,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> stop() async {
     try {
-      await _audioEngine.stop();
+      await engine.action.stop();
     } catch (e) {
       debugPrint('[PlaybackController] stop error: $e');
     }
@@ -511,7 +608,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> next() async {
     try {
-      await _audioEngine.next();
+      await engine.action.next();
     } catch (e) {
       debugPrint('[PlaybackController] next error: $e');
     }
@@ -519,7 +616,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> previous() async {
     try {
-      await _audioEngine.previous();
+      await engine.action.previous();
     } catch (e) {
       debugPrint('[PlaybackController] previous error: $e');
     }
@@ -527,7 +624,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> seek(Duration pos) async {
     try {
-      await _audioEngine.seek(pos);
+      await engine.action.seek(pos);
     } catch (e) {
       debugPrint('[PlaybackController] seek error: $e');
     }
@@ -535,7 +632,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setVolume(double vol) async {
     try {
-      await _audioEngine.setVolume(vol);
+      await engine.action.setVolume(vol / 100.0);
     } catch (e) {
       debugPrint('[PlaybackController] setVolume error: $e');
     }
@@ -543,7 +640,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setRate(double rate) async {
     try {
-      await _audioEngine.setRate(rate);
+      await engine.action.setRate(rate);
     } catch (e) {
       debugPrint('[PlaybackController] setRate error: $e');
     }
@@ -551,7 +648,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setPitch(double pitch) async {
     try {
-      await _audioEngine.setPitch(pitch);
+      await engine.action.setPitch(pitch);
     } catch (e) {
       debugPrint('[PlaybackController] setPitch error: $e');
     }
@@ -559,7 +656,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setShuffle(bool enabled) async {
     try {
-      await _audioEngine.setShuffle(enabled);
+      await engine.action.setShuffle(enabled);
     } catch (e) {
       debugPrint('[PlaybackController] setShuffle error: $e');
     }
@@ -569,7 +666,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setLoopMode(Loop loop) async {
     try {
-      await _audioEngine.setLoopMode(loop);
+      await engine.action.setLoopMode(_mapLoopMode(loop));
     } catch (e) {
       debugPrint('[PlaybackController] setLoopMode error: $e');
     }
@@ -578,7 +675,7 @@ class PlaybackController extends ChangeNotifier {
   Future<void> toggleLoopMode() async {
     try {
       final nextMode = _state.loop.next();
-      await _audioEngine.setLoopMode(nextMode);
+      await setLoopMode(nextMode);
     } catch (e) {
       debugPrint('[PlaybackController] toggleLoopMode error: $e');
     }
@@ -588,7 +685,15 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setCrossfadeConfig(CrossfadeConfig config) async {
     try {
-      await _audioEngine.setCrossfadeConfig(config);
+      await engine.action.setCrossfadeConfig(
+        ma.CrossfadeConfig(
+          duration: config.duration,
+          manualDuration: config.manualDuration,
+          curve: config.curve == CrossfadeCurve.linear
+              ? ma.CrossfadeCurve.linear
+              : ma.CrossfadeCurve.equalPower,
+        ),
+      );
     } catch (e) {
       debugPrint('[PlaybackController] setCrossfadeConfig error: $e');
     }
@@ -596,7 +701,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setSkipSilence(bool enabled) async {
     try {
-      await _audioEngine.setSkipSilence(enabled);
+      await engine.action.setSkipSilence(enabled);
     } catch (e) {
       debugPrint('[PlaybackController] setSkipSilence error: $e');
     }
@@ -604,7 +709,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setVolumeNormalization(bool enabled) async {
     try {
-      await _audioEngine.setVolumeNormalization(enabled);
+      await engine.action.setVolumeNormalization(enabled);
     } catch (e) {
       debugPrint('[PlaybackController] setVolumeNormalization error: $e');
     }
@@ -612,7 +717,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setPreamp(double preampDb) async {
     try {
-      await _audioEngine.setPreamp(preampDb);
+      await engine.action.setPreamp(preampDb);
     } catch (e) {
       debugPrint('[PlaybackController] setPreamp error: $e');
     }
@@ -620,7 +725,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setBalance(double balance) async {
     try {
-      await _audioEngine.setBalance(balance);
+      await engine.action.setBalance(balance);
     } catch (e) {
       debugPrint('[PlaybackController] setBalance error: $e');
     }
@@ -628,15 +733,15 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setMono(bool enabled) async {
     try {
-      await _audioEngine.setMono(enabled);
+      await engine.action.setMono(enabled);
     } catch (e) {
       debugPrint('[PlaybackController] setMono error: $e');
     }
   }
 
-  Future<void> setCrossfeed(CrossfeedMode mode) async {
+  Future<void> setCrossfeed(ma.CrossfeedMode mode) async {
     try {
-      await _audioEngine.setCrossfeed(mode);
+      await engine.action.setCrossfeed(mode);
     } catch (e) {
       debugPrint('[PlaybackController] setCrossfeed error: $e');
     }
@@ -644,7 +749,7 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setSpatializer(double width) async {
     try {
-      await _audioEngine.setSpatializer(width);
+      await engine.action.setSpatializer(enabled: width > 0, width: width);
     } catch (e) {
       debugPrint('[PlaybackController] setSpatializer error: $e');
     }
@@ -652,9 +757,31 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setLimiter(bool enabled) async {
     try {
-      await _audioEngine.setLimiter(enabled);
+      await engine.action.setLimiter(enabled);
     } catch (e) {
       debugPrint('[PlaybackController] setLimiter error: $e');
+    }
+  }
+
+  static ma.LoopMode _mapLoopMode(Loop loop) {
+    switch (loop) {
+      case Loop.off:
+        return ma.LoopMode.off;
+      case Loop.one:
+        return ma.LoopMode.one;
+      case Loop.all:
+        return ma.LoopMode.all;
+    }
+  }
+
+  static Loop _unmapLoopMode(ma.LoopMode mode) {
+    switch (mode) {
+      case ma.LoopMode.off:
+        return Loop.off;
+      case ma.LoopMode.one:
+        return Loop.one;
+      case ma.LoopMode.all:
+        return Loop.all;
     }
   }
 
@@ -697,16 +824,8 @@ class PlaybackController extends ChangeNotifier {
         prev.buffering != next.buffering ||
         prev.completed != next.completed ||
         prev.duration != next.duration ||
-        prev.rate != next.rate ||
-        prev.pitch != next.pitch ||
-        prev.volume != next.volume ||
         prev.shuffle != next.shuffle ||
         prev.loop != next.loop ||
-        prev.crossfadeDuration != next.crossfadeDuration ||
-        prev.skipSilence != next.skipSilence ||
-        prev.audioBitrate != next.audioBitrate ||
-        prev.audioSampleRate != next.audioSampleRate ||
-        prev.audioChannels != next.audioChannels ||
         prev.hasPrevious != next.hasPrevious ||
         prev.hasNext != next.hasNext ||
         prev.isInfiniteMixEnabled != next.isInfiniteMixEnabled ||
@@ -783,7 +902,10 @@ class PlaybackController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
-    _engineSubscription.cancel();
+    for (final sub in _engineSubscriptions) {
+      sub.cancel();
+    }
+    _engineSubscriptions.clear();
     _positionSubscription?.cancel();
     _visualizerSubscription?.cancel();
     _devicesSubscription?.cancel();
@@ -793,8 +915,8 @@ class PlaybackController extends ChangeNotifier {
         positionMs: _positionNotifier.value.inMilliseconds,
       );
     }
-    if (_ownsAudioEngine) {
-      unawaited(_audioEngine.dispose());
+    if (_ownsEngine && _engine != null) {
+      unawaited(_engine!.dispose());
     }
     _positionNotifier.dispose();
     super.dispose();

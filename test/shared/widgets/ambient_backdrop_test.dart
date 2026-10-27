@@ -5,8 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
-import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
@@ -91,9 +89,7 @@ void main() {
       thumbnailHash: 'album_hash_123',
     );
 
-    final db = AppDatabase.inMemory();
-    final backend = DirectTachyonBackendClient(database: db);
-    final playback = PlaybackController(backend: backend, settingsRepository: settingsRepo);
+    final playback = PlaybackController(settingsRepository: settingsRepo);
 
     await tester.pumpWidget(
       MultiProvider(
@@ -114,8 +110,6 @@ void main() {
     expect(backdrop.thumbnailHash, equals('album_hash_123'));
 
     playback.dispose();
-    await backend.dispose();
-    await db.close();
   });
 
   testWidgets('ArtistDetailScreen renders AmbientBackdrop with thumbnailHash', (tester) async {
@@ -134,8 +128,6 @@ void main() {
       thumbnailHash: 'artist_hash_456',
     );
 
-    final db = AppDatabase.inMemory();
-    final backend = DirectTachyonBackendClient(database: db);
     final snapshot = CatalogSnapshot(
       tracks: [
         const RawTrackDto(
@@ -156,8 +148,8 @@ void main() {
       trackGenres: const [],
     );
     final store = LibraryStore.fromSnapshot(snapshot);
-    final library = LibraryController(backend: backend, settingsRepository: settingsRepo, store: store);
-    final playback = PlaybackController(backend: backend, settingsRepository: settingsRepo);
+    final library = LibraryController(settingsRepository: settingsRepo, store: store);
+    final playback = PlaybackController(settingsRepository: settingsRepo);
 
     await tester.pumpWidget(
       MultiProvider(
@@ -180,7 +172,5 @@ void main() {
 
     library.dispose();
     playback.dispose();
-    await backend.dispose();
-    await db.close();
   });
 }

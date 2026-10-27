@@ -1,22 +1,22 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/backend.dart';
+import 'package:tachyon/core/lyrics/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/lyrics/lrc_parser.dart';
 import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/lyrics/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
-import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_view.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
@@ -32,27 +32,28 @@ String _lrc(String prefix, int count, {int stepSeconds = 4}) {
   return buffer.toString();
 }
 
-/// Backend whose lyrics for "remote" tracks resolve only when the test
+/// LyricsManager whose lyrics for "remote" tracks resolve only when the test
 /// completes the corresponding completer (simulating a slow API call).
-class _DelayedBackendClient extends DirectTachyonBackendClient {
-  _DelayedBackendClient(AppDatabase db) : super(database: db);
+class _DelayedLyricsManager extends LyricsManager {
+  _DelayedLyricsManager(AppDatabase db) : super(database: db);
 
   final Map<String, Completer<void>> pending = {};
   final Set<String> remotePaths = {};
 
   @override
-  Future<LyricsResult?> resolveLyrics({
-    required int trackId,
+  Future<LyricsResult> getLyricsForTrack({
+    required int? trackId,
     required String filePath,
-    String? title,
-    String? artist,
+    required String title,
+    required String artist,
     String? album,
-    int? durationMs,
-    bool allowRemote = true,
-    bool bypassCache = false,
-    Set<LyricsSource>? allowedSources,
+    int? durationSeconds,
+    bool enableLocal = true,
+    bool enableLrclib = true,
+    bool enableLyricsOvh = true,
+    bool forceRefresh = false,
     LyricsCancellationToken? cancellationToken,
-    void Function(int seconds)? onThresholdCountdown,
+    void Function(LyricsResult retryResult)? onThresholdRetryResolved,
   }) async {
     if (remotePaths.contains(filePath)) {
       final completer = pending.putIfAbsent(filePath, Completer<void>.new);
@@ -62,11 +63,10 @@ class _DelayedBackendClient extends DirectTachyonBackendClient {
       _lrc(filePath.contains('b') ? 'B' : 'A', 40),
     );
     return LyricsResult(
-      lyricsId: trackId,
-      lyrics: parsed,
+      lyricsId: trackId ?? 1,
+      lrc: parsed,
+      rawLrc: _lrc(filePath.contains('b') ? 'B' : 'A', 40),
       source: LyricsSource.lrclib,
-      state: LyricsSourceState.found,
-      isSynced: true,
     );
   }
 
@@ -75,18 +75,20 @@ class _DelayedBackendClient extends DirectTachyonBackendClient {
   final Set<int> remoteTranslationIds = {};
 
   @override
-  Future<List<String>?> translateLyrics({
-    required int lyricsId,
-    required String targetLang,
-    String? sourceLang,
-    required List<String> rawLines,
+  Future<List<String>> translateLyrics({
+    required int? lyricsId,
+    required List<String> lines,
+    required String targetLanguage,
+    String sourceLanguage = 'autodetect',
+    bool forceRefresh = false,
+    LyricsCancellationToken? cancellationToken,
   }) async {
-    if (delayTranslations && remoteTranslationIds.contains(lyricsId)) {
+    if (delayTranslations && lyricsId != null && remoteTranslationIds.contains(lyricsId)) {
       await pendingTranslations
           .putIfAbsent(lyricsId, Completer<void>.new)
           .future;
     }
-    return rawLines.map((l) => 'TR $l translated text').toList();
+    return lines.map((l) => 'TR $l translated text').toList();
   }
 }
 
@@ -115,9 +117,17 @@ class _Playback extends ChangeNotifier implements PlaybackController {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _EmptyLocaleRepository extends LocaleRepository {
+class _FileSystemLocaleRepository extends LocaleRepository {
   @override
-  Future<Map<String, String>> getLocaleStrings(String localeCode) async => {};
+  Future<Map<String, String>> getLocaleStrings(String localeCode) async {
+    final file = File('i18n/$localeCode.jsonc');
+    if (!file.existsSync()) return {};
+    final content = file.readAsStringSync();
+    final json = jsoncDecode(content) as Map<String, dynamic>;
+    return json.map(
+      (key, value) => MapEntry(key, value.toString().trim()),
+    );
+  }
 }
 
 void main() {
@@ -131,7 +141,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     settingsRepo = SettingsRepository(await SharedPreferences.getInstance());
     db = AppDatabase.inMemory();
-    locale = LocaleController(_EmptyLocaleRepository(), 'en');
+    locale = LocaleController(_FileSystemLocaleRepository(), 'en');
     await locale.whenReady;
   });
 
@@ -156,11 +166,11 @@ void main() {
     artists: [Artist(id: 1, name: 'X')],
   );
 
-  Widget host(_Playback playback, LyricsController lyrics) {
+  Widget host(_Playback playback, _DelayedLyricsManager lyrics) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<PlaybackController>.value(value: playback),
-        ChangeNotifierProvider<LyricsController>.value(value: lyrics),
+        Provider<LyricsManager>.value(value: lyrics),
         ChangeNotifierProvider<LocaleController>.value(value: locale),
       ],
       child: MaterialApp(
@@ -168,7 +178,11 @@ void main() {
           body: Builder(
             builder: (context) {
               final p = context.watch<PlaybackController>();
-              return LyricsView(filePath: p.currentTrack!.filePath);
+              return LyricsView(
+                filePath: p.currentTrack!.filePath,
+                trackId: p.currentTrack!.id,
+                track: p.currentTrack,
+              );
             },
           ),
         ),
@@ -208,24 +222,17 @@ void main() {
 
             // Remote: B's lyrics come from the API and its translation is not
             // cached yet (still in flight / failed) while A's is cached.
-            final backend = _DelayedBackendClient(db)
+            final lyrics = _DelayedLyricsManager(db)
               ..delayTranslations = remote;
             if (remote) {
-              backend.remotePaths.add(trackB.filePath);
-              backend.remoteTranslationIds.add(trackB.id!);
+              lyrics.remotePaths.add(trackB.filePath);
+              lyrics.remoteTranslationIds.add(trackB.id!);
             }
             final playback = _Playback()..currentTrack = trackA;
             playback.position = const Duration(seconds: 121); // A: Line 31
-            final lyrics = LyricsController(
-              backendClient: backend,
-              playbackController: playback,
-              settingsRepository: settingsRepo,
-            );
-            lyrics.setLyricsViewVisible(true);
 
             await tester.pumpWidget(host(playback, lyrics));
             await tester.pumpAndSettle();
-            expect(lyrics.currentIndex, 30);
             expect(centeredLine(tester), 'A Line 31');
 
             // Skip to B: the backend may still report A's position for a moment.
@@ -237,13 +244,9 @@ void main() {
             await tester.pump(const Duration(milliseconds: 300));
 
             if (remote) {
-              expect(lyrics.isLoading, isTrue);
-              backend.pending[trackB.filePath]!.complete();
+              lyrics.pending[trackB.filePath]!.complete();
             }
             await tester.pumpAndSettle();
-            expect(lyrics.hasLyrics, isTrue);
-            expect(lyrics.lines.first.text, startsWith('B Line 1 '));
-            expect(lyrics.currentIndex, 0);
             expect(centeredLine(tester), 'B Line 1');
 
             // Natural advance (250 ms ticks) follows the new song.
@@ -256,11 +259,9 @@ void main() {
                 await tester.pump(const Duration(milliseconds: 250));
               }
               await tester.pumpAndSettle();
-              expect(lyrics.currentIndex, line - 1);
               expect(centeredLine(tester), 'B Line $line', reason: 'line $line');
             }
 
-            lyrics.dispose();
             playback.dispose();
           },
         );

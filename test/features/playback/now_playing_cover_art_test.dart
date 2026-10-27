@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
@@ -27,7 +26,6 @@ class _MockLocaleRepo extends LocaleRepository {
 
 class _TestPlaybackController extends PlaybackController {
   _TestPlaybackController({
-    required super.backend,
     required super.settingsRepository,
   });
 
@@ -86,7 +84,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late LocaleController localeController;
-  late DirectTachyonBackendClient backend;
+  late AppDatabase db;
   late SharedPreferences prefs;
   late SettingsRepository settingsRepo;
   late SettingsController settingsController;
@@ -104,15 +102,12 @@ void main() {
     localeController = LocaleController(_MockLocaleRepo(enMap), 'en');
     await localeController.whenReady;
 
-    final db = AppDatabase.inMemory();
-    backend = DirectTachyonBackendClient(database: db);
+    db = AppDatabase.inMemory();
     settingsRepo = SettingsRepository(prefs);
     settingsController = SettingsController(
       repository: settingsRepo,
-      backend: backend,
     );
     playbackController = _TestPlaybackController(
-      backend: backend,
       settingsRepository: settingsRepo,
     );
   });
@@ -120,7 +115,7 @@ void main() {
   tearDown(() async {
     playbackController.dispose();
     settingsController.dispose();
-    await backend.dispose();
+    await db.close();
   });
 
   Widget buildTestApp({required Widget child}) {

@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/backend.dart';
 import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/core/lyrics/lrc_parser.dart';
 import 'package:tachyon/core/database/app_database.dart';
@@ -17,7 +16,6 @@ import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
-import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_view.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/lyrics_sources_dialog.dart';
@@ -39,8 +37,10 @@ class _FileSystemLocaleRepository extends LocaleRepository {
   }
 }
 
-class FakeBackendClient extends DirectTachyonBackendClient {
-  FakeBackendClient(AppDatabase db) : super(database: db);
+class FakeLyricsManager extends LyricsManager {
+  FakeLyricsManager({
+    required super.database,
+  });
 
   String syncedLrcText = '''
 [00:01.00]Line 1
@@ -79,7 +79,8 @@ Line 10 plain
       final s = i * 2;
       final m = s ~/ 60;
       final remS = s % 60;
-      final timeStr = '${m.toString().padLeft(2, '0')}:${remS.toString().padLeft(2, '0')}.00';
+      final timeStr =
+          '${m.toString().padLeft(2, '0')}:${remS.toString().padLeft(2, '0')}.00';
       buffer.writeln('[$timeStr]Track 2 Line $i');
     }
     return buffer.toString();
@@ -87,33 +88,45 @@ Line 10 plain
 
   bool returnSynced = true;
   int resolveLyricsCallCount = 0;
+  final Map<int, Future<LyricsResult>> _mockInFlight = {};
 
   @override
-  Future<LyricsResult?> resolveLyrics({
-    required int trackId,
+  Future<LyricsResult> getLyricsForTrack({
+    required int? trackId,
     required String filePath,
-    String? title,
-    String? artist,
+    required String title,
+    required String artist,
     String? album,
-    int? durationMs,
-    bool allowRemote = true,
-    bool bypassCache = false,
-    Set<LyricsSource>? allowedSources,
+    int? durationSeconds,
+    bool enableLocal = true,
+    bool enableLrclib = true,
+    bool enableLyricsOvh = true,
+    bool forceRefresh = false,
     LyricsCancellationToken? cancellationToken,
-    void Function(int seconds)? onThresholdCountdown,
-  }) async {
+    void Function(LyricsResult retryResult)? onThresholdRetryResolved,
+  }) {
+    if (trackId != null && !forceRefresh && cancellationToken == null) {
+      final existing = _mockInFlight[trackId];
+      if (existing != null) return existing;
+      final future = _mockResolve(filePath);
+      _mockInFlight[trackId] = future;
+      return future.whenComplete(() => _mockInFlight.remove(trackId));
+    }
+    return _mockResolve(filePath);
+  }
+
+  Future<LyricsResult> _mockResolve(String filePath) async {
     resolveLyricsCallCount++;
+    await Future<void>.value();
     final text = filePath.contains('track2')
         ? generate50Lines()
         : (returnSynced ? syncedLrcText : unsyncedLrcText);
     final parsed = LrcParser.parse(text);
     return LyricsResult(
-      lyrics: parsed,
+      lrc: parsed,
+      rawLrc: text,
       source: LyricsSource.file,
-      state: LyricsSourceState.found,
       lyricsId: 101,
-      isSynced: parsed.isSynced,
-      lang: 'en',
     );
   }
 }
@@ -186,7 +199,6 @@ void main() {
   late SharedPreferences prefs;
   late SettingsRepository settingsRepo;
   late AppDatabase db;
-  late FakeBackendClient backend;
   late _FileSystemLocaleRepository localeRepo;
   late LocaleController localeControllerEs;
   late LocaleController localeControllerEn;
@@ -196,7 +208,6 @@ void main() {
     prefs = await SharedPreferences.getInstance();
     settingsRepo = SettingsRepository(prefs);
     db = AppDatabase.inMemory();
-    backend = FakeBackendClient(db);
     localeRepo = _FileSystemLocaleRepository();
 
     localeControllerEs = LocaleController(localeRepo, 'es');
@@ -211,15 +222,9 @@ void main() {
   });
 
   testWidgets('Problem 1: Manual scroll in synced lyrics does NOT auto-resume after 5 seconds', (tester) async {
-    backend.returnSynced = true;
+    final lyricsManager = FakeLyricsManager(database: db);
+    lyricsManager.returnSynced = true;
     final playback = MockPlaybackController();
-    final lyrics = LyricsController(
-      backendClient: backend,
-      playbackController: playback,
-      settingsRepository: settingsRepo,
-    );
-
-    lyrics.setLyricsViewVisible(true);
 
     const testTrack = Track(
       id: 1,
@@ -238,13 +243,13 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          Provider<LyricsManager>.value(value: lyricsManager),
           ChangeNotifierProvider<PlaybackController>.value(value: playback),
-          ChangeNotifierProvider<LyricsController>.value(value: lyrics),
           ChangeNotifierProvider<LocaleController>.value(value: localeControllerEs),
         ],
         child: const MaterialApp(
           home: Scaffold(
-            body: LyricsView(filePath: '/music/track1.mp3'),
+            body: LyricsView(filePath: '/music/track1.mp3', trackId: 1),
           ),
         ),
       ),
@@ -253,49 +258,37 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify lyrics loaded and synced
-    expect(lyrics.hasLyrics, isTrue);
-    expect(lyrics.isSynced, isTrue);
+    expect(find.text('Line 1'), findsOneWidget);
 
     // Initial state: not scroll locked, sync button not visible
-    expect(lyrics.isUserScrollLocked, isFalse);
     expect(find.byIcon(Icons.sync_rounded), findsNothing);
 
     // User scrolls manually
-    lyrics.onUserScroll();
+    await tester.drag(find.byType(ListView), const Offset(0, -150));
     await tester.pump();
 
     // Now locked, sync button is visible
-    expect(lyrics.isUserScrollLocked, isTrue);
     expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
 
     // Wait 6 seconds (previously timer was 5 seconds)
     await tester.pump(const Duration(seconds: 6));
 
     // Must REMAIN locked: no auto-resume timer jumping back!
-    expect(lyrics.isUserScrollLocked, isTrue);
     expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
 
     // Tapping sync button re-engages auto-scroll
     await tester.tap(find.byIcon(Icons.sync_rounded));
     await tester.pumpAndSettle();
 
-    expect(lyrics.isUserScrollLocked, isFalse);
     expect(find.byIcon(Icons.sync_rounded), findsNothing);
 
-    lyrics.dispose();
     playback.dispose();
   });
 
   testWidgets('Problem 1 Case 2: Manual scroll in unsynced lyrics does NOT lock scroll or show sync button', (tester) async {
-    backend.returnSynced = false;
+    final lyricsManager = FakeLyricsManager(database: db);
+    lyricsManager.returnSynced = false;
     final playback = MockPlaybackController();
-    final lyrics = LyricsController(
-      backendClient: backend,
-      playbackController: playback,
-      settingsRepository: settingsRepo,
-    );
-
-    lyrics.setLyricsViewVisible(true);
 
     const testTrack = Track(
       id: 2,
@@ -313,13 +306,13 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          Provider<LyricsManager>.value(value: lyricsManager),
           ChangeNotifierProvider<PlaybackController>.value(value: playback),
-          ChangeNotifierProvider<LyricsController>.value(value: lyrics),
           ChangeNotifierProvider<LocaleController>.value(value: localeControllerEs),
         ],
         child: const MaterialApp(
           home: Scaffold(
-            body: LyricsView(filePath: '/music/track_unsynced.mp3'),
+            body: LyricsView(filePath: '/music/track_unsynced.mp3', trackId: 2),
           ),
         ),
       ),
@@ -327,65 +320,36 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(lyrics.hasLyrics, isTrue);
-    expect(lyrics.isSynced, isFalse);
+    expect(find.text('Line 1 plain'), findsOneWidget);
 
     // Simulate user scroll
-    lyrics.onUserScroll();
+    await tester.drag(find.byType(ListView), const Offset(0, -100));
     await tester.pump();
 
     // Must NOT lock scroll and must NOT show sync button
-    expect(lyrics.isUserScrollLocked, isFalse);
     expect(find.byIcon(Icons.sync_rounded), findsNothing);
 
     // Wait 6 seconds
     await tester.pump(const Duration(seconds: 6));
-    expect(lyrics.isUserScrollLocked, isFalse);
     expect(find.byIcon(Icons.sync_rounded), findsNothing);
 
-    lyrics.dispose();
     playback.dispose();
   });
 
   testWidgets('Problem 3: Settings dialog translation tab displays Retranslate button', (tester) async {
-    backend.returnSynced = true;
-    final playback = MockPlaybackController();
-    final lyrics = LyricsController(
-      backendClient: backend,
-      playbackController: playback,
-      settingsRepository: settingsRepo,
-    );
     final settingsCtrl = SettingsController(
       repository: settingsRepo,
-      backend: backend,
     );
-
-    lyrics.setLyricsViewVisible(true);
-
-    const testTrack = Track(
-      id: 1,
-      filePath: '/music/track1.mp3',
-      title: 'Track 1',
-      durationMs: 180000,
-      fileSize: 1000,
-      modifiedAt: 1000,
-    );
-
-    playback.queue = [PlaylistEntry.forQueue(id: 1, track: testTrack)];
-    playback.currentIndex = 0;
-    playback.setCurrentTrack(testTrack);
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<PlaybackController>.value(value: playback),
-          ChangeNotifierProvider<LyricsController>.value(value: lyrics),
           ChangeNotifierProvider<SettingsController>.value(value: settingsCtrl),
           ChangeNotifierProvider<LocaleController>.value(value: localeControllerEs),
         ],
         child: const MaterialApp(
           home: Scaffold(
-            body: LyricsSourcesDialog(),
+            body: LyricsSourcesDialog(hasLyrics: true),
           ),
         ),
       ),
@@ -405,8 +369,6 @@ void main() {
     expect(find.text('Volver a buscar'), findsNothing);
     expect(find.byIcon(Icons.translate_rounded), findsWidgets);
 
-    lyrics.dispose();
-    playback.dispose();
     settingsCtrl.dispose();
   });
 
@@ -421,15 +383,9 @@ void main() {
   });
 
   testWidgets('Problem 2: Track transition from 15 to 50 lines centers active line and keeps it visible', (tester) async {
-    backend.returnSynced = true;
+    final lyricsManager = FakeLyricsManager(database: db);
+    lyricsManager.returnSynced = true;
     final playback = MockPlaybackController();
-    final lyrics = LyricsController(
-      backendClient: backend,
-      playbackController: playback,
-      settingsRepository: settingsRepo,
-    );
-
-    lyrics.setLyricsViewVisible(true);
 
     const track1 = Track(
       id: 1,
@@ -464,20 +420,19 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          Provider<LyricsManager>.value(value: lyricsManager),
           ChangeNotifierProvider<PlaybackController>.value(value: playback),
-          ChangeNotifierProvider<LyricsController>.value(value: lyrics),
           ChangeNotifierProvider<LocaleController>.value(value: localeControllerEs),
         ],
         child: const MaterialApp(
           home: Scaffold(
-            body: LyricsView(filePath: '/music/track1.mp3'),
+            body: LyricsView(filePath: '/music/track1.mp3', trackId: 1),
           ),
         ),
       ),
     );
 
     await tester.pumpAndSettle();
-    expect(lyrics.lines.length, equals(15));
     expect(find.text('Line 2'), findsOneWidget);
 
     // Now transition to track 2 (50 lines) with playback position at line 35 (seconds = 35 * 2 = 70s)
@@ -489,22 +444,19 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          Provider<LyricsManager>.value(value: lyricsManager),
           ChangeNotifierProvider<PlaybackController>.value(value: playback),
-          ChangeNotifierProvider<LyricsController>.value(value: lyrics),
           ChangeNotifierProvider<LocaleController>.value(value: localeControllerEs),
         ],
         child: const MaterialApp(
           home: Scaffold(
-            body: LyricsView(filePath: '/music/track2.mp3'),
+            body: LyricsView(filePath: '/music/track2.mp3', trackId: 2),
           ),
         ),
       ),
     );
 
     await tester.pumpAndSettle();
-
-    expect(lyrics.lines.length, equals(50));
-    expect(lyrics.currentIndex, equals(34)); // index 34 is Line 35 (starts at 70s)
 
     // Line 35 must be rendered and visible in the viewport!
     expect(find.text('Track 2 Line 35'), findsOneWidget);
@@ -515,21 +467,15 @@ void main() {
     playback.position = const Duration(seconds: 72);
     await tester.pumpAndSettle();
 
-    expect(lyrics.currentIndex, equals(35)); // Line 36
     expect(find.text('Track 2 Line 36'), findsOneWidget);
 
-    lyrics.dispose();
     playback.dispose();
   });
 
   testWidgets('Problem: Minimizing and reopening player with 50-line synced lyrics centers active line after advance', (tester) async {
-    backend.returnSynced = true;
+    final lyricsManager = FakeLyricsManager(database: db);
+    lyricsManager.returnSynced = true;
     final playback = MockPlaybackController();
-    final lyrics = LyricsController(
-      backendClient: backend,
-      playbackController: playback,
-      settingsRepository: settingsRepo,
-    );
 
     const track = Track(
       id: 2,
@@ -548,34 +494,30 @@ void main() {
     playback.position = const Duration(seconds: 4); // Line 2
 
     // 1. Open NowPlaying with LyricsView
-    lyrics.setLyricsViewVisible(true);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          Provider<LyricsManager>.value(value: lyricsManager),
           ChangeNotifierProvider<PlaybackController>.value(value: playback),
-          ChangeNotifierProvider<LyricsController>.value(value: lyrics),
           ChangeNotifierProvider<LocaleController>.value(value: localeControllerEs),
         ],
         child: const MaterialApp(
           home: Scaffold(
-            body: LyricsView(filePath: '/music/track2.mp3'),
+            body: LyricsView(filePath: '/music/track2.mp3', trackId: 2),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(lyrics.lines.length, equals(50));
-    expect(lyrics.currentIndex, equals(1)); // index 1 is Line 2
     expect(find.text('Track 2 Line 2'), findsOneWidget);
 
     // 2. "Minimize player": close NowPlaying screen (unmount LyricsView)
-    lyrics.setLyricsViewVisible(false);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          Provider<LyricsManager>.value(value: lyricsManager),
           ChangeNotifierProvider<PlaybackController>.value(value: playback),
-          ChangeNotifierProvider<LyricsController>.value(value: lyrics),
           ChangeNotifierProvider<LocaleController>.value(value: localeControllerEs),
         ],
         child: const MaterialApp(
@@ -592,17 +534,16 @@ void main() {
     await tester.pumpAndSettle();
 
     // 4. "Re-open player": push NowPlaying screen again (remount LyricsView)
-    lyrics.setLyricsViewVisible(true);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          Provider<LyricsManager>.value(value: lyricsManager),
           ChangeNotifierProvider<PlaybackController>.value(value: playback),
-          ChangeNotifierProvider<LyricsController>.value(value: lyrics),
           ChangeNotifierProvider<LocaleController>.value(value: localeControllerEs),
         ],
         child: const MaterialApp(
           home: Scaffold(
-            body: LyricsView(filePath: '/music/track2.mp3'),
+            body: LyricsView(filePath: '/music/track2.mp3', trackId: 2),
           ),
         ),
       ),
@@ -610,7 +551,6 @@ void main() {
     await tester.pumpAndSettle();
 
     // 5. Must have centered on Line 35, NOT stuck at offset 0
-    expect(lyrics.currentIndex, equals(34)); // Line 35
     expect(find.text('Track 2 Line 35'), findsOneWidget);
     expect(find.text('Track 2 Line 1'), findsNothing);
 
@@ -618,43 +558,30 @@ void main() {
     playback.position = const Duration(seconds: 72); // Line 36
     await tester.pumpAndSettle();
 
-    expect(lyrics.currentIndex, equals(35)); // Line 36
     expect(find.text('Track 2 Line 36'), findsOneWidget);
 
-    lyrics.dispose();
     playback.dispose();
   });
 
   testWidgets('ensureLyricsLoaded does not duplicate backend resolve calls while loading', (tester) async {
-    final client = FakeBackendClient(db);
-    final cooldown = LyricsCooldownManager();
-    final playback = MockPlaybackController();
-    playback.currentTrack = const Track(
-      id: 999,
+    final client = FakeLyricsManager(database: db);
+
+    // Call getLyricsForTrack twice concurrently
+    final f1 = client.getLyricsForTrack(
+      trackId: 999,
       filePath: '/music/track_test.mp3',
       title: 'Track Test',
-      durationMs: 180000,
-      fileSize: 1000,
-      modifiedAt: 1000,
-      artists: [Artist(name: 'Artist Test')],
+      artist: 'Artist Test',
     );
-
-    final lyrics = LyricsController(
-      backendClient: client,
-      playbackController: playback,
-      cooldownManager: cooldown,
-      settingsRepository: settingsRepo,
+    final f2 = client.getLyricsForTrack(
+      trackId: 999,
+      filePath: '/music/track_test.mp3',
+      title: 'Track Test',
+      artist: 'Artist Test',
     );
-    lyrics.setLyricsViewVisible(true);
-
-    // Call ensureLyricsLoaded twice concurrently
-    final f1 = lyrics.ensureLyricsLoaded();
-    final f2 = lyrics.ensureLyricsLoaded();
+    await tester.pump();
     await Future.wait([f1, f2]);
 
     expect(client.resolveLyricsCallCount, equals(1));
-
-    lyrics.dispose();
-    playback.dispose();
   });
 }

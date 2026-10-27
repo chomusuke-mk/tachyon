@@ -8,9 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/backend_client.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
-import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
@@ -20,7 +17,6 @@ import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/store/domain/track.dart';
-import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
@@ -76,7 +72,6 @@ CatalogSnapshot _createSampleSnapshot() {
 
 class _TestPlaybackController extends PlaybackController {
   _TestPlaybackController({
-    required super.backend,
     required super.settingsRepository,
   });
 
@@ -122,14 +117,11 @@ void main() {
 
   late LocaleController localeController;
   late LocaleController esLocaleController;
-  late AppDatabase db;
-  late DirectTachyonBackendClient backend;
   late SettingsRepository settingsRepo;
   late SettingsController settingsController;
   late LibraryStore libraryStore;
   late LibraryController libraryController;
   late _TestPlaybackController playbackController;
-  late LyricsController lyricsController;
   late PlaylistsController playlistsController;
   late TachyonSearchController searchController;
   late GlobalKey<NavigatorState> navigatorKey;
@@ -145,30 +137,20 @@ void main() {
     esLocaleController = LocaleController(_TestLocaleRepo(), 'es');
     await esLocaleController.whenReady;
 
-    db = AppDatabase.inMemory();
-    backend = DirectTachyonBackendClient(database: db);
     libraryStore = LibraryStore.fromSnapshot(_createSampleSnapshot());
 
     settingsController = SettingsController(
       repository: settingsRepo,
-      backend: backend,
     );
     libraryController = LibraryController(
-      backend: backend,
       settingsRepository: settingsRepo,
       store: libraryStore,
     );
     playbackController = _TestPlaybackController(
-      backend: backend,
-      settingsRepository: settingsRepo,
-    );
-    lyricsController = LyricsController(
-      backendClient: backend,
-      playbackController: playbackController,
       settingsRepository: settingsRepo,
     );
     playlistsController = PlaylistsController(
-      backend: backend,
+      store: libraryStore,
     );
     searchController = TachyonSearchController(
       storeSupplier: () => libraryController.store,
@@ -180,23 +162,18 @@ void main() {
     settingsController.dispose();
     libraryController.dispose();
     playbackController.dispose();
-    lyricsController.dispose();
     playlistsController.dispose();
     searchController.dispose();
-    await backend.dispose();
-    await db.close();
   });
 
   Widget buildApp(Widget child, {LocaleController? locale}) {
     return MultiProvider(
       providers: [
-        Provider<TachyonBackendClient>.value(value: backend),
         Provider<SettingsRepository>.value(value: settingsRepo),
         ChangeNotifierProvider<SettingsController>.value(value: settingsController),
         ChangeNotifierProvider<LocaleController>.value(value: locale ?? localeController),
         ChangeNotifierProvider<LibraryController>.value(value: libraryController),
         ChangeNotifierProvider<PlaybackController>.value(value: playbackController),
-        ChangeNotifierProvider<LyricsController>.value(value: lyricsController),
         ChangeNotifierProvider<PlaylistsController>.value(value: playlistsController),
         ChangeNotifierProvider<TachyonSearchController>.value(value: searchController),
       ],

@@ -6,7 +6,6 @@ import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/album.dart';
@@ -102,14 +101,12 @@ void main() {
   group('Adversarial Layout Overflow & Stress Harness', () {
     testWidgets('ADV-1: PlaylistDetailScreen action buttons wrap cleanly at 360px & 320px in Spanish', (tester) async {
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore();
       final playbackCtrl = PlaybackController(
-        backend: backend,
+        store: store,
         settingsRepository: settingsRepository,
       );
       final playlistsCtrl = PlaylistsController(
-        backend: backend,
         store: store,
       );
 
@@ -178,20 +175,17 @@ void main() {
 
     testWidgets('ADV-2: TracksScreen sort popup menu opens without overflow at 360px & 320px in Spanish', (tester) async {
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(_buildTestSnapshot());
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playbackCtrl = PlaybackController(
-        backend: backend,
+        store: store,
         settingsRepository: settingsRepository,
       );
       final playlistsCtrl = PlaylistsController(
-        backend: backend,
         store: store,
       );
 
@@ -252,10 +246,8 @@ void main() {
 
     testWidgets('ADV-3: PlaylistsScreen options popup menu opens without overflow at 360px in Spanish', (tester) async {
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore();
       final playlistsCtrl = PlaylistsController(
-        backend: backend,
         store: store,
       );
 
@@ -387,15 +379,13 @@ void main() {
       addTearDown(() => tester.view.resetPhysicalSize());
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore();
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playback = PlaybackController(
-        backend: backend,
+        store: store,
         settingsRepository: settingsRepository,
       );
 
@@ -471,15 +461,13 @@ void main() {
       addTearDown(() => tester.view.resetPhysicalSize());
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore();
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playback = PlaybackController(
-        backend: backend,
+        store: store,
         settingsRepository: settingsRepository,
       );
       final searchCtrl = TachyonSearchController(store: store);
@@ -544,14 +532,11 @@ void main() {
 
     testWidgets('ADV-7: AudioEffectsSheet renders with 0 overflows at 320px in Spanish with 10 bands and equalizer enabled', (tester) async {
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final playback = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
       );
       final settingsCtrl = SettingsController(
         repository: settingsRepository,
-        backend: backend,
       );
       await settingsCtrl.setEqualizerEnabled(true);
       await settingsCtrl.setEqualizerPreset('bassBoost');
@@ -603,19 +588,14 @@ void main() {
 
     testWidgets('ADV-8: LyricsSourcesDialog renders with 0 overflows at 320px in Spanish and switches tabs cleanly', (tester) async {
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final playback = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
       );
-      final lyricsCtrl = LyricsController(
-        backendClient: backend,
-        playbackController: playback,
-        settingsRepository: settingsRepository,
+      final lyricsCtrl = LyricsManager(
+        database: db,
       );
       final settingsCtrl = SettingsController(
         repository: settingsRepository,
-        backend: backend,
       );
 
       tester.view.physicalSize = const Size(320, 640);
@@ -637,7 +617,6 @@ void main() {
           MultiProvider(
             providers: [
               ChangeNotifierProvider<LocaleController>.value(value: esLocaleController),
-              ChangeNotifierProvider<LyricsController>.value(value: lyricsCtrl),
               ChangeNotifierProvider<SettingsController>.value(value: settingsCtrl),
             ],
             child: const MaterialApp(
@@ -711,16 +690,13 @@ void main() {
 
     testWidgets('ADV-9: SettingsScreen renders adaptive ThemeMode and searchable language picker at 320px in Spanish', (tester) async {
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore();
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final settingsCtrl = SettingsController(
         repository: settingsRepository,
-        backend: backend,
       );
 
       tester.view.physicalSize = const Size(320, 640);

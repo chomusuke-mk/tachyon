@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/store/library_store.dart';
@@ -50,28 +48,41 @@ class _FileSystemLocaleRepository extends LocaleRepository {
   }
 }
 
-class _PlaybackTestBackendClient extends DirectTachyonBackendClient {
-  final StreamController<PlaybackState> _stateCtrl =
-      StreamController<PlaybackState>.broadcast();
-  PlaybackState currentState = const PlaybackState.initial();
+class _TestPlaybackController extends PlaybackController {
+  _TestPlaybackController({
+    required super.settingsRepository,
+  });
 
-  _PlaybackTestBackendClient({super.database});
-
-  @override
-  Stream<PlaybackState> get playbackStateStream => _stateCtrl.stream;
-
-  @override
-  Future<PlaybackState> getPlaybackState() async => currentState;
-
-  void emitState(PlaybackState state) {
-    currentState = state;
-    _stateCtrl.add(state);
-  }
+  Track? _mockCurrentTrack;
+  bool _mockIsPlaying = false;
+  List<PlaylistEntry> _mockQueue = [];
+  int _mockCurrentIndex = 0;
 
   @override
-  Future<void> dispose() async {
-    await _stateCtrl.close();
-    await super.dispose();
+  Track? get currentTrack => _mockCurrentTrack ?? super.currentTrack;
+
+  @override
+  bool get isPlaying => _mockIsPlaying;
+
+  @override
+  List<PlaylistEntry> get queue =>
+      _mockQueue.isNotEmpty ? _mockQueue : super.queue;
+
+  @override
+  int get currentIndex => _mockCurrentIndex;
+
+  void emitPlaybackState(PlaybackState state) {
+    _mockIsPlaying = state.playing;
+    _mockQueue = state.playables;
+    _mockCurrentIndex = state.index;
+    if (state.playables.isNotEmpty &&
+        state.index >= 0 &&
+        state.index < state.playables.length) {
+      _mockCurrentTrack = state.playables[state.index].track;
+    } else {
+      _mockCurrentTrack = null;
+    }
+    notifyListeners();
   }
 }
 
@@ -123,9 +134,6 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
-
       // Create 500 tracks
       final tracks = List.generate(
         500,
@@ -158,12 +166,12 @@ void main() {
       );
 
       final store = LibraryStore();
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
       playlistsCtrl.selectPlaylist(playlist);
 
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -191,17 +199,12 @@ void main() {
 
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     testWidgets('PlaylistDetailScreen for liked songs renders virtualized SliverList.builder', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
 
       final tracks = List.generate(
         100,
@@ -234,12 +237,12 @@ void main() {
       );
 
       final store = LibraryStore();
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
       playlistsCtrl.selectPlaylist(likedPlaylist);
 
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -258,14 +261,9 @@ void main() {
 
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     testWidgets('PlaylistsScreen renders user playlists via virtualized SliverList.builder', (tester) async {
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
-
       final rawPlaylists = [
         const RawPlaylistDto(id: 1, name: 'Liked Songs', createdAt: 100, type: 1),
         const RawPlaylistDto(id: 2, name: 'History', createdAt: 100, type: 2),
@@ -292,7 +290,7 @@ void main() {
       );
 
       final store = LibraryStore.fromSnapshot(snapshot);
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
 
       await tester.pumpWidget(
         createTestHarness(
@@ -316,17 +314,12 @@ void main() {
       expect(find.text('User Playlist 50'), findsNothing);
 
       playlistsCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     testWidgets('ArtistDetailScreen uses SliverGrid.builder for albums and SliverList.builder for tracks', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
 
       final rawAlbums = List.generate(
         12,
@@ -369,13 +362,12 @@ void main() {
       final artist = store.getArtistById(1)!;
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -401,17 +393,12 @@ void main() {
 
       libraryCtrl.dispose();
       playbackCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     testWidgets('AlbumDetailScreen uses SliverList.builder for album tracks', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
 
       final rawTracks = List.generate(
         20,
@@ -451,8 +438,8 @@ void main() {
       final album = store.getAlbumById(1)!;
 
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -469,8 +456,6 @@ void main() {
       expect(find.text('Album Cut 1'), findsOneWidget);
 
       playbackCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
   });
 
@@ -531,9 +516,6 @@ void main() {
     });
 
     testWidgets('PlaylistsScreen renders cover with heart overlay for liked songs and clock for history', (tester) async {
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
-
       final snapshot = CatalogSnapshot(
         tracks: const [
           RawTrackDto(
@@ -597,7 +579,7 @@ void main() {
       );
 
       final store = LibraryStore.fromSnapshot(snapshot);
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
 
       await tester.pumpWidget(
         createTestHarness(
@@ -619,17 +601,12 @@ void main() {
       expect(find.byIcon(Icons.history_rounded), findsOneWidget);
 
       playlistsCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     testWidgets('PlaylistDetailScreen renders AmbientBackdrop and HQ cover of the latest added track with cover hash', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
 
       final trackWithCover = const Track(
         id: 25,
@@ -654,12 +631,12 @@ void main() {
 
       final store = LibraryStore();
       store.addPlaylist(playlist);
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
       playlistsCtrl.selectPlaylist(playlist);
 
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -696,14 +673,9 @@ void main() {
 
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     testWidgets('PlaylistDetailScreen highlights and marks currently playing track with equalizer and primary color', (tester) async {
-      final db = AppDatabase.inMemory();
-      final backend = _PlaybackTestBackendClient(database: db);
-
       final playingTrack = const Track(
         id: 77,
         filePath: '/music/now_playing.mp3',
@@ -735,15 +707,14 @@ void main() {
       );
 
       final store = LibraryStore();
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
       playlistsCtrl.selectPlaylist(playlist);
 
-      final playbackCtrl = PlaybackController(
-        backend: backend,
+      final playbackCtrl = _TestPlaybackController(
         settingsRepository: settingsRepository,
       );
 
-      backend.emitState(
+      playbackCtrl.emitPlaybackState(
         PlaybackState(
           playing: true,
           playables: [
@@ -778,17 +749,12 @@ void main() {
 
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     testWidgets('AlbumDetailScreen highlights and marks currently playing track with equalizer and primary color', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-
-      final db = AppDatabase.inMemory();
-      final backend = _PlaybackTestBackendClient(database: db);
 
       final playingTrack = const Track(
         id: 101,
@@ -846,12 +812,11 @@ void main() {
       final store = LibraryStore.fromSnapshot(snapshot);
       final album = store.getAlbumById(10)!;
 
-      final playbackCtrl = PlaybackController(
-        backend: backend,
+      final playbackCtrl = _TestPlaybackController(
         settingsRepository: settingsRepository,
       );
 
-      backend.emitState(
+      playbackCtrl.emitPlaybackState(
         PlaybackState(
           playing: true,
           playables: [
@@ -883,17 +848,12 @@ void main() {
       expect(find.byType(MiniPlayerBar), findsOneWidget);
 
       playbackCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     testWidgets('TracksScreen highlights and marks currently playing track with equalizer and primary color', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-
-      final db = AppDatabase.inMemory();
-      final backend = _PlaybackTestBackendClient(database: db);
 
       final rawTracks = [
         const RawTrackDto(
@@ -928,20 +888,18 @@ void main() {
 
       final store = LibraryStore.fromSnapshot(snapshot);
       final libraryCtrl = LibraryController(
-        backend: backend,
         store: store,
         settingsRepository: settingsRepository,
       );
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
 
-      final playbackCtrl = PlaybackController(
-        backend: backend,
+      final playbackCtrl = _TestPlaybackController(
         settingsRepository: settingsRepository,
       );
 
       final playingTrack = store.tracks.first;
 
-      backend.emitState(
+      playbackCtrl.emitPlaybackState(
         PlaybackState(
           playing: true,
           playables: [
@@ -970,8 +928,6 @@ void main() {
       libraryCtrl.dispose();
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     test('Genre coverHash searches internal tracks and picks first non-empty thumbnailHash', () {
@@ -1012,9 +968,6 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
-
       final rawTracks = [
         const RawTrackDto(
           id: 301,
@@ -1044,7 +997,6 @@ void main() {
 
       final store = LibraryStore.fromSnapshot(snapshot);
       final libraryCtrl = LibraryController(
-        backend: backend,
         store: store,
         settingsRepository: settingsRepository,
       );
@@ -1064,17 +1016,12 @@ void main() {
       expect(albumArt.quality, ThumbnailQuality.medium);
 
       libraryCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
 
     testWidgets('GenreDetailScreen renders AmbientBackdrop and HQ cover of genre', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-
-      final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
 
       final rawTracks = [
         const RawTrackDto(
@@ -1107,8 +1054,8 @@ void main() {
       final genre = store.getGenreById(40)!;
 
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -1132,8 +1079,6 @@ void main() {
       expect(headerArt.thumbnailHash, 'ambient_hash_99');
 
       playbackCtrl.dispose();
-      await backend.dispose();
-      await db.close();
     });
   });
 }

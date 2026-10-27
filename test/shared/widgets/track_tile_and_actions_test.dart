@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
@@ -32,22 +31,22 @@ class _TestLocaleRepository extends LocaleRepository {
   }
 }
 
-class _TrackingBackendClient extends DirectTachyonBackendClient {
-  final List<int> insertNextTrackIds = [];
-  final List<List<int>> appendTrackIds = [];
+class _TrackingPlaybackController extends PlaybackController {
+  final List<Track> insertNextTracks = [];
+  final List<Track> appendTracksList = [];
 
-  _TrackingBackendClient({super.database});
+  _TrackingPlaybackController({required super.settingsRepository});
 
   @override
-  Future<void> insertNext(int trackId) async {
-    insertNextTrackIds.add(trackId);
-    await super.insertNext(trackId);
+  Future<void> playNext(Track track) async {
+    insertNextTracks.add(track);
+    await super.playNext(track);
   }
 
   @override
-  Future<void> append(List<int> trackIds) async {
-    appendTrackIds.add(trackIds);
-    await super.append(trackIds);
+  Future<void> addToQueue(Track track) async {
+    appendTracksList.add(track);
+    await super.addToQueue(track);
   }
 }
 
@@ -55,12 +54,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AppDatabase db;
-  late _TrackingBackendClient backend;
   late SettingsRepository settingsRepo;
   late SettingsController settingsController;
   late _TestLocaleRepository localeRepo;
   late LocaleController localeController;
-  late PlaybackController playbackController;
+  late _TrackingPlaybackController playbackController;
   late LibraryStore store;
   late LibraryController libraryController;
   late PlaylistsController playlistsController;
@@ -104,19 +102,15 @@ void main() {
       ['My Mix', PlaylistType.user.index],
     );
 
-    backend = _TrackingBackendClient(database: db);
-
     settingsController = SettingsController(
       repository: settingsRepo,
-      backend: backend,
     );
 
     localeRepo = _TestLocaleRepository();
     localeController = LocaleController(localeRepo, 'en');
     await localeController.whenReady;
 
-    playbackController = PlaybackController(
-      backend: backend,
+    playbackController = _TrackingPlaybackController(
       settingsRepository: settingsRepo,
     );
 
@@ -152,16 +146,14 @@ void main() {
       trackGenres: const [],
     );
 
-    store = LibraryStore.fromSnapshot(snapshot);
+    store = LibraryStore.fromSnapshot(snapshot, db);
 
     libraryController = LibraryController(
-      backend: backend,
       settingsRepository: settingsRepo,
       store: store,
     );
 
     playlistsController = PlaylistsController(
-      backend: backend,
       store: store,
     );
   });
@@ -171,7 +163,6 @@ void main() {
     libraryController.dispose();
     playbackController.dispose();
     settingsController.dispose();
-    backend.dispose();
     await db.close();
   });
 
@@ -241,8 +232,8 @@ void main() {
     await tester.tap(find.text(localeController.localeStrings.trPlayNext));
     await tester.pumpAndSettle();
 
-    // Verify backend received insertNext
-    expect(backend.insertNextTrackIds, contains(trackA.id));
+    // Verify playbackController received insertNext
+    expect(playbackController.insertNextTracks.map((t) => t.id), contains(trackA.id));
 
     // Tap menu button again
     await tester.tap(menuButton);
@@ -252,8 +243,8 @@ void main() {
     await tester.tap(find.text(localeController.localeStrings.trAddQueue));
     await tester.pumpAndSettle();
 
-    // Verify backend received append
-    expect(backend.appendTrackIds.any((ids) => ids.contains(trackA.id)), isTrue);
+    // Verify playbackController received append
+    expect(playbackController.appendTracksList.map((t) => t.id), contains(trackA.id));
   });
 
   testWidgets('TrackTile shows Add to Playlist dialog when selected', (tester) async {
@@ -427,7 +418,6 @@ void main() {
     // Add trackA to "My Mix" first
     final userPl = store.playlists.firstWhere((p) => p.name == 'My Mix');
     store.addTrackToPlaylist(userPl.id!, trackA.id!);
-    playlistsController.updateStore(store);
 
     await tester.pumpWidget(
       buildApp(
@@ -581,7 +571,6 @@ void main() {
       (tester) async {
     final userPl = store.playlists.firstWhere((p) => p.name == 'My Mix');
     store.addTrackToPlaylist(userPl.id!, trackA.id!);
-    playlistsController.updateStore(store);
 
     expect(userPl.entries.length, 1);
 

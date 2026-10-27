@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:tachyon/core/store/domain/album_sort_option.dart';
+import 'package:tachyon/core/store/domain/artist_sort_option.dart';
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
 import 'package:tachyon/core/playback/domain/loop_mode.dart';
@@ -59,6 +61,10 @@ class SettingsRepository {
   static const _keyEqualizerGains = 's_equalizer_gains';
   static const _keyTrackSortBy = 's_track_sort_by';
   static const _keyTrackSortAscending = 's_track_sort_ascending';
+  static const _keyAlbumSortBy = 's_album_sort_by';
+  static const _keyAlbumSortAscending = 's_album_sort_ascending';
+  static const _keyArtistSortBy = 's_artist_sort_by';
+  static const _keyArtistSortAscending = 's_artist_sort_ascending';
   static const _keyLyricsDisplayMode = 's_lyrics_display_mode';
   static const _keyPlaybackShowLyrics = 's_playback_show_lyrics';
   static const _keyPlaybackShowQueue = 's_playback_show_queue';
@@ -67,6 +73,7 @@ class SettingsRepository {
   static const _keyLyricsTranslationSourceLang =
       's_lyrics_translation_source_lang';
   static const _keyAudioOutputDeviceId = 's_audio_output_device_id';
+  static const _keyPauseOnDeviceChange = 's_pause_on_device_change';
   static const _keyEqualizerPreset = 's_equalizer_preset';
   static const _keyAccentColor = 's_accent_color_val';
   static const _keyIsOledMode = 's_is_oled_mode';
@@ -128,12 +135,21 @@ class SettingsRepository {
         _prefs.getString(_keyTrackSortBy),
       ),
       trackSortAscending: _prefs.getBool(_keyTrackSortAscending) ?? true,
+      albumSortOption: AlbumSortOption.fromString(
+        _prefs.getString(_keyAlbumSortBy),
+      ),
+      albumSortAscending: _prefs.getBool(_keyAlbumSortAscending) ?? true,
+      artistSortOption: ArtistSortOption.fromString(
+        _prefs.getString(_keyArtistSortBy),
+      ),
+      artistSortAscending: _prefs.getBool(_keyArtistSortAscending) ?? true,
       lyricsDisplayMode: LyricsDisplayMode.values.firstWhere(
         (e) => e.name == _prefs.getString(_keyLyricsDisplayMode),
         orElse: () => LyricsDisplayMode.original,
       ),
       playbackShowLyrics: _prefs.getBool(_keyPlaybackShowLyrics) ?? false,
       playbackShowQueue: _prefs.getBool(_keyPlaybackShowQueue) ?? false,
+      pauseOnDeviceChange: _prefs.getBool(_keyPauseOnDeviceChange) ?? true,
       audioOutputDeviceId: _prefs.getString(_keyAudioOutputDeviceId),
       lastPlayedFilePath: _prefs.getString(_keyLastPlayedFilePath),
       lastPlayedPositionMs: _prefs.getInt(_keyLastPlayedPosition) ?? 0,
@@ -196,9 +212,14 @@ class SettingsRepository {
       ),
       _prefs.setString(_keyTrackSortBy, settings.trackSortOption.name),
       _prefs.setBool(_keyTrackSortAscending, settings.trackSortAscending),
+      _prefs.setString(_keyAlbumSortBy, settings.albumSortOption.name),
+      _prefs.setBool(_keyAlbumSortAscending, settings.albumSortAscending),
+      _prefs.setString(_keyArtistSortBy, settings.artistSortOption.name),
+      _prefs.setBool(_keyArtistSortAscending, settings.artistSortAscending),
       _prefs.setString(_keyLyricsDisplayMode, settings.lyricsDisplayMode.name),
       _prefs.setBool(_keyPlaybackShowLyrics, settings.playbackShowLyrics),
       _prefs.setBool(_keyPlaybackShowQueue, settings.playbackShowQueue),
+      _prefs.setBool(_keyPauseOnDeviceChange, settings.pauseOnDeviceChange),
       _prefs.setInt(_keyLastPlayedPosition, settings.lastPlayedPositionMs),
       _prefs.setBool(_keyEqualizerEnabled, settings.equalizerEnabled),
       _prefs.setString(_keyEqualizerPreset, settings.equalizerPreset),
@@ -254,6 +275,32 @@ class SettingsRepository {
   Future<void> setTrackSortAscending(bool ascending) =>
       _prefs.setBool(_keyTrackSortAscending, ascending);
 
+  AlbumSortOption getAlbumSortOption() {
+    return AlbumSortOption.fromString(_prefs.getString(_keyAlbumSortBy));
+  }
+
+  Future<void> setAlbumSortOption(AlbumSortOption option) =>
+      _prefs.setString(_keyAlbumSortBy, option.name);
+
+  bool getAlbumSortAscending() =>
+      _prefs.getBool(_keyAlbumSortAscending) ?? true;
+
+  Future<void> setAlbumSortAscending(bool ascending) =>
+      _prefs.setBool(_keyAlbumSortAscending, ascending);
+
+  ArtistSortOption getArtistSortOption() {
+    return ArtistSortOption.fromString(_prefs.getString(_keyArtistSortBy));
+  }
+
+  Future<void> setArtistSortOption(ArtistSortOption option) =>
+      _prefs.setString(_keyArtistSortBy, option.name);
+
+  bool getArtistSortAscending() =>
+      _prefs.getBool(_keyArtistSortAscending) ?? true;
+
+  Future<void> setArtistSortAscending(bool ascending) =>
+      _prefs.setBool(_keyArtistSortAscending, ascending);
+
   LyricsDisplayMode getLyricsDisplayMode() {
     final modeName = _prefs.getString(_keyLyricsDisplayMode);
     return LyricsDisplayMode.values.firstWhere(
@@ -289,6 +336,12 @@ class SettingsRepository {
       _prefs.setString(_keyLyricsTranslationSourceLang, lang);
 
   String? getAudioOutputDeviceId() => _prefs.getString(_keyAudioOutputDeviceId);
+
+  bool getPauseOnDeviceChange() =>
+      _prefs.getBool(_keyPauseOnDeviceChange) ?? true;
+
+  Future<void> setPauseOnDeviceChange(bool pause) =>
+      _prefs.setBool(_keyPauseOnDeviceChange, pause);
 
   Future<void> setAudioOutputDeviceId(String? id) async {
     if (id == null) {

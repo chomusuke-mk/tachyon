@@ -180,7 +180,7 @@ void main() {
     });
 
     testWidgets('Mobile NavigationBar and popup menu have NO search destination', (tester) async {
-      tester.view.physicalSize = const Size(400, 800);
+      tester.view.physicalSize = const Size(320, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 

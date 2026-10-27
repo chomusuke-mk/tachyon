@@ -7,8 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/backend/backend_client.dart';
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
@@ -79,8 +77,8 @@ CatalogSnapshot _createSampleSnapshot() {
 
 class _TestPlaybackController extends PlaybackController {
   _TestPlaybackController({
-    required super.backend,
     required super.settingsRepository,
+    super.store,
   });
 
   Track? _mockTrack;
@@ -99,13 +97,12 @@ void main() {
 
   late LocaleController localeController;
   late AppDatabase db;
-  late DirectTachyonBackendClient backend;
+  late LyricsManager lyricsManager;
   late SettingsRepository settingsRepo;
   late SettingsController settingsController;
   late LibraryStore libraryStore;
   late LibraryController libraryController;
   late _TestPlaybackController playbackController;
-  late LyricsController lyricsController;
   late PlaylistsController playlistsController;
   late GlobalKey<NavigatorState> navigatorKey;
 
@@ -118,29 +115,22 @@ void main() {
     await localeController.whenReady;
 
     db = AppDatabase.inMemory();
-    backend = DirectTachyonBackendClient(database: db);
+    lyricsManager = LyricsManager(database: db);
     libraryStore = LibraryStore.fromSnapshot(_createSampleSnapshot());
 
     settingsController = SettingsController(
       repository: settingsRepo,
-      backend: backend,
     );
     libraryController = LibraryController(
-      backend: backend,
       settingsRepository: settingsRepo,
       store: libraryStore,
     );
     playbackController = _TestPlaybackController(
-      backend: backend,
       settingsRepository: settingsRepo,
-    );
-    lyricsController = LyricsController(
-      backendClient: backend,
-      playbackController: playbackController,
-      settingsRepository: settingsRepo,
+      store: libraryStore,
     );
     playlistsController = PlaylistsController(
-      backend: backend,
+      store: libraryStore,
     );
     navigatorKey = GlobalKey<NavigatorState>();
   });
@@ -149,22 +139,21 @@ void main() {
     settingsController.dispose();
     libraryController.dispose();
     playbackController.dispose();
-    lyricsController.dispose();
     playlistsController.dispose();
-    await backend.dispose();
     await db.close();
   });
 
   Widget buildApp(Widget child) {
     return MultiProvider(
       providers: [
-        Provider<TachyonBackendClient>.value(value: backend),
+        Provider<AppDatabase>.value(value: db),
+        ChangeNotifierProvider<LibraryStore>.value(value: libraryStore),
+        Provider<LyricsManager>.value(value: lyricsManager),
         Provider<SettingsRepository>.value(value: settingsRepo),
         ChangeNotifierProvider<SettingsController>.value(value: settingsController),
         ChangeNotifierProvider<LocaleController>.value(value: localeController),
         ChangeNotifierProvider<LibraryController>.value(value: libraryController),
         ChangeNotifierProvider<PlaybackController>.value(value: playbackController),
-        ChangeNotifierProvider<LyricsController>.value(value: lyricsController),
         ChangeNotifierProvider<PlaylistsController>.value(value: playlistsController),
       ],
       child: MaterialApp(

@@ -3,15 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/widgets/album_card.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/features/search/presentation/search_screen.dart';
 import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
 import 'package:tachyon/shared/widgets/app_icon.dart';
 
 import 'album_detail_screen.dart';
 import 'library_controller.dart';
-
-enum AlbumSortOption { title, artist, year, trackCount }
 
 class AlbumsScreen extends StatefulWidget {
   const AlbumsScreen({super.key});
@@ -21,62 +18,7 @@ class AlbumsScreen extends StatefulWidget {
 }
 
 class _AlbumsScreenState extends State<AlbumsScreen> {
-  AlbumSortOption _sortOption = AlbumSortOption.title;
-  bool _ascending = true;
   bool _isCardView = true;
-
-  List<Album>? _lastSourceAlbums;
-  AlbumSortOption? _lastSortOption;
-  bool? _lastAscending;
-  List<Album> _cachedAlbums = const [];
-
-  List<Album> _getSortedAlbums(List<Album> source) {
-    if (identical(source, _lastSourceAlbums) &&
-        _sortOption == _lastSortOption &&
-        _ascending == _lastAscending) {
-      return _cachedAlbums;
-    }
-    final albums = List<Album>.of(source, growable: false);
-    if (albums.length > 1) {
-      switch (_sortOption) {
-        case AlbumSortOption.title:
-          final keys = <Album, String>{
-            for (final a in albums) a: a.name.toLowerCase(),
-          };
-          albums.sort((a, b) {
-            final cmp = keys[a]!.compareTo(keys[b]!);
-            return _ascending ? cmp : -cmp;
-          });
-          break;
-        case AlbumSortOption.artist:
-          final keys = <Album, String>{
-            for (final a in albums) a: (a.artist?.name ?? '').toLowerCase(),
-          };
-          albums.sort((a, b) {
-            final cmp = keys[a]!.compareTo(keys[b]!);
-            return _ascending ? cmp : -cmp;
-          });
-          break;
-        case AlbumSortOption.year:
-          albums.sort((a, b) {
-            final cmp = (a.year ?? 0).compareTo(b.year ?? 0);
-            return _ascending ? cmp : -cmp;
-          });
-          break;
-        case AlbumSortOption.trackCount:
-          albums.sort((a, b) {
-            final cmp = a.trackCount.compareTo(b.trackCount);
-            return _ascending ? cmp : -cmp;
-          });
-          break;
-      }
-    }
-    _lastSourceAlbums = source;
-    _lastSortOption = _sortOption;
-    _lastAscending = _ascending;
-    _cachedAlbums = albums;
-    return albums;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +26,7 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
     final library = context.watch<LibraryController>();
     final isDesktop = TachyonBreakpoints.isDesktop(context);
 
-    final albums = _getSortedAlbums(library.albums);
+    final albums = library.albums;
 
     return Scaffold(
       appBar: AppBar(
@@ -123,32 +65,91 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
           PopupMenuButton<AlbumSortOption>(
             icon: const Icon(Icons.sort_rounded),
             tooltip: strings.alSort,
-            onSelected: (option) {
-              setState(() {
-                if (_sortOption == option) {
-                  _ascending = !_ascending;
-                } else {
-                  _sortOption = option;
-                  _ascending = true;
-                }
-              });
-            },
+            onSelected: (option) => library.setAlbumSortOption(option),
             itemBuilder: (context) => [
               PopupMenuItem(
                 value: AlbumSortOption.title,
-                child: Text(strings.alSortTitle),
+                child: Row(
+                  children: [
+                    if (library.albumSortOption == AlbumSortOption.title)
+                      Icon(
+                        library.albumSortAscending
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        size: 16,
+                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        strings.alSortTitle,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: AlbumSortOption.artist,
-                child: Text(strings.alSortArtist),
+                child: Row(
+                  children: [
+                    if (library.albumSortOption == AlbumSortOption.artist)
+                      Icon(
+                        library.albumSortAscending
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        size: 16,
+                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        strings.alSortArtist,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: AlbumSortOption.year,
-                child: Text(strings.alSortYear),
+                child: Row(
+                  children: [
+                    if (library.albumSortOption == AlbumSortOption.year)
+                      Icon(
+                        library.albumSortAscending
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        size: 16,
+                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        strings.alSortYear,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: AlbumSortOption.trackCount,
-                child: Text(strings.alSortTrackCount),
+                child: Row(
+                  children: [
+                    if (library.albumSortOption == AlbumSortOption.trackCount)
+                      Icon(
+                        library.albumSortAscending
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        size: 16,
+                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        strings.alSortTrackCount,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

@@ -5,7 +5,6 @@ import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/album.dart';
@@ -35,6 +34,24 @@ class _FileSystemLocaleRepository extends LocaleRepository {
     );
     stringMap.removeWhere((_, value) => value.isEmpty);
     return stringMap;
+  }
+}
+
+class _PlaybackControllerWithMockPlayAll extends PlaybackController {
+  _PlaybackControllerWithMockPlayAll({
+    required super.settingsRepository,
+    super.store,
+  });
+
+  List<Track>? lastPlayedTracks;
+
+  @override
+  Future<void> playAll(
+    List<Track> tracks, {
+    bool shuffle = false,
+    int? startIndex,
+  }) async {
+    lastPlayedTracks = tracks;
   }
 }
 
@@ -507,9 +524,8 @@ void main() {
       final album = store.getAlbumById(10)!;
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
-      final playback = PlaybackController(
-        backend: backend,
+      final playback = _PlaybackControllerWithMockPlayAll(
+        store: store,
         settingsRepository: settingsRepository,
       );
 
@@ -542,8 +558,11 @@ void main() {
       await tester.tap(find.text(strings.alPlayAll));
       await tester.pumpAndSettle();
 
+      expect(playback.lastPlayedTracks, isNotNull);
+      expect(playback.lastPlayedTracks!.length, equals(2));
+      expect(identical(playback.lastPlayedTracks!.first, album.tracks.first), isTrue);
+
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -556,9 +575,7 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final playback = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
       );
 
@@ -582,7 +599,6 @@ void main() {
       expect(find.text(strings.alPlayAll), findsOneWidget);
 
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -597,13 +613,11 @@ void main() {
       final artist = store.getArtistById(1)!;
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final playback = PlaybackController(
-        backend: backend,
+        store: store,
         settingsRepository: settingsRepository,
       );
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
@@ -633,7 +647,6 @@ void main() {
 
       libraryCtrl.dispose();
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -642,13 +655,11 @@ void main() {
       final store = LibraryStore.fromSnapshot(snapshot);
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final playback = PlaybackController(
-        backend: backend,
+        store: store,
         settingsRepository: settingsRepository,
       );
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
@@ -680,7 +691,6 @@ void main() {
 
       libraryCtrl.dispose();
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
 

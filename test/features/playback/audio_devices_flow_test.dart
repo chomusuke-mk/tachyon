@@ -2,46 +2,41 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/playback/legacy/audio_engine_service.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
-class _FakeAudioEngineService extends AudioEngineService {
+class _FakeAudioDevicesProvider {
   final StreamController<List<AudioDevice>> _devController =
       StreamController<List<AudioDevice>>.broadcast();
 
-  @override
   Stream<List<AudioDevice>> get devicesStream => _devController.stream;
 
-  @override
   Future<List<AudioDevice>> getAudioDevices() async => const [];
 
   void emitAudioDevices(List<AudioDevice> devices) {
     _devController.add(devices);
   }
 
-  @override
   Future<void> dispose() async {
     await _devController.close();
-    await super.dispose();
   }
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('AudioDevice reactive flow and miniaudio_player 2.0.0 integration', () {
+  group('AudioDevice reactive flow and miniaudio_player 3.0.1 integration', () {
     late SettingsRepository settingsRepo;
-    late _FakeAudioEngineService audioEngine;
+    late _FakeAudioDevicesProvider audioEngine;
     late PlaybackController controller;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       settingsRepo = SettingsRepository(prefs);
-      audioEngine = _FakeAudioEngineService();
+      audioEngine = _FakeAudioDevicesProvider();
       controller = PlaybackController(
-        audioEngine: audioEngine,
+        devicesStream: audioEngine.devicesStream,
         settingsRepository: settingsRepo,
       );
     });

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:miniaudio_player/miniaudio_player.dart'
     show CrossfeedMode, Reverb;
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
+import 'package:tachyon/core/store/domain/album_sort_option.dart';
+import 'package:tachyon/core/store/domain/artist_sort_option.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
 import 'package:tachyon/core/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
@@ -35,6 +37,7 @@ class AppSettings {
   final bool limiterEnabled; // default true
   final double volumeBoost; // 100.0% to 200.0% (default 100.0)
   final bool exclusiveAudio; // Windows WASAPI exclusive (default false)
+  final bool pauseOnDeviceChange; // default true
   final String? audioOutputDeviceId;
 
   // Appearance & Localization
@@ -51,6 +54,10 @@ class AppSettings {
   // Library Sorting
   final TrackSortOption trackSortOption;
   final bool trackSortAscending;
+  final AlbumSortOption albumSortOption;
+  final bool albumSortAscending;
+  final ArtistSortOption artistSortOption;
+  final bool artistSortAscending;
 
   // Playback & Lyrics View Persistence
   final LyricsDisplayMode lyricsDisplayMode;
@@ -95,6 +102,7 @@ class AppSettings {
     this.limiterEnabled = true,
     this.volumeBoost = 100.0,
     this.exclusiveAudio = false,
+    this.pauseOnDeviceChange = true,
     this.audioOutputDeviceId,
     this.themeMode = ThemeMode.dark,
     this.accentColorValue = 0xFF7C4DFF,
@@ -107,6 +115,10 @@ class AppSettings {
     this.lyricsTranslationSourceLang = 'auto',
     this.trackSortOption = TrackSortOption.title,
     this.trackSortAscending = true,
+    this.albumSortOption = AlbumSortOption.title,
+    this.albumSortAscending = true,
+    this.artistSortOption = ArtistSortOption.name,
+    this.artistSortAscending = true,
     this.lyricsDisplayMode = LyricsDisplayMode.original,
     this.playbackShowLyrics = false,
     this.playbackShowQueue = false,
@@ -170,6 +182,7 @@ class AppSettings {
           limiterEnabled == other.limiterEnabled &&
           volumeBoost == other.volumeBoost &&
           exclusiveAudio == other.exclusiveAudio &&
+          pauseOnDeviceChange == other.pauseOnDeviceChange &&
           audioOutputDeviceId == other.audioOutputDeviceId &&
           themeMode == other.themeMode &&
           accentColorValue == other.accentColorValue &&
@@ -182,6 +195,10 @@ class AppSettings {
           lyricsTranslationSourceLang == other.lyricsTranslationSourceLang &&
           trackSortOption == other.trackSortOption &&
           trackSortAscending == other.trackSortAscending &&
+          albumSortOption == other.albumSortOption &&
+          albumSortAscending == other.albumSortAscending &&
+          artistSortOption == other.artistSortOption &&
+          artistSortAscending == other.artistSortAscending &&
           lyricsDisplayMode == other.lyricsDisplayMode &&
           playbackShowLyrics == other.playbackShowLyrics &&
           playbackShowQueue == other.playbackShowQueue &&
@@ -218,6 +235,7 @@ class AppSettings {
     bool? limiterEnabled,
     double? volumeBoost,
     bool? exclusiveAudio,
+    bool? pauseOnDeviceChange,
     String? audioOutputDeviceId,
     ThemeMode? themeMode,
     int? accentColorValue,
@@ -231,6 +249,10 @@ class AppSettings {
     String? lyricsTranslationSourceLang,
     TrackSortOption? trackSortOption,
     bool? trackSortAscending,
+    AlbumSortOption? albumSortOption,
+    bool? albumSortAscending,
+    ArtistSortOption? artistSortOption,
+    bool? artistSortAscending,
     LyricsDisplayMode? lyricsDisplayMode,
     bool? playbackShowLyrics,
     bool? playbackShowQueue,
@@ -268,6 +290,7 @@ class AppSettings {
       limiterEnabled: limiterEnabled ?? this.limiterEnabled,
       volumeBoost: volumeBoost ?? this.volumeBoost,
       exclusiveAudio: exclusiveAudio ?? this.exclusiveAudio,
+      pauseOnDeviceChange: pauseOnDeviceChange ?? this.pauseOnDeviceChange,
       audioOutputDeviceId: audioOutputDeviceId ?? this.audioOutputDeviceId,
       themeMode: themeMode ?? this.themeMode,
       accentColorValue: accentColorValue ?? this.accentColorValue,
@@ -284,6 +307,10 @@ class AppSettings {
           lyricsTranslationSourceLang ?? this.lyricsTranslationSourceLang,
       trackSortOption: trackSortOption ?? this.trackSortOption,
       trackSortAscending: trackSortAscending ?? this.trackSortAscending,
+      albumSortOption: albumSortOption ?? this.albumSortOption,
+      albumSortAscending: albumSortAscending ?? this.albumSortAscending,
+      artistSortOption: artistSortOption ?? this.artistSortOption,
+      artistSortAscending: artistSortAscending ?? this.artistSortAscending,
       lyricsDisplayMode: lyricsDisplayMode ?? this.lyricsDisplayMode,
       playbackShowLyrics: playbackShowLyrics ?? this.playbackShowLyrics,
       playbackShowQueue: playbackShowQueue ?? this.playbackShowQueue,
@@ -323,6 +350,7 @@ class AppSettings {
     limiterEnabled,
     volumeBoost,
     exclusiveAudio,
+    pauseOnDeviceChange,
     audioOutputDeviceId,
     themeMode,
     accentColorValue,
@@ -335,6 +363,10 @@ class AppSettings {
     lyricsTranslationSourceLang,
     trackSortOption,
     trackSortAscending,
+    albumSortOption,
+    albumSortAscending,
+    artistSortOption,
+    artistSortAscending,
     lyricsDisplayMode,
     playbackShowLyrics,
     playbackShowQueue,

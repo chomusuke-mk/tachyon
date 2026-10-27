@@ -62,6 +62,7 @@ class SettingsController extends ChangeNotifier {
   String get lyricsTranslationTargetLang => _settings.lyricsTranslationTargetLang;
   String get lyricsTranslationSourceLang => _settings.lyricsTranslationSourceLang;
   String? get audioOutputDeviceId => _settings.audioOutputDeviceId;
+  bool get pauseOnDeviceChange => _settings.pauseOnDeviceChange;
   bool get equalizerEnabled => _settings.equalizerEnabled;
   String get equalizerPreset => _settings.equalizerPreset;
   List<double> get equalizerGains => _settings.equalizerGains;
@@ -100,6 +101,7 @@ class SettingsController extends ChangeNotifier {
       await pb.setCrossfeed(_settings.crossfeedMode);
       await pb.setSpatializer(_settings.spatializerWidth);
       await pb.setLimiter(_settings.limiterEnabled);
+      await pb.setPauseOnDeviceChange(_settings.pauseOnDeviceChange);
       await pb.setReverb(_settings.reverbConfig);
       await pb.setLoopMode(_settings.loopMode);
 
@@ -268,6 +270,13 @@ class SettingsController extends ChangeNotifier {
   Future<void> setAudioOutputDeviceId(String? deviceId) async {
     _settings = _settings.copyWith(audioOutputDeviceId: deviceId);
     await _repository.setAudioOutputDeviceId(deviceId);
+    notifyListeners();
+  }
+
+  Future<void> setPauseOnDeviceChange(bool pause) async {
+    _settings = _settings.copyWith(pauseOnDeviceChange: pause);
+    await _repository.setPauseOnDeviceChange(pause);
+    await _playbackController?.setPauseOnDeviceChange(pause);
     notifyListeners();
   }
 

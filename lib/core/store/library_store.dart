@@ -11,6 +11,8 @@ import 'package:tachyon/core/store/domain/genre.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
+import 'package:tachyon/core/store/domain/album_sort_option.dart';
+import 'package:tachyon/core/store/domain/artist_sort_option.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
 
 /// In-memory relational graph for the Main Isolate.
@@ -1007,6 +1009,99 @@ class LibraryStore extends ChangeNotifier {
     });
 
     return List<Track>.generate(n, (i) => list[indices[i]], growable: false);
+  }
+
+  List<Album> sortAlbums(
+    List<Album> list,
+    AlbumSortOption option, {
+    bool ascending = true,
+  }) {
+    if (list.length <= 1) return List<Album>.of(list);
+
+    final albums = List<Album>.of(list);
+    switch (option) {
+      case AlbumSortOption.title:
+        final lowerNames = {for (final a in albums) a: a.name.toLowerCase()};
+        albums.sort((a, b) {
+          final cmp = lowerNames[a]!.compareTo(lowerNames[b]!);
+          return ascending ? cmp : -cmp;
+        });
+        break;
+      case AlbumSortOption.artist:
+        final lowerArtists = {
+          for (final a in albums) a: (a.artist?.name ?? '').toLowerCase(),
+        };
+        final lowerNames = {for (final a in albums) a: a.name.toLowerCase()};
+        albums.sort((a, b) {
+          var cmp = lowerArtists[a]!.compareTo(lowerArtists[b]!);
+          if (cmp == 0) {
+            cmp = lowerNames[a]!.compareTo(lowerNames[b]!);
+          }
+          return ascending ? cmp : -cmp;
+        });
+        break;
+      case AlbumSortOption.year:
+        final lowerNames = {for (final a in albums) a: a.name.toLowerCase()};
+        albums.sort((a, b) {
+          var cmp = (a.year ?? 0).compareTo(b.year ?? 0);
+          if (cmp == 0) {
+            cmp = lowerNames[a]!.compareTo(lowerNames[b]!);
+          }
+          return ascending ? cmp : -cmp;
+        });
+        break;
+      case AlbumSortOption.trackCount:
+        final lowerNames = {for (final a in albums) a: a.name.toLowerCase()};
+        albums.sort((a, b) {
+          var cmp = a.trackCount.compareTo(b.trackCount);
+          if (cmp == 0) {
+            cmp = lowerNames[a]!.compareTo(lowerNames[b]!);
+          }
+          return ascending ? cmp : -cmp;
+        });
+        break;
+    }
+    return List.unmodifiable(albums);
+  }
+
+  List<Artist> sortArtists(
+    List<Artist> list,
+    ArtistSortOption option, {
+    bool ascending = true,
+  }) {
+    if (list.length <= 1) return List<Artist>.of(list);
+
+    final artists = List<Artist>.of(list);
+    switch (option) {
+      case ArtistSortOption.name:
+        final lowerNames = {for (final a in artists) a: a.name.toLowerCase()};
+        artists.sort((a, b) {
+          final cmp = lowerNames[a]!.compareTo(lowerNames[b]!);
+          return ascending ? cmp : -cmp;
+        });
+        break;
+      case ArtistSortOption.albums:
+        final lowerNames = {for (final a in artists) a: a.name.toLowerCase()};
+        artists.sort((a, b) {
+          var cmp = a.albumCount.compareTo(b.albumCount);
+          if (cmp == 0) {
+            cmp = lowerNames[a]!.compareTo(lowerNames[b]!);
+          }
+          return ascending ? cmp : -cmp;
+        });
+        break;
+      case ArtistSortOption.tracks:
+        final lowerNames = {for (final a in artists) a: a.name.toLowerCase()};
+        artists.sort((a, b) {
+          var cmp = a.trackCount.compareTo(b.trackCount);
+          if (cmp == 0) {
+            cmp = lowerNames[a]!.compareTo(lowerNames[b]!);
+          }
+          return ascending ? cmp : -cmp;
+        });
+        break;
+    }
+    return List.unmodifiable(artists);
   }
 
   List<Track> filterTracks({Album? album, Artist? artist, Genre? genre}) {

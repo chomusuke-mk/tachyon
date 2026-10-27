@@ -6,7 +6,6 @@ import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tachyon/core/backend/direct_backend_client.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/album.dart';
@@ -62,6 +61,7 @@ void main() {
 
   Widget createTestHarness({
     required Widget child,
+    LibraryStore? store,
     LibraryController? libraryController,
     PlaybackController? playbackController,
     PlaylistsController? playlistsController,
@@ -69,6 +69,8 @@ void main() {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<LocaleController>.value(value: localeController),
+        if (store != null)
+          ChangeNotifierProvider<LibraryStore>.value(value: store),
         if (libraryController != null)
           ChangeNotifierProvider<LibraryController>.value(
             value: libraryController,
@@ -204,20 +206,17 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
       final playlistsCtrl = PlaylistsController(
-        backend: backend,
         store: store,
       );
 
@@ -259,7 +258,6 @@ void main() {
       libraryCtrl.dispose();
       playbackCtrl.dispose();
       playlistsCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -303,15 +301,14 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
       final playlist = store.getPlaylistById(1)!;
 
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
       playlistsCtrl.selectPlaylist(playlist);
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -329,7 +326,6 @@ void main() {
 
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
   });
@@ -429,20 +425,17 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
       final playlistsCtrl = PlaylistsController(
-        backend: backend,
         store: store,
       );
 
@@ -477,7 +470,6 @@ void main() {
       libraryCtrl.dispose();
       playbackCtrl.dispose();
       playlistsCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -523,15 +515,14 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
       final playlist = store.getPlaylistById(2)!;
 
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
       playlistsCtrl.selectPlaylist(playlist);
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -548,7 +539,6 @@ void main() {
 
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
   });
@@ -568,9 +558,7 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final playback = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
       );
 
@@ -596,7 +584,6 @@ void main() {
       expect(shuffleButton.onPressed, isNull);
 
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -618,11 +605,9 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
@@ -653,7 +638,6 @@ void main() {
       expect(find.text('Alpha Album'), findsOneWidget);
 
       libraryCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -676,18 +660,16 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
       final emptyArtist = store.getArtistById(301)!;
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playback = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -718,7 +700,6 @@ void main() {
 
       libraryCtrl.dispose();
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -738,11 +719,9 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
@@ -771,7 +750,6 @@ void main() {
       expect(find.text('Zorro'), findsOneWidget);
 
       libraryCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -790,17 +768,15 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playback = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -831,7 +807,6 @@ void main() {
 
       libraryCtrl.dispose();
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
   });
@@ -918,11 +893,9 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
@@ -940,7 +913,6 @@ void main() {
       expect(find.text('!Special'), findsOneWidget);
 
       libraryCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
   });
@@ -975,20 +947,17 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
       final playlistsCtrl = PlaylistsController(
-        backend: backend,
         store: store,
       );
 
@@ -1014,7 +983,6 @@ void main() {
       libraryCtrl.dispose();
       playbackCtrl.dispose();
       playlistsCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -1045,20 +1013,17 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore.fromSnapshot(snapshot);
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
       final playlistsCtrl = PlaylistsController(
-        backend: backend,
         store: store,
       );
 
@@ -1084,7 +1049,6 @@ void main() {
       libraryCtrl.dispose();
       playbackCtrl.dispose();
       playlistsCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -1097,17 +1061,15 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore();
 
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playback = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       await tester.pumpWidget(
@@ -1123,7 +1085,6 @@ void main() {
 
       libraryCtrl.dispose();
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -1136,9 +1097,7 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final playback = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
       );
 
@@ -1155,7 +1114,6 @@ void main() {
       expect(find.text(strings.trUnknownArtist), findsOneWidget);
 
       playback.dispose();
-      await backend.dispose();
       await db.close();
     });
 
@@ -1172,18 +1130,16 @@ void main() {
       );
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore();
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playbackCtrl = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
-      final playlistsCtrl = PlaylistsController(backend: backend, store: store);
+      final playlistsCtrl = PlaylistsController(store: store);
 
       await tester.pumpWidget(
         createTestHarness(
@@ -1232,7 +1188,6 @@ void main() {
       libraryCtrl.dispose();
       playbackCtrl.dispose();
       playlistsCtrl.dispose();
-      await backend.dispose();
       await db.close();
     });
   });
@@ -1354,16 +1309,14 @@ void main() {
       await esLocaleController.whenReady;
 
       final db = AppDatabase.inMemory();
-      final backend = DirectTachyonBackendClient(database: db);
       final store = LibraryStore();
       final libraryCtrl = LibraryController(
-        backend: backend,
         settingsRepository: settingsRepository,
         store: store,
       );
       final playback = PlaybackController(
-        backend: backend,
         settingsRepository: settingsRepository,
+        store: store,
       );
 
       const track = Track(

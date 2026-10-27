@@ -414,6 +414,10 @@ class AppStringKey {
   String get sExclusiveAudio => _cadenasLocalizadas['s_exclusive_audio'] ?? '';
   String get sExclusiveAudioDesc =>
       _cadenasLocalizadas['s_exclusive_audio_desc'] ?? '';
+  String get sPauseOnDeviceChange =>
+      _cadenasLocalizadas['s_pause_on_device_change'] ?? '';
+  String get sPauseOnDeviceChangeDesc =>
+      _cadenasLocalizadas['s_pause_on_device_change_desc'] ?? '';
   String get sReplayGainMode => _cadenasLocalizadas['s_replay_gain_mode'] ?? '';
   String get sReplayGainModeDesc =>
       _cadenasLocalizadas['s_replay_gain_mode_desc'] ?? '';
@@ -834,6 +838,7 @@ class AppStringKey {
     's_crossfade_curve_linear',
     's_audio_output',
     's_audio_output_desc', 's_exclusive_audio', 's_exclusive_audio_desc',
+    's_pause_on_device_change', 's_pause_on_device_change_desc',
     's_replay_gain_mode', 's_replay_gain_mode_desc', 's_replay_gain_preamp',
     's_replay_gain_preamp_desc',
     's_gapless_playback',

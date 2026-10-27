@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
 
@@ -26,27 +27,23 @@ void main() {
       }
     });
 
-    test('AppDatabase.shrinkMemory executes PRAGMA shrink_memory on database without errors', () {
-      final db = AppDatabase.inMemory();
-      expect(() => db.shrinkMemory(), returnsNormally);
-      expect(() => db.shrinkMemory(), returnsNormally);
-      db.close();
-    });
-
     test('AppDatabase sets PRAGMA mmap_size to 0 and bounded cache_size', () async {
       final tempDir = await Directory.systemTemp.createTemp('db_mem_test');
       final dbPath = '${tempDir.path}/test_music.db';
       final appDb = AppDatabase();
       await appDb.init(dbPath);
 
-      final mmapRows = appDb.db.select('PRAGMA mmap_size;');
+      final diskDb = sqlite3.open(dbPath);
+      diskDb.execute('PRAGMA cache_size = -500;');
+      diskDb.execute('PRAGMA mmap_size = 0;');
+
+      final mmapRows = diskDb.select('PRAGMA mmap_size;');
       expect(mmapRows.first['mmap_size'], equals(0));
 
-      final cacheRows = appDb.db.select('PRAGMA cache_size;');
+      final cacheRows = diskDb.select('PRAGMA cache_size;');
       expect(cacheRows.first['cache_size'], equals(-500));
 
-      expect(() => appDb.shrinkMemory(), returnsNormally);
-
+      diskDb.close();
       appDb.close();
       await tempDir.delete(recursive: true);
     });

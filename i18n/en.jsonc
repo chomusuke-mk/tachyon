@@ -291,6 +291,8 @@
   "s_audio_output_desc": "Select the sound card or driver used for media output.",
   "s_exclusive_audio": "Exclusive Audio Mode",
   "s_exclusive_audio_desc": "Lock audio device for bit-perfect output on Windows (bypasses OS mixer).",
+  "s_pause_on_device_change": "Pause on Device Change",
+  "s_pause_on_device_change_desc": "Automatically pause playback when headphones are disconnected or the audio output device changes.",
   "s_replay_gain_mode": "ReplayGain Normalization",
   "s_replay_gain_mode_desc": "Equalize loudness across tracks and albums automatically.",
   "s_replay_gain_preamp": "ReplayGain Preamp",

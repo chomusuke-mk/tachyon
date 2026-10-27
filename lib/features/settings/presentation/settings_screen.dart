@@ -573,6 +573,16 @@ class SettingsScreen extends StatelessWidget {
                     type: ControllerType.switchCtrl,
                     child: Switch(value: true, onChanged: null),
                   ),
+                  const Divider(),
+                  SettingRow(
+                    title: strings.sPauseOnDeviceChange,
+                    description: strings.sPauseOnDeviceChangeDesc,
+                    type: ControllerType.switchCtrl,
+                    child: Switch(
+                      value: settings.pauseOnDeviceChange,
+                      onChanged: (val) => settings.setPauseOnDeviceChange(val),
+                    ),
+                  ),
                 ],
               ),
             ),
