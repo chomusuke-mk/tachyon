@@ -49,10 +49,7 @@ app.*.map.json
 /app/src/
 /venv/
 /dist/
-/.agents/
-/app/src_old/
-/docs-from-otro-player
 # Widget Preview related
 .widget_preview/
-/JSON/
+
 /rust/

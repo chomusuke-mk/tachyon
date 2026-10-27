@@ -181,6 +181,7 @@ words:
   - httpx
   - hwnd
   - HWND
+  - ICONIFIED
   - icudtl
   - ifdef
   - ifndef
@@ -444,6 +445,7 @@ words:
   - strfreev
   - subcarpeta
   - SUBLANG
+  - sublist
   - Submenús
   - subosito
   - subprocesos
@@ -471,6 +473,7 @@ words:
   - timeframe
   - tipado
   - TIPADO
+  - Titlebar
   - tkinter
   - tldextract
   - tmpfilename
