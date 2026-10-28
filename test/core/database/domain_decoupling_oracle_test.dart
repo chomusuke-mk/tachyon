@@ -57,7 +57,7 @@ void main() {
         artists: [Artist(id: 2, name: 'Queue Artist')],
       );
 
-      final entry = PlaylistEntry.forQueue(id: 0, track: track);
+      final entry = PlaylistEntry(id: 0, position: 0, addedAt: 0, track: track);
       final dynamic dynamicItem = entry;
 
       expect(() => dynamicItem.lyrics, throwsNoSuchMethodError);

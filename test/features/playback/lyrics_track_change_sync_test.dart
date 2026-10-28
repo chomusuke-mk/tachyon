@@ -52,7 +52,7 @@ class _DelayedLyricsManager extends LyricsManager {
     bool enableLrclib = true,
     bool enableLyricsOvh = true,
     bool forceRefresh = false,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     void Function(LyricsResult retryResult)? onThresholdRetryResolved,
   }) async {
     if (remotePaths.contains(filePath)) {
@@ -81,7 +81,7 @@ class _DelayedLyricsManager extends LyricsManager {
     required String targetLanguage,
     String sourceLanguage = 'autodetect',
     bool forceRefresh = false,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
   }) async {
     if (delayTranslations && lyricsId != null && remoteTranslationIds.contains(lyricsId)) {
       await pendingTranslations

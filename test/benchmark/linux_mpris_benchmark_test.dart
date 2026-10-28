@@ -39,7 +39,7 @@ class _BenchmarkPlaybackController extends PlaybackController {
   bool get isShuffled => _benchmarkState.shuffle;
 
   @override
-  Loop get loopMode => _benchmarkState.loop;
+  LoopMode get loopMode => _benchmarkState.loop;
 
   @override
   double get rate => _benchmarkState.rate;
@@ -112,7 +112,7 @@ class _BenchmarkPlaybackController extends PlaybackController {
   }
 
   @override
-  Future<void> setLoopMode(Loop loop) async {
+  Future<void> setLoopMode(LoopMode loop) async {
     emitState(_benchmarkState.copyWith(loop: loop));
   }
 

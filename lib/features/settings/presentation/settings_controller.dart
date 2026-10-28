@@ -36,7 +36,7 @@ class SettingsController extends ChangeNotifier {
   double get volume => _settings.volume;
   double get playbackRate => _settings.playbackRate;
   double get playbackPitch => _settings.playbackPitch;
-  Loop get loopMode => _settings.loopMode;
+  LoopMode get loopMode => _settings.loopMode;
   bool get shuffle => _settings.shuffle;
   bool get skipSilence => _settings.skipSilence;
   bool get volumeNormalization => _settings.volumeNormalization;

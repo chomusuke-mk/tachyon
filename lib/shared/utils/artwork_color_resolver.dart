@@ -99,6 +99,3 @@ abstract final class ArtworkColorResolver {
     }
   }
 }
-
-/// Backwards compatibility alias for [ArtworkColorResolver].
-typedef MiniPlayerColorResolver = ArtworkColorResolver;

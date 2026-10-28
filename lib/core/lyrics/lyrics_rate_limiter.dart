@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'package:tachyon/shared/utils/cancellation_token.dart';
+
+export 'package:tachyon/shared/utils/cancellation_token.dart'
+    show CancellationToken;
 
 /// Exception thrown when a throttled or in-flight lyrics request is cancelled
 /// before execution or while waiting in the pacing queue.
@@ -12,54 +16,22 @@ class LyricsCancelledException implements Exception {
   String toString() => 'LyricsCancelledException: $message';
 }
 
-/// Lightweight cancellation token used to abort pending throttled requests,
-/// countdown timers, and in-flight operations when rapid track skips occur.
-class LyricsCancellationToken {
-  bool _isCancelled = false;
-  final List<void Function()> _listeners = [];
-
-  bool get isCancelled => _isCancelled;
-
-  /// Marks this token as cancelled and notifies all registered listeners.
-  void cancel() {
-    if (_isCancelled) return;
-    _isCancelled = true;
-    for (final listener in List.of(_listeners)) {
-      try {
-        listener();
-      } catch (_) {}
-    }
-    _listeners.clear();
-  }
-
-  /// Registers a listener callback invoked immediately if already cancelled,
-  /// or when [cancel] is called.
-  void onCancelled(void Function() callback) {
-    if (_isCancelled) {
-      callback();
-    } else {
-      _listeners.add(callback);
-    }
-  }
-}
-
 /// Monotonic generation tracker managing track transition tokens.
 ///
 /// Ensures rapid track changes (e.g. 1 -> 2 -> 3 -> 4 -> 5) immediately
 /// cancel older in-flight or throttled operations, preventing stale lyric overwrites.
 class LyricsGenerationTracker {
   int _activeToken = 0;
-  LyricsCancellationToken? _activeCancellationToken;
+  CancellationToken? _activeCancellationToken;
 
   int get activeToken => _activeToken;
-  LyricsCancellationToken? get activeCancellationToken =>
-      _activeCancellationToken;
+  CancellationToken? get activeCancellationToken => _activeCancellationToken;
 
   /// Advances generation counter, cancels previous token, and returns fresh token.
-  LyricsCancellationToken nextGeneration() {
+  CancellationToken nextGeneration() {
     _activeCancellationToken?.cancel();
     _activeToken++;
-    final token = LyricsCancellationToken();
+    final token = CancellationToken();
     _activeCancellationToken = token;
     return token;
   }

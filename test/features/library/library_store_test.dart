@@ -5,6 +5,7 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
@@ -849,6 +850,57 @@ void main() {
       expect(store.getArtistById(2)?.thumbnailHash, equals('album_10_hash'));
       expect(store.getArtistById(3)?.thumbnailHash, equals('track_100_hash'));
       expect(store.getArtistById(4)?.thumbnailHash, isNull);
+    });
+
+    test('Ephemeral tracks (id < 0) register, resolve in O(1), and do not pollute catalog', () {
+      final store = LibraryStore();
+
+      // Initially empty catalog
+      expect(store.tracks, isEmpty);
+
+      // Register external file
+      final track = store.registerEphemeralTrack(
+        '/external/unindexed_track.flac',
+        title: 'External Track',
+        artist: 'External Artist',
+      );
+
+      expect(track.id, isNotNull);
+      expect(track.id!, lessThan(0));
+      expect(track.title, equals('External Track'));
+      expect(track.artists.first.name, equals('External Artist'));
+
+      // Lookups resolve in O(1)
+      expect(store.getTrackById(track.id!), equals(track));
+      expect(store.getTrackByPath('/external/unindexed_track.flac'), equals(track));
+
+      // Catalog indexed lists are strictly NOT contaminated
+      expect(store.tracks, isEmpty);
+      expect(store.allTracks, isEmpty);
+      expect(store.artists, isEmpty);
+
+      // Re-registering the same path returns the identical instance
+      final sameTrack = store.registerEphemeralTrack('/external/unindexed_track.flac');
+      expect(identical(sameTrack, track), isTrue);
+
+      // Updating metadata
+      final updated = Track(
+        id: track.id,
+        filePath: track.filePath,
+        title: 'Updated External Track',
+        durationMs: 180000,
+        fileSize: 5000000,
+        modifiedAt: 123456,
+        artists: track.artists,
+      );
+      store.updateEphemeralTrack(updated);
+      expect(store.getTrackById(track.id!)?.title, equals('Updated External Track'));
+      expect(store.getTrackById(track.id!)?.durationMs, equals(180000));
+
+      // Removing ephemeral track
+      store.removeEphemeralTrack(track.id!);
+      expect(store.getTrackById(track.id!), isNull);
+      expect(store.getTrackByPath('/external/unindexed_track.flac'), isNull);
     });
   });
 }

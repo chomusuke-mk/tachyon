@@ -289,7 +289,7 @@ class LrclibClient {
     required String artistName,
     String? albumName,
     int? durationSeconds,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     bool Function()? isCancelled,
   }) async {
     bool cancelled() =>
@@ -503,7 +503,7 @@ class LrclibClient {
   /// Serializes outgoing requests to satisfy the [_minPacing] (500ms) rule.
   /// Aborts immediately in <1ms if [cancellationToken] is cancelled.
   Future<void> _enforcePacing({
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     bool Function()? isCancelled,
   }) {
     if (_minPacing <= Duration.zero) {
@@ -532,7 +532,7 @@ class LrclibClient {
                   final timer = Timer(wait, () {
                     if (!delayCompleter.isCompleted) delayCompleter.complete();
                   });
-                  cancellationToken.onCancelled(() {
+                  cancellationToken.onCancel(() {
                     timer.cancel();
                     if (!delayCompleter.isCompleted) delayCompleter.complete();
                   });

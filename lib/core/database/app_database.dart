@@ -25,6 +25,7 @@ abstract final class AppDatabaseSchema {
     'CREATE TABLE IF NOT EXISTS playlist_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, position INTEGER NOT NULL, added_at INTEGER NOT NULL, playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE, track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE);',
     'CREATE TABLE IF NOT EXISTS lyrics (id INTEGER PRIMARY KEY AUTOINCREMENT, track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, source TEXT NOT NULL, state TEXT NOT NULL DEFAULT \'FOUND\', raw_lrc TEXT, is_synced INTEGER DEFAULT 0, lang TEXT, updated_at INTEGER NOT NULL, UNIQUE(track_id, source));',
     'CREATE TABLE IF NOT EXISTS lyrics_translations (id INTEGER PRIMARY KEY AUTOINCREMENT, lyrics_id INTEGER NOT NULL REFERENCES lyrics(id) ON DELETE CASCADE, lang TEXT NOT NULL, translated_lines TEXT NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(lyrics_id, lang));',
+    'CREATE TABLE IF NOT EXISTS radio_stations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, stream_url TEXT NOT NULL UNIQUE, homepage_url TEXT, favicon_url TEXT, genre TEXT, country TEXT, bitrate_kbps INTEGER, codec TEXT, is_favorite INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);',
   ];
 
   static const List<String> indexes = [
@@ -42,6 +43,7 @@ abstract final class AppDatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_playlist_entries_track_id ON playlist_entries(track_id);',
     'CREATE INDEX IF NOT EXISTS idx_lyrics_track_source ON lyrics(track_id, source);',
     'CREATE INDEX IF NOT EXISTS idx_lyrics_translations_lookup ON lyrics_translations(lyrics_id, lang);',
+    'CREATE INDEX IF NOT EXISTS idx_radio_stations_favorite ON radio_stations(is_favorite);',
   ];
 }
 

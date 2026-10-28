@@ -152,7 +152,7 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
     if (hash == _lastThumbnailHash) return;
     _lastThumbnailHash = hash;
 
-    MiniPlayerColorResolver.resolveColor(
+    ArtworkColorResolver.resolveColor(
       thumbnailHash: hash,
       theme: theme,
     ).then((color) {

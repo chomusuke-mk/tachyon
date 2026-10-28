@@ -512,7 +512,6 @@ void main() {
       );
 
       // Should skip track 4 (addedAt 400, null hash) and pick track 3 (addedAt 300, 'hash_latest')
-      playlist.coverHash = LibraryStore.computePlaylistCoverHash(playlist);
       expect(playlist.coverHash, equals('hash_latest'));
     });
 
@@ -628,7 +627,6 @@ void main() {
           PlaylistEntry(id: 1, position: 0, addedAt: 1000, track: trackWithCover),
         ],
       );
-      playlist.coverHash = LibraryStore.computePlaylistCoverHash(playlist);
 
       final store = LibraryStore();
       store.addPlaylist(playlist);
@@ -952,7 +950,6 @@ void main() {
       );
 
       final emptyGenre = Genre(id: 1, name: 'Empty Genre', tracks: []);
-      emptyGenre.coverHash = LibraryStore.computeGenreCoverHash(emptyGenre);
       expect(emptyGenre.coverHash, isNull);
 
       final genreWithCover = Genre(
@@ -960,7 +957,6 @@ void main() {
         name: 'Rock',
         tracks: [trackWithoutCover, trackWithCover],
       );
-      genreWithCover.coverHash = LibraryStore.computeGenreCoverHash(genreWithCover);
       expect(genreWithCover.coverHash, 'genre_track_cover_hash');
     });
 

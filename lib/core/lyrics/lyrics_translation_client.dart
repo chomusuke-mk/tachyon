@@ -353,7 +353,7 @@ class LyricsTranslationClient {
         }
 
         final responseStatus =
-            ParserUtils.parseInt(decoded['responseStatus']) ?? 200;
+            ParseUtils.parseInt(decoded['responseStatus']) ?? 200;
         if (responseStatus == 429) {
           if (attempt == 0) continue;
           throw const LyricsTranslationException(
@@ -374,7 +374,7 @@ class LyricsTranslationClient {
         }
 
         final responseData = decoded['responseData'] as Map<String, dynamic>?;
-        final rawTranslatedText = ParserUtils.parseString(
+        final rawTranslatedText = ParseUtils.parseString(
           responseData?['translatedText'],
         );
         if (rawTranslatedText == null) {

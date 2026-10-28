@@ -21,7 +21,7 @@ class FakeLrclib extends LrclibClient {
     required String artistName,
     String? albumName,
     int? durationSeconds,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     bool Function()? isCancelled,
   }) async {
     calls++;

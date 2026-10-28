@@ -88,7 +88,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
     _lastRequestedKey = cacheKey;
     _currentThumbnailHash = thumbnailHash;
 
-    MiniPlayerColorResolver.resolveColor(
+    ArtworkColorResolver.resolveColor(
       thumbnailHash: thumbnailHash,
       theme: theme,
     ).then((color) {
@@ -124,8 +124,8 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
     final Color targetColor;
 
     if (cacheKey != null &&
-        MiniPlayerColorResolver.cache.containsKey(cacheKey)) {
-      targetColor = MiniPlayerColorResolver.cache[cacheKey]!;
+        ArtworkColorResolver.cache.containsKey(cacheKey)) {
+      targetColor = ArtworkColorResolver.cache[cacheKey]!;
     } else if (_extractedColor != null &&
         _currentThumbnailHash == thumbnailHash) {
       targetColor = _extractedColor!;
@@ -308,14 +308,14 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                               alignment: Alignment.center,
                               children: [
                                 Icon(
-                                  playback.loopMode != Loop.off
-                                      ? (playback.loopMode == Loop.one
+                                  playback.loopMode != LoopMode.off
+                                      ? (playback.loopMode == LoopMode.one
                                             ? Icons.repeat_one_rounded
                                             : Icons.repeat_rounded)
                                       : Icons.repeat_rounded,
                                   size: 24,
                                 ),
-                                if (playback.loopMode == Loop.all)
+                                if (playback.loopMode == LoopMode.all)
                                   Positioned(
                                     child: Text(
                                       'A',
@@ -328,12 +328,12 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                   ),
                               ],
                             ),
-                            color: playback.loopMode != Loop.off
+                            color: playback.loopMode != LoopMode.off
                                 ? colorScheme.primary
                                 : colorScheme.onSurfaceVariant,
-                            tooltip: playback.loopMode == Loop.one
+                            tooltip: playback.loopMode == LoopMode.one
                                 ? strings.npRepeatOne
-                                : (playback.loopMode == Loop.all
+                                : (playback.loopMode == LoopMode.all
                                       ? strings.npRepeatAll
                                       : strings.npRepeatOff),
                             onPressed: playback.toggleLoopMode,

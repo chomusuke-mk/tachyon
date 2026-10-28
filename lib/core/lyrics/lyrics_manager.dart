@@ -82,7 +82,7 @@ class LyricsManager {
 
   final LyricsGenerationTracker _generationTracker = LyricsGenerationTracker();
   final Map<int, Future<LyricsResult>> _inFlight = {};
-  LyricsCancellationToken? _translationToken;
+  CancellationToken? _translationToken;
   Timer? _debounceTimer;
   Completer<LyricsResult>? _pendingDebounceCompleter;
 
@@ -135,7 +135,7 @@ class LyricsManager {
     bool enableLyricsOvh = true,
     bool forceRefresh = false,
     Duration? debounceOverride,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     void Function(LyricsResult retryResult)? onThresholdRetryResolved,
   }) async {
     _debounceTimer?.cancel();
@@ -204,7 +204,7 @@ class LyricsManager {
     required bool enableLrclib,
     required bool enableLyricsOvh,
     required bool forceRefresh,
-    required LyricsCancellationToken token,
+    required CancellationToken token,
     void Function(LyricsResult retryResult)? onThresholdRetryResolved,
   }) async {
     if (token.isCancelled) return LyricsResult.cancelled;
@@ -250,7 +250,7 @@ class LyricsManager {
     bool enableLrclib = true,
     bool enableLyricsOvh = true,
     bool forceRefresh = false,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     void Function(LyricsResult retryResult)? onThresholdRetryResolved,
   }) {
     if (trackId != null && !forceRefresh && cancellationToken == null) {
@@ -304,7 +304,7 @@ class LyricsManager {
     required bool enableLrclib,
     required bool enableLyricsOvh,
     required bool forceRefresh,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     void Function(LyricsResult retryResult)? onThresholdRetryResolved,
   }) async {
     bool isCancelled() => cancellationToken?.isCancelled ?? false;
@@ -509,10 +509,10 @@ class LyricsManager {
     required String targetLanguage,
     String sourceLanguage = 'autodetect',
     bool forceRefresh = false,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
   }) async {
     _translationToken?.cancel();
-    final token = cancellationToken ?? LyricsCancellationToken();
+    final token = cancellationToken ?? CancellationToken();
     _translationToken = token;
 
     final cleanTarget = targetLanguage.trim().toLowerCase();
@@ -580,7 +580,7 @@ class LyricsManager {
     required String artist,
     String? album,
     int? durationSeconds,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     void Function(LyricsResult retryResult)? onThresholdRetryResolved,
     required bool enableLyricsOvhFallback,
     bool preserveExistingFound = false,
@@ -720,7 +720,7 @@ class LyricsManager {
     required int? trackId,
     required String artist,
     required String title,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     bool preserveExistingFound = false,
     int? existingId,
     String? existingRawLrc,

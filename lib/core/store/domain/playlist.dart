@@ -37,20 +37,6 @@ class PlaylistEntry {
     this.playlist,
   });
 
-  factory PlaylistEntry.forQueue({
-    required int id,
-    int position = 0,
-    required Track track,
-    int? addedAt,
-  }) {
-    return PlaylistEntry(
-      id: id,
-      position: position,
-      addedAt: addedAt ?? DateTime.now().millisecondsSinceEpoch,
-      track: track,
-    );
-  }
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -71,18 +57,35 @@ class Playlist {
   final PlaylistType type;
   final List<PlaylistEntry> entries;
 
-  /// Only for UI
-  String? coverHash;
-
   int get trackCount => entries.length;
   bool get isSpecial => type != PlaylistType.user;
 
-  Playlist({
+  /// Dynamically resolved from the most recently added entry with a valid cover hash.
+  String? get coverHash {
+    if (entries.isEmpty) return null;
+    final sorted = List<PlaylistEntry>.from(entries)
+      ..sort((a, b) {
+        final cmp = b.addedAt.compareTo(a.addedAt);
+        if (cmp != 0) return cmp;
+        return b.position.compareTo(a.position);
+      });
+    for (final entry in sorted) {
+      final track = entry.track;
+      if (track != null) {
+        final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
+        if (hash != null && hash.trim().isNotEmpty) {
+          return hash.trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  const Playlist({
     this.id,
     required this.name,
     required this.createdAt,
     this.type = PlaylistType.user,
     this.entries = const [],
-    this.coverHash,
   });
 }

@@ -174,9 +174,9 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     }
 
     final asRepeatMode = switch (state.loop) {
-      Loop.off => as_lib.AudioServiceRepeatMode.none,
-      Loop.one => as_lib.AudioServiceRepeatMode.one,
-      Loop.all => as_lib.AudioServiceRepeatMode.all,
+      LoopMode.off => as_lib.AudioServiceRepeatMode.none,
+      LoopMode.one => as_lib.AudioServiceRepeatMode.one,
+      LoopMode.all => as_lib.AudioServiceRepeatMode.all,
     };
 
     final asShuffleMode = state.shuffle
@@ -269,10 +269,10 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   @override
   Future<void> setRepeatMode(as_lib.AudioServiceRepeatMode repeatMode) async {
     final targetLoop = switch (repeatMode) {
-      as_lib.AudioServiceRepeatMode.none => Loop.off,
-      as_lib.AudioServiceRepeatMode.one => Loop.one,
+      as_lib.AudioServiceRepeatMode.none => LoopMode.off,
+      as_lib.AudioServiceRepeatMode.one => LoopMode.one,
       as_lib.AudioServiceRepeatMode.all ||
-      as_lib.AudioServiceRepeatMode.group => Loop.all,
+      as_lib.AudioServiceRepeatMode.group => LoopMode.all,
     };
     await playbackController.setLoopMode(targetLoop);
   }

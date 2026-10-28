@@ -682,14 +682,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   alignment: Alignment.center,
                   children: [
                     Icon(
-                      playback.loopMode != Loop.off
-                          ? (playback.loopMode == Loop.one
+                      playback.loopMode != LoopMode.off
+                          ? (playback.loopMode == LoopMode.one
                                 ? Icons.repeat_one_rounded
                                 : Icons.repeat_rounded)
                           : Icons.repeat_rounded,
                       size: 24,
                     ),
-                    if (playback.loopMode == Loop.all)
+                    if (playback.loopMode == LoopMode.all)
                       Positioned(
                         child: Text(
                           'A',
@@ -702,12 +702,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                       ),
                   ],
                 ),
-                color: playback.loopMode != Loop.off
+                color: playback.loopMode != LoopMode.off
                     ? colorScheme.primary
                     : colorScheme.onSurfaceVariant,
-                tooltip: playback.loopMode == Loop.one
+                tooltip: playback.loopMode == LoopMode.one
                     ? strings.npRepeatOne
-                    : (playback.loopMode == Loop.all
+                    : (playback.loopMode == LoopMode.all
                           ? strings.npRepeatAll
                           : strings.npRepeatOff),
                 onPressed: playback.toggleLoopMode,

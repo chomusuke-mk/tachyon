@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+export 'package:tachyon/shared/utils/cancellation_token.dart'
+    show CancellationToken;
 
 /// Stage states of the library scan lifecycle.
 enum ScanStage {
@@ -117,31 +119,4 @@ class ScanProgress {
   @override
   String toString() =>
       'ScanProgress($stage, label: $progressLabel, value: $progressValue, error: $errorMessage)';
-}
-
-/// Token enabling cooperative cancellation of asynchronous scan pipelines.
-class CancellationToken {
-  bool _isCancelled = false;
-  final List<VoidCallback> _callbacks = [];
-
-  bool get isCancelled => _isCancelled;
-
-  void cancel() {
-    if (_isCancelled) return;
-    _isCancelled = true;
-    for (final callback in _callbacks) {
-      try {
-        callback();
-      } catch (_) {}
-    }
-    _callbacks.clear();
-  }
-
-  void onCancel(VoidCallback callback) {
-    if (_isCancelled) {
-      callback();
-    } else {
-      _callbacks.add(callback);
-    }
-  }
 }

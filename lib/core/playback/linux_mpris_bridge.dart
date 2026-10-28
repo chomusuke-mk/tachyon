@@ -65,9 +65,9 @@ class LinuxMprisBridge {
 
   String get loopStatus {
     return switch (playbackController.state.loop) {
-      Loop.off => 'None',
-      Loop.one => 'Track',
-      Loop.all => 'Playlist',
+      LoopMode.off => 'None',
+      LoopMode.one => 'Track',
+      LoopMode.all => 'Playlist',
     };
   }
 
@@ -191,9 +191,9 @@ class LinuxMprisBridge {
 
   Future<void> setLoopStatus(String loopStr) async {
     final targetLoop = switch (loopStr) {
-      'Track' => Loop.one,
-      'Playlist' => Loop.all,
-      _ => Loop.off,
+      'Track' => LoopMode.one,
+      'Playlist' => LoopMode.all,
+      _ => LoopMode.off,
     };
     await playbackController.setLoopMode(targetLoop);
     _scheduleSync(isMetadataChange: false);

@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/core/metadata/metadata_utils.dart';
-import 'package:tachyon/shared/utils/parse_utils.dart';
+import 'package:tachyon/shared/utils/crypto_utils.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
@@ -187,11 +187,11 @@ void main() {
     });
 
     test('Standardized hash methods produce deterministic SHA-256 hashes', () {
-      final bytesHash = ParserUtils.computeBytesHash(Uint8List.fromList([1, 2, 3, 4]));
-      final strHash = ParserUtils.computeStringHash('Queen');
+      final bytesHash = CryptoUtils.computeBytesHash(Uint8List.fromList([1, 2, 3, 4]));
+      final strHash = CryptoUtils.computeStringHash('Queen');
 
       expect(bytesHash, isNotEmpty);
-      expect(strHash, ParserUtils.computeStringHash('Queen'));
+      expect(strHash, CryptoUtils.computeStringHash('Queen'));
     });
 
     test('hasCachedThumbnail and listCachedThumbnails track saved files', () {
@@ -211,7 +211,7 @@ void main() {
         MetadataUtils.hasCachedThumbnail(hash, quality: ThumbnailQuality.high),
         isFalse,
       );
-      expect(MetadataUtils.listCachedThumbnails().length, 1);
+      expect(MetadataUtils.listCachedCoverFiles().length, 1);
     });
 
     test('clearTempDirectory removes temporary files without touching saved covers', () async {

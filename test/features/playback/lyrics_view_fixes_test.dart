@@ -101,7 +101,7 @@ Line 10 plain
     bool enableLrclib = true,
     bool enableLyricsOvh = true,
     bool forceRefresh = false,
-    LyricsCancellationToken? cancellationToken,
+    CancellationToken? cancellationToken,
     void Function(LyricsResult retryResult)? onThresholdRetryResolved,
   }) {
     if (trackId != null && !forceRefresh && cancellationToken == null) {

@@ -36,6 +36,10 @@ class LibraryStore extends ChangeNotifier {
   final Map<int, Genre> _genresById = {};
   final Map<int, Playlist> _playlistsById = {};
 
+  // Ephemeral external tracks (id < 0) for instant zero-latency playback
+  final Map<int, Track> _ephemeralTracksById = {};
+  int _nextEphemeralId = -1;
+
   // Ordered lists
   final List<Track> _allTracks = [];
   final List<Album> _allAlbums = [];
@@ -121,8 +125,55 @@ class LibraryStore extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // O(1) Lookups & In-Memory Queries
   // ---------------------------------------------------------------------------
-  Track? getTrackById(int id) => _tracksById[id];
-  Track? getTrackByPath(String path) => _tracksByPath[path];
+  Track? getTrackById(int id) => id < 0 ? _ephemeralTracksById[id] : _tracksById[id];
+  Track? getTrackByPath(String path) {
+    final indexed = _tracksByPath[path];
+    if (indexed != null) return indexed;
+    for (final t in _ephemeralTracksById.values) {
+      if (t.filePath == path) return t;
+    }
+    return null;
+  }
+
+  /// Registers an external unindexed track with a negative ID (id < 0) for instant playback.
+  /// Does not pollute indexed collections or SQLite.
+  Track registerEphemeralTrack(String filePath, {String? title, String? artist}) {
+    final existing = getTrackByPath(filePath);
+    if (existing != null) return existing;
+
+    for (final track in _ephemeralTracksById.values) {
+      if (track.filePath == filePath) return track;
+    }
+
+    final id = _nextEphemeralId--;
+    final filename = p.basenameWithoutExtension(filePath);
+    final track = Track(
+      id: id,
+      filePath: filePath,
+      title: title ?? (filename.isNotEmpty ? filename : filePath),
+      durationMs: 0,
+      fileSize: 0,
+      modifiedAt: DateTime.now().millisecondsSinceEpoch,
+      artists: artist != null && artist.isNotEmpty ? [Artist(name: artist)] : const [],
+    );
+    _ephemeralTracksById[id] = track;
+    return track;
+  }
+
+  /// Updates metadata of an ephemeral track when background extraction completes.
+  void updateEphemeralTrack(Track updated) {
+    if (updated.id != null && updated.id! < 0) {
+      _ephemeralTracksById[updated.id!] = updated;
+      notifyListeners();
+    }
+  }
+
+  /// Removes an ephemeral track from session memory.
+  void removeEphemeralTrack(int id) {
+    if (id < 0) {
+      _ephemeralTracksById.remove(id);
+    }
+  }
   List<Track> getTracksInDirectory(String directoryPath) {
     final normalized = p.normalize(directoryPath);
     return UnmodifiableListView(_tracksByDirectory[normalized] ?? const []);
@@ -470,11 +521,6 @@ class LibraryStore extends ChangeNotifier {
       });
     }
 
-    // Compute coverHash for each genre based on its tracks
-    for (final genre in _allGenres) {
-      genre.coverHash = computeGenreCoverHash(genre);
-    }
-
     // 6. Instantiate Playlists and PlaylistEntries linking to Tracks
     final playlistEntriesMap = <int, List<RawPlaylistEntryDto>>{};
     for (final entry in snapshot.playlistEntries) {
@@ -512,8 +558,6 @@ class LibraryStore extends ChangeNotifier {
           _likedTrackIds.add(track!.id!);
         }
       }
-
-      playlist.coverHash = computePlaylistCoverHash(playlist);
     }
 
     _isHydrated = true;
@@ -561,7 +605,6 @@ class LibraryStore extends ChangeNotifier {
           );
         }
       }
-      likedPl.coverHash = computePlaylistCoverHash(likedPl);
     }
     notifyListeners();
   }
@@ -610,8 +653,6 @@ class LibraryStore extends ChangeNotifier {
       }
     }
 
-    playlist.coverHash = computePlaylistCoverHash(playlist);
-
     if (playlist.type == PlaylistType.liked) {
       _likedTrackIdsView = null;
       _likedTrackIds.add(trackId);
@@ -642,7 +683,6 @@ class LibraryStore extends ChangeNotifier {
         );
       }
     }
-    playlist.coverHash = computePlaylistCoverHash(playlist);
     if (playlist.type == PlaylistType.liked) {
       _likedTrackIdsView = null;
       _likedTrackIds.remove(trackId);
@@ -668,12 +708,10 @@ class LibraryStore extends ChangeNotifier {
         track: curr.track,
       );
     }
-    playlist.coverHash = computePlaylistCoverHash(playlist);
     notifyListeners();
   }
 
   void addPlaylist(Playlist playlist) {
-    playlist.coverHash ??= computePlaylistCoverHash(playlist);
     if (playlist.id != null) {
       _playlistsById[playlist.id!] = playlist;
     }
@@ -698,7 +736,6 @@ class LibraryStore extends ChangeNotifier {
       createdAt: playlist.createdAt,
       type: playlist.type,
       entries: playlist.entries,
-      coverHash: playlist.coverHash,
     );
     _playlistsById[playlistId] = updated;
     final index = _allPlaylists.indexWhere((p) => p.id == playlistId);
@@ -711,7 +748,6 @@ class LibraryStore extends ChangeNotifier {
 
   void clearHistory() {
     historyPlaylist?.entries.clear();
-    historyPlaylist?.coverHash = null;
     notifyListeners();
   }
 
@@ -739,19 +775,12 @@ class LibraryStore extends ChangeNotifier {
     for (final genre in track.genres) {
       if (genre.id != null) {
         final g = _genresById[genre.id];
-        if (g != null) {
-          g.tracks.removeWhere((t) => t.id == trackId);
-          g.coverHash = computeGenreCoverHash(g);
-        }
+        g?.tracks.removeWhere((t) => t.id == trackId);
       }
     }
 
     for (final playlist in _allPlaylists) {
-      final had = playlist.entries.any((e) => e.track?.id == trackId);
       playlist.entries.removeWhere((e) => e.track?.id == trackId);
-      if (had) {
-        playlist.coverHash = computePlaylistCoverHash(playlist);
-      }
     }
     _likedTrackIdsView = null;
     _likedTrackIds.remove(trackId);
@@ -866,49 +895,8 @@ class LibraryStore extends ChangeNotifier {
     }
   }
 
-  static String? computePlaylistCoverHash(
-    Playlist playlist, [
-    List<Track>? tracks,
-  ]) {
-    if (playlist.entries.isNotEmpty) {
-      final sorted = List<PlaylistEntry>.from(playlist.entries)
-        ..sort((a, b) {
-          final cmp = b.addedAt.compareTo(a.addedAt);
-          if (cmp != 0) return cmp;
-          return b.position.compareTo(a.position);
-        });
-      for (final entry in sorted) {
-        final track = entry.track;
-        if (track != null) {
-          final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
-          if (hash != null && hash.trim().isNotEmpty) {
-            return hash.trim();
-          }
-        }
-      }
-    }
-
-    if (tracks != null && tracks.isNotEmpty) {
-      for (final track in tracks.reversed) {
-        final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
-        if (hash != null && hash.trim().isNotEmpty) {
-          return hash.trim();
-        }
-      }
-    }
-
-    return null;
-  }
-
-  static String? computeGenreCoverHash(Genre genre) {
-    for (final track in genre.tracks) {
-      final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
-      if (hash != null && hash.trim().isNotEmpty) {
-        return hash.trim();
-      }
-    }
-    return null;
-  }
+  static String? computePlaylistCoverHash(Playlist playlist) => playlist.coverHash;
+  static String? computeGenreCoverHash(Genre genre) => genre.coverHash;
 
   // ---------------------------------------------------------------------------
   // In-Memory Search, Filter, and Sort (0 SQL Calls)

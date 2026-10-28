@@ -14,7 +14,7 @@ export 'package:miniaudio_player/miniaudio_player.dart'
 export 'package:tachyon/core/playback/domain/crossfade_config.dart'
     show CrossfadeCurve;
 export 'package:tachyon/core/playback/domain/loop_mode.dart'
-    show Loop, LoopMode;
+    show LoopMode;
 
 @immutable
 class AppSettings {
@@ -93,7 +93,7 @@ class AppSettings {
     this.volume = 1.0,
     this.playbackRate = 1.0,
     this.playbackPitch = 1.0,
-    this.loopMode = Loop.off,
+    this.loopMode = LoopMode.off,
     this.shuffle = false,
     this.skipSilence = false,
     this.volumeNormalization = true,
@@ -228,7 +228,7 @@ class AppSettings {
     double? volume,
     double? playbackRate,
     double? playbackPitch,
-    Loop? loopMode,
+    LoopMode? loopMode,
     bool? shuffle,
     bool? skipSilence,
     bool? volumeNormalization,

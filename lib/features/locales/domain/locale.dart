@@ -1,9 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 
-/// Alias for [AppStringKey] providing semantic nomenclature.
-typedef AppStrings = AppStringKey;
-
 /// Central domain class managing localized string lookups for Tachyon.
 ///
 /// Exposes strictly-typed camelCase getters for all keys cataloged in

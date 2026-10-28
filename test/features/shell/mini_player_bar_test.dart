@@ -73,10 +73,10 @@ void main() {
   });
 
   setUp(() {
-    MiniPlayerColorResolver.clearCache();
+    ArtworkColorResolver.clearCache();
   });
 
-  group('MiniPlayerColorResolver tests', () {
+  group('ArtworkColorResolver tests', () {
     test('computeColor produces proper contrasts for dark, light, and OLED themes', () {
       const extractedScheme = ColorScheme(
         brightness: Brightness.dark,
@@ -98,7 +98,7 @@ void main() {
       final lightTheme = TachyonTheme.lightTheme;
 
       // Dark theme computation
-      final darkColor = MiniPlayerColorResolver.computeColor(
+      final darkColor = ArtworkColorResolver.computeColor(
         extractedScheme: extractedScheme,
         themeScheme: darkTheme.colorScheme,
         isDark: true,
@@ -108,7 +108,7 @@ void main() {
       expect(darkColor.a, 1.0);
 
       // OLED theme computation
-      final oledColor = MiniPlayerColorResolver.computeColor(
+      final oledColor = ArtworkColorResolver.computeColor(
         extractedScheme: extractedScheme,
         themeScheme: oledTheme.colorScheme,
         isDark: true,
@@ -118,7 +118,7 @@ void main() {
       expect(oledColor.a, 1.0);
 
       // Light theme computation
-      final lightColor = MiniPlayerColorResolver.computeColor(
+      final lightColor = ArtworkColorResolver.computeColor(
         extractedScheme: extractedScheme,
         themeScheme: lightTheme.colorScheme,
         isDark: false,
@@ -130,7 +130,7 @@ void main() {
 
     test('resolveColor returns null gracefully when thumbnail file is absent', () async {
       final darkTheme = TachyonTheme.darkTheme;
-      final color = await MiniPlayerColorResolver.resolveColor(
+      final color = await ArtworkColorResolver.resolveColor(
         thumbnailHash: 'non_existent_hash',
         theme: darkTheme,
       );
@@ -141,9 +141,9 @@ void main() {
       const testHash = 'test_cached_hash';
       const fakeColor = Color(0xFF334455);
       final cacheKey = '$testHash:dark:std';
-      MiniPlayerColorResolver.cache[cacheKey] = fakeColor;
+      ArtworkColorResolver.cache[cacheKey] = fakeColor;
 
-      final color = await MiniPlayerColorResolver.resolveColor(
+      final color = await ArtworkColorResolver.resolveColor(
         thumbnailHash: testHash,
         theme: TachyonTheme.darkTheme,
       );
@@ -276,7 +276,7 @@ void main() {
       const expectedArtColor = Color(0xFF4A2528);
 
       final cacheKey = '$customHash:dark:std';
-      MiniPlayerColorResolver.cache[cacheKey] = expectedArtColor;
+      ArtworkColorResolver.cache[cacheKey] = expectedArtColor;
 
       final track = Track(
         id: 2,

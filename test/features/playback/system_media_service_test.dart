@@ -23,7 +23,7 @@ class FakePlaybackController extends PlaybackController {
   int playCount = 0;
   int pauseCount = 0;
   Duration? lastSeekPosition;
-  Loop? lastSetLoop;
+  LoopMode? lastSetLoop;
   bool? lastShuffle;
   void Function(bool)? onSetMinimized;
 
@@ -56,7 +56,7 @@ class FakePlaybackController extends PlaybackController {
   bool get isShuffled => _fakeState.shuffle;
 
   @override
-  Loop get loopMode => _fakeState.loop;
+  LoopMode get loopMode => _fakeState.loop;
 
   @override
   double get rate => _fakeState.rate;
@@ -95,7 +95,7 @@ class FakePlaybackController extends PlaybackController {
   }
 
   @override
-  Future<void> setLoopMode(Loop loop) async {
+  Future<void> setLoopMode(LoopMode loop) async {
     lastSetLoop = loop;
     emitPlaybackState(_fakeState.copyWith(loop: loop));
   }
@@ -178,7 +178,7 @@ void main() {
           playing: true,
           position: const Duration(seconds: 42),
           duration: const Duration(milliseconds: 240000),
-          loop: Loop.all,
+          loop: LoopMode.all,
           shuffle: true,
         ),
       );
@@ -212,7 +212,7 @@ void main() {
       expect(controller.lastSeekPosition, equals(const Duration(seconds: 90)));
 
       await handler.setRepeatMode(as_lib.AudioServiceRepeatMode.one);
-      expect(controller.lastSetLoop, equals(Loop.one));
+      expect(controller.lastSetLoop, equals(LoopMode.one));
     });
 
     test('onTaskRemoved stops playback only when not playing', () async {
@@ -262,7 +262,7 @@ void main() {
           position: const Duration(seconds: 15),
           duration: const Duration(milliseconds: 180000),
           volume: 0.75,
-          loop: Loop.all,
+          loop: LoopMode.all,
         ),
       );
       await Future<void>.delayed(Duration.zero);

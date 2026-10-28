@@ -372,7 +372,7 @@ class SettingsRepository {
   Future<void> setPlaybackPitch(double pitch) =>
       _prefs.setDouble(_keyPlaybackPitch, pitch.clamp(0.5, 1.5));
 
-  Future<void> setLoopMode(Loop mode) =>
+  Future<void> setLoopMode(LoopMode mode) =>
       _prefs.setString(_keyLoopMode, mode.repr);
 
   Future<void> setShuffle(bool shuffle) => _prefs.setBool(_keyShuffle, shuffle);

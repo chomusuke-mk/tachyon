@@ -273,7 +273,7 @@ void main() {
         modifiedAt: 123456789,
       );
 
-      final entry = PlaylistEntry.forQueue(id: 0, track: track);
+      final entry = PlaylistEntry(id: 0, position: 0, addedAt: 0, track: track);
 
       final dynamic dynamicTrack = track;
       expect(() => dynamicTrack.lyrics, throwsNoSuchMethodError);

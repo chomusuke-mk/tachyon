@@ -48,7 +48,7 @@ class _FakePlaybackController extends PlaybackController {
   bool get isShuffled => _fakeState.shuffle;
 
   @override
-  Loop get loopMode => _fakeState.loop;
+  LoopMode get loopMode => _fakeState.loop;
 
   @override
   double get rate => _fakeState.rate;

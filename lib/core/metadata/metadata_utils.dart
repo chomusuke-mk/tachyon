@@ -8,6 +8,7 @@ import 'package:haudiotagger/haudiotagger.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:path/path.dart' as p;
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/shared/utils/crypto_utils.dart';
 import 'package:tachyon/shared/utils/parse_utils.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
 
@@ -215,8 +216,8 @@ abstract final class MetadataUtils {
     Tag? tag;
     try {
       tag = await Haudiotagger.read(filePath);
-      trackGain = ParserUtils.parseDouble(tag?.replayGainTrackGain);
-      trackPeak = ParserUtils.parseDouble(tag?.replayGainTrackPeak);
+      trackGain = ParseUtils.parseDouble(tag?.replayGainTrackGain);
+      trackPeak = ParseUtils.parseDouble(tag?.replayGainTrackPeak);
     } catch (e) {
       debugPrint('[MetadataService] readMetadata error for $filePath: $e');
     }
@@ -674,14 +675,5 @@ abstract final class MetadataUtils {
       followLinks: false,
     );
     return files.whereType<File>().toList();
-  }
-
-  static List<File> listCachedThumbnails() => listCachedCoverFiles();
-
-  static void disposeBridge() {
-    ui.IsolateNameServer.removePortNameMapping(_kGpuBridgePortName);
-    _gpuBridgePort?.close();
-    _gpuBridgePort = null;
-    _inFlightHashes.clear();
   }
 }
