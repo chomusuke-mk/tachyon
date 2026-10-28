@@ -1,11 +1,11 @@
 class AppDefaults {
-  static const double volumeMax = 100.0;
+  static const double volumeMax = 1.0;
   static const double volumeMin = 0.0;
-  static const double volumeDefault = 100.0;
+  static const double volumeDefault = 1.0;
 
-  static const double volumeBoostMax = 200.0;
-  static const double volumeBoostMin = 100.0;
-  static const double volumeBoostDefault = 100.0;
+  static const double volumeBoostMax = 2.0;
+  static const double volumeBoostMin = 1.0;
+  static const double volumeBoostDefault = 1.0;
 
   static const int crossfadeMinDuration = 0;
   static const int crossfadeMaxDuration = 20;
@@ -22,8 +22,6 @@ class AppDefaults {
   static const double playbackPitchMin = 0.5;
   static const double playbackPitchMax = 1.5;
   static const double playbackPitchDefault = 1.0;
-
-  static const bool audioPlayerAsyncEnabled = false;
 
   // METADATA EXTRACTOR SUPPORT
   /*

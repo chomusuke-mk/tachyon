@@ -43,11 +43,11 @@ class _PlaybackControllerWithMockPlayAll extends PlaybackController {
     super.store,
   });
 
-  List<Track>? lastPlayedTracks;
+  List<AudioPlayable>? lastPlayedTracks;
 
   @override
   Future<void> playAll(
-    List<Track> tracks, {
+    List<AudioPlayable> tracks, {
     bool shuffle = false,
     int? startIndex,
   }) async {

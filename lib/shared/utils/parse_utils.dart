@@ -1,9 +1,13 @@
-import 'dart:convert';
 import 'dart:typed_data';
+import 'crypto_utils.dart';
 
-import 'package:crypto/crypto.dart';
+export 'crypto_utils.dart';
 
-class ParserUtils {
+/// Legacy alias for [ParseUtils].
+typedef ParserUtils = ParseUtils;
+
+/// Robust string and number parsing utilities.
+class ParseUtils {
   static double? parseDouble(dynamic val) {
     if (val == null) return null;
     if (val is num) return val.toDouble();
@@ -30,11 +34,11 @@ class ParserUtils {
     return val.toString();
   }
 
-  static String computeBytesHash(Uint8List bytes) {
-    return sha256.convert(bytes).toString();
-  }
+  /// @deprecated Use [CryptoUtils.computeBytesHash] directly.
+  static String computeBytesHash(Uint8List bytes) =>
+      CryptoUtils.computeBytesHash(bytes);
 
-  static String computeStringHash(String input) {
-    return sha256.convert(utf8.encode(input)).toString();
-  }
+  /// @deprecated Use [CryptoUtils.computeStringHash] directly.
+  static String computeStringHash(String input) =>
+      CryptoUtils.computeStringHash(input);
 }

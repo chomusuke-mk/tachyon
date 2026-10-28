@@ -5,11 +5,14 @@ import 'package:tachyon/features/permissions/presentation/permissions_gate.dart'
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/features/shell/tachyon_shell.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
-import 'package:tachyon/shared/utils/toast_utils.dart';
+
 import 'package:tachyon/shared/widgets/app_background.dart';
 import 'package:tachyon/shared/widgets/desktop_shortcuts_handler.dart';
 
 class App extends StatelessWidget {
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   /// Whether all required runtime permissions were already granted at startup.
   final bool permissionsGranted;
 
@@ -35,7 +38,7 @@ class App extends StatelessWidget {
           );
 
     return MaterialApp(
-      navigatorKey: ToastUtils.navigatorKey,
+      navigatorKey: navigatorKey,
       title: 'Tachyon',
       debugShowCheckedModeBanner: false,
       themeMode: settings.themeMode,
@@ -47,7 +50,7 @@ class App extends StatelessWidget {
           child: child,
           builder: (context, isMinimized, routeChild) {
             return DesktopShortcutsHandler(
-              navigatorKey: ToastUtils.navigatorKey,
+              navigatorKey: navigatorKey,
               child: Stack(
                 fit: StackFit.expand,
                 children: [

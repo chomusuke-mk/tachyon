@@ -5,22 +5,23 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 
+import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart' show AppDatabase;
-import 'package:tachyon/core/playback/domain/crossfade_config.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
-import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 export 'package:miniaudio_player/miniaudio_player.dart'
-    show AudioDevice, CrossfeedMode, Equalizer, Reverb;
+    show AudioDevice, CrossfeedMode, Equalizer, Reverb, EngineItem;
+export 'package:tachyon/core/playback/domain/audio_playable.dart';
+export 'package:tachyon/core/playback/domain/crossfade_config.dart';
 export 'package:tachyon/core/playback/domain/loop_mode.dart';
 
 class PlaybackController extends ChangeNotifier {
   final LibraryStore? _store;
   final SettingsRepository _settingsRepository;
-  ma.MiniaudioEngine<Track>? _engine;
+  ma.MiniaudioEngine<AudioPlayable>? _engine;
   final bool _ownsEngine;
 
   final List<StreamSubscription<dynamic>> _engineSubscriptions = [];
@@ -64,7 +65,7 @@ class PlaybackController extends ChangeNotifier {
   PlaybackController({
     LibraryStore? store,
     required SettingsRepository settingsRepository,
-    ma.MiniaudioEngine<Track>? engine,
+    ma.MiniaudioEngine<AudioPlayable>? engine,
     dynamic audioEngine,
     Stream<List<ma.AudioDevice>>? devicesStream,
   }) : _store = store,
@@ -76,7 +77,7 @@ class PlaybackController extends ChangeNotifier {
       _engine = engine;
       _bindEngine(engine);
       engine.action.setPauseOnDeviceChange(_pauseOnDeviceChange);
-    } else if (audioEngine is ma.MiniaudioEngine<Track>) {
+    } else if (audioEngine is ma.MiniaudioEngine<AudioPlayable>) {
       _engine = audioEngine;
       _bindEngine(audioEngine);
       audioEngine.action.setPauseOnDeviceChange(_pauseOnDeviceChange);
@@ -114,15 +115,15 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  ma.MiniaudioEngine<Track> get engine {
+  ma.MiniaudioEngine<AudioPlayable> get engine {
     if (_engine == null) {
-      final eng = ma.MiniaudioEngine<Track>(
+      final eng = ma.MiniaudioEngine<AudioPlayable>(
         pauseOnDeviceChange: _pauseOnDeviceChange,
         infiniteMixProvider: (count) async {
           final tracks = _store?.getRandomTracks(count) ?? const <Track>[];
           return [
             for (final t in tracks)
-              ma.EngineItem<Track>.file(t.filePath, data: t),
+              t.toEngineItem(),
           ];
         },
       );
@@ -132,7 +133,7 @@ class PlaybackController extends ChangeNotifier {
     return _engine!;
   }
 
-  void _bindEngine(ma.MiniaudioEngine<Track> eng) {
+  void _bindEngine(ma.MiniaudioEngine<AudioPlayable> eng) {
     eng.action.setVisualizerEnabled(false);
     _syncStateFromEngine(eng);
     _isInfiniteMixEnabled = eng.state.infiniteMixEnabled;
@@ -167,6 +168,15 @@ class PlaybackController extends ChangeNotifier {
     );
     _engineSubscriptions.add(
       eng.stream.infiniteMixEnabled.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.volume.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.rate.listen((_) => _syncStateFromEngine(eng)),
+    );
+    _engineSubscriptions.add(
+      eng.stream.pitch.listen((_) => _syncStateFromEngine(eng)),
     );
 
     _positionSubscription = eng.stream.position.listen((pos) {
@@ -205,24 +215,14 @@ class PlaybackController extends ChangeNotifier {
     });
   }
 
-  void _syncStateFromEngine(ma.MiniaudioEngine<Track> eng) {
+  void _syncStateFromEngine(ma.MiniaudioEngine<AudioPlayable> eng) {
     final oldState = _state;
     final engState = eng.state;
     final queueItems = engState.queue;
 
-    final playables = <PlaylistEntry>[
-      for (int i = 0; i < queueItems.length; i++)
-        if (queueItems[i].data != null)
-          PlaylistEntry.forQueue(
-            id: queueItems[i].id ?? i,
-            position: i,
-            track: queueItems[i].data!,
-          ),
-    ];
-
     _state = PlaybackState(
       index: engState.currentIndex,
-      playables: playables,
+      playables: queueItems,
       playing: engState.playing,
       buffering: engState.buffering,
       completed: engState.completed,
@@ -230,9 +230,9 @@ class PlaybackController extends ChangeNotifier {
       duration: engState.duration,
       rate: engState.rate,
       pitch: engState.pitch,
-      volume: engState.volume * 100.0,
+      volume: engState.volume,
       shuffle: engState.shuffle,
-      loop: _unmapLoopMode(engState.loopMode),
+      loop: engState.loopMode,
       crossfadeDuration: engState.crossfadeConfig.duration,
       skipSilence: engState.skipSilence,
       volumeNormalization: engState.volumeNormalization,
@@ -254,22 +254,31 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Track _canonicalTrack(Track track) {
+  AudioPlayable _canonicalPlayable(AudioPlayable playable) {
+    if (playable is! Track) return playable;
     final store = _store;
-    if (store == null) return track;
-    if (track.id != null) {
-      final byId = store.getTrackById(track.id!);
-      if (byId != null) return byId;
+    if (store == null) return playable;
+    if (playable.id != null) {
+      final existing = store.getTrackById(playable.id!);
+      if (existing != null) return existing;
     }
-    return store.getTrackByPath(track.filePath) ?? track;
+    final existing = store.getTrackByPath(playable.filePath);
+    return existing ?? playable;
   }
 
   // ---------------------------------------------------------------------------
-  // Reactive Getters (Exposed for MiniPlayer, NowPlaying, TransportBar)
+  // Getters & Observables
   // ---------------------------------------------------------------------------
   PlaybackState get state => _state;
-  PlaylistEntry? get currentEntry => _state.currentEntry;
-  Track? get currentTrack => _state.currentTrack;
+  ma.EngineItem<AudioPlayable>? get currentEntry =>
+      _engine != null ? _engine!.state.currentItem : _state.currentEntry;
+  AudioPlayable? get currentPlayable => currentEntry?.data;
+  Track? get currentTrack {
+    final p = currentPlayable;
+    if (p is Track) return p;
+    return _state.currentTrack;
+  }
+
   bool isCurrentTrack(Track? track) {
     final cur = currentTrack;
     return track != null &&
@@ -278,9 +287,10 @@ class PlaybackController extends ChangeNotifier {
             (cur?.filePath.isNotEmpty == true &&
                 cur?.filePath == track.filePath));
   }
-  bool get isPlaying => _state.playing;
-  bool get isBuffering => _state.buffering;
-  bool get isCompleted => _state.completed;
+
+  bool get isPlaying => _engine?.state.playing ?? _state.playing;
+  bool get isBuffering => _engine?.state.buffering ?? _state.buffering;
+  bool get isCompleted => _engine?.state.completed ?? _state.completed;
 
   Duration get position => _positionNotifier.value;
   ValueNotifier<Duration> get positionNotifier => _positionNotifier;
@@ -325,43 +335,64 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Duration get duration => _state.duration;
-  double get progress => _state.progress;
-  Duration get remaining => _state.remaining;
-
-  double get currentVisualAmplitude => isPlaying
-      ? (currentTrack?.getPointAtPosition(position, duration) ?? 0.0)
+  Duration get duration => _engine?.state.duration ?? _state.duration;
+  double get progress => duration.inMilliseconds > 0
+      ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
       : 0.0;
+  Duration get remaining =>
+      duration > position ? duration - position : Duration.zero;
 
-  double get volume => _state.volume;
-  double get rate => _state.rate;
-  double get pitch => _state.pitch;
+  double get currentVisualAmplitude {
+    if (!isPlaying) return 0.0;
+    final track = currentTrack;
+    return track?.getPointAtPosition(position, duration) ?? 0.0;
+  }
 
-  Loop get loopMode => _state.loop;
-  bool get isShuffled => _state.shuffle;
+  double get volume => _engine != null ? _engine!.state.volume : _state.volume;
+  double get rate => _engine?.state.rate ?? _state.rate;
+  double get pitch => _engine?.state.pitch ?? _state.pitch;
 
-  List<PlaylistEntry> get queue => _state.playables;
-  int get currentIndex => _state.index;
+  LoopMode get loopMode => _engine?.state.loopMode ?? _state.loop;
+  bool get isShuffled => _engine?.state.shuffle ?? _state.shuffle;
 
-  bool get hasNext => _state.hasNext;
-  bool get hasPrevious => _state.hasPrevious;
+  List<ma.EngineItem<AudioPlayable>> get queue =>
+      _engine != null ? _engine!.state.queue : _state.playables;
+  int get currentIndex => _engine?.state.currentIndex ?? _state.index;
 
-  CrossfadeConfig get crossfadeConfig => _state.crossfadeConfig;
-  bool get skipSilence => _state.skipSilence;
-  bool get volumeNormalization => _state.volumeNormalization;
-  double get preampDb => _state.preampDb;
-  double get balance => _state.balance;
-  double get spatializerWidth => _state.spatializerWidth;
-  bool get mono => _state.mono;
-  ma.CrossfeedMode get crossfeedMode => _state.crossfeedMode;
-  bool get limiterEnabled => _state.limiterEnabled;
+  bool get hasNext => _engine?.state.hasNext ?? _state.hasNext;
+  bool get hasPrevious => _engine?.state.hasPrevious ?? _state.hasPrevious;
+
+  CrossfadeConfig get crossfadeConfig =>
+      _engine != null
+          ? CrossfadeConfig(
+              duration: _engine!.state.crossfadeConfig.duration,
+              manualDuration: _engine!.state.crossfadeConfig.manualDuration,
+              curve: _engine!.state.crossfadeConfig.curve,
+            )
+          : _state.crossfadeConfig;
+
+  bool get isCrossfading => _engine?.state.isCrossfading ?? false;
+  double get crossfadeProgress => _engine?.state.crossfadeProgress ?? 0.0;
+
+  bool get skipSilence => _engine?.state.skipSilence ?? _state.skipSilence;
+  bool get volumeNormalization =>
+      _engine?.state.volumeNormalization ?? _state.volumeNormalization;
+  double get preampDb => _engine?.state.preamp ?? _state.preampDb;
+  double get balance => _engine?.state.balance ?? _state.balance;
+  double get spatializerWidth =>
+      _engine?.state.spatializerWidth ?? _state.spatializerWidth;
+  bool get mono => _engine?.state.mono ?? _state.mono;
+  ma.CrossfeedMode get crossfeedMode =>
+      _engine?.state.crossfeed ?? _state.crossfeedMode;
+  bool get limiterEnabled =>
+      _engine?.state.limiterEnabled ?? _state.limiterEnabled;
   ma.Reverb get reverb => _engine?.state.reverb ?? ma.Reverb.off;
 
   // ---------------------------------------------------------------------------
   // High-Level Track Selection & Queue Actions
   // ---------------------------------------------------------------------------
   Future<void> openTracks(
-    List<Track> tracks, {
+    List<AudioPlayable> tracks, {
     int? startIndex,
     bool play = true,
     bool shuffle = false,
@@ -369,12 +400,7 @@ class PlaybackController extends ChangeNotifier {
     if (tracks.isEmpty) return;
     final items = [
       for (int i = 0; i < tracks.length; i++)
-        ma.EngineItem<Track>.file(
-          tracks[i].filePath,
-          data: _canonicalTrack(tracks[i]),
-          id: i,
-          position: i,
-        ),
+        _canonicalPlayable(tracks[i]).toEngineItem(position: i),
     ];
     await engine.action.open(
       items,
@@ -386,7 +412,10 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Future<void> playTrack(Track track, {List<Track>? contextTracks}) async {
+  Future<void> playTrack(
+    AudioPlayable track, {
+    List<AudioPlayable>? contextTracks,
+  }) async {
     final trackList = (contextTracks != null && contextTracks.isNotEmpty)
         ? contextTracks
         : [track];
@@ -399,7 +428,7 @@ class PlaybackController extends ChangeNotifier {
         trackList,
         startIndex: startIndex,
         play: true,
-        shuffle: _state.shuffle,
+        shuffle: isShuffled,
       );
     } catch (e) {
       debugPrint('[PlaybackController] Error in playTrack: $e');
@@ -407,7 +436,7 @@ class PlaybackController extends ChangeNotifier {
   }
 
   Future<void> playAll(
-    List<Track> tracks, {
+    List<AudioPlayable> tracks, {
     bool shuffle = false,
     int? startIndex,
   }) async {
@@ -424,28 +453,25 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Future<void> playNext(Track track) async {
+  Future<void> playNext(AudioPlayable track) async {
     try {
-      final item = ma.EngineItem<Track>.file(
-        track.filePath,
-        data: _canonicalTrack(track),
-      );
+      final item = _canonicalPlayable(track).toEngineItem();
       await engine.action.insertNext(item);
     } catch (e) {
       debugPrint('[PlaybackController] Error in playNext: $e');
     }
   }
 
-  Future<void> addToQueue(Track track) async {
+  Future<void> addToQueue(AudioPlayable track) async {
     await appendTracks([track]);
   }
 
-  Future<void> appendTracks(List<Track> tracks) async {
+  Future<void> appendTracks(List<AudioPlayable> tracks) async {
     if (tracks.isEmpty) return;
     try {
       final items = [
         for (final t in tracks)
-          ma.EngineItem<Track>.file(t.filePath, data: _canonicalTrack(t)),
+          _canonicalPlayable(t).toEngineItem(),
       ];
       await engine.action.append(items);
     } catch (e) {
@@ -478,15 +504,13 @@ class PlaybackController extends ChangeNotifier {
   }
 
   Future<void> skipToQueueIndex(int index) async {
-    if (index < 0 || index >= _state.queue.length) return;
+    if (index < 0 || index >= queue.length) return;
     try {
       await engine.action.skipToIndex(index);
     } catch (e) {
       debugPrint('[PlaybackController] Error in skipToQueueIndex: $e');
     }
   }
-
-  Future<void> playTrackAtIndex(int index) => skipToQueueIndex(index);
 
   ma.Equalizer get equalizer => _equalizer;
   ma.AudioDevice? get currentDevice => _currentDevice;
@@ -591,7 +615,7 @@ class PlaybackController extends ChangeNotifier {
   }
 
   Future<void> playOrPause() async {
-    if (_state.playing) {
+    if (isPlaying) {
       await pause();
     } else {
       await play();
@@ -632,7 +656,10 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setVolume(double vol) async {
     try {
-      await engine.action.setVolume(vol / 100.0);
+      final clamped = vol.clamp(0.0, 2.0);
+      _state = _state.copyWith(volume: clamped);
+      notifyListeners();
+      await engine.action.setVolume(clamped);
     } catch (e) {
       debugPrint('[PlaybackController] setVolume error: $e');
     }
@@ -640,7 +667,13 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setRate(double rate) async {
     try {
-      await engine.action.setRate(rate);
+      final clamped = rate.clamp(
+        AppDefaults.playbackRateMin,
+        AppDefaults.playbackRateMax,
+      );
+      _state = _state.copyWith(rate: clamped);
+      notifyListeners();
+      await engine.action.setRate(clamped);
     } catch (e) {
       debugPrint('[PlaybackController] setRate error: $e');
     }
@@ -648,7 +681,13 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setPitch(double pitch) async {
     try {
-      await engine.action.setPitch(pitch);
+      final clamped = pitch.clamp(
+        AppDefaults.playbackPitchMin,
+        AppDefaults.playbackPitchMax,
+      );
+      _state = _state.copyWith(pitch: clamped);
+      notifyListeners();
+      await engine.action.setPitch(clamped);
     } catch (e) {
       debugPrint('[PlaybackController] setPitch error: $e');
     }
@@ -662,11 +701,11 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleShuffle() => setShuffle(!_state.shuffle);
+  Future<void> toggleShuffle() => setShuffle(!isShuffled);
 
-  Future<void> setLoopMode(Loop loop) async {
+  Future<void> setLoopMode(LoopMode loop) async {
     try {
-      await engine.action.setLoopMode(_mapLoopMode(loop));
+      await engine.action.setLoopMode(loop);
     } catch (e) {
       debugPrint('[PlaybackController] setLoopMode error: $e');
     }
@@ -674,14 +713,12 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> toggleLoopMode() async {
     try {
-      final nextMode = _state.loop.next();
+      final nextMode = loopMode.next();
       await setLoopMode(nextMode);
     } catch (e) {
       debugPrint('[PlaybackController] toggleLoopMode error: $e');
     }
   }
-
-  Future<void> cycleLoopMode() => toggleLoopMode();
 
   Future<void> setCrossfadeConfig(CrossfadeConfig config) async {
     try {
@@ -689,9 +726,7 @@ class PlaybackController extends ChangeNotifier {
         ma.CrossfadeConfig(
           duration: config.duration,
           manualDuration: config.manualDuration,
-          curve: config.curve == CrossfadeCurve.linear
-              ? ma.CrossfadeCurve.linear
-              : ma.CrossfadeCurve.equalPower,
+          curve: config.curve,
         ),
       );
     } catch (e) {
@@ -763,28 +798,6 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  static ma.LoopMode _mapLoopMode(Loop loop) {
-    switch (loop) {
-      case Loop.off:
-        return ma.LoopMode.off;
-      case Loop.one:
-        return ma.LoopMode.one;
-      case Loop.all:
-        return ma.LoopMode.all;
-    }
-  }
-
-  static Loop _unmapLoopMode(ma.LoopMode mode) {
-    switch (mode) {
-      case ma.LoopMode.off:
-        return Loop.off;
-      case ma.LoopMode.one:
-        return Loop.one;
-      case ma.LoopMode.all:
-        return Loop.all;
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // History Logging & State Persistence Helpers
   // ---------------------------------------------------------------------------
@@ -824,6 +837,9 @@ class PlaybackController extends ChangeNotifier {
         prev.buffering != next.buffering ||
         prev.completed != next.completed ||
         prev.duration != next.duration ||
+        prev.rate != next.rate ||
+        prev.pitch != next.pitch ||
+        prev.volume != next.volume ||
         prev.shuffle != next.shuffle ||
         prev.loop != next.loop ||
         prev.hasPrevious != next.hasPrevious ||
@@ -872,7 +888,7 @@ class PlaybackController extends ChangeNotifier {
   }
 
   Future<void> flushStatePersistence() async {
-    final current = _state.currentTrack;
+    final current = currentTrack;
     if (current != null) {
       await _flushStatePersistence(
         current.filePath,
@@ -909,9 +925,10 @@ class PlaybackController extends ChangeNotifier {
     _positionSubscription?.cancel();
     _visualizerSubscription?.cancel();
     _devicesSubscription?.cancel();
-    if (_state.currentTrack != null) {
+    final current = currentTrack;
+    if (current != null) {
       _settingsRepository.setLastPlayed(
-        filePath: _state.currentTrack!.filePath,
+        filePath: current.filePath,
         positionMs: _positionNotifier.value.inMilliseconds,
       );
     }

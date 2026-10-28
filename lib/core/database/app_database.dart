@@ -462,7 +462,7 @@ class AppDatabase {
         }
       });
 
-  Future<void> addTrackToPlaylist(int playlistId, int trackId, [String? filePath]) =>
+  Future<void> addTrackToPlaylist(int playlistId, int trackId) =>
       _runTask((db) => _addTrackToPlaylistSync(db, playlistId, trackId));
 
   static void _addTrackToPlaylistSync(Database db, int playlistId, int trackId) {
@@ -559,7 +559,7 @@ class AppDatabase {
     }
   }
 
-  Future<void> toggleLikeTrack(int trackId, [String? filePath]) => _runTask((db) {
+  Future<void> toggleLikeTrack(int trackId) => _runTask((db) {
         try {
           final rows = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? AND track_id = ? LIMIT 1;', [likedSongsPlaylistId, trackId]);
           if (rows.isNotEmpty) {

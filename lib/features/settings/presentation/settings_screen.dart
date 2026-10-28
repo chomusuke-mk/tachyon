@@ -6,7 +6,6 @@ import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/constants/languages.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
-import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/shared/utils/file_picker_service.dart';
@@ -15,6 +14,7 @@ import 'package:tachyon/shared/widgets/app_icon.dart';
 import 'package:tachyon/shared/widgets/setting_row.dart';
 
 import 'settings_controller.dart';
+import 'widgets/language_picker_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -36,278 +36,6 @@ class SettingsScreen extends StatelessWidget {
     } else if (added && context.mounted) {
       context.read<LibraryController>().scanDirectories();
     }
-  }
-
-  void _showTranslationLanguageDialog(
-    BuildContext context,
-    SettingsController settings,
-    AppStringKey strings,
-  ) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogCtx) {
-        String searchQuery = '';
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final filteredEntries = languagesEndonyms.entries.where((e) {
-              final query = searchQuery.toLowerCase().trim();
-              if (query.isEmpty) return true;
-              return e.key.toLowerCase().contains(query) ||
-                  e.value.toLowerCase().contains(query);
-            }).toList();
-
-            return AlertDialog(
-              title: Text(strings.sTranslationTargetLang),
-              content: SizedBox(
-                width: 400,
-                height: 450,
-                child: Column(
-                  children: [
-                    TextField(
-                      autofocus: false,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        hintText: strings.sLanguageSearchHint,
-                        isDense: true,
-                        border: const OutlineInputBorder(),
-                      ),
-                      onChanged: (val) {
-                        setDialogState(() {
-                          searchQuery = val;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: searchQuery.isEmpty
-                            ? filteredEntries.length + 1
-                            : filteredEntries.length,
-                        itemBuilder: (context, index) {
-                          if (searchQuery.isEmpty && index == 0) {
-                            final isSelected =
-                                settings.lyricsTranslationTargetLang ==
-                                'defaultOption';
-                            final effectiveLocale = context
-                                .read<LocaleController>()
-                                .currentLocaleCode;
-                            final resolvedName =
-                                languagesEndonyms[effectiveLocale] ??
-                                effectiveLocale;
-                            return ListTile(
-                              leading: Icon(
-                                Icons.auto_awesome_rounded,
-                                color: isSelected
-                                    ? Theme.of(context).colorScheme.primary
-                                    : null,
-                              ),
-                              title: Text(
-                                strings.sTranslationLangDefault,
-                                style: TextStyle(
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                              subtitle: Text(resolvedName),
-                              trailing: isSelected
-                                  ? Icon(
-                                      Icons.check_rounded,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary,
-                                    )
-                                  : null,
-                              onTap: () {
-                                settings.setLyricsTranslationTargetLang(
-                                  'defaultOption',
-                                );
-                                Navigator.of(dialogCtx).pop();
-                              },
-                            );
-                          }
-
-                          final item =
-                              filteredEntries[searchQuery.isEmpty
-                                  ? index - 1
-                                  : index];
-                          final isSelected =
-                              settings.lyricsTranslationTargetLang == item.key;
-
-                          return ListTile(
-                            title: Text(
-                              item.value,
-                              style: TextStyle(
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            subtitle: Text(item.key),
-                            trailing: isSelected
-                                ? Icon(
-                                    Icons.check_rounded,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary,
-                                  )
-                                : null,
-                            onTap: () {
-                              settings.setLyricsTranslationTargetLang(item.key);
-                              Navigator.of(dialogCtx).pop();
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: Text(strings.sCancel),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showAppLanguageDialog(
-    BuildContext context,
-    SettingsController settings,
-    AppStringKey strings,
-  ) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogCtx) {
-        String searchQuery = '';
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final query = searchQuery.toLowerCase().trim();
-            final filteredEntries = languagesEndonyms.entries.where((e) {
-              if (query.isEmpty) return true;
-              return e.key.toLowerCase().contains(query) ||
-                  e.value.toLowerCase().contains(query);
-            }).toList();
-
-            return AlertDialog(
-              title: Text(strings.sLanguage),
-              content: SizedBox(
-                width: 400,
-                height: 450,
-                child: Column(
-                  children: [
-                    TextField(
-                      autofocus: false,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        hintText: strings.sLanguageSearchHint,
-                        isDense: true,
-                        border: const OutlineInputBorder(),
-                      ),
-                      onChanged: (val) {
-                        setDialogState(() {
-                          searchQuery = val;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: searchQuery.isEmpty
-                            ? filteredEntries.length + 1
-                            : filteredEntries.length,
-                        itemBuilder: (context, index) {
-                          if (searchQuery.isEmpty && index == 0) {
-                            final isSelected =
-                                settings.appLanguage == 'defaultOption';
-                            final effectiveLocale = context
-                                .read<LocaleController>()
-                                .currentLocaleCode;
-                            final resolvedName =
-                                languagesEndonyms[effectiveLocale] ??
-                                effectiveLocale;
-                            return ListTile(
-                              leading: Icon(
-                                Icons.auto_awesome_rounded,
-                                color: isSelected
-                                    ? Theme.of(context).colorScheme.primary
-                                    : null,
-                              ),
-                              title: Text(
-                                strings.sTranslationLangDefault,
-                                style: TextStyle(
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                              subtitle: Text(resolvedName),
-                              trailing: isSelected
-                                  ? Icon(
-                                      Icons.check_rounded,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary,
-                                    )
-                                  : null,
-                              onTap: () {
-                                settings.setAppLanguage('defaultOption');
-                                Navigator.of(dialogCtx).pop();
-                              },
-                            );
-                          }
-
-                          final item =
-                              filteredEntries[searchQuery.isEmpty
-                                  ? index - 1
-                                  : index];
-                          final isSelected = settings.appLanguage == item.key;
-
-                          return ListTile(
-                            title: Text(
-                              item.value,
-                              style: TextStyle(
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            subtitle: Text(item.key),
-                            trailing: isSelected
-                                ? Icon(
-                                    Icons.check_rounded,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary,
-                                  )
-                                : null,
-                            onTap: () {
-                              settings.setAppLanguage(item.key);
-                              Navigator.of(dialogCtx).pop();
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: Text(strings.sCancel),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   @override
@@ -856,8 +584,13 @@ class SettingsScreen extends StatelessWidget {
                     type: ControllerType.dropdown,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(12),
-                      onTap: () =>
-                          _showAppLanguageDialog(context, settings, strings),
+                      onTap: () => LanguagePickerDialog.show(
+                        context,
+                        title: strings.sLanguage,
+                        currentSelectedValue: settings.appLanguage,
+                        strings: strings,
+                        onSelected: settings.setAppLanguage,
+                      ),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
@@ -904,10 +637,13 @@ class SettingsScreen extends StatelessWidget {
                     type: ControllerType.dropdown,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(12),
-                      onTap: () => _showTranslationLanguageDialog(
+                      onTap: () => LanguagePickerDialog.show(
                         context,
-                        settings,
-                        strings,
+                        title: strings.sTranslationTargetLang,
+                        currentSelectedValue:
+                            settings.lyricsTranslationTargetLang,
+                        strings: strings,
+                        onSelected: settings.setLyricsTranslationTargetLang,
                       ),
                       child: Container(
                         padding: const EdgeInsets.symmetric(

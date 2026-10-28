@@ -6,12 +6,15 @@ import 'package:tachyon/core/store/domain/track_sort_option.dart';
 import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist_sort_option.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
+import 'package:tachyon/core/playback/domain/crossfade_config.dart';
 import 'package:tachyon/core/playback/domain/loop_mode.dart';
-import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 export 'package:miniaudio_player/miniaudio_player.dart'
     show CrossfeedMode, Reverb;
-typedef LoopMode = Loop;
+export 'package:tachyon/core/playback/domain/crossfade_config.dart'
+    show CrossfadeCurve;
+export 'package:tachyon/core/playback/domain/loop_mode.dart'
+    show Loop, LoopMode;
 
 @immutable
 class AppSettings {
@@ -20,12 +23,12 @@ class AppSettings {
 
   // Audio Playback
   final int crossfadeDuration; // 0 to 30 seconds (default 5)
-  final int crossfadeManualDuration; // 0 to 30 seconds (default 3)
+  final int crossfadeManualDuration; // 0 to 5 seconds (default 1)
   final CrossfadeCurve crossfadeCurve; // 'equal_power' or 'linear'
-  final double volume; // 0.0 to 100.0 (default 100.0)
+  final double volume; // 0.0 to 1.0 (default 1.0)
   final double playbackRate; // 0.5 to 1.5 (default 1.0)
   final double playbackPitch; // 0.5 to 1.5 (default 1.0)
-  final Loop loopMode; // Loop.off (default)
+  final LoopMode loopMode; // LoopMode.off (default)
   final bool shuffle; // default false
   final bool skipSilence; // default false
   final bool volumeNormalization; // default true
@@ -35,7 +38,7 @@ class AppSettings {
   final CrossfeedMode crossfeedMode; // CrossfeedMode.off (default)
   final double spatializerWidth; // 0.0 to 2.0 (default 1.0)
   final bool limiterEnabled; // default true
-  final double volumeBoost; // 100.0% to 200.0% (default 100.0)
+  final double volumeBoost; // 1.0 to 2.0 (default 1.0)
   final bool exclusiveAudio; // Windows WASAPI exclusive (default false)
   final bool pauseOnDeviceChange; // default true
   final String? audioOutputDeviceId;
@@ -85,9 +88,9 @@ class AppSettings {
   const AppSettings({
     this.musicDirectories = const [],
     this.crossfadeDuration = 5,
-    this.crossfadeManualDuration = 3,
+    this.crossfadeManualDuration = 1,
     this.crossfadeCurve = CrossfadeCurve.equalPower,
-    this.volume = 100.0,
+    this.volume = 1.0,
     this.playbackRate = 1.0,
     this.playbackPitch = 1.0,
     this.loopMode = Loop.off,
@@ -100,7 +103,7 @@ class AppSettings {
     this.crossfeedMode = CrossfeedMode.off,
     this.spatializerWidth = 1.0,
     this.limiterEnabled = true,
-    this.volumeBoost = 100.0,
+    this.volumeBoost = 1.0,
     this.exclusiveAudio = false,
     this.pauseOnDeviceChange = true,
     this.audioOutputDeviceId,
@@ -124,7 +127,7 @@ class AppSettings {
     this.playbackShowQueue = false,
     required this.lastPlayedFilePath,
     this.lastPlayedPositionMs = 0,
-    this.equalizerEnabled = false,
+    this.equalizerEnabled = true,
     this.equalizerPreset = 'flat',
     this.equalizerGains = const [
       0.0,
@@ -149,14 +152,16 @@ class AppSettings {
 
   Color get accentColor => Color(accentColorValue);
 
-  Reverb get reverbConfig => Reverb(
-    enabled: reverbEnabled,
-    roomSize: reverbRoomSize,
-    damping: reverbDamping,
-    width: reverbWidth,
-    wet: reverbWet,
-    dry: reverbDry,
-  );
+  Reverb get reverbConfig => (reverbEnabled && reverbPreset != 'off')
+      ? Reverb(
+          enabled: true,
+          roomSize: reverbRoomSize,
+          damping: reverbDamping,
+          width: reverbWidth,
+          wet: reverbWet,
+          dry: reverbDry,
+        )
+      : Reverb.off;
 
   @override
   bool operator ==(Object other) =>

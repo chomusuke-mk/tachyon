@@ -74,7 +74,7 @@ class LinuxMprisBridge {
   bool get shuffle => playbackController.state.shuffle;
 
   double get volume =>
-      (playbackController.state.volume / 100.0).clamp(0.0, 1.0);
+      playbackController.state.volume.clamp(0.0, 1.0);
 
   double get rate => playbackController.state.rate;
 
@@ -180,7 +180,7 @@ class LinuxMprisBridge {
   }
 
   Future<void> setVolume(double newVolume) async {
-    final targetVol = (newVolume * 100.0).clamp(0.0, 100.0);
+    final targetVol = newVolume.clamp(0.0, 1.0);
     await playbackController.setVolume(targetVol);
     final currentVol = volume;
     if (_emittedVolume != currentVol) {

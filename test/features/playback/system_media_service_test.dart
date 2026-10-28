@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
-import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
@@ -174,7 +173,7 @@ void main() {
         PlaybackState(
           index: 0,
           playables: [
-            PlaylistEntry.forQueue(id: 1, track: track),
+            track.toEngineItem(),
           ],
           playing: true,
           position: const Duration(seconds: 42),
@@ -257,12 +256,12 @@ void main() {
         PlaybackState(
           index: 0,
           playables: [
-            PlaylistEntry.forQueue(id: 1, track: track),
+            track.toEngineItem(),
           ],
           playing: true,
           position: const Duration(seconds: 15),
           duration: const Duration(milliseconds: 180000),
-          volume: 75.0,
+          volume: 0.75,
           loop: Loop.all,
         ),
       );

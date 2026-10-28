@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/core/store/domain/artist.dart';
-import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
@@ -152,7 +151,7 @@ void main() {
 
       controller.emitState(PlaybackState(
         index: 0,
-        playables: [PlaylistEntry.forQueue(id: 1, track: track)],
+        playables: [track.toEngineItem()],
         playing: true,
       ));
 
@@ -185,7 +184,7 @@ void main() {
       });
 
       final playables = tracks
-          .map((t) => PlaylistEntry.forQueue(id: t.id!, track: t))
+          .map((t) => t.toEngineItem())
           .toList();
 
       controller.emitState(PlaybackState(

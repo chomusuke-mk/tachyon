@@ -10,6 +10,7 @@ import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/shared/utils/duration_formatter.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 
@@ -31,17 +32,6 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PlaylistsController>().selectPlaylist(widget.playlist);
     });
-  }
-
-  String _formatTotalDuration(List<Track> tracks) {
-    final totalMs = tracks.fold<int>(0, (sum, t) => sum + t.durationMs);
-    final duration = Duration(milliseconds: totalMs);
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    if (hours > 0) {
-      return '${hours}h ${minutes}m';
-    }
-    return '${minutes}m';
   }
 
   Widget _buildHeaderCover(
@@ -177,7 +167,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${strings.plTracksCountFormatted(tracks.length)} • ${_formatTotalDuration(tracks)}',
+                        '${strings.plTracksCountFormatted(tracks.length)} • ${tracks.formattedTotalDuration}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),

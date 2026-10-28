@@ -51,22 +51,6 @@ class PlaylistEntry {
     );
   }
 
-  PlaylistEntry copyWith({
-    int? id,
-    int? position,
-    int? addedAt,
-    Playlist? playlist,
-    Track? track,
-  }) {
-    return PlaylistEntry(
-      id: id ?? this.id,
-      position: position ?? this.position,
-      addedAt: addedAt ?? this.addedAt,
-      playlist: playlist ?? this.playlist,
-      track: track ?? this.track,
-    );
-  }
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

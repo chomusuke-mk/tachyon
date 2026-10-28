@@ -1,10 +1,15 @@
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
+import 'package:tachyon/core/playback/domain/audio_playable.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/genre.dart';
 
-class Track {
+class Track implements AudioPlayable {
+  @override
   final int? id;
+  @override
   final String filePath;
+  @override
   final String title;
   final int? trackNumber;
   final int? discNumber;
@@ -16,9 +21,12 @@ class Track {
   final String? codec;
   final int fileSize;
   final int modifiedAt;
+  @override
   final double? replayGainTrackGain;
+  @override
   final double? replayGainTrackPeak;
   final List<double>? waveform;
+  @override
   final String? thumbnailHash;
 
   final Album? album;
@@ -48,6 +56,7 @@ class Track {
     this.artists = const [],
   });
 
+  @override
   Duration get duration => Duration(milliseconds: durationMs);
   DateTime get modifiedDateTime =>
       DateTime.fromMillisecondsSinceEpoch(modifiedAt);
@@ -68,5 +77,26 @@ class Track {
     final clamped = progress.clamp(0.0, 1.0);
     final index = (clamped * (waveform!.length - 1)).round();
     return waveform![index];
+  }
+
+  @override
+  List<String> get artistNames => artists.map((a) => a.name).toList();
+
+  @override
+  String? get albumTitle => album?.name;
+
+  @override
+  bool get isStream => false;
+
+  @override
+  ma.EngineItem<AudioPlayable> toEngineItem({int position = 0}) {
+    return ma.EngineItem<AudioPlayable>.file(
+      filePath,
+      data: this,
+      id: id,
+      position: position,
+      replayGainDb: replayGainTrackGain,
+      replayPeak: replayGainTrackPeak,
+    );
   }
 }

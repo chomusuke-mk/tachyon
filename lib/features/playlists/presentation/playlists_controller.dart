@@ -220,7 +220,7 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
-  Future<bool> toggleLike(int trackId, [String? filePath]) async {
+  Future<bool> toggleLike(int trackId) async {
     try {
       final isLiked = await _store.toggleLikeInStore(trackId);
       _syncFromStore();
@@ -234,7 +234,7 @@ class PlaylistsController extends ChangeNotifier {
 
   Future<void> toggleLikeTrack(Track track) async {
     if (track.id == null) return;
-    await toggleLike(track.id!, track.filePath);
+    await toggleLike(track.id!);
   }
 
   Future<void> clearHistory() async {

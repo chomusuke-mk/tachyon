@@ -208,15 +208,6 @@ class LyricsOvhClient {
     }
   }
 
-  /// Convenience method matching PROJECT.md interface contract.
-  Future<String?> getPlainLyrics({
-    required String artist,
-    required String title,
-  }) async {
-    final response = await getLyrics(artist: artist, title: title);
-    return response.isSuccess ? response.lyrics : null;
-  }
-
   /// Closes the HTTP client if this instance owns it.
   void close() {
     dispose();

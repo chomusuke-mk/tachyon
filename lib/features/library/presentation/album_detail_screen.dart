@@ -7,27 +7,16 @@ import 'package:tachyon/shared/widgets/track_tile.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/store/domain/album.dart';
-import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/shared/utils/duration_formatter.dart';
 
 class AlbumDetailScreen extends StatelessWidget {
   final Album album;
 
   const AlbumDetailScreen({super.key, required this.album});
-
-  String _formatTotalDuration(List<Track> tracks) {
-    final totalMs = tracks.fold<int>(0, (sum, t) => sum + t.durationMs);
-    final duration = Duration(milliseconds: totalMs);
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    if (hours > 0) {
-      return '${hours}h ${minutes}m';
-    }
-    return '${minutes}m';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,7 +88,7 @@ class AlbumDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${album.year ?? ''} • ${strings.alTracksCountFormatted(albumTracks.length)} • ${_formatTotalDuration(albumTracks)}',
+                        '${album.year ?? ''} • ${strings.alTracksCountFormatted(albumTracks.length)} • ${albumTracks.formattedTotalDuration}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),

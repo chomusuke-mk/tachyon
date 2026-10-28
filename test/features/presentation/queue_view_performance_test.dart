@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
-import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
@@ -29,21 +28,17 @@ class _FileSystemLocaleRepository extends LocaleRepository {
 
 class MockPlaybackController extends ChangeNotifier implements PlaybackController {
   @override
-  List<PlaylistEntry> queue = List.generate(
+  List<EngineItem<AudioPlayable>> queue = List.generate(
     1500,
-    (i) => PlaylistEntry.forQueue(
+    (i) => Track(
       id: i,
-      position: i,
-      track: Track(
-        id: i,
-        filePath: '/music/track_$i.mp3',
-        title: 'Track Title $i',
-        artists: [Artist(id: i, name: 'Artist Name $i')],
-        durationMs: 210000,
-        fileSize: 1000,
-        modifiedAt: 1000,
-      ),
-    ),
+      filePath: '/music/track_$i.mp3',
+      title: 'Track Title $i',
+      artists: [Artist(id: i, name: 'Artist Name $i')],
+      durationMs: 210000,
+      fileSize: 1000,
+      modifiedAt: 1000,
+    ).toEngineItem(position: i),
   );
 
   @override

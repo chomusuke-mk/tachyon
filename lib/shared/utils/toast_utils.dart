@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:tachyon/app.dart';
 
 class ToastUtils {
-  // 1. Cambiamos de ScaffoldMessengerKey a NavigatorKey.
-  // Esto nos da acceso a la capa "Overlay" (el nivel más alto en la jerarquía visual),
-  // garantizando que las notificaciones aparezcan sobre CUALQUIER elemento flotante.
-  static final navigatorKey = GlobalKey<NavigatorState>();
+  /// Global navigator key owned by [App].
+  static GlobalKey<NavigatorState> get navigatorKey => App.navigatorKey;
 
   static OverlayEntry? _currentOverlay;
   static _ToastWidgetState? _currentState;

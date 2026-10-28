@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+//import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -31,6 +32,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   PaintingBinding.instance.imageCache.maximumSize = 25;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 4 * 1024 * 1024;
+  // MiniaudioPlayer.config(logLevel: MiniaudioLogLevel.verbose);
   try {
     SystemChannels.skia.invokeMethod<void>(
       'Skia.setResourceCacheMaxBytes',
@@ -83,7 +85,6 @@ Future<void> main() async {
   final settingsController = SettingsController(
     repository: settingsRepository,
     playbackController: playbackController,
-    libraryController: libraryController,
   );
   await settingsController.init();
 

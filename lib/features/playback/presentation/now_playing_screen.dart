@@ -158,7 +158,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     try {
       final playlists = context.read<PlaylistsController?>();
       if (playlists != null) {
-        await playlists.toggleLike(track.id!, track.filePath);
+        await playlists.toggleLike(track.id!);
       }
     } catch (_) {}
   }
@@ -1224,7 +1224,7 @@ class _PopupVolumeControlState extends State<_PopupVolumeControl>
                               icon: Icon(
                                 volume == 0.0
                                     ? Icons.volume_off_rounded
-                                    : (volume > 50.0
+                                    : (volume > 0.5
                                           ? Icons.volume_up_rounded
                                           : Icons.volume_down_rounded),
                               ),
@@ -1285,18 +1285,24 @@ class _PopupVolumeControlState extends State<_PopupVolumeControl>
     return RepaintBoundary(
       child: CompositedTransformTarget(
         link: _layerLink,
-        child: IconButton(
-          icon: Icon(
-            widget.playback.volume == 0.0
-                ? Icons.volume_off_rounded
-                : (widget.playback.volume > 50.0
-                      ? Icons.volume_up_rounded
-                      : Icons.volume_down_rounded),
-            size: 28,
-          ),
-          tooltip: widget.tooltip,
-          color: Theme.of(context).colorScheme.onSurface,
-          onPressed: _togglePopup,
+        child: ListenableBuilder(
+          listenable: widget.playback,
+          builder: (context, _) {
+            final vol = widget.playback.volume;
+            return IconButton(
+              icon: Icon(
+                vol == 0.0
+                    ? Icons.volume_off_rounded
+                    : (vol > 0.5
+                        ? Icons.volume_up_rounded
+                        : Icons.volume_down_rounded),
+                size: 28,
+              ),
+              tooltip: widget.tooltip,
+              color: Theme.of(context).colorScheme.onSurface,
+              onPressed: _togglePopup,
+            );
+          },
         ),
       ),
     );

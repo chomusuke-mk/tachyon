@@ -257,7 +257,7 @@ abstract final class MetadataUtils {
       String? getOrComputeHash(Picture? pic) {
         if (pic == null || pic.bytes.isEmpty) return null;
         return pictureHashes.putIfAbsent(pic, () {
-          final h = ParserUtils.computeBytesHash(pic.bytes);
+          final h = CryptoUtils.computeBytesHash(pic.bytes);
           hashToBytes[h] = pic.bytes;
           return h;
         });

@@ -4,9 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
-import 'package:tachyon/core/playback/domain/crossfade_config.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 import 'package:tachyon/shared/utils/folder_utils.dart';
@@ -14,17 +12,14 @@ import 'package:tachyon/shared/utils/folder_utils.dart';
 class SettingsController extends ChangeNotifier {
   final SettingsRepository _repository;
   final PlaybackController? _playbackController;
-  final LibraryController? _libraryController;
 
   late AppSettings _settings;
 
   SettingsController({
     required SettingsRepository repository,
     PlaybackController? playbackController,
-    LibraryController? libraryController,
   }) : _repository = repository,
-       _playbackController = playbackController,
-       _libraryController = libraryController {
+       _playbackController = playbackController {
     _settings = _repository.getSettings();
   }
 
@@ -113,10 +108,6 @@ class SettingsController extends ChangeNotifier {
     }
 
     notifyListeners();
-  }
-
-  Future<void> clearLibrary() async {
-    await _libraryController?.clearLibrary();
   }
 
   // ---------------------------------------------------------------------------
@@ -218,11 +209,13 @@ class SettingsController extends ChangeNotifier {
   }
 
   Future<void> setEqualizerGains(List<double> gains) async {
-    _settings = _settings.copyWith(equalizerGains: gains);
+    _settings = _settings.copyWith(
+      equalizerGains: gains,
+      equalizerEnabled: true,
+    );
     await _repository.setEqualizerGains(gains);
-    if (_settings.equalizerEnabled) {
-      await _playbackController?.setEqualizer(Equalizer.fromList(gains));
-    }
+    await _repository.setEqualizerEnabled(true);
+    await _playbackController?.setEqualizer(Equalizer.fromList(gains));
     notifyListeners();
   }
 
@@ -340,8 +333,29 @@ class SettingsController extends ChangeNotifier {
   }
 
   Future<void> setReverbEnabled(bool enabled) async {
-    _settings = _settings.copyWith(reverbEnabled: enabled);
-    await _repository.setReverbEnabled(enabled);
+    if (enabled && (_settings.reverbPreset == 'off' || _settings.reverbPreset == 'Off' || _settings.reverbRoomSize == 0.0)) {
+      const preset = 'studio';
+      const target = Reverb.studio;
+      _settings = _settings.copyWith(
+        reverbEnabled: true,
+        reverbPreset: preset,
+        reverbRoomSize: target.roomSize,
+        reverbDamping: target.damping,
+        reverbWidth: target.width,
+        reverbWet: target.wet,
+        reverbDry: target.dry,
+      );
+      await _repository.setReverbEnabled(true);
+      await _repository.setReverbPreset(preset);
+      await _repository.setReverbRoomSize(target.roomSize);
+      await _repository.setReverbDamping(target.damping);
+      await _repository.setReverbWidth(target.width);
+      await _repository.setReverbWet(target.wet);
+      await _repository.setReverbDry(target.dry);
+    } else {
+      _settings = _settings.copyWith(reverbEnabled: enabled);
+      await _repository.setReverbEnabled(enabled);
+    }
     await _playbackController?.setReverb(_settings.reverbConfig);
     notifyListeners();
   }
@@ -375,7 +389,9 @@ class SettingsController extends ChangeNotifier {
     }
 
     if (target != null) {
+      final isOff = preset == 'off';
       _settings = _settings.copyWith(
+        reverbEnabled: !isOff,
         reverbPreset: preset,
         reverbRoomSize: target.roomSize,
         reverbDamping: target.damping,
@@ -383,6 +399,7 @@ class SettingsController extends ChangeNotifier {
         reverbWet: target.wet,
         reverbDry: target.dry,
       );
+      await _repository.setReverbEnabled(!isOff);
       await _repository.setReverbPreset(preset);
       await _repository.setReverbRoomSize(target.roomSize);
       await _repository.setReverbDamping(target.damping);
@@ -400,9 +417,11 @@ class SettingsController extends ChangeNotifier {
   Future<void> setReverbRoomSize(double val) async {
     final clamped = val.clamp(0.0, 1.0);
     _settings = _settings.copyWith(
+      reverbEnabled: true,
       reverbRoomSize: clamped,
       reverbPreset: 'custom',
     );
+    await _repository.setReverbEnabled(true);
     await _repository.setReverbPreset('custom');
     await _repository.setReverbRoomSize(clamped);
     await _playbackController?.setReverb(_settings.reverbConfig);
@@ -412,9 +431,11 @@ class SettingsController extends ChangeNotifier {
   Future<void> setReverbDamping(double val) async {
     final clamped = val.clamp(0.0, 1.0);
     _settings = _settings.copyWith(
+      reverbEnabled: true,
       reverbDamping: clamped,
       reverbPreset: 'custom',
     );
+    await _repository.setReverbEnabled(true);
     await _repository.setReverbPreset('custom');
     await _repository.setReverbDamping(clamped);
     await _playbackController?.setReverb(_settings.reverbConfig);
@@ -424,9 +445,11 @@ class SettingsController extends ChangeNotifier {
   Future<void> setReverbWidth(double val) async {
     final clamped = val.clamp(0.0, 1.0);
     _settings = _settings.copyWith(
+      reverbEnabled: true,
       reverbWidth: clamped,
       reverbPreset: 'custom',
     );
+    await _repository.setReverbEnabled(true);
     await _repository.setReverbPreset('custom');
     await _repository.setReverbWidth(clamped);
     await _playbackController?.setReverb(_settings.reverbConfig);
@@ -436,9 +459,11 @@ class SettingsController extends ChangeNotifier {
   Future<void> setReverbWet(double val) async {
     final clamped = val.clamp(0.0, 2.0);
     _settings = _settings.copyWith(
+      reverbEnabled: true,
       reverbWet: clamped,
       reverbPreset: 'custom',
     );
+    await _repository.setReverbEnabled(true);
     await _repository.setReverbPreset('custom');
     await _repository.setReverbWet(clamped);
     await _playbackController?.setReverb(_settings.reverbConfig);
@@ -448,9 +473,11 @@ class SettingsController extends ChangeNotifier {
   Future<void> setReverbDry(double val) async {
     final clamped = val.clamp(0.0, 2.0);
     _settings = _settings.copyWith(
+      reverbEnabled: true,
       reverbDry: clamped,
       reverbPreset: 'custom',
     );
+    await _repository.setReverbEnabled(true);
     await _repository.setReverbPreset('custom');
     await _repository.setReverbDry(clamped);
     await _playbackController?.setReverb(_settings.reverbConfig);

@@ -9,6 +9,7 @@ import 'package:tachyon/features/library/presentation/artists_screen.dart';
 import 'package:tachyon/features/library/presentation/folders_screen.dart';
 import 'package:tachyon/features/library/presentation/genres_screen.dart';
 import 'package:tachyon/features/library/presentation/tracks_screen.dart';
+import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_screen.dart';
 import 'package:tachyon/features/settings/presentation/settings_screen.dart';
@@ -79,7 +80,7 @@ class _TachyonShellState extends State<TachyonShell> {
     NowPlayingScreen.open(context);
   }
 
-  List<_DestinationSpec> _getDestinations(dynamic strings) {
+  List<_DestinationSpec> _getDestinations(AppStringKey strings) {
     return [
       _DestinationSpec(
         index: 0,

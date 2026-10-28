@@ -101,7 +101,6 @@ void main() {
     settingsController = SettingsController(
       repository: settingsRepo,
       playbackController: playbackController,
-      libraryController: libraryController,
     );
     playlistsController = PlaylistsController(
       store: libraryStore,

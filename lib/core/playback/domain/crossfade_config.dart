@@ -1,8 +1,27 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:tachyon/features/settings/data/settings_repository.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:tachyon/core/constants/app_defaults.dart';
+
+export 'package:miniaudio_player/miniaudio_player.dart' show CrossfadeCurve;
+
+/// Extension providing serialization and parsing for [ma.CrossfadeCurve].
+extension CrossfadeCurveExtension on ma.CrossfadeCurve {
+  String get jsonValue {
+    switch (this) {
+      case ma.CrossfadeCurve.linear:
+        return 'linear';
+      case ma.CrossfadeCurve.equalPower:
+        return 'equal_power';
+    }
+  }
+
+  static ma.CrossfadeCurve fromString(String? val) {
+    if (val == 'linear') return ma.CrossfadeCurve.linear;
+    return ma.CrossfadeCurve.equalPower;
+  }
+}
 
 @immutable
 class CrossfadeConfig {
@@ -21,12 +40,12 @@ class CrossfadeConfig {
 
   final Duration duration;
   final Duration manualDuration;
-  final CrossfadeCurve curve;
+  final ma.CrossfadeCurve curve;
 
   const CrossfadeConfig({
     this.duration = defaultDuration,
     this.manualDuration = defaultManualDuration,
-    this.curve = CrossfadeCurve.equalPower,
+    this.curve = ma.CrossfadeCurve.equalPower,
   });
 
   /// Clamps duration to ensure it is always within [minDuration, maxDuration]
@@ -52,9 +71,9 @@ class CrossfadeConfig {
   double calculateFadeOutVolume(double progress, double masterVolume) {
     final p = progress.clamp(0.0, 1.0);
     switch (curve) {
-      case CrossfadeCurve.equalPower:
+      case ma.CrossfadeCurve.equalPower:
         return masterVolume * math.cos(math.pi * 0.5 * p);
-      case CrossfadeCurve.linear:
+      case ma.CrossfadeCurve.linear:
         return masterVolume * (1.0 - p);
     }
   }
@@ -64,9 +83,9 @@ class CrossfadeConfig {
   double calculateFadeInVolume(double progress, double masterVolume) {
     final p = progress.clamp(0.0, 1.0);
     switch (curve) {
-      case CrossfadeCurve.equalPower:
+      case ma.CrossfadeCurve.equalPower:
         return masterVolume * math.sin(math.pi * 0.5 * p);
-      case CrossfadeCurve.linear:
+      case ma.CrossfadeCurve.linear:
         return masterVolume * p;
     }
   }
@@ -74,7 +93,7 @@ class CrossfadeConfig {
   CrossfadeConfig copyWith({
     Duration? duration,
     Duration? manualDuration,
-    CrossfadeCurve? curve,
+    ma.CrossfadeCurve? curve,
   }) {
     return CrossfadeConfig(
       duration: duration ?? this.duration,
@@ -103,7 +122,7 @@ class CrossfadeConfig {
             (json['manualDurationMs'] as num?)?.toInt() ??
             defaultManualDuration.inMilliseconds,
       ),
-      curve: CrossfadeCurve.fromString(json['curve'] as String?),
+      curve: CrossfadeCurveExtension.fromString(json['curve'] as String?),
     );
   }
 

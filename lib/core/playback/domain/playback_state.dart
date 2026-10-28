@@ -1,11 +1,14 @@
 import 'package:flutter/foundation.dart';
-import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
-import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
+import 'package:tachyon/core/playback/domain/audio_playable.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 
 import 'crossfade_config.dart';
 import 'loop_mode.dart';
+
 export 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
+export 'package:tachyon/core/playback/domain/audio_playable.dart';
+export 'crossfade_config.dart';
 export 'loop_mode.dart';
 
 enum PlaybackStatus { idle, loading, playing, paused, completed }
@@ -13,7 +16,7 @@ enum PlaybackStatus { idle, loading, playing, paused, completed }
 @immutable
 class PlaybackState {
   final int index;
-  final List<PlaylistEntry> playables;
+  final List<ma.EngineItem<AudioPlayable>> playables;
   final bool playing;
   final bool buffering;
   final bool completed;
@@ -23,7 +26,7 @@ class PlaybackState {
   final double pitch;
   final double volume;
   final bool shuffle;
-  final Loop loop;
+  final LoopMode loop;
   final Duration crossfadeDuration;
   final bool skipSilence;
   final bool volumeNormalization;
@@ -34,7 +37,7 @@ class PlaybackState {
   final double preampDb;
   final double balance;
   final bool mono;
-  final CrossfeedMode crossfeedMode;
+  final ma.CrossfeedMode crossfeedMode;
   final double spatializerWidth;
   final bool limiterEnabled;
 
@@ -48,9 +51,9 @@ class PlaybackState {
     this.duration = Duration.zero,
     this.rate = 1.0,
     this.pitch = 1.0,
-    this.volume = 100.0,
+    this.volume = 1.0,
     this.shuffle = false,
-    this.loop = Loop.off,
+    this.loop = LoopMode.off,
     this.crossfadeDuration = const Duration(seconds: 5),
     this.skipSilence = false,
     this.volumeNormalization = true,
@@ -61,25 +64,28 @@ class PlaybackState {
     this.preampDb = 0.0,
     this.balance = 0.0,
     this.mono = false,
-    this.crossfeedMode = CrossfeedMode.off,
+    this.crossfeedMode = ma.CrossfeedMode.off,
     this.spatializerWidth = 1.0,
     this.limiterEnabled = true,
   });
 
   const PlaybackState.initial() : this();
 
-  PlaylistEntry? get currentEntry =>
+  ma.EngineItem<AudioPlayable>? get currentEntry =>
       (index >= 0 && index < playables.length) ? playables[index] : null;
 
-  Track? get currentTrack => currentEntry?.track;
+  AudioPlayable? get currentPlayable => currentEntry?.data;
+
+  Track? get currentTrack =>
+      currentPlayable is Track ? currentPlayable as Track : null;
 
   bool get hasNext =>
-      loop == Loop.all ||
-      loop == Loop.one ||
+      loop == LoopMode.all ||
+      loop == LoopMode.one ||
       index < playables.length - 1 ||
       (isInfiniteMixEnabled && playables.isNotEmpty);
   bool get hasPrevious =>
-      loop == Loop.all || index > 0 || position.inSeconds > 3;
+      loop == LoopMode.all || index > 0 || position.inSeconds > 3;
 
   double get progress => duration.inMilliseconds > 0
       ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
@@ -100,16 +106,16 @@ class PlaybackState {
   bool get isPlaying => playing;
   bool get isBuffering => buffering;
   bool get isCompleted => completed;
-  List<PlaylistEntry> get queue => playables;
+  List<ma.EngineItem<AudioPlayable>> get queue => playables;
   int get currentIndex => index;
-  Loop get loopMode => loop;
+  LoopMode get loopMode => loop;
   bool get isShuffled => shuffle;
   CrossfadeConfig get crossfadeConfig =>
       CrossfadeConfig(duration: crossfadeDuration);
 
   PlaybackState copyWith({
     int? index,
-    List<PlaylistEntry>? playables,
+    List<ma.EngineItem<AudioPlayable>>? playables,
     bool? playing,
     bool? buffering,
     bool? completed,
@@ -119,7 +125,7 @@ class PlaybackState {
     double? pitch,
     double? volume,
     bool? shuffle,
-    Loop? loop,
+    LoopMode? loop,
     Duration? crossfadeDuration,
     CrossfadeConfig? crossfadeConfig,
     bool? skipSilence,
@@ -131,7 +137,7 @@ class PlaybackState {
     double? preampDb,
     double? balance,
     bool? mono,
-    CrossfeedMode? crossfeedMode,
+    ma.CrossfeedMode? crossfeedMode,
     double? spatializerWidth,
     bool? limiterEnabled,
   }) {

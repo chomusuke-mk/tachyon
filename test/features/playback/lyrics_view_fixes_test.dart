@@ -13,7 +13,6 @@ import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
-import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_view.dart';
@@ -133,7 +132,7 @@ Line 10 plain
 
 class MockPlaybackController extends ChangeNotifier implements PlaybackController {
   @override
-  List<PlaylistEntry> queue = [];
+  List<EngineItem<AudioPlayable>> queue = [];
 
   @override
   int currentIndex = 0;
@@ -142,7 +141,10 @@ class MockPlaybackController extends ChangeNotifier implements PlaybackControlle
   Track? currentTrack;
 
   @override
-  PlaylistEntry? get currentEntry =>
+  AudioPlayable? get currentPlayable => currentTrack;
+
+  @override
+  EngineItem<AudioPlayable>? get currentEntry =>
       queue.isNotEmpty && currentIndex >= 0 && currentIndex < queue.length
           ? queue[currentIndex]
           : null;
@@ -235,7 +237,7 @@ void main() {
       modifiedAt: 1000,
     );
 
-    playback.queue = [PlaylistEntry.forQueue(id: 1, track: testTrack)];
+    playback.queue = [testTrack.toEngineItem()];
     playback.currentIndex = 0;
     playback.setCurrentTrack(testTrack);
     playback.position = const Duration(seconds: 2);
@@ -299,7 +301,7 @@ void main() {
       modifiedAt: 1000,
     );
 
-    playback.queue = [PlaylistEntry.forQueue(id: 2, track: testTrack)];
+    playback.queue = [testTrack.toEngineItem()];
     playback.currentIndex = 0;
     playback.setCurrentTrack(testTrack);
 
@@ -410,8 +412,8 @@ void main() {
     );
 
     playback.queue = [
-      PlaylistEntry.forQueue(id: 1, track: track1),
-      PlaylistEntry.forQueue(id: 2, track: track2),
+      track1.toEngineItem(),
+      track2.toEngineItem(),
     ];
     playback.currentIndex = 0;
     playback.setCurrentTrack(track1);
@@ -488,7 +490,7 @@ void main() {
       album: Album(id: 2, name: 'Album 2'),
     );
 
-    playback.queue = [PlaylistEntry.forQueue(id: 2, track: track)];
+    playback.queue = [track.toEngineItem()];
     playback.currentIndex = 0;
     playback.setCurrentTrack(track);
     playback.position = const Duration(seconds: 4); // Line 2

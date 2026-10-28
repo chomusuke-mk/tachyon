@@ -7,7 +7,8 @@ import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 
-import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
+import 'package:tachyon/shared/utils/duration_formatter.dart';
 import 'package:tachyon/shared/widgets/track_action_helper.dart';
 
 import 'package:tachyon/core/playback/playback_controller.dart';
@@ -123,17 +124,12 @@ class _QueueViewState extends State<QueueView> {
     super.dispose();
   }
 
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final queue = context.select<PlaybackController, List<PlaylistEntry>>(
-      (c) => c.queue,
-    );
+    final queue =
+        context.select<PlaybackController, List<ma.EngineItem<AudioPlayable>>>(
+          (c) => c.queue,
+        );
     final currentIndex = context.select<PlaybackController, int>(
       (c) => c.currentIndex,
     );
@@ -342,10 +338,7 @@ class _QueueViewState extends State<QueueView> {
                                     ),
                                   ),
                                   subtitle: Text(
-                                    track?.artists
-                                            .map((a) => a.name)
-                                            .join(', ') ??
-                                        '',
+                                    track?.artistNames.join(', ') ?? '',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
@@ -357,9 +350,8 @@ class _QueueViewState extends State<QueueView> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        _formatDuration(
-                                          track?.duration ?? Duration.zero,
-                                        ),
+                                        (track?.duration ?? Duration.zero)
+                                            .toFormattedString(padMinutes: true),
                                         style: Theme.of(context)
                                             .textTheme
                                             .bodySmall,

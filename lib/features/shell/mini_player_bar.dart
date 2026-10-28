@@ -1,96 +1,15 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/shared/utils/artwork_color_resolver.dart';
+import 'package:tachyon/shared/utils/duration_formatter.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/text_link.dart';
 
-/// Service responsible for extracting and caching a harmonized background color
-/// from a track's low-quality thumbnail image.
-abstract final class MiniPlayerColorResolver {
-  static final Map<String, Color> _cache = <String, Color>{};
-
-  @visibleForTesting
-  static Map<String, Color> get cache => _cache;
-
-  @visibleForTesting
-  static void clearCache() => _cache.clear();
-
-  /// Computes a surface color harmonized with the extracted artwork color scheme,
-  /// preserving readability and contrasting with [ThemeData.colorScheme].
-  static Color computeColor({
-    required ColorScheme extractedScheme,
-    required ColorScheme themeScheme,
-    required bool isDark,
-    required bool isOled,
-  }) {
-    if (isOled) {
-      return Color.alphaBlend(
-        extractedScheme.primaryContainer.withValues(alpha: 0.28),
-        themeScheme.surfaceContainerHigh,
-      );
-    } else if (isDark) {
-      return Color.alphaBlend(
-        extractedScheme.primaryContainer.withValues(alpha: 0.45),
-        extractedScheme.surfaceContainerHigh,
-      );
-    } else {
-      return Color.alphaBlend(
-        extractedScheme.primaryContainer.withValues(alpha: 0.35),
-        extractedScheme.surfaceContainerHigh,
-      );
-    }
-  }
-
-  /// Asynchronously loads the low-quality thumbnail and extracts
-  /// a Material ColorScheme seeded from the artwork.
-  static Future<Color?> resolveColor({
-    required String thumbnailHash,
-    required ThemeData theme,
-  }) async {
-    final isDark = theme.brightness == Brightness.dark;
-    final isOled =
-        isDark && theme.colorScheme.surface == const Color(0xFF000000);
-    final cacheKey =
-        '$thumbnailHash:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
-
-    if (_cache.containsKey(cacheKey)) {
-      return _cache[cacheKey];
-    }
-
-    try {
-      final filePath = await AlbumArtImage.getThumbnail(
-        thumbnailHash,
-        quality: ThumbnailQuality.low,
-      );
-      if (filePath == null) return null;
-
-      final file = File(filePath);
-      if (!await file.exists() || await file.length() <= 0) return null;
-
-      final scheme = await ColorScheme.fromImageProvider(
-        provider: FileImage(file),
-        brightness: theme.brightness,
-      );
-
-      final color = computeColor(
-        extractedScheme: scheme,
-        themeScheme: theme.colorScheme,
-        isDark: isDark,
-        isOled: isOled,
-      );
-
-      _cache[cacheKey] = color;
-      return color;
-    } catch (_) {
-      return null;
-    }
-  }
-}
+export 'package:tachyon/shared/utils/artwork_color_resolver.dart';
 
 class MiniPlayerBar extends StatefulWidget {
   final bool isDesktop;
@@ -110,12 +29,6 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
   Duration? _lastTotalDuration;
   TextStyle? _lastDurationStyle;
   Widget? _cachedDurationText;
-
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
 
   Widget _buildProgressBar(
     PlaybackController playback,
@@ -154,7 +67,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
           return _cachedDurationText!;
         }
         final textWidget = Text(
-          '${_formatDuration(pos)} / ${_formatDuration(dur)}',
+          '${pos.toFormattedString(padMinutes: true)} / ${dur.toFormattedString(padMinutes: true)}',
           style: style,
         );
         _lastFormattedSecond = sec;

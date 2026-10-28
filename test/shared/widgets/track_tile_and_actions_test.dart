@@ -32,19 +32,19 @@ class _TestLocaleRepository extends LocaleRepository {
 }
 
 class _TrackingPlaybackController extends PlaybackController {
-  final List<Track> insertNextTracks = [];
-  final List<Track> appendTracksList = [];
+  final List<AudioPlayable> insertNextTracks = [];
+  final List<AudioPlayable> appendTracksList = [];
 
   _TrackingPlaybackController({required super.settingsRepository});
 
   @override
-  Future<void> playNext(Track track) async {
+  Future<void> playNext(AudioPlayable track) async {
     insertNextTracks.add(track);
     await super.playNext(track);
   }
 
   @override
-  Future<void> addToQueue(Track track) async {
+  Future<void> addToQueue(AudioPlayable track) async {
     appendTracksList.add(track);
     await super.addToQueue(track);
   }
@@ -523,8 +523,8 @@ void main() {
     expect(userPl.entries.isEmpty, isTrue);
 
     final queue = [
-      PlaylistEntry.forQueue(id: 1, position: 0, track: trackA),
-      PlaylistEntry.forQueue(id: 2, position: 1, track: trackB),
+      trackA.toEngineItem(position: 0),
+      trackB.toEngineItem(position: 1),
     ];
 
     await tester.pumpWidget(
@@ -575,8 +575,8 @@ void main() {
     expect(userPl.entries.length, 1);
 
     final queue = [
-      PlaylistEntry.forQueue(id: 1, position: 0, track: trackA),
-      PlaylistEntry.forQueue(id: 2, position: 1, track: trackB),
+      trackA.toEngineItem(position: 0),
+      trackB.toEngineItem(position: 1),
     ];
 
     await tester.pumpWidget(

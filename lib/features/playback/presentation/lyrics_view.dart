@@ -249,7 +249,7 @@ class _LyricsViewState extends State<LyricsView> {
           filePath: filePath,
           title: track?.title ?? '',
           artist: track != null
-              ? track.artists.map((a) => a.name).join(', ')
+              ? track.artists.firstOrNull?.name ?? ''
               : '',
           album: track?.album?.name,
           durationSeconds: track != null && track.durationMs > 0

@@ -4,6 +4,7 @@ import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/shared/utils/duration_formatter.dart';
 
 import 'album_art_image.dart';
 import 'track_action_helper.dart';
@@ -49,17 +50,6 @@ class TrackTile extends StatelessWidget {
     this.additionalActions,
     this.additionalTrailing,
   });
-
-  String _formatDuration(int durationMs) {
-    final duration = Duration(milliseconds: durationMs);
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    if (hours > 0) {
-      return '$hours:$minutes:$seconds';
-    }
-    return '$minutes:$seconds';
-  }
 
   bool _resolveIsPlaying(BuildContext context) {
     try {
@@ -189,7 +179,7 @@ class TrackTile extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                _formatDuration(track.durationMs),
+                track.durationMs.toFormattedDuration(),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),

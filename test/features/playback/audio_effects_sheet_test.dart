@@ -95,27 +95,17 @@ void main() {
     // Verify Card 4: Stereo & DSP Effects
     expect(find.text('Stereo & DSP Effects'), findsOneWidget);
     expect(find.text('Stereo Balance'), findsOneWidget);
-    expect(find.text('Stereo Width'), findsOneWidget);
+    expect(find.text('Stereo Width'), findsNWidgets(2)); // Stereo effect width + Reverb width knob
     expect(find.text('Bauer Crossfeed (bs2b)'), findsOneWidget);
 
-    // Verify Card 5: Studio Reverb
+    // Verify Card 5: Studio Reverb (always active, controls rendered directly without switches)
     expect(find.text('Studio Reverb'), findsOneWidget);
-
-    // Turn Reverb ON to view Presets and controls
-    await settingsController.setReverbEnabled(true);
-    await tester.pumpAndSettle();
-
     expect(find.text('Room Size'), findsOneWidget);
     expect(find.text('Damping'), findsOneWidget);
     expect(find.text('Dry Level'), findsOneWidget);
 
-    // Verify Card 6: Equalizer Title
+    // Verify Card 6: Equalizer Title & Preamp (always visible, controls rendered directly without switches)
     expect(find.text('Equalizer'), findsOneWidget);
-
-    // Turn Equalizer ON to view Preamp
-    await settingsController.setEqualizerEnabled(true);
-    await tester.pumpAndSettle();
-
     expect(find.text('Preamp'), findsOneWidget);
   });
 
@@ -180,11 +170,22 @@ void main() {
     await settingsController.setReverbDry(1.2);
     expect(settingsController.reverbDry, equals(1.2));
 
-    // Enable EQ and adjust Preamp
-    await settingsController.setEqualizerEnabled(true);
-    await tester.pumpAndSettle();
+    // Reverb reset back to 'off'
+    await settingsController.setReverbPreset('off');
+    expect(settingsController.reverbPreset, equals('off'));
+    expect(settingsController.reverbRoomSize, equals(0.0));
+    expect(settingsController.reverbEnabled, isFalse);
+
+    // Adjust Preamp and Equalizer
     expect(settingsController.preampDb, equals(0.0));
     await settingsController.setPreamp(-3.5);
     expect(settingsController.preampDb, equals(-3.5));
+
+    // Equalizer reset back to 'flat'
+    await settingsController.setEqualizerPreset('flat');
+    await settingsController.setPreamp(0.0);
+    expect(settingsController.equalizerPreset, equals('flat'));
+    expect(settingsController.preampDb, equals(0.0));
+    await tester.pumpAndSettle();
   });
 }

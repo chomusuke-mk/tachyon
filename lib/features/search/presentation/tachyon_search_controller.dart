@@ -8,6 +8,9 @@ import 'package:tachyon/core/store/library_store.dart';
 
 enum SearchFilterCategory { all, tracks, albums, artists }
 
+/// Alias for [TachyonSearchController] avoiding naming collisions with Flutter's [SearchController].
+typedef LibrarySearchController = TachyonSearchController;
+
 class TachyonSearchController extends ChangeNotifier {
   final LibraryStore Function()? storeSupplier;
   final LibraryStore? store;

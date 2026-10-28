@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:tachyon/shared/utils/duration_formatter.dart';
 
 /// Interactive seek slider with optimistic local drag state, simulated aesthetic
 /// waveform rendering, buffered progress indicator, and tabular numeric time readouts.
@@ -57,17 +58,6 @@ class _WaveformSliderState extends State<WaveformSlider> {
   Duration? _lastDuration;
   ColorScheme? _lastColorScheme;
   Widget? _cachedTimeCounterRow;
-
-  String _formatDuration(Duration duration, {String? prefix}) {
-    final totalSeconds = duration.inSeconds.abs();
-    final hours = (totalSeconds ~/ 3600);
-    final minutes = ((totalSeconds % 3600) ~/ 60).toString();
-    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
-    if (hours > 0) {
-      return '${prefix ?? ""}$hours:${minutes.padLeft(2, '0')}:$seconds';
-    }
-    return '${prefix ?? ""}$minutes:$seconds';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -243,7 +233,7 @@ class _WaveformSliderState extends State<WaveformSlider> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         // Elapsed Time
-        Text(_formatDuration(elapsedDuration), style: counterStyle),
+        Text(elapsedDuration.toFormattedString(), style: counterStyle),
         if (widget.currentIndex != null && widget.totalCount != null)
           GestureDetector(
             onTap: () => setState(() {
@@ -254,7 +244,7 @@ class _WaveformSliderState extends State<WaveformSlider> {
               _showPlaylistProgressTime &&
                       widget.playlistPosition != null &&
                       widget.playlistDuration != null
-                  ? '${_formatDuration(widget.playlistPosition!())} / ${_formatDuration(widget.playlistDuration!())}'
+                  ? '${widget.playlistPosition!().toFormattedString()} / ${widget.playlistDuration!().toFormattedString()}'
                   : '${widget.currentIndex ?? 0} / ${widget.totalCount ?? 0}',
               style: counterStyle,
             ),
@@ -268,8 +258,8 @@ class _WaveformSliderState extends State<WaveformSlider> {
           }),
           child: Text(
             _showRemaining
-                ? _formatDuration(remainingDuration, prefix: "-")
-                : _formatDuration(widget.duration),
+                ? remainingDuration.toFormattedString(prefix: "-")
+                : widget.duration.toFormattedString(),
             style: counterStyle,
           ),
         ),

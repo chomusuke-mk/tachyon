@@ -1,22 +1,18 @@
-enum Loop {
-  off('off'),
-  one('one'),
-  all('all');
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 
-  Loop next() {
-    switch (this) {
-      case Loop.off:
-        return Loop.all;
-      case Loop.all:
-        return Loop.one;
-      case Loop.one:
-        return Loop.off;
-    }
-  }
+export 'package:miniaudio_player/miniaudio_player.dart' show LoopMode;
 
-  const Loop(this.repr);
-  final String repr;
-  static Loop fromString(String? val) {
-    return Loop.values.firstWhere((e) => e.repr == val, orElse: () => Loop.off);
+/// Backwards compatibility alias for [ma.LoopMode].
+typedef Loop = ma.LoopMode;
+
+/// Extension providing string serialization and parsing for [ma.LoopMode].
+extension LoopModeExtension on ma.LoopMode {
+  String get repr => name;
+
+  static ma.LoopMode fromString(String? val) {
+    return ma.LoopMode.values.firstWhere(
+      (e) => e.name == val,
+      orElse: () => ma.LoopMode.off,
+    );
   }
 }

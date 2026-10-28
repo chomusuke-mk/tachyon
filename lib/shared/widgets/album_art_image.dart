@@ -4,6 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 
+/// Standard modern alias for [AlbumArtImage] representing general cover/thumbnail artwork.
+typedef CoverArtImage = AlbumArtImage;
+
+/// Standard modern alias for [AlbumArtImage] representing general thumbnail artwork.
+typedef ThumbnailImage = AlbumArtImage;
+
 class AlbumArtImage extends StatelessWidget {
   final String? thumbnailHash;
   final ThumbnailQuality quality;

@@ -15,8 +15,8 @@ class WaveVisualizerPainter extends CustomPainter {
   final Color color;
   final double cornerRadius;
 
-  static final Path _fillPath = Path();
-  static final Paint _fillPaint = Paint()
+  final Path _fillPath = Path();
+  final Paint _fillPaint = Paint()
     ..style = PaintingStyle.fill
     ..isAntiAlias = true;
 

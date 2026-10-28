@@ -213,7 +213,7 @@ class LyricsManager {
     final filePath = resolvedTrack?.filePath ?? '';
     final title = resolvedTrack?.title ?? '';
     final artist = resolvedTrack != null
-        ? resolvedTrack.artists.map((a) => a.name).join(', ')
+        ? resolvedTrack.artists.firstOrNull?.name ?? ''
         : '';
     final album = resolvedTrack?.album?.name;
     final durationSeconds = resolvedTrack != null && resolvedTrack.durationMs > 0

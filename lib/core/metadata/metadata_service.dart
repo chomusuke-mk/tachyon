@@ -12,9 +12,6 @@ import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
 
-/// Track metadata snapshot used to detect unchanged files during incremental scanning.
-typedef TrackFileMeta = ({int modifiedAt, int fileSize});
-
 /// Stored track metadata snapshot in RAM used during differential folder scanning.
 typedef StoredTrackInfo = ({int id, String filePath, int modifiedAt});
 

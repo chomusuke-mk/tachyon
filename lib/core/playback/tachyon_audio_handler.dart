@@ -4,10 +4,10 @@ import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:flutter/foundation.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/core/store/domain/playlist.dart';
 
 /// Bridges [PlaybackController] to [as_lib.BaseAudioHandler].
 /// This acts as the unified system media controls bridge for Android, iOS,
@@ -18,7 +18,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
   bool _isDisposed = false;
   String? _lastEmittedMediaSignature;
-  List<PlaylistEntry>? _lastSyncedPlayables;
+  List<ma.EngineItem<AudioPlayable>>? _lastSyncedPlayables;
   DateTime? _lastPositionUpdateTime;
   Duration _lastEmittedPosition = Duration.zero;
 
@@ -142,18 +142,15 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
           final entry = state.playables[i];
           final t = entry.track;
           if (t == null) continue;
-          final artists = t.artists.map((a) => a.name).join(', ');
-          final uri = resolveLowQualityArtUri(
-            t.thumbnailHash,
-            t.album?.thumbnailHash,
-          );
+          final artists = t.artistNames.join(', ');
+          final uri = resolveLowQualityArtUri(t.thumbnailHash);
           queueItems.add(
             as_lib.MediaItem(
               id: t.filePath,
               title: t.title,
               artist: artists.isNotEmpty ? artists : null,
-              album: t.album?.name,
-              duration: Duration(milliseconds: t.durationMs),
+              album: t.albumTitle,
+              duration: t.duration,
               artUri: uri,
             ),
           );

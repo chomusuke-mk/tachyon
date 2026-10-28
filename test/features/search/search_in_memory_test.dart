@@ -21,7 +21,6 @@ import 'package:tachyon/features/search/presentation/tachyon_search_controller.d
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 
-import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/shared/widgets/album_card.dart';
 import 'package:tachyon/shared/widgets/artist_card.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
@@ -106,7 +105,7 @@ class _TestPlaybackController extends PlaybackController {
     required super.settingsRepository,
   });
 
-  List<PlaylistEntry>? openedItems;
+  List<EngineItem<AudioPlayable>>? openedItems;
   int? openedIndex;
   Track? _activeTrack;
 
@@ -114,15 +113,18 @@ class _TestPlaybackController extends PlaybackController {
   Track? get currentTrack => _activeTrack ?? super.currentTrack;
 
   @override
-  Future<void> playTrack(Track track, {List<Track>? contextTracks}) async {
+  Future<void> playTrack(
+    AudioPlayable track, {
+    List<AudioPlayable>? contextTracks,
+  }) async {
     final list = contextTracks ?? [track];
     openedItems = [
       for (int i = 0; i < list.length; i++)
-        PlaylistEntry.forQueue(id: i, position: i, track: list[i]),
+        list[i].toEngineItem(position: i),
     ];
     openedIndex = list.indexOf(track);
     if (openedIndex == -1) openedIndex = 0;
-    _activeTrack = track;
+    _activeTrack = track is Track ? track : null;
     notifyListeners();
   }
 }
@@ -162,7 +164,6 @@ void main() {
     settingsController = SettingsController(
       repository: settingsRepo,
       playbackController: playbackController,
-      libraryController: libraryController,
     );
     playlistsController = PlaylistsController(
       store: libraryStore,

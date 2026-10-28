@@ -55,7 +55,7 @@ class _TestPlaybackController extends PlaybackController {
 
   Track? _mockCurrentTrack;
   bool _mockIsPlaying = false;
-  List<PlaylistEntry> _mockQueue = [];
+  List<EngineItem<AudioPlayable>> _mockQueue = [];
   int _mockCurrentIndex = 0;
 
   @override
@@ -65,7 +65,7 @@ class _TestPlaybackController extends PlaybackController {
   bool get isPlaying => _mockIsPlaying;
 
   @override
-  List<PlaylistEntry> get queue =>
+  List<EngineItem<AudioPlayable>> get queue =>
       _mockQueue.isNotEmpty ? _mockQueue : super.queue;
 
   @override
@@ -78,7 +78,8 @@ class _TestPlaybackController extends PlaybackController {
     if (state.playables.isNotEmpty &&
         state.index >= 0 &&
         state.index < state.playables.length) {
-      _mockCurrentTrack = state.playables[state.index].track;
+      final p = state.playables[state.index].track;
+      _mockCurrentTrack = p is Track ? p : null;
     } else {
       _mockCurrentTrack = null;
     }
@@ -718,8 +719,8 @@ void main() {
         PlaybackState(
           playing: true,
           playables: [
-            PlaylistEntry.forQueue(id: 1, position: 0, track: playingTrack),
-            PlaylistEntry.forQueue(id: 2, position: 1, track: otherTrack),
+            playingTrack.toEngineItem(position: 0),
+            otherTrack.toEngineItem(position: 1),
           ],
           index: 0,
         ),
@@ -820,7 +821,7 @@ void main() {
         PlaybackState(
           playing: true,
           playables: [
-            PlaylistEntry.forQueue(id: 1, position: 0, track: playingTrack),
+            playingTrack.toEngineItem(position: 0),
           ],
           index: 0,
         ),
@@ -903,7 +904,7 @@ void main() {
         PlaybackState(
           playing: true,
           playables: [
-            PlaylistEntry.forQueue(id: 1, position: 0, track: playingTrack),
+            playingTrack.toEngineItem(position: 0),
           ],
           index: 0,
         ),

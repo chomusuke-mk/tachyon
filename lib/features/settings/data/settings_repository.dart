@@ -5,23 +5,12 @@ import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist_sort_option.dart';
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
+import 'package:tachyon/core/playback/domain/crossfade_config.dart';
 import 'package:tachyon/core/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 
-enum CrossfadeCurve {
-  equalPower('equal_power'),
-  linear('linear');
-
-  const CrossfadeCurve(this.jsonValue);
-  final String jsonValue;
-
-  static CrossfadeCurve fromString(String? val) {
-    return CrossfadeCurve.values.firstWhere(
-      (e) => e.jsonValue == val,
-      orElse: () => CrossfadeCurve.equalPower,
-    );
-  }
-}
+export 'package:tachyon/core/playback/domain/crossfade_config.dart'
+    show CrossfadeCurve;
 
 class SettingsRepository {
   final SharedPreferences _prefs;
@@ -99,14 +88,17 @@ class SettingsRepository {
     return AppSettings(
       musicDirectories: _prefs.getStringList(_keyMusicDirectories) ?? [],
       crossfadeDuration: _prefs.getInt(_keyCrossfadeDuration) ?? 5,
-      crossfadeManualDuration: _prefs.getInt(_keyCrossfadeManualDuration) ?? 3,
-      crossfadeCurve: CrossfadeCurve.fromString(
+      crossfadeManualDuration: _prefs.getInt(_keyCrossfadeManualDuration) ?? 1,
+      crossfadeCurve: CrossfadeCurveExtension.fromString(
         _prefs.getString(_keyCrossfadeCurve),
       ),
-      volume: _prefs.getDouble(_keyVolume) ?? 100.0,
+      volume: () {
+        final val = _prefs.getDouble(_keyVolume) ?? 1.0;
+        return val > 1.0 ? (val / 100.0).clamp(0.0, 1.0) : val.clamp(0.0, 1.0);
+      }(),
       playbackRate: _prefs.getDouble(_keyPlaybackRate) ?? 1.0,
       playbackPitch: _prefs.getDouble(_keyPlaybackPitch) ?? 1.0,
-      loopMode: Loop.fromString(_prefs.getString(_keyLoopMode)),
+      loopMode: LoopModeExtension.fromString(_prefs.getString(_keyLoopMode)),
       shuffle: _prefs.getBool(_keyShuffle) ?? false,
       skipSilence: _prefs.getBool(_keySkipSilence) ?? false,
       volumeNormalization: _prefs.getBool(_keyVolumeNormalization) ?? true,
@@ -119,7 +111,10 @@ class SettingsRepository {
           CrossfeedMode.off,
       spatializerWidth: _prefs.getDouble(_keySpatializer) ?? 1.0,
       limiterEnabled: _prefs.getBool(_keyLimiter) ?? true,
-      volumeBoost: _prefs.getDouble(_keyVolumeBoost) ?? 100.0,
+      volumeBoost: () {
+        final val = _prefs.getDouble(_keyVolumeBoost) ?? 1.0;
+        return val > 2.0 ? (val / 100.0).clamp(1.0, 2.0) : val.clamp(1.0, 2.0);
+      }(),
       themeMode: _getAppTheme(),
       accentColorValue: _prefs.getInt(_keyAccentColor) ?? 0xFF7C4DFF,
       isOledMode: _prefs.getBool(_keyIsOledMode) ?? false,
@@ -153,7 +148,7 @@ class SettingsRepository {
       audioOutputDeviceId: _prefs.getString(_keyAudioOutputDeviceId),
       lastPlayedFilePath: _prefs.getString(_keyLastPlayedFilePath),
       lastPlayedPositionMs: _prefs.getInt(_keyLastPlayedPosition) ?? 0,
-      equalizerEnabled: _prefs.getBool(_keyEqualizerEnabled) ?? false,
+      equalizerEnabled: _prefs.getBool(_keyEqualizerEnabled) ?? true,
       equalizerPreset: _prefs.getString(_keyEqualizerPreset) ?? 'flat',
       equalizerGains: getEqualizerGains(),
       reverbEnabled: _prefs.getBool(_keyReverbEnabled) ?? false,
@@ -363,13 +358,13 @@ class SettingsRepository {
       _prefs.setInt(_keyCrossfadeDuration, durationSeconds.clamp(0, 30));
 
   Future<void> setCrossfadeManualDuration(int durationSeconds) =>
-      _prefs.setInt(_keyCrossfadeManualDuration, durationSeconds.clamp(0, 30));
+      _prefs.setInt(_keyCrossfadeManualDuration, durationSeconds.clamp(0, 5));
 
   Future<void> setCrossfadeCurve(CrossfadeCurve curve) =>
       _prefs.setString(_keyCrossfadeCurve, curve.jsonValue);
 
   Future<void> setVolume(double volume) =>
-      _prefs.setDouble(_keyVolume, volume.clamp(0, 100));
+      _prefs.setDouble(_keyVolume, volume.clamp(0.0, 2.0));
 
   Future<void> setPlaybackRate(double rate) =>
       _prefs.setDouble(_keyPlaybackRate, rate.clamp(0.5, 1.5));

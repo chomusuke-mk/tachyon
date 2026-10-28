@@ -5,21 +5,15 @@ import 'package:flutter/material.dart';
 
 /// Renders a persistent background wallpaper image with Gaussian blur
 /// and an adaptive surface tint overlay to ensure text legibility and contrast.
-class AppBackground extends StatelessWidget {
+class AppBackground extends StatefulWidget {
   final String? imagePath;
   final double blurSigma;
   final double dimOpacity;
 
-  static String? _cachedCheckedPath;
-  static bool _cachedPathExists = false;
-
-  /// Checks whether [path] exists on disk, caching the result for repeated builds.
+  /// Checks whether [path] is non-empty and exists on disk.
   static bool fileExists(String? path) {
     if (path == null || path.isEmpty) return false;
-    if (path == _cachedCheckedPath) return _cachedPathExists;
-    _cachedCheckedPath = path;
-    _cachedPathExists = File(path).existsSync();
-    return _cachedPathExists;
+    return File(path).existsSync();
   }
 
   const AppBackground({
@@ -30,21 +24,53 @@ class AppBackground extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    if (!fileExists(imagePath)) return const SizedBox.shrink();
+  State<AppBackground> createState() => _AppBackgroundState();
+}
 
-    final file = File(imagePath!);
+class _AppBackgroundState extends State<AppBackground> {
+  bool _exists = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkExists();
+  }
+
+  @override
+  void didUpdateWidget(covariant AppBackground oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imagePath != widget.imagePath) {
+      _checkExists();
+    }
+  }
+
+  void _checkExists() {
+    final path = widget.imagePath;
+    if (path == null || path.isEmpty) {
+      _exists = false;
+    } else {
+      _exists = File(path).existsSync();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_exists || widget.imagePath == null) {
+      return const SizedBox.shrink();
+    }
+
+    final file = File(widget.imagePath!);
     final colorScheme = Theme.of(context).colorScheme;
 
     return RepaintBoundary(
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (blurSigma > 0.0)
+          if (widget.blurSigma > 0.0)
             ImageFiltered(
               imageFilter: ImageFilter.blur(
-                sigmaX: blurSigma,
-                sigmaY: blurSigma,
+                sigmaX: widget.blurSigma,
+                sigmaY: widget.blurSigma,
                 tileMode: TileMode.clamp,
               ),
               child: Transform.scale(
@@ -67,7 +93,7 @@ class AppBackground extends StatelessWidget {
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           Container(
-            color: colorScheme.surface.withValues(alpha: dimOpacity),
+            color: colorScheme.surface.withValues(alpha: widget.dimOpacity),
           ),
         ],
       ),

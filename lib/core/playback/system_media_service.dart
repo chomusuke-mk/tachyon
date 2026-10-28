@@ -5,8 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/shared/utils/memory_optimizer.dart';
-import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/utils/app_memory_coordinator.dart';
 
 import 'linux_mpris_bridge.dart';
 import 'tachyon_audio_handler.dart';
@@ -127,50 +126,15 @@ class SystemMediaService with WidgetsBindingObserver {
     return service;
   }
 
-  bool _isBackgroundTrimmed = false;
-
   /// Enters or exits Minimized Mode, coordinating UI cache eviction,
   /// ticker suspension, position throttling, and native memory trimming.
   void setMinimizedMode(bool minimized) {
-    if (_isMinimizedNotifier.value == minimized &&
-        (minimized ? _isBackgroundTrimmed : !_isBackgroundTrimmed)) {
+    if (_isMinimizedNotifier.value == minimized) {
       return;
     }
     _isMinimizedNotifier.value = minimized;
     _playbackController?.setMinimized(minimized);
-
-    if (minimized) {
-      MemoryOptimizer.stopPeriodicTrimmer();
-      PaintingBinding.instance.imageCache.clear();
-      PaintingBinding.instance.imageCache.clearLiveImages();
-      AlbumArtImage.clearExistenceCache();
-      try {
-        SystemChannels.skia.invokeMethod<void>(
-          'Skia.setResourceCacheMaxBytes',
-          0,
-        );
-      } catch (_) {}
-      if (!_isBackgroundTrimmed) {
-        _isBackgroundTrimmed = true;
-        MemoryOptimizer.trim(aggressive: true);
-        // Schedule a zero-allocation purge after Dart_NotifyLowMemory() completes
-        Future<void>.delayed(const Duration(milliseconds: 450), () {
-          if (_isBackgroundTrimmed) {
-            MemoryOptimizer.trim(aggressive: false);
-          }
-        });
-      }
-    } else {
-      _isBackgroundTrimmed = false;
-      try {
-        SystemChannels.skia.invokeMethod<void>(
-          'Skia.setResourceCacheMaxBytes',
-          4 * 1024 * 1024,
-        );
-      } catch (_) {}
-      MemoryOptimizer.trim(aggressive: false);
-      MemoryOptimizer.startPeriodicTrimmer();
-    }
+    AppMemoryCoordinator.applyMinimizedMemoryPolicy(minimized);
   }
 
   /// Static helper to update Minimized Mode state directly (e.g. from lifecycle
@@ -182,16 +146,7 @@ class SystemMediaService with WidgetsBindingObserver {
     if (_isMinimizedNotifier.value == minimized) return;
     _isMinimizedNotifier.value = minimized;
     playbackController?.setMinimized(minimized);
-    if (minimized) {
-      MemoryOptimizer.stopPeriodicTrimmer();
-      PaintingBinding.instance.imageCache.clear();
-      PaintingBinding.instance.imageCache.clearLiveImages();
-      AlbumArtImage.clearExistenceCache();
-      MemoryOptimizer.trim(aggressive: true);
-    } else {
-      MemoryOptimizer.trim(aggressive: false);
-      MemoryOptimizer.startPeriodicTrimmer();
-    }
+    AppMemoryCoordinator.applyMinimizedMemoryPolicy(minimized);
   }
 
   @override
