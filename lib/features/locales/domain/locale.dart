@@ -1,623 +1,626 @@
 import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 
+/// Alias for [AppStringKey] providing semantic nomenclature.
+typedef AppStrings = AppStringKey;
+
 /// Central domain class managing localized string lookups for Tachyon.
 ///
 /// Exposes strictly-typed camelCase getters for all keys cataloged in
 /// `i18n/en.jsonc` and `i18n/es.jsonc`. All getters guarantee a null-safe
 /// empty string fallback.
 class AppStringKey {
-  final Map<String, String> _cadenasLocalizadas = <String, String>{};
+  final Map<String, String> _localizedStrings = <String, String>{};
 
   // ---------------------------------------------------------------------------
   // np_: Now Playing & Transport Controls
   // ---------------------------------------------------------------------------
-  String get npTitle => _cadenasLocalizadas['np_title'] ?? '';
-  String get npPlay => _cadenasLocalizadas['np_play'] ?? '';
-  String get npPause => _cadenasLocalizadas['np_pause'] ?? '';
-  String get npPrevious => _cadenasLocalizadas['np_previous'] ?? '';
-  String get npNext => _cadenasLocalizadas['np_next'] ?? '';
-  String get npStop => _cadenasLocalizadas['np_stop'] ?? '';
-  String get npMute => _cadenasLocalizadas['np_mute'] ?? '';
-  String get npUnmute => _cadenasLocalizadas['np_unmute'] ?? '';
-  String get npVolume => _cadenasLocalizadas['np_volume'] ?? '';
-  String get npShuffleOff => _cadenasLocalizadas['np_shuffle_off'] ?? '';
-  String get npShuffleOn => _cadenasLocalizadas['np_shuffle_on'] ?? '';
-  String get npRepeatOff => _cadenasLocalizadas['np_repeat_off'] ?? '';
-  String get npRepeatAll => _cadenasLocalizadas['np_repeat_all'] ?? '';
-  String get npRepeatOne => _cadenasLocalizadas['np_repeat_one'] ?? '';
-  String get npElapsed => _cadenasLocalizadas['np_elapsed'] ?? '';
-  String get npRemaining => _cadenasLocalizadas['np_remaining'] ?? '';
-  String get npDuration => _cadenasLocalizadas['np_duration'] ?? '';
-  String get npSeekForward => _cadenasLocalizadas['np_seek_forward'] ?? '';
-  String get npSeekBackward => _cadenasLocalizadas['np_seek_backward'] ?? '';
-  String get npQueue => _cadenasLocalizadas['np_queue'] ?? '';
-  String get npQueueClear => _cadenasLocalizadas['np_queue_clear'] ?? '';
+  String get npTitle => _localizedStrings['np_title'] ?? '';
+  String get npPlay => _localizedStrings['np_play'] ?? '';
+  String get npPause => _localizedStrings['np_pause'] ?? '';
+  String get npPrevious => _localizedStrings['np_previous'] ?? '';
+  String get npNext => _localizedStrings['np_next'] ?? '';
+  String get npStop => _localizedStrings['np_stop'] ?? '';
+  String get npMute => _localizedStrings['np_mute'] ?? '';
+  String get npUnmute => _localizedStrings['np_unmute'] ?? '';
+  String get npVolume => _localizedStrings['np_volume'] ?? '';
+  String get npShuffleOff => _localizedStrings['np_shuffle_off'] ?? '';
+  String get npShuffleOn => _localizedStrings['np_shuffle_on'] ?? '';
+  String get npRepeatOff => _localizedStrings['np_repeat_off'] ?? '';
+  String get npRepeatAll => _localizedStrings['np_repeat_all'] ?? '';
+  String get npRepeatOne => _localizedStrings['np_repeat_one'] ?? '';
+  String get npElapsed => _localizedStrings['np_elapsed'] ?? '';
+  String get npRemaining => _localizedStrings['np_remaining'] ?? '';
+  String get npDuration => _localizedStrings['np_duration'] ?? '';
+  String get npSeekForward => _localizedStrings['np_seek_forward'] ?? '';
+  String get npSeekBackward => _localizedStrings['np_seek_backward'] ?? '';
+  String get npQueue => _localizedStrings['np_queue'] ?? '';
+  String get npQueueClear => _localizedStrings['np_queue_clear'] ?? '';
   String get npQueueClearConfirm =>
-      _cadenasLocalizadas['np_queue_clear_confirm'] ?? '';
-  String get npQueueEmpty => _cadenasLocalizadas['np_queue_empty'] ?? '';
-  String get npQueueReorder => _cadenasLocalizadas['np_queue_reorder'] ?? '';
+      _localizedStrings['np_queue_clear_confirm'] ?? '';
+  String get npQueueEmpty => _localizedStrings['np_queue_empty'] ?? '';
+  String get npQueueReorder => _localizedStrings['np_queue_reorder'] ?? '';
   String get npQueueAddToPlaylist =>
-      _cadenasLocalizadas['np_queue_add_to_playlist'] ?? '';
+      _localizedStrings['np_queue_add_to_playlist'] ?? '';
   String get npInfiniteMix =>
-      _cadenasLocalizadas['np_infinite_mix'] ?? '';
-  String get npLyrics => _cadenasLocalizadas['np_lyrics'] ?? '';
-  String get npLyricsEmpty => _cadenasLocalizadas['np_lyrics_empty'] ?? '';
-  String get npLyricsSync => _cadenasLocalizadas['np_lyrics_sync'] ?? '';
-  String get npLyricsUnsync => _cadenasLocalizadas['np_lyrics_unsync'] ?? '';
+      _localizedStrings['np_infinite_mix'] ?? '';
+  String get npLyrics => _localizedStrings['np_lyrics'] ?? '';
+  String get npLyricsEmpty => _localizedStrings['np_lyrics_empty'] ?? '';
+  String get npLyricsSync => _localizedStrings['np_lyrics_sync'] ?? '';
+  String get npLyricsUnsync => _localizedStrings['np_lyrics_unsync'] ?? '';
   String get npLyricsTranslate =>
-      _cadenasLocalizadas['np_lyrics_translate'] ?? '';
+      _localizedStrings['np_lyrics_translate'] ?? '';
   String get npLyricsTranslating =>
-      _cadenasLocalizadas['np_lyrics_translating'] ?? '';
+      _localizedStrings['np_lyrics_translating'] ?? '';
   String get npLyricsTranslationMode =>
-      _cadenasLocalizadas['np_lyrics_translation_mode'] ?? '';
+      _localizedStrings['np_lyrics_translation_mode'] ?? '';
   String get npLyricsOriginal =>
-      _cadenasLocalizadas['np_lyrics_original'] ?? '';
+      _localizedStrings['np_lyrics_original'] ?? '';
   String get npLyricsTranslated =>
-      _cadenasLocalizadas['np_lyrics_translated'] ?? '';
+      _localizedStrings['np_lyrics_translated'] ?? '';
   String get npLyricsInterleaved =>
-      _cadenasLocalizadas['np_lyrics_interleaved'] ?? '';
-  String get npLyricsSources => _cadenasLocalizadas['np_lyrics_sources'] ?? '';
+      _localizedStrings['np_lyrics_interleaved'] ?? '';
+  String get npLyricsSources => _localizedStrings['np_lyrics_sources'] ?? '';
   String get npLyricsResearch =>
-      _cadenasLocalizadas['np_lyrics_research'] ?? '';
+      _localizedStrings['np_lyrics_research'] ?? '';
   String get npLyricsResumeSync =>
-      _cadenasLocalizadas['np_lyrics_resume_sync'] ?? '';
+      _localizedStrings['np_lyrics_resume_sync'] ?? '';
   String get npLyricsSourcesTitle =>
-      _cadenasLocalizadas['np_lyrics_sources_title'] ?? '';
+      _localizedStrings['np_lyrics_sources_title'] ?? '';
   String get npLyricsSourceLocal =>
-      _cadenasLocalizadas['np_lyrics_source_local'] ?? '';
+      _localizedStrings['np_lyrics_source_local'] ?? '';
   String get npLyricsSourceLocalDesc =>
-      _cadenasLocalizadas['np_lyrics_source_local_desc'] ?? '';
+      _localizedStrings['np_lyrics_source_local_desc'] ?? '';
   String get npLyricsSourceLrclib =>
-      _cadenasLocalizadas['np_lyrics_source_lrclib'] ?? '';
+      _localizedStrings['np_lyrics_source_lrclib'] ?? '';
   String get npLyricsSourceLrclibDesc =>
-      _cadenasLocalizadas['np_lyrics_source_lrclib_desc'] ?? '';
+      _localizedStrings['np_lyrics_source_lrclib_desc'] ?? '';
   String get npLyricsSourceOvh =>
-      _cadenasLocalizadas['np_lyrics_source_ovh'] ?? '';
+      _localizedStrings['np_lyrics_source_ovh'] ?? '';
   String get npLyricsSourceOvhDesc =>
-      _cadenasLocalizadas['np_lyrics_source_ovh_desc'] ?? '';
+      _localizedStrings['np_lyrics_source_ovh_desc'] ?? '';
   String get npLyricsSourcesResearch =>
-      _cadenasLocalizadas['np_lyrics_sources_research'] ?? '';
+      _localizedStrings['np_lyrics_sources_research'] ?? '';
   String get npLyricsSourcesResearchBtn =>
-      _cadenasLocalizadas['np_lyrics_sources_research_btn'] ?? '';
+      _localizedStrings['np_lyrics_sources_research_btn'] ?? '';
   String get npLyricsRetranslateBtn =>
-      _cadenasLocalizadas['np_lyrics_retranslate_btn'] ?? '';
+      _localizedStrings['np_lyrics_retranslate_btn'] ?? '';
   String get npLyricsSourcesClose =>
-      _cadenasLocalizadas['np_lyrics_sources_close'] ?? '';
+      _localizedStrings['np_lyrics_sources_close'] ?? '';
   String get npLyricsSourcesCloseBtn =>
-      _cadenasLocalizadas['np_lyrics_sources_close_btn'] ?? '';
+      _localizedStrings['np_lyrics_sources_close_btn'] ?? '';
   String get npLyricsTabSources =>
-      _cadenasLocalizadas['np_lyrics_tab_sources'] ?? '';
+      _localizedStrings['np_lyrics_tab_sources'] ?? '';
   String get npLyricsTabTranslation =>
-      _cadenasLocalizadas['np_lyrics_tab_translation'] ?? '';
+      _localizedStrings['np_lyrics_tab_translation'] ?? '';
   String get npLyricsSourceLang =>
-      _cadenasLocalizadas['np_lyrics_source_lang'] ?? '';
+      _localizedStrings['np_lyrics_source_lang'] ?? '';
   String get npLyricsTargetLang =>
-      _cadenasLocalizadas['np_lyrics_target_lang'] ?? '';
+      _localizedStrings['np_lyrics_target_lang'] ?? '';
   String get npLyricsLangAuto =>
-      _cadenasLocalizadas['np_lyrics_lang_auto'] ?? '';
+      _localizedStrings['np_lyrics_lang_auto'] ?? '';
   String get npLyricsLangAutoTarget =>
-      _cadenasLocalizadas['np_lyrics_lang_auto_target'] ?? '';
+      _localizedStrings['np_lyrics_lang_auto_target'] ?? '';
   String get npLyricsRateLimitError =>
-      _cadenasLocalizadas['np_lyrics_rate_limit_error'] ?? '';
+      _localizedStrings['np_lyrics_rate_limit_error'] ?? '';
   String get npLyricsThresholdWaiting =>
-      _cadenasLocalizadas['np_lyrics_threshold_waiting'] ?? '';
+      _localizedStrings['np_lyrics_threshold_waiting'] ?? '';
   String get npLyricsBannerDismiss =>
-      _cadenasLocalizadas['np_lyrics_banner_dismiss'] ?? '';
+      _localizedStrings['np_lyrics_banner_dismiss'] ?? '';
   String get npLyricsSourceEmbedded =>
-      _cadenasLocalizadas['np_lyrics_source_embedded'] ?? '';
+      _localizedStrings['np_lyrics_source_embedded'] ?? '';
   String get npLyricsSourceFile =>
-      _cadenasLocalizadas['np_lyrics_source_file'] ?? '';
+      _localizedStrings['np_lyrics_source_file'] ?? '';
   String get npLyricsSourceNone =>
-      _cadenasLocalizadas['np_lyrics_source_none'] ?? '';
-  String get npLyricsLoading => _cadenasLocalizadas['np_lyrics_loading'] ?? '';
-  String get npLyricsError => _cadenasLocalizadas['np_lyrics_error'] ?? '';
+      _localizedStrings['np_lyrics_source_none'] ?? '';
+  String get npLyricsLoading => _localizedStrings['np_lyrics_loading'] ?? '';
+  String get npLyricsError => _localizedStrings['np_lyrics_error'] ?? '';
   String get npLyricsTranslateError =>
-      _cadenasLocalizadas['np_lyrics_translate_error'] ?? '';
-  String get npAudioControls => _cadenasLocalizadas['np_audio_controls'] ?? '';
-  String get npSpeed => _cadenasLocalizadas['np_speed'] ?? '';
-  String get npPitch => _cadenasLocalizadas['np_pitch'] ?? '';
-  String get npVolumeBoost => _cadenasLocalizadas['np_volume_boost'] ?? '';
-  String get npReplayGain => _cadenasLocalizadas['np_replay_gain'] ?? '';
-  String get npReplayGainOff => _cadenasLocalizadas['np_replay_gain_off'] ?? '';
+      _localizedStrings['np_lyrics_translate_error'] ?? '';
+  String get npAudioControls => _localizedStrings['np_audio_controls'] ?? '';
+  String get npSpeed => _localizedStrings['np_speed'] ?? '';
+  String get npPitch => _localizedStrings['np_pitch'] ?? '';
+  String get npVolumeBoost => _localizedStrings['np_volume_boost'] ?? '';
+  String get npReplayGain => _localizedStrings['np_replay_gain'] ?? '';
+  String get npReplayGainOff => _localizedStrings['np_replay_gain_off'] ?? '';
   String get npReplayGainTrack =>
-      _cadenasLocalizadas['np_replay_gain_track'] ?? '';
+      _localizedStrings['np_replay_gain_track'] ?? '';
   String get npReplayGainAlbum =>
-      _cadenasLocalizadas['np_replay_gain_album'] ?? '';
-  String get npPreamp => _cadenasLocalizadas['np_preamp'] ?? '';
-  String get npCrossfade => _cadenasLocalizadas['np_crossfade'] ?? '';
+      _localizedStrings['np_replay_gain_album'] ?? '';
+  String get npPreamp => _localizedStrings['np_preamp'] ?? '';
+  String get npCrossfade => _localizedStrings['np_crossfade'] ?? '';
   String get npCrossfadeDuration =>
-      _cadenasLocalizadas['np_crossfade_duration'] ?? '';
-  String get npAudioDevices => _cadenasLocalizadas['np_audio_devices'] ?? '';
+      _localizedStrings['np_crossfade_duration'] ?? '';
+  String get npAudioDevices => _localizedStrings['np_audio_devices'] ?? '';
   String get npAudioDeviceDefault =>
-      _cadenasLocalizadas['np_audio_device_default'] ?? '';
-  String get npCrossfadeAuto => _cadenasLocalizadas['np_crossfade_auto'] ?? '';
+      _localizedStrings['np_audio_device_default'] ?? '';
+  String get npCrossfadeAuto => _localizedStrings['np_crossfade_auto'] ?? '';
   String get npCrossfadeManual =>
-      _cadenasLocalizadas['np_crossfade_manual'] ?? '';
+      _localizedStrings['np_crossfade_manual'] ?? '';
   String get npExclusiveAudio =>
-      _cadenasLocalizadas['np_exclusive_audio'] ?? '';
-  String get npFullscreen => _cadenasLocalizadas['np_fullscreen'] ?? '';
+      _localizedStrings['np_exclusive_audio'] ?? '';
+  String get npFullscreen => _localizedStrings['np_fullscreen'] ?? '';
   String get npExitFullscreen =>
-      _cadenasLocalizadas['np_exit_fullscreen'] ?? '';
-  String get npVisualizer => _cadenasLocalizadas['np_visualizer'] ?? '';
+      _localizedStrings['np_exit_fullscreen'] ?? '';
+  String get npVisualizer => _localizedStrings['np_visualizer'] ?? '';
   String get npBackgroundArtwork =>
-      _cadenasLocalizadas['np_background_artwork'] ?? '';
+      _localizedStrings['np_background_artwork'] ?? '';
   String get npBackgroundGradient =>
-      _cadenasLocalizadas['np_background_gradient'] ?? '';
-  String get npAddToPlaylist => _cadenasLocalizadas['np_add_to_playlist'] ?? '';
-  String get npLike => _cadenasLocalizadas['np_like'] ?? '';
-  String get npUnlike => _cadenasLocalizadas['np_unlike'] ?? '';
-  String get npTechnicalInfo => _cadenasLocalizadas['np_technical_info'] ?? '';
-  String get npBitrate => _cadenasLocalizadas['np_bitrate'] ?? '';
-  String get npSampleRate => _cadenasLocalizadas['np_sample_rate'] ?? '';
-  String get npChannels => _cadenasLocalizadas['np_channels'] ?? '';
-  String get npFormat => _cadenasLocalizadas['np_format'] ?? '';
+      _localizedStrings['np_background_gradient'] ?? '';
+  String get npAddToPlaylist => _localizedStrings['np_add_to_playlist'] ?? '';
+  String get npLike => _localizedStrings['np_like'] ?? '';
+  String get npUnlike => _localizedStrings['np_unlike'] ?? '';
+  String get npTechnicalInfo => _localizedStrings['np_technical_info'] ?? '';
+  String get npBitrate => _localizedStrings['np_bitrate'] ?? '';
+  String get npSampleRate => _localizedStrings['np_sample_rate'] ?? '';
+  String get npChannels => _localizedStrings['np_channels'] ?? '';
+  String get npFormat => _localizedStrings['np_format'] ?? '';
 
   // ---------------------------------------------------------------------------
   // tr_: Tracks Screen & Actions
   // ---------------------------------------------------------------------------
-  String get trTitle => _cadenasLocalizadas['tr_title'] ?? '';
-  String get trSearchHint => _cadenasLocalizadas['tr_search_hint'] ?? '';
-  String get trPlay => _cadenasLocalizadas['tr_play'] ?? '';
-  String get trPlayNext => _cadenasLocalizadas['tr_play_next'] ?? '';
-  String get trAddQueue => _cadenasLocalizadas['tr_add_queue'] ?? '';
-  String get trAddPlaylist => _cadenasLocalizadas['tr_add_playlist'] ?? '';
-  String get trViewAlbum => _cadenasLocalizadas['tr_view_album'] ?? '';
-  String get trViewArtist => _cadenasLocalizadas['tr_view_artist'] ?? '';
-  String get trEditTags => _cadenasLocalizadas['tr_edit_tags'] ?? '';
-  String get trFileInfo => _cadenasLocalizadas['tr_file_info'] ?? '';
-  String get trShare => _cadenasLocalizadas['tr_share'] ?? '';
-  String get trDelete => _cadenasLocalizadas['tr_delete'] ?? '';
-  String get trDeleteConfirm => _cadenasLocalizadas['tr_delete_confirm'] ?? '';
+  String get trTitle => _localizedStrings['tr_title'] ?? '';
+  String get trSearchHint => _localizedStrings['tr_search_hint'] ?? '';
+  String get trPlay => _localizedStrings['tr_play'] ?? '';
+  String get trPlayNext => _localizedStrings['tr_play_next'] ?? '';
+  String get trAddQueue => _localizedStrings['tr_add_queue'] ?? '';
+  String get trAddPlaylist => _localizedStrings['tr_add_playlist'] ?? '';
+  String get trViewAlbum => _localizedStrings['tr_view_album'] ?? '';
+  String get trViewArtist => _localizedStrings['tr_view_artist'] ?? '';
+  String get trEditTags => _localizedStrings['tr_edit_tags'] ?? '';
+  String get trFileInfo => _localizedStrings['tr_file_info'] ?? '';
+  String get trShare => _localizedStrings['tr_share'] ?? '';
+  String get trDelete => _localizedStrings['tr_delete'] ?? '';
+  String get trDeleteConfirm => _localizedStrings['tr_delete_confirm'] ?? '';
   String get trDeletedSuccess =>
-      _cadenasLocalizadas['tr_deleted_success'] ?? '';
-  String get trNoTracks => _cadenasLocalizadas['tr_no_tracks'] ?? '';
-  String get trNoTracksDesc => _cadenasLocalizadas['tr_no_tracks_desc'] ?? '';
-  String get trLoadingTracks => _cadenasLocalizadas['tr_loading_tracks'] ?? '';
-  String get trCount => _cadenasLocalizadas['tr_count'] ?? '';
-  String get trSort => _cadenasLocalizadas['tr_sort'] ?? '';
-  String get trSortTitle => _cadenasLocalizadas['tr_sort_title'] ?? '';
-  String get trSortArtist => _cadenasLocalizadas['tr_sort_artist'] ?? '';
-  String get trSortAlbum => _cadenasLocalizadas['tr_sort_album'] ?? '';
-  String get trSortDateAdded => _cadenasLocalizadas['tr_sort_date_added'] ?? '';
-  String get trSortDuration => _cadenasLocalizadas['tr_sort_duration'] ?? '';
-  String get trSortAscending => _cadenasLocalizadas['tr_sort_ascending'] ?? '';
+      _localizedStrings['tr_deleted_success'] ?? '';
+  String get trNoTracks => _localizedStrings['tr_no_tracks'] ?? '';
+  String get trNoTracksDesc => _localizedStrings['tr_no_tracks_desc'] ?? '';
+  String get trLoadingTracks => _localizedStrings['tr_loading_tracks'] ?? '';
+  String get trCount => _localizedStrings['tr_count'] ?? '';
+  String get trSort => _localizedStrings['tr_sort'] ?? '';
+  String get trSortTitle => _localizedStrings['tr_sort_title'] ?? '';
+  String get trSortArtist => _localizedStrings['tr_sort_artist'] ?? '';
+  String get trSortAlbum => _localizedStrings['tr_sort_album'] ?? '';
+  String get trSortDateAdded => _localizedStrings['tr_sort_date_added'] ?? '';
+  String get trSortDuration => _localizedStrings['tr_sort_duration'] ?? '';
+  String get trSortAscending => _localizedStrings['tr_sort_ascending'] ?? '';
   String get trSortDescending =>
-      _cadenasLocalizadas['tr_sort_descending'] ?? '';
-  String get trFilePath => _cadenasLocalizadas['tr_file_path'] ?? '';
-  String get trCodec => _cadenasLocalizadas['tr_codec'] ?? '';
-  String get trFileSize => _cadenasLocalizadas['tr_file_size'] ?? '';
-  String get trUnknownArtist => _cadenasLocalizadas['tr_unknown_artist'] ?? '';
+      _localizedStrings['tr_sort_descending'] ?? '';
+  String get trFilePath => _localizedStrings['tr_file_path'] ?? '';
+  String get trCodec => _localizedStrings['tr_codec'] ?? '';
+  String get trFileSize => _localizedStrings['tr_file_size'] ?? '';
+  String get trUnknownArtist => _localizedStrings['tr_unknown_artist'] ?? '';
   String get trAddedToPlaylist =>
-      _cadenasLocalizadas['tr_added_to_playlist'] ?? '';
-  String get trMoreActions => _cadenasLocalizadas['tr_more_actions'] ?? '';
-  String get trShuffleAll => _cadenasLocalizadas['tr_shuffle_all'] ?? '';
+      _localizedStrings['tr_added_to_playlist'] ?? '';
+  String get trMoreActions => _localizedStrings['tr_more_actions'] ?? '';
+  String get trShuffleAll => _localizedStrings['tr_shuffle_all'] ?? '';
 
   // ---------------------------------------------------------------------------
   // al_: Albums Screen & Detail
   // ---------------------------------------------------------------------------
-  String get alTitle => _cadenasLocalizadas['al_title'] ?? '';
-  String get alSearchHint => _cadenasLocalizadas['al_search_hint'] ?? '';
-  String get alTracksCount => _cadenasLocalizadas['al_tracks_count'] ?? '';
-  String get alReleaseYear => _cadenasLocalizadas['al_release_year'] ?? '';
-  String get alPlayAll => _cadenasLocalizadas['al_play_all'] ?? '';
-  String get alShuffleAll => _cadenasLocalizadas['al_shuffle_all'] ?? '';
-  String get alAddQueue => _cadenasLocalizadas['al_add_queue'] ?? '';
-  String get alAddPlaylist => _cadenasLocalizadas['al_add_playlist'] ?? '';
-  String get alViewArtist => _cadenasLocalizadas['al_view_artist'] ?? '';
-  String get alNoAlbums => _cadenasLocalizadas['al_no_albums'] ?? '';
-  String get alNoAlbumsDesc => _cadenasLocalizadas['al_no_albums_desc'] ?? '';
-  String get alSort => _cadenasLocalizadas['al_sort'] ?? '';
-  String get alSortTitle => _cadenasLocalizadas['al_sort_title'] ?? '';
-  String get alSortArtist => _cadenasLocalizadas['al_sort_artist'] ?? '';
-  String get alSortYear => _cadenasLocalizadas['al_sort_year'] ?? '';
+  String get alTitle => _localizedStrings['al_title'] ?? '';
+  String get alSearchHint => _localizedStrings['al_search_hint'] ?? '';
+  String get alTracksCount => _localizedStrings['al_tracks_count'] ?? '';
+  String get alReleaseYear => _localizedStrings['al_release_year'] ?? '';
+  String get alPlayAll => _localizedStrings['al_play_all'] ?? '';
+  String get alShuffleAll => _localizedStrings['al_shuffle_all'] ?? '';
+  String get alAddQueue => _localizedStrings['al_add_queue'] ?? '';
+  String get alAddPlaylist => _localizedStrings['al_add_playlist'] ?? '';
+  String get alViewArtist => _localizedStrings['al_view_artist'] ?? '';
+  String get alNoAlbums => _localizedStrings['al_no_albums'] ?? '';
+  String get alNoAlbumsDesc => _localizedStrings['al_no_albums_desc'] ?? '';
+  String get alSort => _localizedStrings['al_sort'] ?? '';
+  String get alSortTitle => _localizedStrings['al_sort_title'] ?? '';
+  String get alSortArtist => _localizedStrings['al_sort_artist'] ?? '';
+  String get alSortYear => _localizedStrings['al_sort_year'] ?? '';
   String get alSortTrackCount =>
-      _cadenasLocalizadas['al_sort_track_count'] ?? '';
-  String get alTotalDuration => _cadenasLocalizadas['al_total_duration'] ?? '';
+      _localizedStrings['al_sort_track_count'] ?? '';
+  String get alTotalDuration => _localizedStrings['al_total_duration'] ?? '';
 
   // ---------------------------------------------------------------------------
   // ar_: Artists Screen & Discography
   // ---------------------------------------------------------------------------
-  String get arTitle => _cadenasLocalizadas['ar_title'] ?? '';
-  String get arSearchHint => _cadenasLocalizadas['ar_search_hint'] ?? '';
-  String get arAlbumsCount => _cadenasLocalizadas['ar_albums_count'] ?? '';
-  String get arTracksCount => _cadenasLocalizadas['ar_tracks_count'] ?? '';
-  String get arPlayAll => _cadenasLocalizadas['ar_play_all'] ?? '';
-  String get arShuffleAll => _cadenasLocalizadas['ar_shuffle_all'] ?? '';
-  String get arDiscography => _cadenasLocalizadas['ar_discography'] ?? '';
-  String get arAllTracks => _cadenasLocalizadas['ar_all_tracks'] ?? '';
-  String get arBiography => _cadenasLocalizadas['ar_biography'] ?? '';
-  String get arNoArtists => _cadenasLocalizadas['ar_no_artists'] ?? '';
-  String get arNoArtistsDesc => _cadenasLocalizadas['ar_no_artists_desc'] ?? '';
-  String get arSort => _cadenasLocalizadas['ar_sort'] ?? '';
-  String get arSortName => _cadenasLocalizadas['ar_sort_name'] ?? '';
-  String get arSortAlbums => _cadenasLocalizadas['ar_sort_albums'] ?? '';
-  String get arSortTracks => _cadenasLocalizadas['ar_sort_tracks'] ?? '';
+  String get arTitle => _localizedStrings['ar_title'] ?? '';
+  String get arSearchHint => _localizedStrings['ar_search_hint'] ?? '';
+  String get arAlbumsCount => _localizedStrings['ar_albums_count'] ?? '';
+  String get arTracksCount => _localizedStrings['ar_tracks_count'] ?? '';
+  String get arPlayAll => _localizedStrings['ar_play_all'] ?? '';
+  String get arShuffleAll => _localizedStrings['ar_shuffle_all'] ?? '';
+  String get arDiscography => _localizedStrings['ar_discography'] ?? '';
+  String get arAllTracks => _localizedStrings['ar_all_tracks'] ?? '';
+  String get arBiography => _localizedStrings['ar_biography'] ?? '';
+  String get arNoArtists => _localizedStrings['ar_no_artists'] ?? '';
+  String get arNoArtistsDesc => _localizedStrings['ar_no_artists_desc'] ?? '';
+  String get arSort => _localizedStrings['ar_sort'] ?? '';
+  String get arSortName => _localizedStrings['ar_sort_name'] ?? '';
+  String get arSortAlbums => _localizedStrings['ar_sort_albums'] ?? '';
+  String get arSortTracks => _localizedStrings['ar_sort_tracks'] ?? '';
 
   // ---------------------------------------------------------------------------
   // pl_: Playlists Management
   // ---------------------------------------------------------------------------
-  String get plTitle => _cadenasLocalizadas['pl_title'] ?? '';
-  String get plCreateNew => _cadenasLocalizadas['pl_create_new'] ?? '';
-  String get plNewNameHint => _cadenasLocalizadas['pl_new_name_hint'] ?? '';
-  String get plCreateButton => _cadenasLocalizadas['pl_create_button'] ?? '';
-  String get plCancelButton => _cadenasLocalizadas['pl_cancel_button'] ?? '';
-  String get plDelete => _cadenasLocalizadas['pl_delete'] ?? '';
-  String get plDeleteConfirm => _cadenasLocalizadas['pl_delete_confirm'] ?? '';
-  String get plRename => _cadenasLocalizadas['pl_rename'] ?? '';
-  String get plEdit => _cadenasLocalizadas['pl_edit'] ?? '';
-  String get plEmpty => _cadenasLocalizadas['pl_empty'] ?? '';
-  String get plEmptyDesc => _cadenasLocalizadas['pl_empty_desc'] ?? '';
-  String get plAddTracks => _cadenasLocalizadas['pl_add_tracks'] ?? '';
-  String get plRemoveTrack => _cadenasLocalizadas['pl_remove_track'] ?? '';
-  String get plPlayAll => _cadenasLocalizadas['pl_play_all'] ?? '';
-  String get plShuffleAll => _cadenasLocalizadas['pl_shuffle_all'] ?? '';
-  String get plLikedSongs => _cadenasLocalizadas['pl_liked_songs'] ?? '';
-  String get plHistory => _cadenasLocalizadas['pl_history'] ?? '';
-  String get plRecentlyAdded => _cadenasLocalizadas['pl_recently_added'] ?? '';
-  String get plTracksCount => _cadenasLocalizadas['pl_tracks_count'] ?? '';
-  String get plReorderHint => _cadenasLocalizadas['pl_reorder_hint'] ?? '';
-  String get plNoPlaylists => _cadenasLocalizadas['pl_no_playlists'] ?? '';
+  String get plTitle => _localizedStrings['pl_title'] ?? '';
+  String get plCreateNew => _localizedStrings['pl_create_new'] ?? '';
+  String get plNewNameHint => _localizedStrings['pl_new_name_hint'] ?? '';
+  String get plCreateButton => _localizedStrings['pl_create_button'] ?? '';
+  String get plCancelButton => _localizedStrings['pl_cancel_button'] ?? '';
+  String get plDelete => _localizedStrings['pl_delete'] ?? '';
+  String get plDeleteConfirm => _localizedStrings['pl_delete_confirm'] ?? '';
+  String get plRename => _localizedStrings['pl_rename'] ?? '';
+  String get plEdit => _localizedStrings['pl_edit'] ?? '';
+  String get plEmpty => _localizedStrings['pl_empty'] ?? '';
+  String get plEmptyDesc => _localizedStrings['pl_empty_desc'] ?? '';
+  String get plAddTracks => _localizedStrings['pl_add_tracks'] ?? '';
+  String get plRemoveTrack => _localizedStrings['pl_remove_track'] ?? '';
+  String get plPlayAll => _localizedStrings['pl_play_all'] ?? '';
+  String get plShuffleAll => _localizedStrings['pl_shuffle_all'] ?? '';
+  String get plLikedSongs => _localizedStrings['pl_liked_songs'] ?? '';
+  String get plHistory => _localizedStrings['pl_history'] ?? '';
+  String get plRecentlyAdded => _localizedStrings['pl_recently_added'] ?? '';
+  String get plTracksCount => _localizedStrings['pl_tracks_count'] ?? '';
+  String get plReorderHint => _localizedStrings['pl_reorder_hint'] ?? '';
+  String get plNoPlaylists => _localizedStrings['pl_no_playlists'] ?? '';
   String get plDuplicateTitle =>
-      _cadenasLocalizadas['pl_duplicate_title'] ?? '';
+      _localizedStrings['pl_duplicate_title'] ?? '';
   String get plDuplicateConfirm =>
-      _cadenasLocalizadas['pl_duplicate_confirm'] ?? '';
-  String get plAddAnyway => _cadenasLocalizadas['pl_add_anyway'] ?? '';
+      _localizedStrings['pl_duplicate_confirm'] ?? '';
+  String get plAddAnyway => _localizedStrings['pl_add_anyway'] ?? '';
   String get plDuplicateQueueTitle =>
-      _cadenasLocalizadas['pl_duplicate_queue_title'] ?? '';
+      _localizedStrings['pl_duplicate_queue_title'] ?? '';
   String get plDuplicateQueueConfirm =>
-      _cadenasLocalizadas['pl_duplicate_queue_confirm'] ?? '';
+      _localizedStrings['pl_duplicate_queue_confirm'] ?? '';
   String get plInsertOnlyNew =>
-      _cadenasLocalizadas['pl_insert_only_new'] ?? '';
+      _localizedStrings['pl_insert_only_new'] ?? '';
 
   // ---------------------------------------------------------------------------
   // g_: Genres Screen
   // ---------------------------------------------------------------------------
-  String get gTitle => _cadenasLocalizadas['g_title'] ?? '';
-  String get gSearchHint => _cadenasLocalizadas['g_search_hint'] ?? '';
-  String get gUnknown => _cadenasLocalizadas['g_unknown'] ?? '';
-  String get gTracksCount => _cadenasLocalizadas['g_tracks_count'] ?? '';
-  String get gAlbumsCount => _cadenasLocalizadas['g_albums_count'] ?? '';
-  String get gPlayAll => _cadenasLocalizadas['g_play_all'] ?? '';
-  String get gShuffleAll => _cadenasLocalizadas['g_shuffle_all'] ?? '';
-  String get gNoGenres => _cadenasLocalizadas['g_no_genres'] ?? '';
-  String get gNoGenresDesc => _cadenasLocalizadas['g_no_genres_desc'] ?? '';
+  String get gTitle => _localizedStrings['g_title'] ?? '';
+  String get gSearchHint => _localizedStrings['g_search_hint'] ?? '';
+  String get gUnknown => _localizedStrings['g_unknown'] ?? '';
+  String get gTracksCount => _localizedStrings['g_tracks_count'] ?? '';
+  String get gAlbumsCount => _localizedStrings['g_albums_count'] ?? '';
+  String get gPlayAll => _localizedStrings['g_play_all'] ?? '';
+  String get gShuffleAll => _localizedStrings['g_shuffle_all'] ?? '';
+  String get gNoGenres => _localizedStrings['g_no_genres'] ?? '';
+  String get gNoGenresDesc => _localizedStrings['g_no_genres_desc'] ?? '';
 
   // ---------------------------------------------------------------------------
   // perm_: Permissions Screen
   // ---------------------------------------------------------------------------
-  String get permTitle => _cadenasLocalizadas['perm_title'] ?? '';
-  String get permSubtitle => _cadenasLocalizadas['perm_subtitle'] ?? '';
-  String get permMusicTitle => _cadenasLocalizadas['perm_music_title'] ?? '';
-  String get permMusicDesc => _cadenasLocalizadas['perm_music_desc'] ?? '';
-  String get permGranted => _cadenasLocalizadas['perm_granted'] ?? '';
-  String get permGrantAccess => _cadenasLocalizadas['perm_grant_access'] ?? '';
+  String get permTitle => _localizedStrings['perm_title'] ?? '';
+  String get permSubtitle => _localizedStrings['perm_subtitle'] ?? '';
+  String get permMusicTitle => _localizedStrings['perm_music_title'] ?? '';
+  String get permMusicDesc => _localizedStrings['perm_music_desc'] ?? '';
+  String get permGranted => _localizedStrings['perm_granted'] ?? '';
+  String get permGrantAccess => _localizedStrings['perm_grant_access'] ?? '';
   String get permOpenSettings =>
-      _cadenasLocalizadas['perm_open_settings'] ?? '';
-  String get permDeniedHint => _cadenasLocalizadas['perm_denied_hint'] ?? '';
-  String get permContinue => _cadenasLocalizadas['perm_continue'] ?? '';
+      _localizedStrings['perm_open_settings'] ?? '';
+  String get permDeniedHint => _localizedStrings['perm_denied_hint'] ?? '';
+  String get permContinue => _localizedStrings['perm_continue'] ?? '';
 
 
   // ---------------------------------------------------------------------------
   // f_: Folders & Filesystem Browser
   // ---------------------------------------------------------------------------
-  String get fTitle => _cadenasLocalizadas['f_title'] ?? '';
-  String get fNavigateUp => _cadenasLocalizadas['f_navigate_up'] ?? '';
-  String get fCurrentFolder => _cadenasLocalizadas['f_current_folder'] ?? '';
-  String get fEmptyFolder => _cadenasLocalizadas['f_empty_folder'] ?? '';
-  String get fScanFolder => _cadenasLocalizadas['f_scan_folder'] ?? '';
-  String get fAddToLibrary => _cadenasLocalizadas['f_add_to_library'] ?? '';
-  String get fItemsCount => _cadenasLocalizadas['f_items_count'] ?? '';
-  String get fInaccessible => _cadenasLocalizadas['f_inaccessible'] ?? '';
+  String get fTitle => _localizedStrings['f_title'] ?? '';
+  String get fNavigateUp => _localizedStrings['f_navigate_up'] ?? '';
+  String get fCurrentFolder => _localizedStrings['f_current_folder'] ?? '';
+  String get fEmptyFolder => _localizedStrings['f_empty_folder'] ?? '';
+  String get fScanFolder => _localizedStrings['f_scan_folder'] ?? '';
+  String get fAddToLibrary => _localizedStrings['f_add_to_library'] ?? '';
+  String get fItemsCount => _localizedStrings['f_items_count'] ?? '';
+  String get fInaccessible => _localizedStrings['f_inaccessible'] ?? '';
   String get fInaccessibleDesc =>
-      _cadenasLocalizadas['f_inaccessible_desc'] ?? '';
-  String get fBreadcrumbRoot => _cadenasLocalizadas['f_breadcrumb_root'] ?? '';
-  String get fViewAsGrid => _cadenasLocalizadas['f_view_as_grid'] ?? '';
-  String get fViewAsList => _cadenasLocalizadas['f_view_as_list'] ?? '';
-  String get fRescanAll => _cadenasLocalizadas['f_rescan_all'] ?? '';
+      _localizedStrings['f_inaccessible_desc'] ?? '';
+  String get fBreadcrumbRoot => _localizedStrings['f_breadcrumb_root'] ?? '';
+  String get fViewAsGrid => _localizedStrings['f_view_as_grid'] ?? '';
+  String get fViewAsList => _localizedStrings['f_view_as_list'] ?? '';
+  String get fRescanAll => _localizedStrings['f_rescan_all'] ?? '';
 
   // ---------------------------------------------------------------------------
   // sr_: Global Search
   // ---------------------------------------------------------------------------
-  String get srTitle => _cadenasLocalizadas['sr_title'] ?? '';
-  String get srHint => _cadenasLocalizadas['sr_hint'] ?? '';
-  String get srFilterAll => _cadenasLocalizadas['sr_filter_all'] ?? '';
-  String get srNoResults => _cadenasLocalizadas['sr_no_results'] ?? '';
-  String get srNoResultsDesc => _cadenasLocalizadas['sr_no_results_desc'] ?? '';
-  String get srTracksFound => _cadenasLocalizadas['sr_tracks_found'] ?? '';
-  String get srAlbumsFound => _cadenasLocalizadas['sr_albums_found'] ?? '';
-  String get srArtistsFound => _cadenasLocalizadas['sr_artists_found'] ?? '';
-  String get srGenresFound => _cadenasLocalizadas['sr_genres_found'] ?? '';
+  String get srTitle => _localizedStrings['sr_title'] ?? '';
+  String get srHint => _localizedStrings['sr_hint'] ?? '';
+  String get srFilterAll => _localizedStrings['sr_filter_all'] ?? '';
+  String get srNoResults => _localizedStrings['sr_no_results'] ?? '';
+  String get srNoResultsDesc => _localizedStrings['sr_no_results_desc'] ?? '';
+  String get srTracksFound => _localizedStrings['sr_tracks_found'] ?? '';
+  String get srAlbumsFound => _localizedStrings['sr_albums_found'] ?? '';
+  String get srArtistsFound => _localizedStrings['sr_artists_found'] ?? '';
+  String get srGenresFound => _localizedStrings['sr_genres_found'] ?? '';
   String get srPlaylistsFound =>
-      _cadenasLocalizadas['sr_playlists_found'] ?? '';
-  String get srViewMore => _cadenasLocalizadas['sr_view_more'] ?? '';
+      _localizedStrings['sr_playlists_found'] ?? '';
+  String get srViewMore => _localizedStrings['sr_view_more'] ?? '';
   String get srRecentSearches =>
-      _cadenasLocalizadas['sr_recent_searches'] ?? '';
-  String get srClearHistory => _cadenasLocalizadas['sr_clear_history'] ?? '';
+      _localizedStrings['sr_recent_searches'] ?? '';
+  String get srClearHistory => _localizedStrings['sr_clear_history'] ?? '';
 
   // ---------------------------------------------------------------------------
   // s_: Settings Screen
   // ---------------------------------------------------------------------------
-  String get sTitle => _cadenasLocalizadas['s_title'] ?? '';
-  String get sMusicFolders => _cadenasLocalizadas['s_music_folders'] ?? '';
+  String get sTitle => _localizedStrings['s_title'] ?? '';
+  String get sMusicFolders => _localizedStrings['s_music_folders'] ?? '';
   String get sMusicFoldersDesc =>
-      _cadenasLocalizadas['s_music_folders_desc'] ?? '';
-  String get sAddFolder => _cadenasLocalizadas['s_add_folder'] ?? '';
-  String get sAddFolderTitle => _cadenasLocalizadas['s_add_folder_title'] ?? '';
-  String get sFolderPathHint => _cadenasLocalizadas['s_folder_path_hint'] ?? '';
+      _localizedStrings['s_music_folders_desc'] ?? '';
+  String get sAddFolder => _localizedStrings['s_add_folder'] ?? '';
+  String get sAddFolderTitle => _localizedStrings['s_add_folder_title'] ?? '';
+  String get sFolderPathHint => _localizedStrings['s_folder_path_hint'] ?? '';
   String get sFolderPathLabel =>
-      _cadenasLocalizadas['s_folder_path_label'] ?? '';
-  String get sBrowseFolder => _cadenasLocalizadas['s_browse_folder'] ?? '';
+      _localizedStrings['s_folder_path_label'] ?? '';
+  String get sBrowseFolder => _localizedStrings['s_browse_folder'] ?? '';
   String get sFolderErrorInvalid =>
-      _cadenasLocalizadas['s_folder_error_invalid'] ?? '';
-  String get sNoFoldersYet => _cadenasLocalizadas['s_no_folders_yet'] ?? '';
+      _localizedStrings['s_folder_error_invalid'] ?? '';
+  String get sNoFoldersYet => _localizedStrings['s_no_folders_yet'] ?? '';
   String get sBrowseFoldersDesc =>
-      _cadenasLocalizadas['s_browse_folders_desc'] ?? '';
-  String get sCancel => _cadenasLocalizadas['s_cancel'] ?? '';
-  String get sAdd => _cadenasLocalizadas['s_add'] ?? '';
-  String get sClear => _cadenasLocalizadas['s_clear'] ?? '';
+      _localizedStrings['s_browse_folders_desc'] ?? '';
+  String get sCancel => _localizedStrings['s_cancel'] ?? '';
+  String get sAdd => _localizedStrings['s_add'] ?? '';
+  String get sClear => _localizedStrings['s_clear'] ?? '';
   String get sTranslationTargetLang =>
-      _cadenasLocalizadas['s_translation_target_lang'] ?? '';
+      _localizedStrings['s_translation_target_lang'] ?? '';
   String get sTranslationTargetLangDesc =>
-      _cadenasLocalizadas['s_translation_target_lang_desc'] ?? '';
+      _localizedStrings['s_translation_target_lang_desc'] ?? '';
   String get sTranslationLangDefault =>
-      _cadenasLocalizadas['s_translation_lang_default'] ?? '';
+      _localizedStrings['s_translation_lang_default'] ?? '';
   String get sAudioDevicesTitle =>
-      _cadenasLocalizadas['s_audio_devices_title'] ?? '';
-  String get sEqualizerTitle => _cadenasLocalizadas['s_equalizer_title'] ?? '';
+      _localizedStrings['s_audio_devices_title'] ?? '';
+  String get sEqualizerTitle => _localizedStrings['s_equalizer_title'] ?? '';
   String get sEqualizerEnabled =>
-      _cadenasLocalizadas['s_equalizer_enabled'] ?? '';
+      _localizedStrings['s_equalizer_enabled'] ?? '';
   String get sEqualizerPreset =>
-      _cadenasLocalizadas['s_equalizer_preset'] ?? '';
-  String get sEqPresetFlat => _cadenasLocalizadas['s_eq_preset_flat'] ?? '';
-  String get sEqPresetRock => _cadenasLocalizadas['s_eq_preset_rock'] ?? '';
-  String get sEqPresetPop => _cadenasLocalizadas['s_eq_preset_pop'] ?? '';
-  String get sEqPresetJazz => _cadenasLocalizadas['s_eq_preset_jazz'] ?? '';
+      _localizedStrings['s_equalizer_preset'] ?? '';
+  String get sEqPresetFlat => _localizedStrings['s_eq_preset_flat'] ?? '';
+  String get sEqPresetRock => _localizedStrings['s_eq_preset_rock'] ?? '';
+  String get sEqPresetPop => _localizedStrings['s_eq_preset_pop'] ?? '';
+  String get sEqPresetJazz => _localizedStrings['s_eq_preset_jazz'] ?? '';
   String get sEqPresetClassical =>
-      _cadenasLocalizadas['s_eq_preset_classical'] ?? '';
+      _localizedStrings['s_eq_preset_classical'] ?? '';
   String get sEqPresetBassBoost =>
-      _cadenasLocalizadas['s_eq_preset_bass_boost'] ?? '';
-  String get sEqPresetCustom => _cadenasLocalizadas['s_eq_preset_custom'] ?? '';
-  String get sRemoveFolder => _cadenasLocalizadas['s_remove_folder'] ?? '';
-  String get sRescanLibrary => _cadenasLocalizadas['s_rescan_library'] ?? '';
+      _localizedStrings['s_eq_preset_bass_boost'] ?? '';
+  String get sEqPresetCustom => _localizedStrings['s_eq_preset_custom'] ?? '';
+  String get sRemoveFolder => _localizedStrings['s_remove_folder'] ?? '';
+  String get sRescanLibrary => _localizedStrings['s_rescan_library'] ?? '';
   String get sRescanLibraryDesc =>
-      _cadenasLocalizadas['s_rescan_library_desc'] ?? '';
+      _localizedStrings['s_rescan_library_desc'] ?? '';
   String get sScanningProgress =>
-      _cadenasLocalizadas['s_scanning_progress'] ?? '';
+      _localizedStrings['s_scanning_progress'] ?? '';
   String get sCleanMissingTracks =>
-      _cadenasLocalizadas['s_clean_missing_tracks'] ?? '';
+      _localizedStrings['s_clean_missing_tracks'] ?? '';
   String get sCleanMissingTracksDesc =>
-      _cadenasLocalizadas['s_clean_missing_tracks_desc'] ?? '';
-  String get sAudioSection => _cadenasLocalizadas['s_audio_section'] ?? '';
+      _localizedStrings['s_clean_missing_tracks_desc'] ?? '';
+  String get sAudioSection => _localizedStrings['s_audio_section'] ?? '';
   String get sCrossfadeEnable =>
-      _cadenasLocalizadas['s_crossfade_enable'] ?? '';
+      _localizedStrings['s_crossfade_enable'] ?? '';
   String get sCrossfadeEnableDesc =>
-      _cadenasLocalizadas['s_crossfade_enable_desc'] ?? '';
+      _localizedStrings['s_crossfade_enable_desc'] ?? '';
   String get sCrossfadeDuration =>
-      _cadenasLocalizadas['s_crossfade_duration'] ?? '';
+      _localizedStrings['s_crossfade_duration'] ?? '';
   String get sCrossfadeDurationDesc =>
-      _cadenasLocalizadas['s_crossfade_duration_desc'] ?? '';
+      _localizedStrings['s_crossfade_duration_desc'] ?? '';
   String get sCrossfadeManualDuration =>
-      _cadenasLocalizadas['s_crossfade_manual_duration'] ?? '';
+      _localizedStrings['s_crossfade_manual_duration'] ?? '';
   String get sCrossfadeManualDurationDesc =>
-      _cadenasLocalizadas['s_crossfade_manual_duration_desc'] ?? '';
-  String get sCrossfadeCurve => _cadenasLocalizadas['s_crossfade_curve'] ?? '';
+      _localizedStrings['s_crossfade_manual_duration_desc'] ?? '';
+  String get sCrossfadeCurve => _localizedStrings['s_crossfade_curve'] ?? '';
   String get sCrossfadeCurveDesc =>
-      _cadenasLocalizadas['s_crossfade_curve_desc'] ?? '';
+      _localizedStrings['s_crossfade_curve_desc'] ?? '';
   String get sCrossfadeCurveEqualPower =>
-      _cadenasLocalizadas['s_crossfade_curve_equal_power'] ?? '';
+      _localizedStrings['s_crossfade_curve_equal_power'] ?? '';
   String get sCrossfadeCurveLinear =>
-      _cadenasLocalizadas['s_crossfade_curve_linear'] ?? '';
-  String get sAudioOutput => _cadenasLocalizadas['s_audio_output'] ?? '';
+      _localizedStrings['s_crossfade_curve_linear'] ?? '';
+  String get sAudioOutput => _localizedStrings['s_audio_output'] ?? '';
   String get sAudioOutputDesc =>
-      _cadenasLocalizadas['s_audio_output_desc'] ?? '';
-  String get sExclusiveAudio => _cadenasLocalizadas['s_exclusive_audio'] ?? '';
+      _localizedStrings['s_audio_output_desc'] ?? '';
+  String get sExclusiveAudio => _localizedStrings['s_exclusive_audio'] ?? '';
   String get sExclusiveAudioDesc =>
-      _cadenasLocalizadas['s_exclusive_audio_desc'] ?? '';
+      _localizedStrings['s_exclusive_audio_desc'] ?? '';
   String get sPauseOnDeviceChange =>
-      _cadenasLocalizadas['s_pause_on_device_change'] ?? '';
+      _localizedStrings['s_pause_on_device_change'] ?? '';
   String get sPauseOnDeviceChangeDesc =>
-      _cadenasLocalizadas['s_pause_on_device_change_desc'] ?? '';
-  String get sReplayGainMode => _cadenasLocalizadas['s_replay_gain_mode'] ?? '';
+      _localizedStrings['s_pause_on_device_change_desc'] ?? '';
+  String get sReplayGainMode => _localizedStrings['s_replay_gain_mode'] ?? '';
   String get sReplayGainModeDesc =>
-      _cadenasLocalizadas['s_replay_gain_mode_desc'] ?? '';
+      _localizedStrings['s_replay_gain_mode_desc'] ?? '';
   String get sReplayGainPreamp =>
-      _cadenasLocalizadas['s_replay_gain_preamp'] ?? '';
+      _localizedStrings['s_replay_gain_preamp'] ?? '';
   String get sReplayGainPreampDesc =>
-      _cadenasLocalizadas['s_replay_gain_preamp_desc'] ?? '';
+      _localizedStrings['s_replay_gain_preamp_desc'] ?? '';
   String get sGaplessPlayback =>
-      _cadenasLocalizadas['s_gapless_playback'] ?? '';
+      _localizedStrings['s_gapless_playback'] ?? '';
   String get sGaplessPlaybackDesc =>
-      _cadenasLocalizadas['s_gapless_playback_desc'] ?? '';
-  String get sSkipSilence => _cadenasLocalizadas['s_skip_silence'] ?? '';
+      _localizedStrings['s_gapless_playback_desc'] ?? '';
+  String get sSkipSilence => _localizedStrings['s_skip_silence'] ?? '';
   String get sSkipSilenceDesc =>
-      _cadenasLocalizadas['s_skip_silence_desc'] ?? '';
-  String get sPreamp => _cadenasLocalizadas['s_preamp'] ?? '';
-  String get sPreampDesc => _cadenasLocalizadas['s_preamp_desc'] ?? '';
-  String get sStereoBalance => _cadenasLocalizadas['s_stereo_balance'] ?? '';
+      _localizedStrings['s_skip_silence_desc'] ?? '';
+  String get sPreamp => _localizedStrings['s_preamp'] ?? '';
+  String get sPreampDesc => _localizedStrings['s_preamp_desc'] ?? '';
+  String get sStereoBalance => _localizedStrings['s_stereo_balance'] ?? '';
   String get sStereoBalanceDesc =>
-      _cadenasLocalizadas['s_stereo_balance_desc'] ?? '';
+      _localizedStrings['s_stereo_balance_desc'] ?? '';
   String get sStereoBalanceCenter =>
-      _cadenasLocalizadas['s_stereo_balance_center'] ?? '';
-  String get sMonoAudio => _cadenasLocalizadas['s_mono_audio'] ?? '';
-  String get sMonoAudioDesc => _cadenasLocalizadas['s_mono_audio_desc'] ?? '';
-  String get sCrossfeed => _cadenasLocalizadas['s_crossfeed'] ?? '';
-  String get sCrossfeedDesc => _cadenasLocalizadas['s_crossfeed_desc'] ?? '';
-  String get sCrossfeedOff => _cadenasLocalizadas['s_crossfeed_off'] ?? '';
+      _localizedStrings['s_stereo_balance_center'] ?? '';
+  String get sMonoAudio => _localizedStrings['s_mono_audio'] ?? '';
+  String get sMonoAudioDesc => _localizedStrings['s_mono_audio_desc'] ?? '';
+  String get sCrossfeed => _localizedStrings['s_crossfeed'] ?? '';
+  String get sCrossfeedDesc => _localizedStrings['s_crossfeed_desc'] ?? '';
+  String get sCrossfeedOff => _localizedStrings['s_crossfeed_off'] ?? '';
   String get sCrossfeedMoffat =>
-      _cadenasLocalizadas['s_crossfeed_moffat'] ?? '';
+      _localizedStrings['s_crossfeed_moffat'] ?? '';
   String get sCrossfeedChumoy =>
-      _cadenasLocalizadas['s_crossfeed_chumoy'] ?? '';
-  String get sSpatializer => _cadenasLocalizadas['s_spatializer'] ?? '';
+      _localizedStrings['s_crossfeed_chumoy'] ?? '';
+  String get sSpatializer => _localizedStrings['s_spatializer'] ?? '';
   String get sSpatializerDesc =>
-      _cadenasLocalizadas['s_spatializer_desc'] ?? '';
-  String get sLimiter => _cadenasLocalizadas['s_limiter'] ?? '';
-  String get sLimiterDesc => _cadenasLocalizadas['s_limiter_desc'] ?? '';
-  String get sReverb => _cadenasLocalizadas['s_reverb'] ?? '';
-  String get sReverbDesc => _cadenasLocalizadas['s_reverb_desc'] ?? '';
-  String get sReverbPreset => _cadenasLocalizadas['s_reverb_preset'] ?? '';
+      _localizedStrings['s_spatializer_desc'] ?? '';
+  String get sLimiter => _localizedStrings['s_limiter'] ?? '';
+  String get sLimiterDesc => _localizedStrings['s_limiter_desc'] ?? '';
+  String get sReverb => _localizedStrings['s_reverb'] ?? '';
+  String get sReverbDesc => _localizedStrings['s_reverb_desc'] ?? '';
+  String get sReverbPreset => _localizedStrings['s_reverb_preset'] ?? '';
   String get sReverbPresetOff =>
-      _cadenasLocalizadas['s_reverb_preset_off'] ?? '';
+      _localizedStrings['s_reverb_preset_off'] ?? '';
   String get sReverbPresetSmallRoom =>
-      _cadenasLocalizadas['s_reverb_preset_small_room'] ?? '';
+      _localizedStrings['s_reverb_preset_small_room'] ?? '';
   String get sReverbPresetStudio =>
-      _cadenasLocalizadas['s_reverb_preset_studio'] ?? '';
+      _localizedStrings['s_reverb_preset_studio'] ?? '';
   String get sReverbPresetConcertHall =>
-      _cadenasLocalizadas['s_reverb_preset_concert_hall'] ?? '';
+      _localizedStrings['s_reverb_preset_concert_hall'] ?? '';
   String get sReverbPresetCathedral =>
-      _cadenasLocalizadas['s_reverb_preset_cathedral'] ?? '';
+      _localizedStrings['s_reverb_preset_cathedral'] ?? '';
   String get sReverbPresetPlate =>
-      _cadenasLocalizadas['s_reverb_preset_plate'] ?? '';
+      _localizedStrings['s_reverb_preset_plate'] ?? '';
   String get sReverbPresetAmbient =>
-      _cadenasLocalizadas['s_reverb_preset_ambient'] ?? '';
+      _localizedStrings['s_reverb_preset_ambient'] ?? '';
   String get sReverbPresetCustom =>
-      _cadenasLocalizadas['s_reverb_preset_custom'] ?? '';
-  String get sReverbRoomSize => _cadenasLocalizadas['s_reverb_room_size'] ?? '';
-  String get sReverbDamping => _cadenasLocalizadas['s_reverb_damping'] ?? '';
-  String get sReverbWidth => _cadenasLocalizadas['s_reverb_width'] ?? '';
-  String get sReverbWet => _cadenasLocalizadas['s_reverb_wet'] ?? '';
-  String get sReverbDry => _cadenasLocalizadas['s_reverb_dry'] ?? '';
+      _localizedStrings['s_reverb_preset_custom'] ?? '';
+  String get sReverbRoomSize => _localizedStrings['s_reverb_room_size'] ?? '';
+  String get sReverbDamping => _localizedStrings['s_reverb_damping'] ?? '';
+  String get sReverbWidth => _localizedStrings['s_reverb_width'] ?? '';
+  String get sReverbWet => _localizedStrings['s_reverb_wet'] ?? '';
+  String get sReverbDry => _localizedStrings['s_reverb_dry'] ?? '';
   String get sAudioDspSection =>
-      _cadenasLocalizadas['s_audio_dsp_section'] ?? '';
+      _localizedStrings['s_audio_dsp_section'] ?? '';
   String get sAppearanceSection =>
-      _cadenasLocalizadas['s_appearance_section'] ?? '';
-  String get sThemeMode => _cadenasLocalizadas['s_theme_mode'] ?? '';
-  String get sThemeModeDesc => _cadenasLocalizadas['s_theme_mode_desc'] ?? '';
-  String get sThemeSystem => _cadenasLocalizadas['s_theme_system'] ?? '';
-  String get sThemeLight => _cadenasLocalizadas['s_theme_light'] ?? '';
-  String get sThemeDark => _cadenasLocalizadas['s_theme_dark'] ?? '';
-  String get sThemeOled => _cadenasLocalizadas['s_theme_oled'] ?? '';
-  String get sThemeOledDesc => _cadenasLocalizadas['s_theme_oled_desc'] ?? '';
-  String get sAccentColor => _cadenasLocalizadas['s_accent_color'] ?? '';
+      _localizedStrings['s_appearance_section'] ?? '';
+  String get sThemeMode => _localizedStrings['s_theme_mode'] ?? '';
+  String get sThemeModeDesc => _localizedStrings['s_theme_mode_desc'] ?? '';
+  String get sThemeSystem => _localizedStrings['s_theme_system'] ?? '';
+  String get sThemeLight => _localizedStrings['s_theme_light'] ?? '';
+  String get sThemeDark => _localizedStrings['s_theme_dark'] ?? '';
+  String get sThemeOled => _localizedStrings['s_theme_oled'] ?? '';
+  String get sThemeOledDesc => _localizedStrings['s_theme_oled_desc'] ?? '';
+  String get sAccentColor => _localizedStrings['s_accent_color'] ?? '';
   String get sAccentColorDesc =>
-      _cadenasLocalizadas['s_accent_color_desc'] ?? '';
-  String get sDynamicColor => _cadenasLocalizadas['s_dynamic_color'] ?? '';
+      _localizedStrings['s_accent_color_desc'] ?? '';
+  String get sDynamicColor => _localizedStrings['s_dynamic_color'] ?? '';
   String get sDynamicColorDesc =>
-      _cadenasLocalizadas['s_dynamic_color_desc'] ?? '';
+      _localizedStrings['s_dynamic_color_desc'] ?? '';
   String get sCustomBackground =>
-      _cadenasLocalizadas['s_custom_background'] ?? '';
+      _localizedStrings['s_custom_background'] ?? '';
   String get sCustomBackgroundDesc =>
-      _cadenasLocalizadas['s_custom_background_desc'] ?? '';
+      _localizedStrings['s_custom_background_desc'] ?? '';
   String get sSelectBackgroundImage =>
-      _cadenasLocalizadas['s_select_background_image'] ?? '';
+      _localizedStrings['s_select_background_image'] ?? '';
   String get sChangeBackgroundImage =>
-      _cadenasLocalizadas['s_change_background_image'] ?? '';
+      _localizedStrings['s_change_background_image'] ?? '';
   String get sRemoveBackgroundImage =>
-      _cadenasLocalizadas['s_remove_background_image'] ?? '';
-  String get sBackgroundBlur => _cadenasLocalizadas['s_background_blur'] ?? '';
+      _localizedStrings['s_remove_background_image'] ?? '';
+  String get sBackgroundBlur => _localizedStrings['s_background_blur'] ?? '';
   String get sBackgroundBlurDesc =>
-      _cadenasLocalizadas['s_background_blur_desc'] ?? '';
-  String get sBackgroundDim => _cadenasLocalizadas['s_background_dim'] ?? '';
+      _localizedStrings['s_background_blur_desc'] ?? '';
+  String get sBackgroundDim => _localizedStrings['s_background_dim'] ?? '';
   String get sBackgroundDimDesc =>
-      _cadenasLocalizadas['s_background_dim_desc'] ?? '';
+      _localizedStrings['s_background_dim_desc'] ?? '';
   String get sCustomBackgroundFileError =>
-      _cadenasLocalizadas['s_custom_background_file_error'] ?? '';
+      _localizedStrings['s_custom_background_file_error'] ?? '';
   String get sLanguageSection =>
-      _cadenasLocalizadas['s_language_section'] ?? '';
-  String get sLanguage => _cadenasLocalizadas['s_language'] ?? '';
-  String get sLanguageDesc => _cadenasLocalizadas['s_language_desc'] ?? '';
+      _localizedStrings['s_language_section'] ?? '';
+  String get sLanguage => _localizedStrings['s_language'] ?? '';
+  String get sLanguageDesc => _localizedStrings['s_language_desc'] ?? '';
   String get sLanguageSearchHint =>
-      _cadenasLocalizadas['s_language_search_hint'] ?? '';
+      _localizedStrings['s_language_search_hint'] ?? '';
   String get sIntegrationsSection =>
-      _cadenasLocalizadas['s_integrations_section'] ?? '';
-  String get sDiscordRpc => _cadenasLocalizadas['s_discord_rpc'] ?? '';
-  String get sDiscordRpcDesc => _cadenasLocalizadas['s_discord_rpc_desc'] ?? '';
+      _localizedStrings['s_integrations_section'] ?? '';
+  String get sDiscordRpc => _localizedStrings['s_discord_rpc'] ?? '';
+  String get sDiscordRpcDesc => _localizedStrings['s_discord_rpc_desc'] ?? '';
   String get sMediaNotifications =>
-      _cadenasLocalizadas['s_media_notifications'] ?? '';
+      _localizedStrings['s_media_notifications'] ?? '';
   String get sMediaNotificationsDesc =>
-      _cadenasLocalizadas['s_media_notifications_desc'] ?? '';
-  String get sAboutSection => _cadenasLocalizadas['s_about_section'] ?? '';
-  String get sAppVersion => _cadenasLocalizadas['s_app_version'] ?? '';
-  String get sCheckUpdates => _cadenasLocalizadas['s_check_updates'] ?? '';
+      _localizedStrings['s_media_notifications_desc'] ?? '';
+  String get sAboutSection => _localizedStrings['s_about_section'] ?? '';
+  String get sAppVersion => _localizedStrings['s_app_version'] ?? '';
+  String get sCheckUpdates => _localizedStrings['s_check_updates'] ?? '';
   String get sCheckUpdatesDesc =>
-      _cadenasLocalizadas['s_check_updates_desc'] ?? '';
-  String get sViewChangelog => _cadenasLocalizadas['s_view_changelog'] ?? '';
-  String get sGithubRepo => _cadenasLocalizadas['s_github_repo'] ?? '';
-  String get sLicense => _cadenasLocalizadas['s_license'] ?? '';
-  String get sStorageUsed => _cadenasLocalizadas['s_storage_used'] ?? '';
-  String get sClearCache => _cadenasLocalizadas['s_clear_cache'] ?? '';
-  String get sClearCacheDesc => _cadenasLocalizadas['s_clear_cache_desc'] ?? '';
+      _localizedStrings['s_check_updates_desc'] ?? '';
+  String get sViewChangelog => _localizedStrings['s_view_changelog'] ?? '';
+  String get sGithubRepo => _localizedStrings['s_github_repo'] ?? '';
+  String get sLicense => _localizedStrings['s_license'] ?? '';
+  String get sStorageUsed => _localizedStrings['s_storage_used'] ?? '';
+  String get sClearCache => _localizedStrings['s_clear_cache'] ?? '';
+  String get sClearCacheDesc => _localizedStrings['s_clear_cache_desc'] ?? '';
   String get sClearCacheSuccess =>
-      _cadenasLocalizadas['s_clear_cache_success'] ?? '';
+      _localizedStrings['s_clear_cache_success'] ?? '';
 
   // ---------------------------------------------------------------------------
   // up_: Software Updater
   // ---------------------------------------------------------------------------
-  String get upTitle => _cadenasLocalizadas['up_title'] ?? '';
-  String get upAvailable => _cadenasLocalizadas['up_available'] ?? '';
-  String get upAvailableDesc => _cadenasLocalizadas['up_available_desc'] ?? '';
-  String get upUpToDate => _cadenasLocalizadas['up_up_to_date'] ?? '';
-  String get upChecking => _cadenasLocalizadas['up_checking'] ?? '';
-  String get upCheckNow => _cadenasLocalizadas['up_check_now'] ?? '';
+  String get upTitle => _localizedStrings['up_title'] ?? '';
+  String get upAvailable => _localizedStrings['up_available'] ?? '';
+  String get upAvailableDesc => _localizedStrings['up_available_desc'] ?? '';
+  String get upUpToDate => _localizedStrings['up_up_to_date'] ?? '';
+  String get upChecking => _localizedStrings['up_checking'] ?? '';
+  String get upCheckNow => _localizedStrings['up_check_now'] ?? '';
   String get upCurrentVersion =>
-      _cadenasLocalizadas['up_current_version'] ?? '';
-  String get upLatestVersion => _cadenasLocalizadas['up_latest_version'] ?? '';
+      _localizedStrings['up_current_version'] ?? '';
+  String get upLatestVersion => _localizedStrings['up_latest_version'] ?? '';
   String get upDownloadButton =>
-      _cadenasLocalizadas['up_download_button'] ?? '';
-  String get upDownloading => _cadenasLocalizadas['up_downloading'] ?? '';
-  String get upInstallButton => _cadenasLocalizadas['up_install_button'] ?? '';
-  String get upDismiss => _cadenasLocalizadas['up_dismiss'] ?? '';
-  String get upReleaseNotes => _cadenasLocalizadas['up_release_notes'] ?? '';
-  String get upError => _cadenasLocalizadas['up_error'] ?? '';
-  String get upErrorNetwork => _cadenasLocalizadas['up_error_network'] ?? '';
+      _localizedStrings['up_download_button'] ?? '';
+  String get upDownloading => _localizedStrings['up_downloading'] ?? '';
+  String get upInstallButton => _localizedStrings['up_install_button'] ?? '';
+  String get upDismiss => _localizedStrings['up_dismiss'] ?? '';
+  String get upReleaseNotes => _localizedStrings['up_release_notes'] ?? '';
+  String get upError => _localizedStrings['up_error'] ?? '';
+  String get upErrorNetwork => _localizedStrings['up_error_network'] ?? '';
 
   // ---------------------------------------------------------------------------
   // cl_: Changelog Viewer
   // ---------------------------------------------------------------------------
-  String get clTitle => _cadenasLocalizadas['cl_title'] ?? '';
-  String get clClose => _cadenasLocalizadas['cl_close'] ?? '';
-  String get clVersion => _cadenasLocalizadas['cl_version'] ?? '';
-  String get clLatestChanges => _cadenasLocalizadas['cl_latest_changes'] ?? '';
-  String get clErrorLoading => _cadenasLocalizadas['cl_error_loading'] ?? '';
-  String get clViewOnGithub => _cadenasLocalizadas['cl_view_on_github'] ?? '';
+  String get clTitle => _localizedStrings['cl_title'] ?? '';
+  String get clClose => _localizedStrings['cl_close'] ?? '';
+  String get clVersion => _localizedStrings['cl_version'] ?? '';
+  String get clLatestChanges => _localizedStrings['cl_latest_changes'] ?? '';
+  String get clErrorLoading => _localizedStrings['cl_error_loading'] ?? '';
+  String get clViewOnGithub => _localizedStrings['cl_view_on_github'] ?? '';
 
   // ---------------------------------------------------------------------------
   // sel_: Multi-selection Toolbar
   // ---------------------------------------------------------------------------
   String get selSelectedCount =>
-      _cadenasLocalizadas['sel_selected_count'] ?? '';
-  String get selSelect => _cadenasLocalizadas['sel_select'] ?? '';
-  String get selCancel => _cadenasLocalizadas['sel_cancel'] ?? '';
-  String get selSelectAll => _cadenasLocalizadas['sel_select_all'] ?? '';
-  String get selDeselectAll => _cadenasLocalizadas['sel_deselect_all'] ?? '';
+      _localizedStrings['sel_selected_count'] ?? '';
+  String get selSelect => _localizedStrings['sel_select'] ?? '';
+  String get selCancel => _localizedStrings['sel_cancel'] ?? '';
+  String get selSelectAll => _localizedStrings['sel_select_all'] ?? '';
+  String get selDeselectAll => _localizedStrings['sel_deselect_all'] ?? '';
 
   // ---------------------------------------------------------------------------
   // common_: Common UI Labels
   // ---------------------------------------------------------------------------
   String get commonViewAsCards =>
-      _cadenasLocalizadas['common_view_as_cards'] ?? '';
+      _localizedStrings['common_view_as_cards'] ?? '';
   String get commonViewAsList =>
-      _cadenasLocalizadas['common_view_as_list'] ?? '';
-  String get commonBack => _cadenasLocalizadas['common_back'] ?? '';
-  String get commonMinimize => _cadenasLocalizadas['common_minimize'] ?? '';
+      _localizedStrings['common_view_as_list'] ?? '';
+  String get commonBack => _localizedStrings['common_back'] ?? '';
+  String get commonMinimize => _localizedStrings['common_minimize'] ?? '';
 
   // ---------------------------------------------------------------------------
   // scan_: Scan Progress Overlay
   // ---------------------------------------------------------------------------
-  String get scanStageIdle => _cadenasLocalizadas['scan_stage_idle'] ?? '';
+  String get scanStageIdle => _localizedStrings['scan_stage_idle'] ?? '';
   String get scanStageGettingDatabase =>
-      _cadenasLocalizadas['scan_stage_getting_database'] ?? '';
+      _localizedStrings['scan_stage_getting_database'] ?? '';
   String get scanStageGettingTracks =>
-      _cadenasLocalizadas['scan_stage_getting_tracks'] ?? '';
+      _localizedStrings['scan_stage_getting_tracks'] ?? '';
   String get scanStageDiscovering =>
-      _cadenasLocalizadas['scan_stage_discovering'] ?? '';
+      _localizedStrings['scan_stage_discovering'] ?? '';
   String get scanStageComparing =>
-      _cadenasLocalizadas['scan_stage_comparing'] ?? '';
+      _localizedStrings['scan_stage_comparing'] ?? '';
   String get scanStageExtracting =>
-      _cadenasLocalizadas['scan_stage_extracting'] ?? '';
+      _localizedStrings['scan_stage_extracting'] ?? '';
   String get scanStageInserting =>
-      _cadenasLocalizadas['scan_stage_inserting'] ?? '';
+      _localizedStrings['scan_stage_inserting'] ?? '';
   String get scanStageCleaningOrphans =>
-      _cadenasLocalizadas['scan_stage_cleaning_orphans'] ?? '';
+      _localizedStrings['scan_stage_cleaning_orphans'] ?? '';
   String get scanStageCleaningThumbnails =>
-      _cadenasLocalizadas['scan_stage_cleaning_thumbnails'] ?? '';
+      _localizedStrings['scan_stage_cleaning_thumbnails'] ?? '';
   String get scanStageCompleted =>
-      _cadenasLocalizadas['scan_stage_completed'] ?? '';
-  String get scanStageFailed => _cadenasLocalizadas['scan_stage_failed'] ?? '';
+      _localizedStrings['scan_stage_completed'] ?? '';
+  String get scanStageFailed => _localizedStrings['scan_stage_failed'] ?? '';
   String get scanStageCancelled =>
-      _cadenasLocalizadas['scan_stage_cancelled'] ?? '';
+      _localizedStrings['scan_stage_cancelled'] ?? '';
   String get scanCancelTooltip =>
-      _cadenasLocalizadas['scan_cancel_tooltip'] ?? '';
+      _localizedStrings['scan_cancel_tooltip'] ?? '';
 
   String scanStageText(ScanStage stage) {
     switch (stage) {
@@ -925,7 +928,7 @@ class AppStringKey {
   List<String> get allKeys => List.unmodifiable(_allAppStrings);
 
   Map<String, String> toJson() =>
-      Map<String, String>.unmodifiable(_cadenasLocalizadas);
+      Map<String, String>.unmodifiable(_localizedStrings);
 
   Future<void> updateFromJson(
     Map<String, String> jsonData, {
@@ -942,6 +945,6 @@ class AppStringKey {
         );
       }
     }
-    _cadenasLocalizadas.addAll(jsonData);
+    _localizedStrings.addAll(jsonData);
   }
 }

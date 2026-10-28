@@ -29,7 +29,7 @@ class TachyonSearchController extends ChangeNotifier {
     if (directStore != null) {
       return directStore;
     }
-    return LibraryStore();
+    throw StateError('LibraryStore must be provided to TachyonSearchController');
   }
 
   // ---------------------------------------------------------------------------

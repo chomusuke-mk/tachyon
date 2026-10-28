@@ -66,28 +66,20 @@ class PlaybackController extends ChangeNotifier {
     LibraryStore? store,
     required SettingsRepository settingsRepository,
     ma.MiniaudioEngine<AudioPlayable>? engine,
-    dynamic audioEngine,
     Stream<List<ma.AudioDevice>>? devicesStream,
   }) : _store = store,
        _settingsRepository = settingsRepository,
-       _ownsEngine = engine == null && audioEngine == null {
+       _ownsEngine = engine == null {
     _pauseOnDeviceChange = _settingsRepository.getPauseOnDeviceChange();
 
     if (engine != null) {
       _engine = engine;
       _bindEngine(engine);
       engine.action.setPauseOnDeviceChange(_pauseOnDeviceChange);
-    } else if (audioEngine is ma.MiniaudioEngine<AudioPlayable>) {
-      _engine = audioEngine;
-      _bindEngine(audioEngine);
-      audioEngine.action.setPauseOnDeviceChange(_pauseOnDeviceChange);
     }
 
     final devStream =
         devicesStream ??
-        (audioEngine != null && audioEngine is! ma.MiniaudioEngine
-            ? (audioEngine.devicesStream as Stream<List<ma.AudioDevice>>?)
-            : null) ??
         _safeGetAudioDevicesStream();
 
     _devicesSubscription = devStream?.listen((devices) {

@@ -2,6 +2,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
@@ -533,10 +534,9 @@ class SettingsController extends ChangeNotifier {
         await bgDir.create(recursive: true);
       }
 
-      final ext = sourceImagePath.contains('.')
-          ? '.${sourceImagePath.split('.').last}'
-          : '.jpg';
-      final targetPath = '${bgDir.path}/custom_bg$ext';
+      final rawExt = p.extension(sourceImagePath);
+      final ext = rawExt.isNotEmpty ? rawExt : '.jpg';
+      final targetPath = p.join(bgDir.path, 'custom_bg$ext');
       final targetFile = await sourceFile.copy(targetPath);
 
       _settings = _settings.copyWith(customBackgroundPath: targetFile.path);

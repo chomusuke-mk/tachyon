@@ -476,6 +476,9 @@ class SettingsRepository {
       _prefs.setDouble(_keyReverbDry, val.clamp(0.0, 2.0));
 
   Future<void> resetToDefaults() async {
-    await _prefs.clear();
+    final keys = _prefs.getKeys().where((k) => k.startsWith('s_')).toList();
+    for (final k in keys) {
+      await _prefs.remove(k);
+    }
   }
 }

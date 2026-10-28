@@ -162,17 +162,6 @@ class LibraryStore extends ChangeNotifier {
     return candidates.sublist(0, count);
   }
 
-  /// Returns track file metadata map (`filePath -> (modifiedAt, fileSize)`) from RAM.
-  Map<String, ({int modifiedAt, int fileSize})> getExistingTrackMetas() {
-    return <String, ({int modifiedAt, int fileSize})>{
-      for (final track in _allTracks)
-        track.filePath: (
-          modifiedAt: track.modifiedAt,
-          fileSize: track.fileSize,
-        ),
-    };
-  }
-
   /// Returns stored track info (`(id, filePath, modifiedAt)`) from RAM.
   List<({int id, String filePath, int modifiedAt})> getStoredTracks() {
     return <({int id, String filePath, int modifiedAt})>[
@@ -205,16 +194,6 @@ class LibraryStore extends ChangeNotifier {
       }
     }
     return hashes;
-  }
-
-  /// Returns ordered track IDs for a playlist directly from RAM.
-  List<int> getTrackIdsForPlaylist(int playlistId) {
-    final playlist = _playlistsById[playlistId];
-    if (playlist == null) return const [];
-    return playlist.entries
-        .map((e) => e.track?.id)
-        .whereType<int>()
-        .toList(growable: false);
   }
 
   // ---------------------------------------------------------------------------
@@ -928,24 +907,6 @@ class LibraryStore extends ChangeNotifier {
         return hash.trim();
       }
     }
-    return null;
-  }
-
-  static String? computeArtistThumbnailHash(Artist artist) {
-    for (final album in artist.albums) {
-      final hash = album.thumbnailHash;
-      if (hash != null && hash.trim().isNotEmpty) {
-        return hash.trim();
-      }
-    }
-
-    for (final track in artist.tracks) {
-      final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
-      if (hash != null && hash.trim().isNotEmpty) {
-        return hash.trim();
-      }
-    }
-
     return null;
   }
 

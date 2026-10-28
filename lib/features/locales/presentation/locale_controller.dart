@@ -70,18 +70,20 @@ class LocaleController extends ChangeNotifier {
   /// Switches active language to [localeCode] in real time.
   ///
   /// Rebuilds all listening widgets instantly via [notifyListeners].
-  void setLocale(String localeCode) async {
+  Future<void> setLocale(String localeCode) async {
     if (localeCode == _currentLocaleCode) return;
 
     _currentLocaleCode = localeCode;
 
-    if (localeCode == _fallbackCode) {
-      // Si vuelve a inglés, usamos el caché instantáneamente (Cero demoras)
-      await _localeStrings.updateFromJson(_fallbackCache);
-      notifyListeners();
-    } else {
-      // Si cambia a otro idioma, descargamos y fusionamos
-      await _loadAndMerge(localeCode);
+    try {
+      if (localeCode == _fallbackCode) {
+        await _localeStrings.updateFromJson(_fallbackCache);
+        notifyListeners();
+      } else {
+        await _loadAndMerge(localeCode);
+      }
+    } catch (e, st) {
+      debugPrint('[LocaleController] Error switching locale to $localeCode: $e\n$st');
     }
   }
 }

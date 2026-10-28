@@ -24,7 +24,6 @@ export 'package:tachyon/core/store/domain/track_sort_option.dart';
 class LibraryController extends ChangeNotifier {
   final SettingsRepository settingsRepository;
   final MetadataService? metadataService;
-  SettingsRepository get _settingsRepository => settingsRepository;
 
   final LibraryStore _store;
 
@@ -34,12 +33,12 @@ class LibraryController extends ChangeNotifier {
     this.metadataService,
   }) : _store = store ?? LibraryStore(),
        _isLoading = store == null {
-    _sortOption = _settingsRepository.getTrackSortOption();
-    _sortAscending = _settingsRepository.getTrackSortAscending();
-    _albumSortOption = _settingsRepository.getAlbumSortOption();
-    _albumSortAscending = _settingsRepository.getAlbumSortAscending();
-    _artistSortOption = _settingsRepository.getArtistSortOption();
-    _artistSortAscending = _settingsRepository.getArtistSortAscending();
+    _sortOption = settingsRepository.getTrackSortOption();
+    _sortAscending = settingsRepository.getTrackSortAscending();
+    _albumSortOption = settingsRepository.getAlbumSortOption();
+    _albumSortAscending = settingsRepository.getAlbumSortAscending();
+    _artistSortOption = settingsRepository.getArtistSortOption();
+    _artistSortAscending = settingsRepository.getArtistSortAscending();
 
     _store.addListener(_onStoreChanged);
 
@@ -256,8 +255,8 @@ class LibraryController extends ChangeNotifier {
       }
     }
 
-    _settingsRepository.setTrackSortOption(_sortOption);
-    _settingsRepository.setTrackSortAscending(_sortAscending);
+    settingsRepository.setTrackSortOption(_sortOption);
+    settingsRepository.setTrackSortAscending(_sortAscending);
 
     _tracks = List<Track>.unmodifiable(
       _store.sortTracks(
@@ -288,8 +287,8 @@ class LibraryController extends ChangeNotifier {
       }
     }
 
-    _settingsRepository.setAlbumSortOption(_albumSortOption);
-    _settingsRepository.setAlbumSortAscending(_albumSortAscending);
+    settingsRepository.setAlbumSortOption(_albumSortOption);
+    settingsRepository.setAlbumSortAscending(_albumSortAscending);
 
     _albums = List<Album>.unmodifiable(
       _store.sortAlbums(
@@ -314,8 +313,8 @@ class LibraryController extends ChangeNotifier {
       }
     }
 
-    _settingsRepository.setArtistSortOption(_artistSortOption);
-    _settingsRepository.setArtistSortAscending(_artistSortAscending);
+    settingsRepository.setArtistSortOption(_artistSortOption);
+    settingsRepository.setArtistSortAscending(_artistSortAscending);
 
     _artists = List<Artist>.unmodifiable(
       _store.sortArtists(
@@ -405,7 +404,7 @@ class LibraryController extends ChangeNotifier {
       );
     } else {
       if (_folderNavigationStack.isEmpty) {
-        final musicDirs = _settingsRepository.getSettings().musicDirectories;
+        final musicDirs = settingsRepository.getSettings().musicDirectories;
         String? matchingRoot;
         for (final root in musicDirs) {
           final normRoot = p.normalize(root);
@@ -503,7 +502,7 @@ class LibraryController extends ChangeNotifier {
     }
 
     // Boundary check: ensure folder is within configured musicDirectories
-    final musicDirs = _settingsRepository.getSettings().musicDirectories;
+    final musicDirs = settingsRepository.getSettings().musicDirectories;
     final root = _folderNavigationStack.firstOrNull;
     if (root != null && musicDirs.isNotEmpty) {
       final normRoot = p.normalize(root);
@@ -566,7 +565,7 @@ class LibraryController extends ChangeNotifier {
   /// When all directories have been removed, scans with an empty list to purge removed tracks.
   Future<void> scanDirectories() async {
     if (isScanning) return;
-    final directories = _settingsRepository.getSettings().musicDirectories;
+    final directories = settingsRepository.getSettings().musicDirectories;
     _scanProgressNotifier.value = const ScanProgress(
       stage: ScanStage.gettingDatabase,
     );
