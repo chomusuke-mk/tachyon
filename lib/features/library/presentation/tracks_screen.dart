@@ -26,6 +26,15 @@ class _TracksScreenState extends State<TracksScreen> {
   bool _isCardView = false;
   final Set<int> _selectedTrackIds = <int>{};
 
+  @override
+  void initState() {
+    super.initState();
+    final library = Provider.of<LibraryController?>(context, listen: false);
+    if (library != null) {
+      _isCardView = library.settingsRepository.getCardView('tracks', defaultValue: false);
+    }
+  }
+
   void _toggleSelectionMode() {
     setState(() {
       _isSelectionMode = !_isSelectionMode;
@@ -130,6 +139,10 @@ class _TracksScreenState extends State<TracksScreen> {
                 setState(() {
                   _isCardView = !_isCardView;
                 });
+                context
+                    .read<LibraryController?>()
+                    ?.settingsRepository
+                    .setCardView('tracks', _isCardView);
               },
             ),
             IconButton(

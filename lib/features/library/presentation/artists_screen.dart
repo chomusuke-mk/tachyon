@@ -21,6 +21,15 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
   bool _isCardView = true;
 
   @override
+  void initState() {
+    super.initState();
+    final library = Provider.of<LibraryController?>(context, listen: false);
+    if (library != null) {
+      _isCardView = library.settingsRepository.getCardView('artists', defaultValue: true);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
@@ -60,6 +69,10 @@ class _ArtistsScreenState extends State<ArtistsScreen> {
               setState(() {
                 _isCardView = !_isCardView;
               });
+              context
+                  .read<LibraryController?>()
+                  ?.settingsRepository
+                  .setCardView('artists', _isCardView);
             },
           ),
           PopupMenuButton<ArtistSortOption>(

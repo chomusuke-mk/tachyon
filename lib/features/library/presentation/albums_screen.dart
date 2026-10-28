@@ -21,6 +21,15 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
   bool _isCardView = true;
 
   @override
+  void initState() {
+    super.initState();
+    final library = Provider.of<LibraryController?>(context, listen: false);
+    if (library != null) {
+      _isCardView = library.settingsRepository.getCardView('albums', defaultValue: true);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
@@ -60,6 +69,10 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
               setState(() {
                 _isCardView = !_isCardView;
               });
+              context
+                  .read<LibraryController?>()
+                  ?.settingsRepository
+                  .setCardView('albums', _isCardView);
             },
           ),
           PopupMenuButton<AlbumSortOption>(

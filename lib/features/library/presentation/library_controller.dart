@@ -39,6 +39,7 @@ class LibraryController extends ChangeNotifier {
     _albumSortAscending = settingsRepository.getAlbumSortAscending();
     _artistSortOption = settingsRepository.getArtistSortOption();
     _artistSortAscending = settingsRepository.getArtistSortAscending();
+    _isFolderGridView = settingsRepository.getCardView('folders', defaultValue: false);
 
     _store.addListener(_onStoreChanged);
 
@@ -373,6 +374,7 @@ class LibraryController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   void toggleFolderGridView() {
     _isFolderGridView = !_isFolderGridView;
+    settingsRepository.setCardView('folders', _isFolderGridView);
     notifyListeners();
   }
 

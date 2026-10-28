@@ -5,6 +5,7 @@ import 'audio_playable.dart';
 class RadioStation implements AudioPlayable {
   @override
   final int? id;
+  final String? stationUuid;
   final String name;
   final String streamUrl;
   final String? homepageUrl;
@@ -18,6 +19,7 @@ class RadioStation implements AudioPlayable {
 
   const RadioStation({
     this.id,
+    this.stationUuid,
     required this.name,
     required this.streamUrl,
     this.homepageUrl,
@@ -70,6 +72,7 @@ class RadioStation implements AudioPlayable {
 
   RadioStation copyWith({
     int? id,
+    String? stationUuid,
     String? name,
     String? streamUrl,
     String? homepageUrl,
@@ -83,6 +86,7 @@ class RadioStation implements AudioPlayable {
   }) {
     return RadioStation(
       id: id ?? this.id,
+      stationUuid: stationUuid ?? this.stationUuid,
       name: name ?? this.name,
       streamUrl: streamUrl ?? this.streamUrl,
       homepageUrl: homepageUrl ?? this.homepageUrl,
@@ -102,8 +106,9 @@ class RadioStation implements AudioPlayable {
       other is RadioStation &&
           runtimeType == other.runtimeType &&
           id == other.id &&
+          stationUuid == other.stationUuid &&
           streamUrl == other.streamUrl;
 
   @override
-  int get hashCode => Object.hash(id, streamUrl);
+  int get hashCode => Object.hash(id, stationUuid, streamUrl);
 }

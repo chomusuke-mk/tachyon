@@ -139,6 +139,12 @@ class AppStringKey {
   String get npExitFullscreen =>
       _localizedStrings['np_exit_fullscreen'] ?? '';
   String get npVisualizer => _localizedStrings['np_visualizer'] ?? '';
+  String get npVisualizerMode => _localizedStrings['np_visualizer_mode'] ?? '';
+  String get npVisualizerOff => _localizedStrings['np_visualizer_off'] ?? '';
+  String get npVisualizerWave => _localizedStrings['np_visualizer_wave'] ?? '';
+  String get npVisualizerBars => _localizedStrings['np_visualizer_bars'] ?? '';
+  String get npVisualizerCircle =>
+      _localizedStrings['np_visualizer_circle'] ?? '';
   String get npBackgroundArtwork =>
       _localizedStrings['np_background_artwork'] ?? '';
   String get npBackgroundGradient =>
@@ -319,6 +325,22 @@ class AppStringKey {
   // rd_: Online Radios & Live Streams
   // ---------------------------------------------------------------------------
   String get rdTitle => _localizedStrings['rd_title'] ?? '';
+  String get rdMyStations => _localizedStrings['rd_my_stations'] ?? '';
+  String get rdDiscover => _localizedStrings['rd_discover'] ?? '';
+  String get rdSearchHint => _localizedStrings['rd_search_hint'] ?? '';
+  String get rdAllGenres => _localizedStrings['rd_all_genres'] ?? '';
+  String get rdAllCountries => _localizedStrings['rd_all_countries'] ?? '';
+  String get rdImageUrl => _localizedStrings['rd_image_url'] ?? '';
+  String get rdSaveToLibrary => _localizedStrings['rd_save_to_library'] ?? '';
+  String get rdSavedToLibrary => _localizedStrings['rd_saved_to_library'] ?? '';
+  String get rdAlreadyInLibrary =>
+      _localizedStrings['rd_already_in_library'] ?? '';
+  String get rdRefresh => _localizedStrings['rd_refresh'] ?? '';
+  String get rdPopular => _localizedStrings['rd_popular'] ?? '';
+  String get rdLoading => _localizedStrings['rd_loading'] ?? '';
+  String get rdNoResults => _localizedStrings['rd_no_results'] ?? '';
+  String get rdNoResultsSubtitle =>
+      _localizedStrings['rd_no_results_subtitle'] ?? '';
   String get rdAddStation => _localizedStrings['rd_add_station'] ?? '';
   String get rdEditStation => _localizedStrings['rd_edit_station'] ?? '';
   String get rdDeleteStation => _localizedStrings['rd_delete_station'] ?? '';
@@ -730,6 +752,11 @@ class AppStringKey {
     'np_fullscreen',
     'np_exit_fullscreen',
     'np_visualizer',
+    'np_visualizer_mode',
+    'np_visualizer_off',
+    'np_visualizer_wave',
+    'np_visualizer_bars',
+    'np_visualizer_circle',
     'np_background_artwork', 'np_background_gradient', 'np_add_to_playlist',
     'np_like',
     'np_unlike',

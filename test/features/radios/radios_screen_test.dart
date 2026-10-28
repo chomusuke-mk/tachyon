@@ -12,6 +12,8 @@ import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/radios/data/radio_browser_service.dart';
+import 'package:tachyon/features/radios/presentation/radio_controller.dart';
 import 'package:tachyon/features/radios/presentation/radios_screen.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
@@ -29,6 +31,7 @@ class _TestPlaybackController extends PlaybackController {
   _TestPlaybackController({required super.settingsRepository});
 
   AudioPlayable? playedPlayable;
+  List<AudioPlayable>? contextTrackList;
 
   @override
   Future<void> playTrack(
@@ -36,7 +39,57 @@ class _TestPlaybackController extends PlaybackController {
     List<AudioPlayable>? contextTracks,
   }) async {
     playedPlayable = track;
+    contextTrackList = contextTracks;
   }
+}
+
+class _TestRadioBrowserService extends RadioBrowserService {
+  List<RadioStation> topStationsToReturn = [];
+  List<String> tagsToReturn = ['Rock', 'Jazz', 'Classical'];
+  List<String> countriesToReturn = ['United Kingdom', 'France'];
+
+  @override
+  Future<List<RadioStation>> getTopStations({int limit = 40}) async {
+    return topStationsToReturn;
+  }
+
+  @override
+  Future<List<RadioStation>> searchStations({
+    String? name,
+    String? country,
+    String? tag,
+    int limit = 40,
+  }) async {
+    return topStationsToReturn.where((s) {
+      if (name != null &&
+          name.isNotEmpty &&
+          !s.name.toLowerCase().contains(name.toLowerCase())) {
+        return false;
+      }
+      if (country != null && country != 'All' && s.country != country) {
+        return false;
+      }
+      if (tag != null &&
+          tag != 'All' &&
+          !(s.genre?.toLowerCase().contains(tag.toLowerCase()) ?? false)) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  @override
+  Future<List<String>> getPopularTags({int limit = 30}) async => tagsToReturn;
+
+  @override
+  Future<List<String>> getPopularCountries({int limit = 30}) async =>
+      countriesToReturn;
+
+  @override
+  Future<List<RadioStation>> validateAndRefreshStations(
+    List<RadioStation> savedStations,
+  ) async =>
+      [];
 }
 
 void main() {
@@ -47,6 +100,8 @@ void main() {
   late LibraryStore store;
   late SettingsRepository settingsRepo;
   late _TestPlaybackController playback;
+  late _TestRadioBrowserService radioService;
+  late RadioController radioController;
 
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
@@ -56,7 +111,7 @@ void main() {
     await localeController.whenReady;
   });
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.inMemory();
     store = LibraryStore.fromSnapshot(
       const CatalogSnapshot(
@@ -72,14 +127,40 @@ void main() {
       db,
     );
     playback = _TestPlaybackController(settingsRepository: settingsRepo);
+
+    radioService = _TestRadioBrowserService();
+    radioService.topStationsToReturn = [
+      RadioStation(
+        stationUuid: 'discover-uuid-1',
+        name: 'Planet Rock',
+        streamUrl: 'https://planet.rock/live.m3u8',
+        genre: 'Rock',
+        country: 'United Kingdom',
+        createdAt: DateTime.now(),
+      ),
+      RadioStation(
+        stationUuid: 'discover-uuid-2',
+        name: 'FIP Jazz',
+        streamUrl: 'https://fip.jazz/audio.aac',
+        genre: 'Jazz',
+        country: 'France',
+        createdAt: DateTime.now(),
+      ),
+    ];
+
+    radioController = RadioController(service: radioService, store: store);
+    await radioController.init();
   });
 
   Widget createSubject() {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<LocaleController>.value(value: localeController),
+        Provider<SettingsRepository>.value(value: settingsRepo),
         ChangeNotifierProvider<LibraryStore>.value(value: store),
         ChangeNotifierProvider<PlaybackController>.value(value: playback),
+        Provider<RadioBrowserService>.value(value: radioService),
+        ChangeNotifierProvider<RadioController>.value(value: radioController),
       ],
       child: const MaterialApp(
         home: RadiosScreen(),
@@ -88,16 +169,19 @@ void main() {
   }
 
   group('RadiosScreen Widget Tests', () {
-    testWidgets('Renders empty state when no radio stations exist', (tester) async {
+    testWidgets('Renders tabs and empty state when no saved radio stations exist',
+        (tester) async {
       await tester.pumpWidget(createSubject());
       await tester.pumpAndSettle();
 
       expect(find.text('Radios'), findsOneWidget);
+      expect(find.text('My Stations'), findsOneWidget);
+      expect(find.text('Discover'), findsWidgets);
       expect(find.text('No Radio Stations'), findsOneWidget);
-      expect(find.text('Add Station'), findsWidgets);
     });
 
-    testWidgets('Adding a new radio station updates store and displays item', (tester) async {
+    testWidgets('Adding a new radio station with image updates store and UI',
+        (tester) async {
       await tester.pumpWidget(createSubject());
       await tester.pumpAndSettle();
 
@@ -107,7 +191,7 @@ void main() {
 
       expect(find.byType(AlertDialog), findsOneWidget);
 
-      // Fill form
+      // Fill form with name, streamUrl, and imageUrl
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Station Name'),
         'SomaFM Groove Salad',
@@ -115,6 +199,10 @@ void main() {
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Stream URL (HTTP/HTTPS/M3U8)'),
         'https://ice1.somafm.com/groovesalad-128-mp3',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Logo / Image URL'),
+        'https://somafm.com/img/groovesalad120.png',
       );
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Genre'),
@@ -129,10 +217,15 @@ void main() {
       expect(find.text('Ambient / Downtempo'), findsOneWidget);
       expect(store.radioStations.length, 1);
       expect(store.radioStations.first.name, 'SomaFM Groove Salad');
+      expect(
+        store.radioStations.first.faviconUrl,
+        'https://somafm.com/img/groovesalad120.png',
+      );
     });
 
-    testWidgets('Tapping a radio station triggers playback.playTrack', (tester) async {
-      final station = await store.saveRadioStationInStore(
+    testWidgets('Tapping a radio station loads entire list as queue in playback',
+        (tester) async {
+      await store.saveRadioStationInStore(
         RadioStation(
           name: 'KEXP 90.3 FM',
           streamUrl: 'https://live-aac-128.kexp.org/kexp128.aac',
@@ -140,12 +233,20 @@ void main() {
           createdAt: DateTime.now(),
         ),
       );
-      expect(station, isNotNull);
+      await store.saveRadioStationInStore(
+        RadioStation(
+          name: 'NTS Radio 1',
+          streamUrl: 'https://stream.nts.live/stream',
+          genre: 'Eclectic',
+          createdAt: DateTime.now(),
+        ),
+      );
 
       await tester.pumpWidget(createSubject());
       await tester.pumpAndSettle();
 
       expect(find.text('KEXP 90.3 FM'), findsOneWidget);
+      expect(find.text('NTS Radio 1'), findsOneWidget);
 
       // Tap station
       await tester.tap(find.text('KEXP 90.3 FM'));
@@ -153,11 +254,13 @@ void main() {
 
       expect(playback.playedPlayable, isNotNull);
       expect(playback.playedPlayable?.title, 'KEXP 90.3 FM');
-      expect(playback.playedPlayable?.filePath, 'https://live-aac-128.kexp.org/kexp128.aac');
-      expect(playback.playedPlayable?.isStream, isTrue);
+      expect(playback.contextTrackList, isNotNull);
+      // Entire station list loaded in contextTracks queue!
+      expect(playback.contextTrackList?.length, 2);
     });
 
-    testWidgets('Toggling favorite heart button updates station favorite state', (tester) async {
+    testWidgets('Toggling favorite heart button updates station favorite state',
+        (tester) async {
       final station = await store.saveRadioStationInStore(
         RadioStation(
           name: 'BBC Radio 6 Music',
@@ -181,7 +284,8 @@ void main() {
       expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
     });
 
-    testWidgets('Deleting a radio station removes it from store and UI', (tester) async {
+    testWidgets('Deleting a radio station removes it from store and UI',
+        (tester) async {
       final station = await store.saveRadioStationInStore(
         RadioStation(
           name: 'Station to Delete',
@@ -211,6 +315,61 @@ void main() {
 
       expect(find.text('Station to Delete'), findsNothing);
       expect(store.radioStations, isEmpty);
+    });
+
+    testWidgets('Switching to Discover tab shows preloaded stations and search bar',
+        (tester) async {
+      await tester.pumpWidget(createSubject());
+      await tester.pumpAndSettle();
+
+      // Switch to Discover tab
+      await tester.tap(find.text('Discover').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Planet Rock'), findsOneWidget);
+      expect(find.text('FIP Jazz'), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('Rock'), findsOneWidget);
+      expect(find.text('Jazz'), findsOneWidget);
+    });
+
+    testWidgets('Saving a station from Discover tab persists into LibraryStore',
+        (tester) async {
+      await tester.pumpWidget(createSubject());
+      await tester.pumpAndSettle();
+
+      // Switch to Discover tab
+      await tester.tap(find.text('Discover').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Planet Rock'), findsOneWidget);
+
+      // Find bookmark add button for Planet Rock
+      final bookmarkAddFinder = find.byIcon(Icons.bookmark_add_outlined);
+      expect(bookmarkAddFinder, findsWidgets);
+
+      await tester.tap(bookmarkAddFinder.first);
+      await tester.pumpAndSettle();
+
+      // Planet Rock should now be in store!
+      expect(store.radioStations.length, 1);
+      expect(store.radioStations.first.name, 'Planet Rock');
+      expect(store.radioStations.first.stationUuid, 'discover-uuid-1');
+    });
+
+    testWidgets('Toggling Cards / List view mode persists in SettingsRepository',
+        (tester) async {
+      await tester.pumpWidget(createSubject());
+      await tester.pumpAndSettle();
+
+      expect(settingsRepo.getCardView('radios', defaultValue: false), isFalse);
+
+      // Tap toggle view mode in AppBar
+      await tester.tap(find.byIcon(Icons.grid_view_rounded));
+      await tester.pumpAndSettle();
+
+      expect(settingsRepo.getCardView('radios', defaultValue: false), isTrue);
+      expect(find.byIcon(Icons.view_list_rounded), findsOneWidget);
     });
   });
 }

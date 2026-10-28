@@ -12,6 +12,11 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/audio_effects_sheet.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/now_playing_cover_art.dart';
+import 'package:tachyon/features/playback/presentation/widgets/visualizers/now_playing_visualizer_mode.dart';
+import 'package:tachyon/features/playback/presentation/widgets/visualizers/now_playing_visualizer_renderer.dart';
+import 'package:tachyon/features/playback/presentation/widgets/visualizers/reactive_circle_visualizer.dart';
+import 'package:tachyon/features/playback/presentation/widgets/visualizers/spectrum_bars_visualizer.dart';
+import 'package:tachyon/features/playback/presentation/widgets/wave_visualizer.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
@@ -264,6 +269,138 @@ void main() {
 
       expect(playbackController.nextCallCount, equals(0));
       expect(playbackController.previousCallCount, equals(0));
+    });
+
+    testWidgets('Tapping artwork cycles visualizer modes (wave -> bars -> circle -> off -> wave)', (tester) async {
+      final track = Track(
+        id: 50,
+        filePath: '/music/track50.mp3',
+        title: 'Visualizer Test Track',
+        durationMs: 200000,
+        fileSize: 1024,
+        modifiedAt: 1000,
+      );
+
+      playbackController.setMockTrack(track, isPlaying: true);
+
+      await tester.pumpWidget(buildTestApp(child: const NowPlayingCoverArt()));
+      await tester.pumpAndSettle();
+
+      // Default mode is wave: WaveVisualizerPainter is present
+      final customPaintsWave = tester.widgetList<CustomPaint>(find.byType(CustomPaint));
+      expect(
+        customPaintsWave.any((cp) => cp.painter is WaveVisualizerPainter),
+        isTrue,
+      );
+
+      // 1. Tap artwork -> switches from wave to bars
+      await tester.tap(find.byType(NowPlayingCoverArt));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(settingsRepo.getNowPlayingVisualizerMode(), equals(NowPlayingVisualizerMode.bars));
+      final customPaintsBars = tester.widgetList<CustomPaint>(find.byType(CustomPaint));
+      expect(
+        customPaintsBars.any((cp) => cp.painter is SpectrumBarsPainter),
+        isTrue,
+      );
+      // In bars mode, WaveVisualizerPainter is NOT used
+      expect(
+        customPaintsBars.any((cp) => cp.painter is WaveVisualizerPainter),
+        isFalse,
+      );
+
+      // 2. Tap artwork -> switches from bars to circle
+      await tester.tap(find.byType(NowPlayingCoverArt));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(settingsRepo.getNowPlayingVisualizerMode(), equals(NowPlayingVisualizerMode.circle));
+      final customPaintsCircle = tester.widgetList<CustomPaint>(find.byType(CustomPaint));
+      expect(
+        customPaintsCircle.any((cp) => cp.painter is ReactiveCirclePainter),
+        isTrue,
+      );
+      expect(find.byType(ReactiveCircleVisualizerWidget), findsOneWidget);
+      // Center app icon is rendered within ClipOval
+      expect(
+        find.descendant(
+          of: find.byType(ReactiveCircleVisualizerWidget),
+          matching: find.byType(ClipOval),
+        ),
+        findsOneWidget,
+      );
+
+      // 3. Tap artwork -> switches from circle to off (pure cover)
+      await tester.tap(find.byType(NowPlayingCoverArt));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(settingsRepo.getNowPlayingVisualizerMode(), equals(NowPlayingVisualizerMode.off));
+      final customPaintsOff = tester.widgetList<CustomPaint>(find.byType(CustomPaint));
+      expect(
+        customPaintsOff.any((cp) => cp.painter is WaveVisualizerPainter),
+        isFalse,
+      );
+      expect(
+        customPaintsOff.any((cp) => cp.painter is SpectrumBarsPainter),
+        isFalse,
+      );
+      expect(
+        customPaintsOff.any((cp) => cp.painter is ReactiveCirclePainter),
+        isFalse,
+      );
+      // AlbumArtImage is displayed
+      expect(find.byType(AlbumArtImage), findsOneWidget);
+
+      // 4. Tap artwork -> switches from off back to wave
+      await tester.tap(find.byType(NowPlayingCoverArt));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(settingsRepo.getNowPlayingVisualizerMode(), equals(NowPlayingVisualizerMode.wave));
+      final customPaintsCycle = tester.widgetList<CustomPaint>(find.byType(CustomPaint));
+      expect(
+        customPaintsCycle.any((cp) => cp.painter is WaveVisualizerPainter),
+        isTrue,
+      );
+    });
+
+    test('NowPlayingVisualizerMode enum and Factory strategy validation', () {
+      expect(NowPlayingVisualizerMode.off.next, equals(NowPlayingVisualizerMode.wave));
+      expect(NowPlayingVisualizerMode.wave.next, equals(NowPlayingVisualizerMode.bars));
+      expect(NowPlayingVisualizerMode.bars.next, equals(NowPlayingVisualizerMode.circle));
+      expect(NowPlayingVisualizerMode.circle.next, equals(NowPlayingVisualizerMode.off));
+
+      expect(NowPlayingVisualizerMode.fromString('off'), equals(NowPlayingVisualizerMode.off));
+      expect(NowPlayingVisualizerMode.fromString('wave'), equals(NowPlayingVisualizerMode.wave));
+      expect(NowPlayingVisualizerMode.fromString('bars'), equals(NowPlayingVisualizerMode.bars));
+      expect(NowPlayingVisualizerMode.fromString('circle'), equals(NowPlayingVisualizerMode.circle));
+      expect(NowPlayingVisualizerMode.fromString('unknown'), equals(NowPlayingVisualizerMode.wave));
+
+      expect(NowPlayingVisualizerFactory.getRenderer(NowPlayingVisualizerMode.off), isA<OffVisualizerRenderer>());
+      expect(NowPlayingVisualizerFactory.getRenderer(NowPlayingVisualizerMode.wave), isA<WaveVisualizerRenderer>());
+      expect(NowPlayingVisualizerFactory.getRenderer(NowPlayingVisualizerMode.bars), isA<BarsVisualizerRenderer>());
+      expect(NowPlayingVisualizerFactory.getRenderer(NowPlayingVisualizerMode.circle), isA<ReactiveCircleVisualizerRenderer>());
+    });
+
+    test('resolveReactiveCircleColor accurately resolves colors and fallbacks', () {
+      final darkTheme = ThemeData.dark();
+      final lightTheme = ThemeData.light();
+
+      // Dark mode fallback without track color -> Electric neon yellow
+      final darkFallback = resolveReactiveCircleColor(trackColor: null, theme: darkTheme);
+      expect(darkFallback, equals(const Color(0xFFFFEE00)));
+
+      // Dark mode with very dark track color -> adjusts lightness for neon visibility
+      const darkBlue = Color(0xFF0A1028);
+      final adjustedDark = resolveReactiveCircleColor(trackColor: darkBlue, theme: darkTheme);
+      expect(HSLColor.fromColor(adjustedDark).lightness, greaterThanOrEqualTo(0.48));
+
+      // Light mode fallback without track color -> theme primary
+      final lightFallback = resolveReactiveCircleColor(trackColor: null, theme: lightTheme);
+      expect(lightFallback, equals(lightTheme.colorScheme.primary));
+
+      // Light mode with very light track color -> darkens lightness for contrast
+      const lightYellow = Color(0xFFFFFFEE);
+      final adjustedLight = resolveReactiveCircleColor(trackColor: lightYellow, theme: lightTheme);
+      expect(HSLColor.fromColor(adjustedLight).lightness, lessThanOrEqualTo(0.52));
     });
   });
 

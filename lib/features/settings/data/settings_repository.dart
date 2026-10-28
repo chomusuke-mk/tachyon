@@ -8,6 +8,7 @@ import 'package:tachyon/core/store/domain/track_sort_option.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
 import 'package:tachyon/core/playback/domain/crossfade_config.dart';
 import 'package:tachyon/core/playback/domain/loop_mode.dart';
+import 'package:tachyon/features/playback/presentation/widgets/visualizers/now_playing_visualizer_mode.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 
 class SettingsRepository {
@@ -67,6 +68,7 @@ class SettingsRepository {
   static const _keyCustomBackgroundPath = 's_custom_bg_path';
   static const _keyBackgroundBlurSigma = 's_bg_blur_sigma';
   static const _keyBackgroundDimOpacity = 's_bg_dim_opacity';
+  static const _keyNowPlayingVisualizerMode = 's_now_playing_visualizer_mode';
 
   ThemeMode _getAppTheme() {
     final themeIndex = _prefs.getInt(_keyTheme);
@@ -472,6 +474,21 @@ class SettingsRepository {
 
   Future<void> setReverbDry(double val) =>
       _prefs.setDouble(_keyReverbDry, val.clamp(0.0, 2.0));
+
+  bool getCardView(String screenKey, {bool defaultValue = true}) {
+    return _prefs.getBool('s_view_card_$screenKey') ?? defaultValue;
+  }
+
+  Future<void> setCardView(String screenKey, bool isCardView) =>
+      _prefs.setBool('s_view_card_$screenKey', isCardView);
+
+  NowPlayingVisualizerMode getNowPlayingVisualizerMode() {
+    final str = _prefs.getString(_keyNowPlayingVisualizerMode);
+    return NowPlayingVisualizerMode.fromString(str);
+  }
+
+  Future<void> setNowPlayingVisualizerMode(NowPlayingVisualizerMode mode) =>
+      _prefs.setString(_keyNowPlayingVisualizerMode, mode.name);
 
   Future<void> resetToDefaults() async {
     final keys = _prefs.getKeys().where((k) => k.startsWith('s_')).toList();

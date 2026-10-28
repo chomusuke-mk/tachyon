@@ -1,6 +1,8 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
@@ -246,20 +248,44 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                             child: SizedBox(
                               width: widget.isDesktop ? 48 : 42,
                               height: widget.isDesktop ? 48 : 42,
-                              child: AlbumArtImage(
-                                thumbnailHash: thumbnailHash,
-                                quality: ThumbnailQuality.low,
-                                fit: BoxFit.cover,
-                                fallback: currentPlayable.isStream
-                                    ? Center(
-                                        child: Icon(
-                                          Icons.radio_rounded,
-                                          size: widget.isDesktop ? 24 : 20,
-                                          color: colorScheme.onSurfaceVariant,
+                              child: (currentPlayable is RadioStation &&
+                                      currentPlayable.faviconUrl?.isNotEmpty == true)
+                                  ? Container(
+                                      color: colorScheme.surfaceContainerHighest,
+                                      child: CachedNetworkImage(
+                                        imageUrl: currentPlayable.faviconUrl!,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) => Center(
+                                          child: Icon(
+                                            Icons.radio_rounded,
+                                            size: widget.isDesktop ? 24 : 20,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
                                         ),
-                                      )
-                                    : null,
-                              ),
+                                        errorWidget: (context, url, error) =>
+                                            Center(
+                                          child: Icon(
+                                            Icons.radio_rounded,
+                                            size: widget.isDesktop ? 24 : 20,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : AlbumArtImage(
+                                      thumbnailHash: thumbnailHash,
+                                      quality: ThumbnailQuality.low,
+                                      fit: BoxFit.cover,
+                                      fallback: currentPlayable.isStream
+                                          ? Center(
+                                              child: Icon(
+                                                Icons.radio_rounded,
+                                                size: widget.isDesktop ? 24 : 20,
+                                                color: colorScheme.onSurfaceVariant,
+                                              ),
+                                            )
+                                          : null,
+                                    ),
                             ),
                           ),
                         ),

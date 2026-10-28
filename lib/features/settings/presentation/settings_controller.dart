@@ -28,6 +28,7 @@ class SettingsController extends ChangeNotifier {
   // Getters
   // ---------------------------------------------------------------------------
   AppSettings get settings => _settings;
+  SettingsRepository get repository => _repository;
 
   List<String> get musicDirectories => _settings.musicDirectories;
   int get crossfadeDuration => _settings.crossfadeDuration;

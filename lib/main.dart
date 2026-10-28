@@ -22,6 +22,8 @@ import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/features/radios/data/radio_browser_service.dart';
+import 'package:tachyon/features/radios/presentation/radio_controller.dart';
 import 'package:tachyon/features/search/presentation/tachyon_search_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
@@ -130,6 +132,14 @@ Future<void> main() async {
     store: libraryStore,
   );
 
+  // 6. Initialize Online Radios (Radio Browser & Livestreams)
+  final radioBrowserService = RadioBrowserService();
+  final radioController = RadioController(
+    service: radioBrowserService,
+    store: libraryStore,
+  );
+  unawaited(radioController.init());
+
   runApp(
     MultiProvider(
       providers: [
@@ -139,6 +149,8 @@ Future<void> main() async {
         Provider<LocaleRepository>.value(value: localeRepository),
         Provider<SystemMediaService>.value(value: systemMediaService),
         Provider<LyricsManager>.value(value: lyricsManager),
+        Provider<RadioBrowserService>.value(value: radioBrowserService),
+        ChangeNotifierProvider<RadioController>.value(value: radioController),
         ChangeNotifierProvider<SettingsController>.value(
           value: settingsController,
         ),
