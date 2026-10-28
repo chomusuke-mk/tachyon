@@ -140,15 +140,15 @@ class _TracksScreenState extends State<TracksScreen> {
             PopupMenuButton<TrackSortOption>(
               icon: const Icon(Icons.sort_rounded),
               tooltip: strings.trSort,
-              onSelected: (option) => library.setSortOption(option),
+              onSelected: (option) => library.setTrackSortOption(option),
               itemBuilder: (context) => [
                 PopupMenuItem(
                   value: TrackSortOption.title,
                   child: Row(
                     children: [
-                      if (library.sortOption == TrackSortOption.title)
+                      if (library.trackSortOption == TrackSortOption.title)
                         Icon(
-                          library.sortAscending
+                          library.trackSortAscending
                               ? Icons.arrow_upward_rounded
                               : Icons.arrow_downward_rounded,
                           size: 16,
@@ -167,9 +167,9 @@ class _TracksScreenState extends State<TracksScreen> {
                   value: TrackSortOption.artist,
                   child: Row(
                     children: [
-                      if (library.sortOption == TrackSortOption.artist)
+                      if (library.trackSortOption == TrackSortOption.artist)
                         Icon(
-                          library.sortAscending
+                          library.trackSortAscending
                               ? Icons.arrow_upward_rounded
                               : Icons.arrow_downward_rounded,
                           size: 16,
@@ -188,9 +188,9 @@ class _TracksScreenState extends State<TracksScreen> {
                   value: TrackSortOption.album,
                   child: Row(
                     children: [
-                      if (library.sortOption == TrackSortOption.album)
+                      if (library.trackSortOption == TrackSortOption.album)
                         Icon(
-                          library.sortAscending
+                          library.trackSortAscending
                               ? Icons.arrow_upward_rounded
                               : Icons.arrow_downward_rounded,
                           size: 16,
@@ -209,9 +209,9 @@ class _TracksScreenState extends State<TracksScreen> {
                   value: TrackSortOption.duration,
                   child: Row(
                     children: [
-                      if (library.sortOption == TrackSortOption.duration)
+                      if (library.trackSortOption == TrackSortOption.duration)
                         Icon(
-                          library.sortAscending
+                          library.trackSortAscending
                               ? Icons.arrow_upward_rounded
                               : Icons.arrow_downward_rounded,
                           size: 16,
@@ -230,9 +230,9 @@ class _TracksScreenState extends State<TracksScreen> {
                   value: TrackSortOption.dateAdded,
                   child: Row(
                     children: [
-                      if (library.sortOption == TrackSortOption.dateAdded)
+                      if (library.trackSortOption == TrackSortOption.dateAdded)
                         Icon(
-                          library.sortAscending
+                          library.trackSortAscending
                               ? Icons.arrow_upward_rounded
                               : Icons.arrow_downward_rounded,
                           size: 16,

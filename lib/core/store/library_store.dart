@@ -10,6 +10,7 @@ import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/domain/genre.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
+import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
 import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist_sort_option.dart';
@@ -24,6 +25,9 @@ import 'package:tachyon/shared/utils/waveform_codec.dart';
 /// - O(1) ID lookups for tracks, albums, artists, genres, and playlists.
 /// - In-memory filtering, searching, and sorting with 0 SQLite calls.
 class LibraryStore extends ChangeNotifier {
+  static const int likedSongsPlaylistId = 1;
+  static const int historyPlaylistId = 2;
+
   final AppDatabase? _database;
   final math.Random _random = math.Random();
 
@@ -50,6 +54,9 @@ class LibraryStore extends ChangeNotifier {
   // Fast set of liked track IDs
   final Set<int> _likedTrackIds = <int>{};
 
+  // Radio stations
+  final List<RadioStation> _radioStations = [];
+
   // Cached zero-copy unmodifiable views, invalidated on collection mutation
   List<Track>? _tracksView;
   List<Album>? _albumsView;
@@ -57,6 +64,7 @@ class LibraryStore extends ChangeNotifier {
   List<Genre>? _genresView;
   List<Playlist>? _playlistsView;
   Set<int>? _likedTrackIdsView;
+  List<RadioStation>? _radioStationsView;
 
   bool _isHydrated = false;
   bool get isHydrated => _isHydrated;
@@ -68,6 +76,7 @@ class LibraryStore extends ChangeNotifier {
     _genresView = null;
     _playlistsView = null;
     _likedTrackIdsView = null;
+    _radioStationsView = null;
   }
 
   LibraryStore([this._database]);
@@ -76,9 +85,10 @@ class LibraryStore extends ChangeNotifier {
   factory LibraryStore.fromSnapshot(
     CatalogSnapshot snapshot, [
     AppDatabase? database,
+    List<RadioStation>? radioStations,
   ]) {
     final store = LibraryStore(database);
-    store.hydrateFromSnapshot(snapshot);
+    store.hydrateFromSnapshot(snapshot, radioStations: radioStations);
     return store;
   }
 
@@ -87,28 +97,27 @@ class LibraryStore extends ChangeNotifier {
     final db = _database;
     if (db == null) return;
     final snapshot = await db.getCatalogSnapshot();
-    hydrateFromSnapshot(snapshot);
+    final stations = await db.getRadioStations();
+    hydrateFromSnapshot(snapshot, radioStations: stations);
   }
 
   // ---------------------------------------------------------------------------
   // Getters & Collections
   // ---------------------------------------------------------------------------
   List<Track> get tracks => _tracksView ??= UnmodifiableListView(_allTracks);
-  List<Track> get allTracks => tracks;
 
   List<Album> get albums => _albumsView ??= UnmodifiableListView(_allAlbums);
-  List<Album> get allAlbums => albums;
 
   List<Artist> get artists =>
       _artistsView ??= UnmodifiableListView(_allArtists);
-  List<Artist> get allArtists => artists;
 
   List<Genre> get genres => _genresView ??= UnmodifiableListView(_allGenres);
-  List<Genre> get allGenres => genres;
 
   List<Playlist> get playlists =>
       _playlistsView ??= UnmodifiableListView(_allPlaylists);
-  List<Playlist> get allPlaylists => playlists;
+
+  List<RadioStation> get radioStations =>
+      _radioStationsView ??= UnmodifiableListView(_radioStations);
 
   Set<int> get likedTrackIds =>
       _likedTrackIdsView ??= UnmodifiableSetView(_likedTrackIds);
@@ -250,7 +259,10 @@ class LibraryStore extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Hydration Algorithm (O(N) single-pass)
   // ---------------------------------------------------------------------------
-  void hydrateFromSnapshot(CatalogSnapshot snapshot) {
+  void hydrateFromSnapshot(
+    CatalogSnapshot snapshot, {
+    List<RadioStation>? radioStations,
+  }) {
     _invalidateViews();
     _tracksById.clear();
     _tracksByPath.clear();
@@ -558,6 +570,13 @@ class LibraryStore extends ChangeNotifier {
           _likedTrackIds.add(track!.id!);
         }
       }
+    }
+
+    if (radioStations != null) {
+      _radioStations
+        ..clear()
+        ..addAll(radioStations);
+      _sortRadioStations();
     }
 
     _isHydrated = true;
@@ -895,8 +914,55 @@ class LibraryStore extends ChangeNotifier {
     }
   }
 
-  static String? computePlaylistCoverHash(Playlist playlist) => playlist.coverHash;
-  static String? computeGenreCoverHash(Genre genre) => genre.coverHash;
+  Future<RadioStation?> saveRadioStationInStore(RadioStation station) async {
+    final db = _database;
+    if (db == null) return null;
+    final saved = await db.saveRadioStation(station);
+    final idx = _radioStations.indexWhere(
+      (s) => (saved.id != null && s.id == saved.id) || s.streamUrl == saved.streamUrl,
+    );
+    if (idx != -1) {
+      _radioStations[idx] = saved;
+    } else {
+      _radioStations.add(saved);
+    }
+    _sortRadioStations();
+    _invalidateViews();
+    notifyListeners();
+    return saved;
+  }
+
+  Future<void> deleteRadioStationInStore(int id) async {
+    final db = _database;
+    if (db == null) return;
+    await db.deleteRadioStation(id);
+    _radioStations.removeWhere((s) => s.id == id);
+    _invalidateViews();
+    notifyListeners();
+  }
+
+  Future<void> toggleRadioStationFavoriteInStore(int id) async {
+    final db = _database;
+    if (db == null) return;
+    final idx = _radioStations.indexWhere((s) => s.id == id);
+    if (idx == -1) return;
+    final current = _radioStations[idx];
+    final newFav = !current.isFavorite;
+    await db.setRadioStationFavorite(id, newFav);
+    _radioStations[idx] = current.copyWith(isFavorite: newFav);
+    _sortRadioStations();
+    _invalidateViews();
+    notifyListeners();
+  }
+
+  void _sortRadioStations() {
+    _radioStations.sort((a, b) {
+      if (a.isFavorite != b.isFavorite) {
+        return a.isFavorite ? -1 : 1;
+      }
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+  }
 
   // ---------------------------------------------------------------------------
   // In-Memory Search, Filter, and Sort (0 SQL Calls)

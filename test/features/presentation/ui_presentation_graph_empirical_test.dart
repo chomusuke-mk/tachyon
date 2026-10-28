@@ -283,7 +283,7 @@ void main() {
       final swOn = Stopwatch()..start();
       var countOn = 0;
       for (var i = 0; i < 2000; i++) {
-        final list = store.allTracks.where((t) => t.album?.id == targetAlbum.id).toList();
+        final list = store.tracks.where((t) => t.album?.id == targetAlbum.id).toList();
         countOn += list.length;
       }
       swOn.stop();

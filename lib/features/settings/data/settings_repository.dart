@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
 import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist_sort_option.dart';
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
@@ -8,9 +9,6 @@ import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
 import 'package:tachyon/core/playback/domain/crossfade_config.dart';
 import 'package:tachyon/core/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
-
-export 'package:tachyon/core/playback/domain/crossfade_config.dart'
-    show CrossfadeCurve;
 
 class SettingsRepository {
   final SharedPreferences _prefs;

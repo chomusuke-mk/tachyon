@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 
 import 'package:tachyon/core/constants/app_defaults.dart';
-import 'package:tachyon/core/database/app_database.dart' show AppDatabase;
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/library_store.dart';
@@ -277,9 +276,10 @@ class PlaybackController extends ChangeNotifier {
   PlaybackState get state => _state;
   ma.EngineItem<AudioPlayable>? get currentEntry =>
       _engine != null ? _engine!.state.currentItem : _state.currentEntry;
-  AudioPlayable? get currentPlayable => currentEntry?.data;
+  AudioPlayable? get currentPlayable =>
+      currentEntry?.data ?? _state.currentPlayable ?? currentTrack;
   Track? get currentTrack {
-    final p = currentPlayable;
+    final p = currentEntry?.data ?? _state.currentPlayable;
     if (p is Track) return p;
     return _state.currentTrack;
   }
@@ -296,6 +296,11 @@ class PlaybackController extends ChangeNotifier {
   bool get isPlaying => _engine?.state.playing ?? _state.isPlaying;
   bool get isBuffering => _engine?.state.buffering ?? _state.isBuffering;
   bool get isCompleted => _engine?.state.completed ?? _state.isCompleted;
+  bool get isLiveStream =>
+      _engine != null
+          ? (_engine!.state.currentItem?.isLiveStream ??
+              (currentPlayable?.isStream ?? false))
+          : _state.isLiveStream;
 
   Duration get position => _positionNotifier.value;
   ValueNotifier<Duration> get positionNotifier => _positionNotifier;
@@ -823,7 +828,7 @@ class PlaybackController extends ChangeNotifier {
         final trackId = newState.currentTrack!.id;
         if (trackId != null) {
           _store
-              ?.addTracksToPlaylistInStore(AppDatabase.historyPlaylistId, [
+              ?.addTracksToPlaylistInStore(LibraryStore.historyPlaylistId, [
                 trackId,
               ])
               .catchError((e) {

@@ -364,12 +364,12 @@ void main() {
       expect(sqlResults.first.id, equals(3));
 
       // Sort with missing album and artist (Track 3 has null album and no artists)
-      final sortedByAlbum = store.sortTracks(store.allTracks, TrackSortOption.album);
+      final sortedByAlbum = store.sortTracks(store.tracks, TrackSortOption.album);
       expect(sortedByAlbum.length, equals(3));
       // Missing album name falls back to empty string, so Track 3 comes first in ascending sort
       expect(sortedByAlbum.first.id, equals(3));
 
-      final sortedByArtist = store.sortTracks(store.allTracks, TrackSortOption.artist);
+      final sortedByArtist = store.sortTracks(store.tracks, TrackSortOption.artist);
       expect(sortedByArtist.length, equals(3));
       expect(sortedByArtist.first.id, equals(3));
     });

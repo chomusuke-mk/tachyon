@@ -81,15 +81,13 @@ class LinuxMprisBridge {
   int get positionMicros => playbackController.position.inMicroseconds;
 
   String _computeMetadataSignature() {
-    final track = playbackController.currentTrack;
-    if (track != null) {
-      final artistNames = track.artists.map((a) => a.name).join(', ');
-      final albumName = track.album?.name ?? '';
-      final hash =
-          (track.thumbnailHash != null && track.thumbnailHash!.isNotEmpty)
-              ? track.thumbnailHash!
-              : (track.album?.thumbnailHash ?? '');
-      return '${track.id ?? track.filePath}|${track.title}|$artistNames|$albumName|${track.durationMs}|$hash';
+    final playable =
+        playbackController.currentPlayable ?? playbackController.currentTrack;
+    if (playable != null) {
+      final artistNames = playable.artistNames.join(', ');
+      final albumName = playable.albumTitle ?? '';
+      final hash = playable.thumbnailHash ?? '';
+      return '${playable.id ?? playable.filePath}|${playable.title}|$artistNames|$albumName|${playable.duration.inMilliseconds}|$hash';
     }
     final item = handler.mediaItem.value;
     if (item == null) return '';
@@ -97,26 +95,25 @@ class LinuxMprisBridge {
   }
 
   DBusDict get metadata {
-    final track = playbackController.currentTrack;
-    if (track != null) {
-      final trackObjId = track.id ?? track.filePath.hashCode.abs();
-      final artistList = track.artists
-          .map((a) => a.name)
+    final playable =
+        playbackController.currentPlayable ?? playbackController.currentTrack;
+    if (playable != null) {
+      final objId = playable.id ?? playable.filePath.hashCode.abs();
+      final artistList = playable.artistNames
           .where((n) => n.isNotEmpty)
           .toList(growable: false);
-      final albumName = track.album?.name;
+      final albumName = playable.albumTitle;
       final artUri = TachyonAudioHandler.resolveLowQualityArtUri(
-        track.thumbnailHash,
-        track.album?.thumbnailHash,
+        playable.thumbnailHash,
       )?.toString();
 
       return DBusDict.stringVariant({
         'mpris:trackid': DBusObjectPath.unchecked(
-          '/org/mpris/MediaPlayer2/Track/t_$trackObjId',
+          '/org/mpris/MediaPlayer2/Track/t_$objId',
         ),
-        'xesam:title': DBusString(track.title),
-        if (track.durationMs > 0)
-          'mpris:length': DBusInt64(track.durationMs * 1000),
+        'xesam:title': DBusString(playable.title),
+        if (playable.duration.inMicroseconds > 0)
+          'mpris:length': DBusInt64(playable.duration.inMicroseconds),
         'xesam:artist': DBusArray.string(artistList),
         if (albumName != null && albumName.isNotEmpty)
           'xesam:album': DBusString(albumName),

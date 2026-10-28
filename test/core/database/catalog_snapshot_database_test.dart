@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
+import 'package:tachyon/core/lyrics/domain/lyrics_source.dart';
 
 void main() {
   group('CatalogSnapshot & Database Relational Mapping Empirical Challenger Tests', () {

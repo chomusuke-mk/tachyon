@@ -6,7 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 
 import 'package:tachyon/core/lyrics/domain/lyric_line.dart';
-import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
+import 'package:tachyon/core/lyrics/domain/lyrics_source.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
 import 'package:tachyon/core/lyrics/lrc_parser.dart';
 import 'package:tachyon/core/lyrics/lyrics_manager.dart';

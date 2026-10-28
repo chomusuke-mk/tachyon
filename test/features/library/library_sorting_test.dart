@@ -130,7 +130,7 @@ void main() {
     });
 
     test('sortAlbums by title (ascending & descending)', () {
-      final asc = store.sortAlbums(store.allAlbums, AlbumSortOption.title, ascending: true);
+      final asc = store.sortAlbums(store.albums, AlbumSortOption.title, ascending: true);
       expect(asc.map((a) => a.name).toList(), [
         'A Night at the Opera',
         'Abbey Road',
@@ -138,7 +138,7 @@ void main() {
         'Unknown Compilation',
       ]);
 
-      final desc = store.sortAlbums(store.allAlbums, AlbumSortOption.title, ascending: false);
+      final desc = store.sortAlbums(store.albums, AlbumSortOption.title, ascending: false);
       expect(desc.map((a) => a.name).toList(), [
         'Unknown Compilation',
         'The Dark Side of the Moon',
@@ -148,14 +148,14 @@ void main() {
     });
 
     test('sortAlbums by artist (ascending & descending)', () {
-      final asc = store.sortAlbums(store.allAlbums, AlbumSortOption.artist, ascending: true);
+      final asc = store.sortAlbums(store.albums, AlbumSortOption.artist, ascending: true);
       // Pink Floyd, Queen, The Beatles, Unknown (empty artist sorts first or last depending on string)
       expect(asc[0].artist?.name ?? '', equals(''));
       expect(asc[1].artist?.name, equals('Pink Floyd'));
       expect(asc[2].artist?.name, equals('Queen'));
       expect(asc[3].artist?.name, equals('The Beatles'));
 
-      final desc = store.sortAlbums(store.allAlbums, AlbumSortOption.artist, ascending: false);
+      final desc = store.sortAlbums(store.albums, AlbumSortOption.artist, ascending: false);
       expect(desc[0].artist?.name, equals('The Beatles'));
       expect(desc[1].artist?.name, equals('Queen'));
       expect(desc[2].artist?.name, equals('Pink Floyd'));
@@ -163,20 +163,20 @@ void main() {
     });
 
     test('sortAlbums by year (ascending & descending)', () {
-      final asc = store.sortAlbums(store.allAlbums, AlbumSortOption.year, ascending: true);
+      final asc = store.sortAlbums(store.albums, AlbumSortOption.year, ascending: true);
       // 0 (unknown) -> 1969 -> 1973 -> 1975
       expect(asc.map((a) => a.year).toList(), [null, 1969, 1973, 1975]);
 
-      final desc = store.sortAlbums(store.allAlbums, AlbumSortOption.year, ascending: false);
+      final desc = store.sortAlbums(store.albums, AlbumSortOption.year, ascending: false);
       expect(desc.map((a) => a.year).toList(), [1975, 1973, 1969, null]);
     });
 
     test('sortAlbums by trackCount (ascending & descending)', () {
-      final asc = store.sortAlbums(store.allAlbums, AlbumSortOption.trackCount, ascending: true);
+      final asc = store.sortAlbums(store.albums, AlbumSortOption.trackCount, ascending: true);
       // 0 -> 1 -> 2 -> 3
       expect(asc.map((a) => a.trackCount).toList(), [0, 1, 2, 3]);
 
-      final desc = store.sortAlbums(store.allAlbums, AlbumSortOption.trackCount, ascending: false);
+      final desc = store.sortAlbums(store.albums, AlbumSortOption.trackCount, ascending: false);
       expect(desc.map((a) => a.trackCount).toList(), [3, 2, 1, 0]);
     });
   });
@@ -189,7 +189,7 @@ void main() {
     });
 
     test('sortArtists by name (ascending & descending)', () {
-      final asc = store.sortArtists(store.allArtists, ArtistSortOption.name, ascending: true);
+      final asc = store.sortArtists(store.artists, ArtistSortOption.name, ascending: true);
       expect(asc.map((a) => a.name).toList(), [
         'ABBA',
         'Pink Floyd',
@@ -197,7 +197,7 @@ void main() {
         'The Beatles',
       ]);
 
-      final desc = store.sortArtists(store.allArtists, ArtistSortOption.name, ascending: false);
+      final desc = store.sortArtists(store.artists, ArtistSortOption.name, ascending: false);
       expect(desc.map((a) => a.name).toList(), [
         'The Beatles',
         'Queen',
@@ -208,18 +208,18 @@ void main() {
 
     test('sortArtists by albumCount (ascending & descending)', () {
       // ABBA has 0 albums, Pink Floyd has 1, Queen has 1, Beatles has 1
-      final asc = store.sortArtists(store.allArtists, ArtistSortOption.albums, ascending: true);
+      final asc = store.sortArtists(store.artists, ArtistSortOption.albums, ascending: true);
       expect(asc[0].name, equals('ABBA'));
       expect(asc[0].albumCount, equals(0));
 
-      final desc = store.sortArtists(store.allArtists, ArtistSortOption.albums, ascending: false);
+      final desc = store.sortArtists(store.artists, ArtistSortOption.albums, ascending: false);
       expect(desc.last.name, equals('ABBA'));
       expect(desc.last.albumCount, equals(0));
     });
 
     test('sortArtists by trackCount (ascending & descending)', () {
       // ABBA: 0 tracks, Pink Floyd: 1 track, Beatles: 2 tracks, Queen: 3 tracks
-      final asc = store.sortArtists(store.allArtists, ArtistSortOption.tracks, ascending: true);
+      final asc = store.sortArtists(store.artists, ArtistSortOption.tracks, ascending: true);
       expect(asc.map((a) => a.name).toList(), [
         'ABBA',
         'Pink Floyd',
@@ -227,7 +227,7 @@ void main() {
         'Queen',
       ]);
 
-      final desc = store.sortArtists(store.allArtists, ArtistSortOption.tracks, ascending: false);
+      final desc = store.sortArtists(store.artists, ArtistSortOption.tracks, ascending: false);
       expect(desc.map((a) => a.name).toList(), [
         'Queen',
         'The Beatles',

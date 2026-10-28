@@ -11,6 +11,7 @@ class WaveformSlider extends StatefulWidget {
   final ValueListenable<Duration>? positionListenable;
   final Duration duration;
   final bool isBuffering;
+  final bool isLiveStream;
   final ValueChanged<Duration> onSeek;
   final int? currentIndex;
   final int? totalCount;
@@ -30,6 +31,7 @@ class WaveformSlider extends StatefulWidget {
     required this.duration,
     required this.onSeek,
     this.isBuffering = false,
+    this.isLiveStream = false,
     this.currentIndex,
     this.totalCount,
     this.playlistDuration,
@@ -63,6 +65,72 @@ class _WaveformSliderState extends State<WaveformSlider> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+
+    if (widget.isLiveStream) {
+      return RepaintBoundary(
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: Colors.redAccent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'LIVE',
+                style: textTheme.labelLarge?.copyWith(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2.0,
+                ),
+              ),
+              if (widget.isBuffering) ...[
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ],
+              const SizedBox(width: 16),
+              if (widget.positionListenable != null)
+                ValueListenableBuilder<Duration>(
+                  valueListenable: widget.positionListenable!,
+                  builder: (context, pos, _) {
+                    return Text(
+                      pos.toFormattedString(padMinutes: true),
+                      style: textTheme.bodySmall?.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    );
+                  },
+                )
+              else
+                Text(
+                  (widget.position ?? Duration.zero)
+                      .toFormattedString(padMinutes: true),
+                  style: textTheme.bodySmall?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
 
     final totalMs = widget.duration.inMilliseconds.toDouble();
     final effectiveTotalMs = totalMs > 0 ? totalMs : 1.0;

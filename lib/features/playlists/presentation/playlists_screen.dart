@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/widgets/app_icon.dart';
+
+import 'package:tachyon/features/playlists/presentation/widgets/playlist_dialogs.dart';
 
 import 'playlist_cover_helper.dart';
 import 'playlist_detail_screen.dart';
@@ -11,111 +12,6 @@ import 'playlists_controller.dart';
 
 class PlaylistsScreen extends StatelessWidget {
   const PlaylistsScreen({super.key});
-
-  void _showCreateDialog(BuildContext context) {
-    final strings = context.read<LocaleController>().localeStrings;
-    final controller = TextEditingController();
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(strings.plCreateNew),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: InputDecoration(hintText: strings.plNewNameHint),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(strings.plCancelButton),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = controller.text.trim();
-                if (name.isNotEmpty) {
-                  context.read<PlaylistsController>().createPlaylist(name);
-                }
-                Navigator.of(dialogContext).pop();
-              },
-              child: Text(strings.plCreateButton),
-            ),
-          ],
-        );
-      },
-    ).then((_) => controller.dispose());
-  }
-
-  void _showRenameDialog(BuildContext context, Playlist playlist) {
-    final controller = TextEditingController(text: playlist.name);
-
-    final strings = context.read<LocaleController>().localeStrings;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(strings.plRename),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: InputDecoration(hintText: strings.plNewNameHint),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(strings.plCancelButton),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = controller.text.trim();
-                if (name.isNotEmpty && playlist.id != null) {
-                  context.read<PlaylistsController>().renamePlaylist(
-                    playlist.id!,
-                    name,
-                  );
-                }
-                Navigator.of(dialogContext).pop();
-              },
-              child: Text(strings.plRename),
-            ),
-          ],
-        );
-      },
-    ).then((_) => controller.dispose());
-  }
-
-  void _showDeleteDialog(BuildContext context, Playlist playlist) {
-    final strings = context.read<LocaleController>().localeStrings;
-
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(strings.plDelete),
-          content: Text(strings.plDeleteConfirmFormatted(playlist.name)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(strings.plCancelButton),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-              onPressed: () {
-                if (playlist.id != null) {
-                  context.read<PlaylistsController>().deletePlaylist(
-                    playlist.id!,
-                  );
-                }
-                Navigator.of(context).pop();
-              },
-              child: Text(strings.plDelete),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +33,7 @@ class PlaylistsScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.add_rounded),
             tooltip: strings.plCreateNew,
-            onPressed: () => _showCreateDialog(context),
+            onPressed: () => PlaylistDialogs.showCreate(context),
           ),
         ],
       ),
@@ -314,9 +210,9 @@ class PlaylistsScreen extends StatelessWidget {
                           tooltip: '',
                           onSelected: (value) {
                             if (value == 'rename') {
-                              _showRenameDialog(context, playlist);
+                              PlaylistDialogs.showRename(context, playlist);
                             } else if (value == 'delete') {
-                              _showDeleteDialog(context, playlist);
+                              PlaylistDialogs.showDelete(context, playlist);
                             }
                           },
                           itemBuilder: (context) => [

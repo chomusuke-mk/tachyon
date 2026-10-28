@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/playback/system_media_service.dart';
+import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
@@ -152,13 +154,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
   Future<void> _toggleLike() async {
     final playback = context.read<PlaybackController>();
-    final track = playback.currentTrack;
-    if (track == null || track.id == null) return;
+    final currentPlayable = playback.currentPlayable;
+    if (currentPlayable == null) return;
 
     try {
-      final playlists = context.read<PlaylistsController?>();
-      if (playlists != null) {
-        await playlists.toggleLike(track.id!);
+      if (currentPlayable is Track && currentPlayable.id != null) {
+        final playlists = context.read<PlaylistsController?>();
+        if (playlists != null) {
+          await playlists.toggleLike(currentPlayable.id!);
+        }
+      } else if (currentPlayable is RadioStation && currentPlayable.id != null) {
+        final store = context.read<LibraryStore?>();
+        if (store != null) {
+          await store.toggleRadioStationFavoriteInStore(currentPlayable.id!);
+        }
       }
     } catch (_) {}
   }
@@ -266,11 +275,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   Widget build(BuildContext context) {
     final playback = context.watch<PlaybackController>();
     final strings = context.watch<LocaleController>().localeStrings;
-    final currentTrack = playback.currentTrack;
+    final currentPlayable = playback.currentPlayable;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    if (currentTrack == null) {
+    if (currentPlayable == null) {
       final emptyScaffold = Scaffold(
         appBar: AppBar(
           leading: IconButton(
@@ -297,6 +306,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     }
 
     final double currentWidth = MediaQuery.sizeOf(context).width;
+    final currentTrack = currentPlayable is Track ? currentPlayable : null;
+    final isLiveStream = playback.isLiveStream;
+    final canShowLyrics = !isLiveStream && currentTrack != null && _showLyrics;
 
     final Widget appTopBar = GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -320,14 +332,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               color: colorScheme.onSurface,
               onPressed: () => _showAudioDevicesDialog(context),
             ),
-            IconButton(
-              icon: Icon(
-                Icons.lyrics_rounded,
-                color: _showLyrics ? colorScheme.primary : colorScheme.onSurface,
+            if (!isLiveStream && currentTrack != null)
+              IconButton(
+                icon: Icon(
+                  Icons.lyrics_rounded,
+                  color: _showLyrics ? colorScheme.primary : colorScheme.onSurface,
+                ),
+                tooltip: strings.npLyrics,
+                onPressed: _toggleLyrics,
               ),
-              tooltip: strings.npLyrics,
-              onPressed: _toggleLyrics,
-            ),
             IconButton(
               icon: Icon(
                 Icons.queue_music_rounded,
@@ -359,7 +372,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   onVerticalDragEnd: _onVerticalDragEnd,
                   onVerticalDragCancel: _onVerticalDragCancel,
                   child: _buildPlayer(
-                    currentTrack,
+                    currentPlayable,
                     context,
                     preferVertical: true,
                     hideQueue: true,
@@ -371,7 +384,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             ],
           )
         : currentWidth >= 588 &&
-              _showLyrics &&
+              canShowLyrics &&
               !SystemMediaService.isMinimized &&
               _isAppActive
         ? Row(
@@ -385,7 +398,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   onVerticalDragEnd: _onVerticalDragEnd,
                   onVerticalDragCancel: _onVerticalDragCancel,
                   child: _buildPlayer(
-                    currentTrack,
+                    currentPlayable,
                     context,
                     preferVertical: true,
                     hideQueue: false,
@@ -405,12 +418,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             ],
           )
         : _buildPlayer(
-            currentTrack,
+            currentPlayable,
             context,
             key: ValueKey(
               _showQueue
                   ? 'narrow_queue'
-                  : _showLyrics
+                  : canShowLyrics
                   ? 'narrow_lyrics'
                   : 'player_only',
             ),
@@ -426,7 +439,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       ),
     );
 
-    final Widget interactiveContent = (!_showQueue && !_showLyrics)
+    final Widget interactiveContent = (!_showQueue && !canShowLyrics)
         ? GestureDetector(
             behavior: HitTestBehavior.translucent,
             onVerticalDragStart: _onVerticalDragStart,
@@ -443,7 +456,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         children: [
           // 1. Ambient Blurred Backdrop
           Positioned.fill(
-            child: AmbientBackdrop(thumbnailHash: currentTrack.thumbnailHash),
+            child: AmbientBackdrop(thumbnailHash: currentPlayable.thumbnailHash),
           ),
 
           // 2. Main Responsive Content Layer
@@ -484,7 +497,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   }
 
   Widget _buildPlayer(
-    Track currentTrack,
+    AudioPlayable currentPlayable,
     BuildContext context, {
     bool preferVertical = false,
     bool hideLyrics = false,
@@ -495,10 +508,28 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final strings = context.watch<LocaleController>().localeStrings;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final trackId = currentTrack.id;
-    final isCurrentTrackLiked = context.select<PlaylistsController?, bool>(
-      (p) => trackId != null && (p?.isTrackLiked(trackId) ?? false),
-    );
+    final currentTrack = currentPlayable is Track ? currentPlayable : null;
+    final currentRadio = currentPlayable is RadioStation ? currentPlayable : null;
+
+    final bool isItemLiked;
+    if (currentTrack != null) {
+      final trackId = currentTrack.id;
+      isItemLiked = context.select<PlaylistsController?, bool>(
+        (p) => trackId != null && (p?.isTrackLiked(trackId) ?? false),
+      );
+    } else if (currentRadio != null) {
+      final stationId = currentRadio.id;
+      isItemLiked = context.select<LibraryStore?, bool>(
+        (s) =>
+            s?.radioStations
+                .where((st) => st.id == stationId)
+                .firstOrNull
+                ?.isFavorite ??
+            currentRadio.isFavorite,
+      );
+    } else {
+      isItemLiked = false;
+    }
 
     final Widget playerControls = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -517,7 +548,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 onToggleMute: () => _toggleMute(playback),
               ),
               IconButton(
-                tooltip: isCurrentTrackLiked
+                tooltip: isItemLiked
                     ? strings.npUnlike
                     : strings.npLike,
                 onPressed: _toggleLike,
@@ -540,15 +571,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
                   // 4. El contenido: El ícono en sí
                   child: Icon(
-                    isCurrentTrackLiked
+                    isItemLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
 
                     // ¡EL KEY ES OBLIGATORIO! Le dice al Switcher que son dos widgets diferentes.
-                    key: ValueKey<bool>(isCurrentTrackLiked),
+                    key: ValueKey<bool>(isItemLiked),
 
                     size: 28,
-                    color: isCurrentTrackLiked
+                    color: isItemLiked
                         ? colorScheme.primary
                         : colorScheme.onSurfaceVariant,
                   ),
@@ -556,10 +587,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               ),
 
               IconButton(
-                onPressed: () => TrackActionHelper.showAddToPlaylistDialog(
-                  context,
-                  currentTrack,
-                ),
+                onPressed: currentTrack != null
+                    ? () => TrackActionHelper.showAddToPlaylistDialog(
+                          context,
+                          currentTrack,
+                        )
+                    : null,
                 icon: const Icon(Icons.add_rounded, size: 28),
                 tooltip: strings.npAddToPlaylist,
               ),
@@ -571,8 +604,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               position: playback.position,
               duration: playback.duration,
               isBuffering: playback.isBuffering,
+              isLiveStream: playback.isLiveStream,
               onSeek: playback.seek,
-              waveform: currentTrack.waveform,
+              waveform: currentTrack?.waveform,
               currentIndex: playback.currentIndex + 1,
               totalCount: playback.queue.length,
               playlistPosition: () {
@@ -726,7 +760,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            currentTrack.title,
+            currentPlayable.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge
@@ -734,7 +768,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           ),
           const SizedBox(height: 2),
           _ClickableArtistNames(
-            artists: currentTrack.artists,
+            artists: currentTrack?.artists ?? const [],
+            fallbackName: currentPlayable.artistNames.join(', '),
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: colorScheme.onSurfaceVariant),
             colorScheme: colorScheme,
@@ -748,6 +783,31 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       builder: (context, constraints) {
         final bool canFitVertically = constraints.maxHeight > 400;
         final bool canFitHorizontally = constraints.maxWidth > 590;
+        final bool canShowLyrics = !playback.isLiveStream &&
+            currentTrack != null &&
+            !hideLyrics &&
+            _showLyrics &&
+            !SystemMediaService.isMinimized &&
+            _isAppActive;
+
+        Widget buildVisualContent() {
+          if (!hideQueue && _showQueue) {
+            return QueueView(key: const ValueKey('queue_view'));
+          }
+          if (canShowLyrics) {
+            return LyricsView(
+              key: const ValueKey('lyrics_view'),
+              filePath: currentTrack.filePath,
+              trackId: currentTrack.id,
+              track: currentTrack,
+              onSeek: playback.seek,
+            );
+          }
+          return const NowPlayingCoverArt(
+            key: ValueKey('cover_art_view'),
+          );
+        }
+
         if (canFitHorizontally && !(preferVertical && canFitVertically)) {
           return Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -765,22 +825,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 fit: FlexFit.loose,
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  child: !hideQueue && _showQueue
-                      ? QueueView(key: const ValueKey('queue_view'))
-                      : !hideLyrics &&
-                            _showLyrics &&
-                            !SystemMediaService.isMinimized &&
-                            _isAppActive
-                      ? LyricsView(
-                          key: const ValueKey('lyrics_view'),
-                          filePath: currentTrack.filePath,
-                          trackId: currentTrack.id,
-                          track: currentTrack,
-                          onSeek: playback.seek,
-                        )
-                      : const NowPlayingCoverArt(
-                          key: ValueKey('cover_art_view'),
-                        ),
+                  child: buildVisualContent(),
                 ),
               ),
             ],
@@ -795,45 +840,19 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 fit: FlexFit.loose,
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  child: !hideQueue && _showQueue
-                      ? QueueView(key: const ValueKey('queue_view'))
-                      : !hideLyrics &&
-                            _showLyrics &&
-                            !SystemMediaService.isMinimized &&
-                            _isAppActive
-                      ? LyricsView(
-                          key: const ValueKey('lyrics_view'),
-                          filePath: currentTrack.filePath,
-                          trackId: currentTrack.id,
-                          track: currentTrack,
-                          onSeek: playback.seek,
-                        )
-                      : const NowPlayingCoverArt(
-                          key: ValueKey('cover_art_view'),
-                        ),
+                  child: buildVisualContent(),
                 ),
               ),
               playerTitle,
               playerControls,
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
             ],
           );
         }
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
-          child: !hideQueue && _showQueue
-              ? QueueView(key: const ValueKey('queue_view'))
-              : !hideLyrics &&
-                    _showLyrics &&
-                    !SystemMediaService.isMinimized &&
-                    _isAppActive
-              ? LyricsView(
-                  key: const ValueKey('lyrics_view'),
-                  filePath: currentTrack.filePath,
-                  trackId: currentTrack.id,
-                  track: currentTrack,
-                  onSeek: playback.seek,
-                )
+          child: !hideQueue && _showQueue || canShowLyrics
+              ? buildVisualContent()
               : Column(
                   key: const ValueKey('cover_art_view'),
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1311,25 +1330,37 @@ class _PopupVolumeControlState extends State<_PopupVolumeControl>
 
 class _ClickableArtistNames extends StatelessWidget {
   final List<Artist> artists;
+  final String? fallbackName;
   final TextStyle? style;
   final ColorScheme colorScheme;
 
   const _ClickableArtistNames({
     required this.artists,
+    this.fallbackName,
     this.style,
     required this.colorScheme,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (artists.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     final effectiveStyle =
         style ??
         Theme.of(context).textTheme.bodyLarge
             ?.copyWith(color: colorScheme.onSurfaceVariant);
+
+    if (artists.isEmpty) {
+      if (fallbackName != null && fallbackName!.isNotEmpty) {
+        return Center(
+          child: Text(
+            fallbackName!,
+            style: effectiveStyle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    }
 
     return Center(
       child: SingleChildScrollView(

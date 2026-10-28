@@ -167,13 +167,13 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
   @override
   Widget build(BuildContext context) {
     final playback = context.watch<PlaybackController>();
-    final currentTrack = playback.currentTrack;
-    if (currentTrack == null) {
+    final currentPlayable = playback.currentPlayable;
+    if (currentPlayable == null) {
       return const SizedBox.shrink();
     }
 
-    final filePath = currentTrack.filePath;
-    final thumbnailHash = currentTrack.thumbnailHash;
+    final filePath = currentPlayable.filePath;
+    final thumbnailHash = currentPlayable.thumbnailHash;
     final isPlaying = playback.isPlaying;
     final theme = Theme.of(context);
 
@@ -307,6 +307,13 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
                   thumbnailHash: thumbnailHash,
                   quality: ThumbnailQuality.high,
                   fit: BoxFit.cover,
+                  fallback: Icon(
+                    currentPlayable.isStream
+                        ? Icons.radio_rounded
+                        : Icons.album_rounded,
+                    size: 64,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             );

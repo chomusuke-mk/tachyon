@@ -13,7 +13,6 @@ import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/domain/playlist.dart' show PlaylistType;
 
 export 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
-export 'package:tachyon/core/playback/domain/radio_station.dart';
 
 abstract final class AppDatabaseSchema {
   static const List<String> createTables = [

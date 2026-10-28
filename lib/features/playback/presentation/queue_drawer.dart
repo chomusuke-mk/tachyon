@@ -299,6 +299,19 @@ class _QueueViewState extends State<QueueView> {
                                             fit: BoxFit.cover,
                                             cacheWidth: 100,
                                             cacheHeight: 100,
+                                            fallback: track?.isStream == true
+                                                ? Center(
+                                                    child: Icon(
+                                                      Icons.radio_rounded,
+                                                      size: 20,
+                                                      color: colorScheme
+                                                          .onSurfaceVariant
+                                                          .withValues(
+                                                            alpha: 0.5,
+                                                          ),
+                                                    ),
+                                                  )
+                                                : null,
                                           ),
                                         ),
                                       ),
@@ -350,11 +363,24 @@ class _QueueViewState extends State<QueueView> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        (track?.duration ?? Duration.zero)
-                                            .toFormattedString(padMinutes: true),
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall,
+                                        track?.isStream == true
+                                            ? 'LIVE'
+                                            : (track?.duration ??
+                                                    Duration.zero)
+                                                .toFormattedString(
+                                                  padMinutes: true,
+                                                ),
+                                        style: track?.isStream == true
+                                            ? Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                  color: Colors.redAccent,
+                                                  fontWeight: FontWeight.bold,
+                                                )
+                                            : Theme.of(context)
+                                                .textTheme
+                                                .bodySmall,
                                       ),
                                       const SizedBox(width: 8),
                                       ReorderableDragStartListener(

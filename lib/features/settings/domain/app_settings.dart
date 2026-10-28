@@ -9,13 +9,6 @@ import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
 import 'package:tachyon/core/playback/domain/crossfade_config.dart';
 import 'package:tachyon/core/playback/domain/loop_mode.dart';
 
-export 'package:miniaudio_player/miniaudio_player.dart'
-    show CrossfeedMode, Reverb;
-export 'package:tachyon/core/playback/domain/crossfade_config.dart'
-    show CrossfadeCurve;
-export 'package:tachyon/core/playback/domain/loop_mode.dart'
-    show LoopMode;
-
 @immutable
 class AppSettings {
   // Library Paths

@@ -12,6 +12,7 @@ import 'package:tachyon/features/library/presentation/tracks_screen.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_screen.dart';
+import 'package:tachyon/features/radios/presentation/radios_screen.dart';
 import 'package:tachyon/features/settings/presentation/settings_screen.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 
@@ -25,6 +26,7 @@ enum ShellDestination {
   playlists,
   genres,
   folders,
+  radios,
   settings,
 }
 
@@ -67,6 +69,7 @@ class _TachyonShellState extends State<TachyonShell> {
     PlaylistsScreen(key: PageStorageKey('playlists_screen')),
     GenresScreen(key: PageStorageKey('genres_screen')),
     FoldersScreen(key: PageStorageKey('folders_screen')),
+    RadiosScreen(key: PageStorageKey('radios_screen')),
     SettingsScreen(key: PageStorageKey('settings_screen')),
   ];
 
@@ -120,6 +123,12 @@ class _TachyonShellState extends State<TachyonShell> {
       ),
       _DestinationSpec(
         index: 6,
+        icon: Icons.radio_outlined,
+        selectedIcon: Icons.radio_rounded,
+        label: strings.rdTitle,
+      ),
+      _DestinationSpec(
+        index: 7,
         icon: Icons.settings_outlined,
         selectedIcon: Icons.settings_rounded,
         label: strings.sTitle,
@@ -174,7 +183,7 @@ class _TachyonShellState extends State<TachyonShell> {
             final isSelected = _currentIndex == itemIndex;
 
             // Separador antes de Settings si hay otros elementos antes en el menú
-            if (itemIndex == 6 && i > 0) {
+            if (itemIndex == allSpecs.length - 1 && i > 0) {
               entries.add(const PopupMenuDivider(height: 8));
             }
 
@@ -230,10 +239,11 @@ class _TachyonShellState extends State<TachyonShell> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxHeight = constraints.maxHeight;
-        const libraryCount = 6; // Índices 0..5 (Settings es 6)
+        final libraryCount = specs.length - 1; // Índices 0..specs.length-2 (Settings es el último)
+        final settingsIndex = specs.length - 1;
 
-        // Altura necesaria para mostrar los 6 iconos + Settings abajo
-        const fullRequiredHeight =
+        // Altura necesaria para mostrar los iconos de biblioteca + Settings abajo
+        final fullRequiredHeight =
             _railLeadingHeight +
             (libraryCount * _railItemHeight) +
             _railSettingsHeight;
@@ -253,7 +263,7 @@ class _TachyonShellState extends State<TachyonShell> {
           final fitCount = (availableWithSettings / _railItemHeight).floor();
 
           if (fitCount >= 2) {
-            // NavigationRail requiere al menos 2 destinos; máximo 5 porque 1 slot es el menú
+            // NavigationRail requiere al menos 2 destinos; máximo libraryCount - 1 porque 1 slot es el menú
             visibleLibraryCount = fitCount.clamp(2, libraryCount - 1);
           } else {
             // Si la altura es muy reducida, movemos también Settings dentro del PopupMenu
@@ -268,7 +278,7 @@ class _TachyonShellState extends State<TachyonShell> {
 
         final overflowIndices = <int>[
           for (int i = visibleLibraryCount; i < libraryCount; i++) i,
-          if (includeSettingsInOverflow) 6,
+          if (includeSettingsInOverflow) settingsIndex,
         ];
 
         final desktopSelectedIndex = _currentIndex < visibleLibraryCount
@@ -337,15 +347,15 @@ class _TachyonShellState extends State<TachyonShell> {
                     padding: const EdgeInsets.only(bottom: 16.0),
                     child: IconButton(
                       icon: Icon(
-                        _currentIndex == 6
+                        _currentIndex == settingsIndex
                             ? Icons.settings_rounded
                             : Icons.settings_outlined,
-                        color: _currentIndex == 6
+                        color: _currentIndex == settingsIndex
                             ? colorScheme.primary
                             : colorScheme.onSurfaceVariant,
                       ),
                       tooltip: strings.sTitle,
-                      onPressed: () => _onDestinationSelected(6),
+                      onPressed: () => _onDestinationSelected(settingsIndex),
                     ),
                   ),
               ],

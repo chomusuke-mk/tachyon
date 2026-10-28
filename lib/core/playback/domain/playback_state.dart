@@ -79,6 +79,9 @@ class PlaybackState {
   Track? get currentTrack =>
       currentPlayable is Track ? currentPlayable as Track : null;
 
+  bool get isLiveStream =>
+      currentPlayable?.isStream ?? (currentEntry?.isLiveStream ?? false);
+
   bool get hasNext =>
       loopMode == LoopMode.all ||
       loopMode == LoopMode.one ||

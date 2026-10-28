@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/shared/utils/artwork_color_resolver.dart';
 import 'package:tachyon/shared/utils/duration_formatter.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/text_link.dart';
-
-export 'package:tachyon/shared/utils/artwork_color_resolver.dart';
 
 class MiniPlayerBar extends StatefulWidget {
   final bool isDesktop;
@@ -34,6 +33,14 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
     PlaybackController playback,
     ColorScheme colorScheme,
   ) {
+    if (playback.isLiveStream) {
+      return LinearProgressIndicator(
+        value: 1.0,
+        minHeight: widget.isDesktop ? 4.0 : 2.5,
+        backgroundColor: colorScheme.onSurface.withValues(alpha: 0.12),
+        valueColor: const AlwaysStoppedAnimation<Color>(Colors.redAccent),
+      );
+    }
     return ValueListenableBuilder<Duration>(
       valueListenable: playback.positionListenable,
       builder: (context, pos, _) {
@@ -55,6 +62,34 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
     PlaybackController playback,
     TextStyle? style,
   ) {
+    if (playback.isLiveStream) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: Colors.redAccent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 5),
+          ValueListenableBuilder<Duration>(
+            valueListenable: playback.positionListenable,
+            builder: (context, pos, _) {
+              return Text(
+                'LIVE ${pos.toFormattedString(padMinutes: true)}',
+                style: style?.copyWith(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                ),
+              );
+            },
+          ),
+        ],
+      );
+    }
     return ValueListenableBuilder<Duration>(
       valueListenable: playback.positionListenable,
       builder: (context, pos, _) {
@@ -108,11 +143,11 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
     final colorScheme = theme.colorScheme;
     final strings = context.watch<LocaleController>().localeStrings;
     final playback = context.watch<PlaybackController>();
-    final currentTrack = playback.currentTrack;
+    final currentPlayable = playback.currentPlayable;
 
-    if (currentTrack == null) return const SizedBox.shrink();
+    if (currentPlayable == null) return const SizedBox.shrink();
 
-    final thumbnailHash = currentTrack.thumbnailHash;
+    final thumbnailHash = currentPlayable.thumbnailHash;
 
     final isDark = theme.brightness == Brightness.dark;
     final isOled = isDark && colorScheme.surface == const Color(0xFF000000);
@@ -167,6 +202,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                               child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onTapDown: (details) {
+                                  if (playback.isLiveStream) return;
                                   final totalMs =
                                       playback.duration.inMilliseconds;
                                   if (totalMs <= 0) return;
@@ -204,7 +240,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                       children: [
                         // Thumbnail
                         Hero(
-                          tag: 'now_playing_art_${currentTrack.filePath}',
+                          tag: 'now_playing_art_${currentPlayable.filePath}',
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8.0),
                             child: SizedBox(
@@ -214,6 +250,15 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                 thumbnailHash: thumbnailHash,
                                 quality: ThumbnailQuality.low,
                                 fit: BoxFit.cover,
+                                fallback: currentPlayable.isStream
+                                    ? Center(
+                                        child: Icon(
+                                          Icons.radio_rounded,
+                                          size: widget.isDesktop ? 24 : 20,
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                      )
+                                    : null,
                               ),
                             ),
                           ),
@@ -227,7 +272,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                currentTrack.title,
+                                currentPlayable.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.titleSmall?.copyWith(
@@ -236,7 +281,8 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                               ),
                               const SizedBox(height: 2),
                               if (widget.isDesktop &&
-                                  currentTrack.artists.isNotEmpty)
+                                  currentPlayable is Track &&
+                                  currentPlayable.artists.isNotEmpty)
                                 SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
                                   child: Row(
@@ -244,7 +290,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                     children: [
                                       for (
                                         int i = 0;
-                                        i < currentTrack.artists.length;
+                                        i < currentPlayable.artists.length;
                                         i++
                                       ) ...[
                                         if (i > 0)
@@ -257,7 +303,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                                 ),
                                           ),
                                         TextLink(
-                                          text: currentTrack.artists[i].name,
+                                          text: currentPlayable.artists[i].name,
                                           style: theme.textTheme.bodySmall
                                               ?.copyWith(
                                                 color: colorScheme
@@ -271,7 +317,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                                 MaterialPageRoute<void>(
                                                   builder: (_) =>
                                                       ArtistDetailScreen(
-                                                        artist: currentTrack
+                                                        artist: currentPlayable
                                                             .artists[i],
                                                       ),
                                                 ),
@@ -283,9 +329,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                 )
                               else
                                 Text(
-                                  currentTrack.artists
-                                      .map((a) => a.name)
-                                      .join(', '),
+                                  currentPlayable.artistNames.join(', '),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.bodySmall?.copyWith(

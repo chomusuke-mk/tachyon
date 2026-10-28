@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 
 /// Floating rounded-rectangle overlay showing real-time library scan progress
@@ -25,7 +26,7 @@ class ScanProgressOverlay extends StatelessWidget {
         final strings = context.watch<LocaleController>().localeStrings;
         final colorScheme = Theme.of(context).colorScheme;
 
-        final stageText = strings.scanStageText(progress.stage);
+        final stageText = progress.stage.localizedLabel(strings);
         final label = progress.progressLabel;
         final displayText = (label != null && label.isNotEmpty)
             ? '$stageText $label'
@@ -110,5 +111,25 @@ class ScanProgressOverlay extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// Extension mapping scanner stages to localized UI labels.
+extension ScanStageLocalization on ScanStage {
+  String localizedLabel(AppStringKey strings) {
+    return switch (this) {
+      ScanStage.idle => strings.scanStageIdle,
+      ScanStage.gettingDatabase => strings.scanStageGettingDatabase,
+      ScanStage.gettingTracks => strings.scanStageGettingTracks,
+      ScanStage.discovering => strings.scanStageDiscovering,
+      ScanStage.comparing => strings.scanStageComparing,
+      ScanStage.extracting => strings.scanStageExtracting,
+      ScanStage.inserting => strings.scanStageInserting,
+      ScanStage.cleaningOrphans => strings.scanStageCleaningOrphans,
+      ScanStage.cleaningThumbnails => strings.scanStageCleaningThumbnails,
+      ScanStage.completed => strings.scanStageCompleted,
+      ScanStage.failed => strings.scanStageFailed,
+      ScanStage.cancelled => strings.scanStageCancelled,
+    };
   }
 }

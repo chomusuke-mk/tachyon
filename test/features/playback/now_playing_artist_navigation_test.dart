@@ -16,6 +16,7 @@ import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/lyrics/lyrics_manager.dart';
+import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
@@ -81,13 +82,33 @@ class _TestPlaybackController extends PlaybackController {
     super.store,
   });
 
+  AudioPlayable? _mockPlayable;
   Track? _mockTrack;
+  bool _mockIsLiveStream = false;
 
   @override
-  Track? get currentTrack => _mockTrack ?? super.currentTrack;
+  AudioPlayable? get currentPlayable =>
+      _mockPlayable ?? _mockTrack ?? super.currentPlayable;
+
+  @override
+  Track? get currentTrack =>
+      _mockTrack ??
+      (_mockPlayable is Track ? _mockPlayable as Track : super.currentTrack);
+
+  @override
+  bool get isLiveStream => _mockIsLiveStream || super.isLiveStream;
 
   void setMockTrack(Track? track) {
+    _mockPlayable = track;
     _mockTrack = track;
+    _mockIsLiveStream = false;
+    notifyListeners();
+  }
+
+  void setMockPlayable(AudioPlayable? playable, {bool isLiveStream = false}) {
+    _mockPlayable = playable;
+    _mockTrack = playable is Track ? playable : null;
+    _mockIsLiveStream = isLiveStream;
     notifyListeners();
   }
 }
@@ -305,6 +326,44 @@ void main() {
       // Once back on NowPlayingScreen, the text must NOT remain underlined
       queenText = tester.widget<Text>(find.text('Queen').first);
       expect(queenText.style?.decoration, isNot(TextDecoration.underline));
+    });
+
+    testWidgets('NowPlayingScreen displays RadioStation livestream cleanly with station name and genre, omitting lyrics button', (tester) async {
+      final station = RadioStation(
+        id: 77,
+        name: 'Chillhop Radio',
+        streamUrl: 'https://stream.chillhop.com/live.m3u8',
+        genre: 'Lofi / Beats',
+        createdAt: DateTime.now(),
+      );
+      playbackController.setMockPlayable(station, isLiveStream: true);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<LocaleController>.value(value: localeController),
+            Provider<LyricsManager>.value(value: lyricsManager),
+            ChangeNotifierProvider<SettingsController>.value(value: settingsController),
+            ChangeNotifierProvider<LibraryStore>.value(value: libraryStore),
+            ChangeNotifierProvider<LibraryController>.value(value: libraryController),
+            ChangeNotifierProvider<PlaybackController>.value(value: playbackController),
+            ChangeNotifierProvider<PlaylistsController>.value(value: playlistsController),
+          ],
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            home: const Scaffold(
+              body: NowPlayingScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NowPlayingScreen), findsOneWidget);
+      expect(find.text('Chillhop Radio'), findsOneWidget);
+      expect(find.text('Lofi / Beats'), findsOneWidget);
+      // Verify lyrics button is omitted for livestreams
+      expect(find.byIcon(Icons.lyrics_rounded), findsNothing);
     });
   });
 }

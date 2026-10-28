@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
+import 'package:tachyon/core/lyrics/domain/lyrics_source.dart';
 import 'package:tachyon/core/lyrics/lrc_parser.dart';
 import 'package:tachyon/core/lyrics/lrclib_client.dart';
 import 'package:tachyon/core/lyrics/lyrics_ovh_client.dart';

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/playback/domain/audio_playable.dart';
+import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/library_store.dart';
 
 void main() {
@@ -258,7 +259,7 @@ void main() {
       await database.upsertTracks([track1]);
       final store = LibraryStore(database);
       await store.reloadFromDatabase();
-      final trackId = store.allTracks.first.id!;
+      final trackId = store.tracks.first.id!;
 
       expect(store.isTrackLiked(trackId), isFalse);
 

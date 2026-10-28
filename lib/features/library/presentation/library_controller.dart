@@ -117,7 +117,6 @@ class LibraryController extends ChangeNotifier {
       ? _filteredTracks
       : _tracks;
 
-  List<Track> get allTracks => _tracks;
   List<Album> get albums => _albums;
   List<Artist> get artists => _artists;
   List<Genre> get genres => _genres;
@@ -125,9 +124,7 @@ class LibraryController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  TrackSortOption get sortOption => _sortOption;
   TrackSortOption get trackSortOption => _sortOption;
-  bool get sortAscending => _sortAscending;
   bool get trackSortAscending => _sortAscending;
 
   AlbumSortOption get albumSortOption => _albumSortOption;
@@ -211,26 +208,26 @@ class LibraryController extends ChangeNotifier {
   void _syncFromStore() {
     _tracks = List<Track>.unmodifiable(
       _store.sortTracks(
-        _store.allTracks,
+        _store.tracks,
         _sortOption,
         ascending: _sortAscending,
       ),
     );
     _albums = List<Album>.unmodifiable(
       _store.sortAlbums(
-        _store.allAlbums,
+        _store.albums,
         _albumSortOption,
         ascending: _albumSortAscending,
       ),
     );
     _artists = List<Artist>.unmodifiable(
       _store.sortArtists(
-        _store.allArtists,
+        _store.artists,
         _artistSortOption,
         ascending: _artistSortAscending,
       ),
     );
-    _genres = _store.allGenres;
+    _genres = _store.genres;
 
     if (_selectedAlbum != null && _selectedAlbum!.id != null) {
       _selectedAlbum = _store.getAlbumById(_selectedAlbum!.id!);
@@ -245,7 +242,7 @@ class LibraryController extends ChangeNotifier {
     _applyFilters();
   }
 
-  Future<void> setSortOption(TrackSortOption option, {bool? ascending}) async {
+  Future<void> setTrackSortOption(TrackSortOption option, {bool? ascending}) async {
     if (_sortOption == option && ascending == null) {
       _sortAscending = !_sortAscending;
     } else {
@@ -260,7 +257,7 @@ class LibraryController extends ChangeNotifier {
 
     _tracks = List<Track>.unmodifiable(
       _store.sortTracks(
-        _store.allTracks,
+        _store.tracks,
         _sortOption,
         ascending: _sortAscending,
       ),
@@ -268,11 +265,6 @@ class LibraryController extends ChangeNotifier {
     _applyFilters();
     notifyListeners();
   }
-
-  Future<void> setTrackSortOption(
-    TrackSortOption option, {
-    bool? ascending,
-  }) => setSortOption(option, ascending: ascending);
 
   Future<void> setAlbumSortOption(
     AlbumSortOption option, {
@@ -292,7 +284,7 @@ class LibraryController extends ChangeNotifier {
 
     _albums = List<Album>.unmodifiable(
       _store.sortAlbums(
-        _store.allAlbums,
+        _store.albums,
         _albumSortOption,
         ascending: _albumSortAscending,
       ),
@@ -318,7 +310,7 @@ class LibraryController extends ChangeNotifier {
 
     _artists = List<Artist>.unmodifiable(
       _store.sortArtists(
-        _store.allArtists,
+        _store.artists,
         _artistSortOption,
         ascending: _artistSortAscending,
       ),
@@ -375,13 +367,6 @@ class LibraryController extends ChangeNotifier {
       ),
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // In-Memory Search
-  // ---------------------------------------------------------------------------
-  List<Track> searchTracks(String query) => _store.searchTracks(query);
-  List<Album> searchAlbums(String query) => _store.searchAlbums(query);
-  List<Artist> searchArtists(String query) => _store.searchArtists(query);
 
   // ---------------------------------------------------------------------------
   // Folder Explorer & Navigation Stack

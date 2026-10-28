@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 
 /// Central domain class managing localized string lookups for Tachyon.
 ///
@@ -317,6 +316,24 @@ class AppStringKey {
   String get fRescanAll => _localizedStrings['f_rescan_all'] ?? '';
 
   // ---------------------------------------------------------------------------
+  // rd_: Online Radios & Live Streams
+  // ---------------------------------------------------------------------------
+  String get rdTitle => _localizedStrings['rd_title'] ?? '';
+  String get rdAddStation => _localizedStrings['rd_add_station'] ?? '';
+  String get rdEditStation => _localizedStrings['rd_edit_station'] ?? '';
+  String get rdDeleteStation => _localizedStrings['rd_delete_station'] ?? '';
+  String get rdDeleteConfirm => _localizedStrings['rd_delete_confirm'] ?? '';
+  String get rdStationName => _localizedStrings['rd_station_name'] ?? '';
+  String get rdStreamUrl => _localizedStrings['rd_stream_url'] ?? '';
+  String get rdGenre => _localizedStrings['rd_genre'] ?? '';
+  String get rdCountry => _localizedStrings['rd_country'] ?? '';
+  String get rdEmptyTitle => _localizedStrings['rd_empty_title'] ?? '';
+  String get rdEmptySubtitle => _localizedStrings['rd_empty_subtitle'] ?? '';
+  String get rdCancel => _localizedStrings['rd_cancel'] ?? '';
+  String get rdSave => _localizedStrings['rd_save'] ?? '';
+  String get rdDelete => _localizedStrings['rd_delete'] ?? '';
+
+  // ---------------------------------------------------------------------------
   // sr_: Global Search
   // ---------------------------------------------------------------------------
   String get srTitle => _localizedStrings['sr_title'] ?? '';
@@ -618,35 +635,6 @@ class AppStringKey {
       _localizedStrings['scan_stage_cancelled'] ?? '';
   String get scanCancelTooltip =>
       _localizedStrings['scan_cancel_tooltip'] ?? '';
-
-  String scanStageText(ScanStage stage) {
-    switch (stage) {
-      case ScanStage.idle:
-        return scanStageIdle;
-      case ScanStage.gettingDatabase:
-        return scanStageGettingDatabase;
-      case ScanStage.gettingTracks:
-        return scanStageGettingTracks;
-      case ScanStage.discovering:
-        return scanStageDiscovering;
-      case ScanStage.comparing:
-        return scanStageComparing;
-      case ScanStage.extracting:
-        return scanStageExtracting;
-      case ScanStage.inserting:
-        return scanStageInserting;
-      case ScanStage.cleaningOrphans:
-        return scanStageCleaningOrphans;
-      case ScanStage.cleaningThumbnails:
-        return scanStageCleaningThumbnails;
-      case ScanStage.completed:
-        return scanStageCompleted;
-      case ScanStage.failed:
-        return scanStageFailed;
-      case ScanStage.cancelled:
-        return scanStageCancelled;
-    }
-  }
 
   // ---------------------------------------------------------------------------
   // Parametric Formatters

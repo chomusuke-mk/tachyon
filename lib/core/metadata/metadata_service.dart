@@ -478,7 +478,7 @@ class MetadataService {
 
           for (final file in orphanedFiles) {
             try {
-              file.deleteSync();
+              await file.delete();
             } catch (_) {}
           }
         } catch (e) {
@@ -555,7 +555,7 @@ Stream<DiscoveredAudioFile> _discoverFilesLocal(
       if (!AppDefaults.supportedAudioExtensions.contains(ext)) continue;
 
       try {
-        final stat = entity.statSync();
+        final stat = await entity.stat();
         if (stat.size <= 0) continue;
         yield DiscoveredAudioFile(
           path: path,

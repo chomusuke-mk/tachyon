@@ -14,6 +14,7 @@ import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 
 import 'playlists_controller.dart';
+import 'widgets/playlist_dialogs.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
   final Playlist playlist;
@@ -137,6 +138,54 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
+        actions: [
+          if (currentPlaylist.type == PlaylistType.user)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (value) {
+                if (value == 'rename') {
+                  PlaylistDialogs.showRename(context, currentPlaylist);
+                } else if (value == 'delete') {
+                  PlaylistDialogs.showDelete(
+                    context,
+                    currentPlaylist,
+                    onDeleted: () => Navigator.of(context).pop(),
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'rename',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit_rounded, size: 20),
+                      const SizedBox(width: 12),
+                      Text(strings.plRename),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.delete_outline_rounded,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        strings.plDelete,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
       body: Stack(
         children: [

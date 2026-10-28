@@ -236,7 +236,7 @@ void main() {
       await tester.pumpWidget(buildApp(const TachyonShell()));
       await tester.pumpAndSettle();
 
-      final album = libraryStore.allAlbums.first;
+      final album = libraryStore.albums.first;
       navigatorKey.currentState!.push(
         MaterialPageRoute<void>(
           builder: (_) => AlbumDetailScreen(album: album),
@@ -261,7 +261,7 @@ void main() {
       await tester.pumpWidget(buildApp(const TachyonShell()));
       await tester.pumpAndSettle();
 
-      final artist = libraryStore.allArtists.first;
+      final artist = libraryStore.artists.first;
       navigatorKey.currentState!.push(
         MaterialPageRoute<void>(
           builder: (_) => ArtistDetailScreen(artist: artist),
@@ -286,7 +286,7 @@ void main() {
       await tester.pumpWidget(buildApp(const TachyonShell()));
       await tester.pumpAndSettle();
 
-      final genre = libraryStore.allGenres.first;
+      final genre = libraryStore.genres.first;
       navigatorKey.currentState!.push(
         MaterialPageRoute<void>(
           builder: (_) => GenreDetailScreen(genre: genre),
@@ -378,7 +378,7 @@ void main() {
       await tester.pumpWidget(buildApp(const TachyonShell()));
       await tester.pumpAndSettle();
 
-      final album = libraryStore.allAlbums.first;
+      final album = libraryStore.albums.first;
       navigatorKey.currentState!.push(
         MaterialPageRoute<void>(
           builder: (_) => AlbumDetailScreen(album: album),
@@ -402,7 +402,7 @@ void main() {
       await tester.pumpWidget(buildApp(const TachyonShell()));
       await tester.pumpAndSettle();
 
-      final artist = libraryStore.allArtists.first;
+      final artist = libraryStore.artists.first;
       navigatorKey.currentState!.push(
         MaterialPageRoute<void>(
           builder: (_) => ArtistDetailScreen(artist: artist),
@@ -426,7 +426,7 @@ void main() {
       await tester.pumpWidget(buildApp(const TachyonShell()));
       await tester.pumpAndSettle();
 
-      final genre = libraryStore.allGenres.first;
+      final genre = libraryStore.genres.first;
       navigatorKey.currentState!.push(
         MaterialPageRoute<void>(
           builder: (_) => GenreDetailScreen(genre: genre),
@@ -501,7 +501,7 @@ void main() {
       await tester.pumpWidget(buildApp(const TachyonShell()));
       await tester.pumpAndSettle();
 
-      final genre = libraryStore.allGenres.first;
+      final genre = libraryStore.genres.first;
       navigatorKey.currentState!.push(
         MaterialPageRoute<void>(
           builder: (_) => GenreDetailScreen(genre: genre),

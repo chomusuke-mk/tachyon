@@ -159,7 +159,7 @@ void main() {
 
       // Search destination should NOT be in NavigationRail
       final navRail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-      expect(navRail.destinations.length, 6); // Tracks, Albums, Artists, Playlists, Genres, Folders
+      expect(navRail.destinations.length, 7); // Tracks, Albums, Artists, Playlists, Genres, Folders, Radios
 
       // Search icon should not exist in destinations
       expect(

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
@@ -371,7 +372,7 @@ void main() {
 
       // Sort Tracks
       final sortedByTitleDesc = store.sortTracks(
-        store.allTracks,
+        store.tracks,
         TrackSortOption.title,
         ascending: false,
       );
@@ -398,7 +399,7 @@ void main() {
         store: store,
       );
 
-      expect(controller.allTracks.length, equals(4));
+      expect(controller.tracks.length, equals(4));
       expect(controller.albums.length, equals(3));
       expect(controller.artists.length, equals(3));
       expect(controller.genres.length, equals(2));
@@ -412,7 +413,7 @@ void main() {
       expect(controller.tracks.length, equals(4));
 
       // Sort in RAM without database call
-      await controller.setSortOption(TrackSortOption.title, ascending: true);
+      await controller.setTrackSortOption(TrackSortOption.title, ascending: true);
       expect(controller.tracks.first.title, equals('Bohemian Rhapsody'));
 
       controller.dispose();
@@ -482,8 +483,8 @@ void main() {
       await store.reloadFromDatabase();
 
       expect(notified, isTrue);
-      expect(controller.allTracks.length, equals(1));
-      expect(controller.allTracks.first.title, equals('Live Track 1'));
+      expect(controller.tracks.length, equals(1));
+      expect(controller.tracks.first.title, equals('Live Track 1'));
 
       controller.dispose();
       await db.close();
@@ -876,7 +877,6 @@ void main() {
 
       // Catalog indexed lists are strictly NOT contaminated
       expect(store.tracks, isEmpty);
-      expect(store.allTracks, isEmpty);
       expect(store.artists, isEmpty);
 
       // Re-registering the same path returns the identical instance
@@ -901,6 +901,61 @@ void main() {
       store.removeEphemeralTrack(track.id!);
       expect(store.getTrackById(track.id!), isNull);
       expect(store.getTrackByPath('/external/unindexed_track.flac'), isNull);
+    });
+
+    test('RadioStation in-memory graph management, persistence, and sorting', () async {
+      final db = AppDatabase.inMemory();
+      final store = LibraryStore(db);
+      await store.reloadFromDatabase();
+
+      expect(store.radioStations, isEmpty);
+
+      // Save station A
+      final stationA = RadioStation(
+        name: 'Chillhop Radio',
+        streamUrl: 'https://stream.chillhop.com/live',
+        genre: 'Lofi',
+        country: 'Netherlands',
+        createdAt: DateTime.now(),
+      );
+      final savedA = await store.saveRadioStationInStore(stationA);
+      expect(savedA?.id, isNotNull);
+      expect(store.radioStations.length, equals(1));
+      expect(store.radioStations.first.name, equals('Chillhop Radio'));
+
+      // Save station B (favorite)
+      final stationB = RadioStation(
+        name: 'Ambient Sleeping Pill',
+        streamUrl: 'https://stream.ambientsleepingpill.com/live',
+        genre: 'Ambient',
+        isFavorite: true,
+        createdAt: DateTime.now(),
+      );
+      await store.saveRadioStationInStore(stationB);
+      expect(store.radioStations.length, equals(2));
+      // Favorites sort first
+      expect(store.radioStations.first.name, equals('Ambient Sleeping Pill'));
+      expect(store.radioStations[1].name, equals('Chillhop Radio'));
+
+      // Toggle favorite on station A
+      await store.toggleRadioStationFavoriteInStore(savedA!.id!);
+      expect(store.radioStations.first.isFavorite, isTrue);
+      // Both are favorites, sorted by name alphabetically: Ambient Sleeping Pill, Chillhop Radio
+      expect(store.radioStations[0].name, equals('Ambient Sleeping Pill'));
+      expect(store.radioStations[1].name, equals('Chillhop Radio'));
+
+      // Delete station B
+      final idB = store.radioStations.firstWhere((s) => s.name == 'Ambient Sleeping Pill').id!;
+      await store.deleteRadioStationInStore(idB);
+      expect(store.radioStations.length, equals(1));
+      expect(store.radioStations.first.name, equals('Chillhop Radio'));
+
+      // Reloading from database preserves radio stations in Store
+      await store.reloadFromDatabase();
+      expect(store.radioStations.length, equals(1));
+      expect(store.radioStations.first.name, equals('Chillhop Radio'));
+
+      await db.close();
     });
   });
 }

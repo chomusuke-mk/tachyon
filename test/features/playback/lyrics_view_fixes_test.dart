@@ -14,7 +14,7 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
-import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
+import 'package:tachyon/core/lyrics/domain/lyrics_source.dart';
 import 'package:tachyon/features/playback/presentation/lyrics_view.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/lyrics_sources_dialog.dart';

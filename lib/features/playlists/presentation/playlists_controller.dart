@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/library_store.dart';
@@ -128,8 +127,8 @@ class PlaylistsController extends ChangeNotifier {
   Future<void> renamePlaylist(int playlistId, String newName) async {
     final clean = newName.trim();
     if (clean.isEmpty) return;
-    if (playlistId == AppDatabase.likedSongsPlaylistId ||
-        playlistId == AppDatabase.historyPlaylistId) {
+    if (playlistId == LibraryStore.likedSongsPlaylistId ||
+        playlistId == LibraryStore.historyPlaylistId) {
       return; // Protected system playlist
     }
 
@@ -143,8 +142,8 @@ class PlaylistsController extends ChangeNotifier {
   }
 
   Future<void> deletePlaylist(int playlistId) async {
-    if (playlistId == AppDatabase.likedSongsPlaylistId ||
-        playlistId == AppDatabase.historyPlaylistId) {
+    if (playlistId == LibraryStore.likedSongsPlaylistId ||
+        playlistId == LibraryStore.historyPlaylistId) {
       return; // Protected system playlist
     }
 
@@ -229,7 +228,7 @@ class PlaylistsController extends ChangeNotifier {
 
   Future<void> clearHistory() async {
     try {
-      if (_selectedPlaylist?.id == AppDatabase.historyPlaylistId) {
+      if (_selectedPlaylist?.id == LibraryStore.historyPlaylistId) {
         _selectedPlaylistTracks.clear();
       }
       await store.clearHistoryInStore();

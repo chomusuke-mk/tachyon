@@ -5,11 +5,11 @@ import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/album_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
-import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlist_cover_helper.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/features/playlists/presentation/widgets/playlist_dialogs.dart';
 import 'package:tachyon/shared/utils/toast_utils.dart';
 
 enum TrackAction {
@@ -29,14 +29,6 @@ enum _QueueAddMode {
   onlyNew,
 }
 
-T? _tryRead<T>(BuildContext context) {
-  try {
-    return context.read<T>();
-  } catch (_) {
-    return null;
-  }
-}
-
 abstract final class TrackActionHelper {
   static Future<void> handleTrackAction(
     BuildContext context,
@@ -45,17 +37,17 @@ abstract final class TrackActionHelper {
     List<Track>? contextTracks,
     bool enableDelete = true,
   }) async {
-    final playback = _tryRead<PlaybackController>(context);
+    final playback = context.read<PlaybackController>();
 
     switch (action) {
       case TrackAction.play:
-        playback?.playTrack(track, contextTracks: contextTracks);
+        playback.playTrack(track, contextTracks: contextTracks);
         break;
       case TrackAction.playNext:
-        playback?.playNext(track);
+        playback.playNext(track);
         break;
       case TrackAction.addToQueue:
-        playback?.addToQueue(track);
+        playback.addToQueue(track);
         break;
       case TrackAction.addToPlaylist:
         showAddToPlaylistDialog(context, track);
@@ -92,8 +84,7 @@ abstract final class TrackActionHelper {
 
   static void showAddToPlaylistDialog(BuildContext context, Track track) {
     final strings = context.read<LocaleController>().localeStrings;
-    final controller = _tryRead<PlaylistsController>(context);
-    if (controller == null) return;
+    final controller = context.read<PlaylistsController>();
 
     showDialog<void>(
       context: context,
@@ -258,8 +249,7 @@ abstract final class TrackActionHelper {
     List<EngineItem<AudioPlayable>> queue,
   ) {
     final strings = context.read<LocaleController>().localeStrings;
-    final controller = _tryRead<PlaylistsController>(context);
-    if (controller == null) return;
+    final controller = context.read<PlaylistsController>();
 
     final queueTracks = queue
         .map((e) => e.track)
@@ -456,16 +446,7 @@ abstract final class TrackActionHelper {
   }
 
   static Future<void> showCreatePlaylistDialog(BuildContext context) {
-    final strings = context.read<LocaleController>().localeStrings;
-    final playlistsCtrl = _tryRead<PlaylistsController>(context);
-
-    return showDialog<void>(
-      context: context,
-      builder: (dialogContext) => _CreatePlaylistDialog(
-        playlistsCtrl: playlistsCtrl,
-        strings: strings,
-      ),
-    );
+    return PlaylistDialogs.showCreate(context);
   }
 
   static void showTrackInfoDialog(BuildContext context, Track track) {
@@ -520,8 +501,7 @@ abstract final class TrackActionHelper {
 
   static void showDeleteTrackDialog(BuildContext context, Track track) {
     final strings = context.read<LocaleController>().localeStrings;
-    final controller = _tryRead<LibraryController>(context);
-    if (controller == null) return;
+    final controller = context.read<LibraryController>();
     showDialog<void>(
       context: context,
       builder: (context) {
@@ -754,68 +734,6 @@ class TrackPopupMenuButton extends StatelessWidget {
               ],
             ),
           ),
-      ],
-    );
-  }
-}
-
-class _CreatePlaylistDialog extends StatefulWidget {
-  final PlaylistsController? playlistsCtrl;
-  final AppStringKey strings;
-
-  const _CreatePlaylistDialog({
-    required this.playlistsCtrl,
-    required this.strings,
-  });
-
-  @override
-  State<_CreatePlaylistDialog> createState() => _CreatePlaylistDialogState();
-}
-
-class _CreatePlaylistDialogState extends State<_CreatePlaylistDialog> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit(BuildContext context) async {
-    final name = _controller.text.trim();
-    if (name.isNotEmpty && widget.playlistsCtrl != null) {
-      await widget.playlistsCtrl!.createPlaylist(name);
-    }
-    if (context.mounted) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.strings.plCreateNew),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: InputDecoration(hintText: widget.strings.plNewNameHint),
-        onSubmitted: (_) => _submit(context),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(widget.strings.plCancelButton),
-        ),
-        FilledButton(
-          onPressed: () => _submit(context),
-          child: Text(widget.strings.plCreateButton),
-        ),
       ],
     );
   }

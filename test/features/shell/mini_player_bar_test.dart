@@ -19,12 +19,14 @@ import 'package:tachyon/features/library/presentation/genre_detail_screen.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playlists/presentation/playlist_detail_screen.dart';
 import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/shell/mini_player_bar.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/shared/utils/artwork_color_resolver.dart';
 
 class _TestLocaleRepo extends LocaleRepository {
   @override
@@ -41,19 +43,39 @@ class _TestPlaybackController extends PlaybackController {
     required super.settingsRepository,
   });
 
+  AudioPlayable? _mockPlayable;
   Track? _mockTrack;
   Duration _mockDuration = Duration.zero;
+  bool _mockIsLiveStream = false;
 
   @override
-  Track? get currentTrack => _mockTrack ?? super.currentTrack;
+  AudioPlayable? get currentPlayable =>
+      _mockPlayable ?? _mockTrack ?? super.currentPlayable;
+
+  @override
+  Track? get currentTrack =>
+      _mockTrack ??
+      (_mockPlayable is Track ? _mockPlayable as Track : super.currentTrack);
+
+  @override
+  bool get isLiveStream => _mockIsLiveStream || super.isLiveStream;
 
   @override
   Duration get duration =>
       _mockDuration > Duration.zero ? _mockDuration : super.duration;
 
   void setMockTrack(Track? track, {Duration? duration}) {
+    _mockPlayable = track;
     _mockTrack = track;
+    _mockIsLiveStream = false;
     if (duration != null) _mockDuration = duration;
+    notifyListeners();
+  }
+
+  void setMockPlayable(AudioPlayable? playable, {bool isLiveStream = false}) {
+    _mockPlayable = playable;
+    _mockTrack = playable is Track ? playable : null;
+    _mockIsLiveStream = isLiveStream;
     notifyListeners();
   }
 }
@@ -445,6 +467,37 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ArtistDetailScreen), findsOneWidget);
+    });
+
+    testWidgets('MiniPlayerBar renders RadioStation livestream with LIVE badge and fallback radio icon', (tester) async {
+      final station = RadioStation(
+        id: 99,
+        name: 'BBC Radio 1',
+        streamUrl: 'https://stream.live.bbcsports.com/radio1.m3u8',
+        genre: 'Pop / Top 40',
+        createdAt: DateTime.now(),
+      );
+      playback.setMockPlayable(station, isLiveStream: true);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: localeController),
+            ChangeNotifierProvider<PlaybackController>.value(value: playback),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: MiniPlayerBar(isDesktop: true),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('BBC Radio 1'), findsOneWidget);
+      expect(find.text('Pop / Top 40'), findsOneWidget);
+      expect(find.textContaining('LIVE'), findsOneWidget);
+      expect(find.byIcon(Icons.radio_rounded), findsOneWidget);
     });
 
     testWidgets('AlbumDetailScreen renders MiniPlayerBar in bottomNavigationBar when track is playing', (tester) async {
