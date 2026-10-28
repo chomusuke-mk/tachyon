@@ -8,10 +8,12 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
+import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/domain/playlist.dart' show PlaylistType;
 
 export 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
+export 'package:tachyon/core/playback/domain/radio_station.dart';
 
 abstract final class AppDatabaseSchema {
   static const List<String> createTables = [
@@ -423,7 +425,7 @@ class AppDatabase {
     try {
       for (final table in [
         'lyrics_translations', 'lyrics', 'playlist_entries', 'track_genres',
-        'track_artists', 'tracks', 'albums', 'artists', 'genres',
+        'track_artists', 'tracks', 'albums', 'artists', 'genres', 'radio_stations',
       ]) {
         db.execute('DELETE FROM $table;');
       }
@@ -632,5 +634,58 @@ class AppDatabase {
           'ON CONFLICT(lyrics_id, lang) DO UPDATE SET translated_lines = excluded.translated_lines, updated_at = excluded.updated_at;',
           [lyricsId, lang, jsonEncode(translatedLines), DateTime.now().millisecondsSinceEpoch],
         );
+      });
+
+  Future<List<RadioStation>> getRadioStations() => _runTask((db) {
+        final rows = db.select(
+          'SELECT id, name, stream_url, homepage_url, favicon_url, genre, country, bitrate_kbps, codec, is_favorite, created_at '
+          'FROM radio_stations ORDER BY is_favorite DESC, name COLLATE NOCASE ASC;',
+        );
+        return rows.map((r) => RadioStation(
+          id: r['id'] as int,
+          name: r['name'] as String,
+          streamUrl: r['stream_url'] as String,
+          homepageUrl: r['homepage_url'] as String?,
+          faviconUrl: r['favicon_url'] as String?,
+          genre: r['genre'] as String?,
+          country: r['country'] as String?,
+          bitrateKbps: r['bitrate_kbps'] as int?,
+          codec: r['codec'] as String?,
+          isFavorite: (r['is_favorite'] as int? ?? 0) == 1,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(r['created_at'] as int),
+        )).toList();
+      });
+
+  Future<RadioStation> saveRadioStation(RadioStation station) => _runTask((db) {
+        final ts = station.createdAt.millisecondsSinceEpoch;
+        final res = db.select(
+          'INSERT INTO radio_stations (name, stream_url, homepage_url, favicon_url, genre, country, bitrate_kbps, codec, is_favorite, created_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+          'ON CONFLICT(stream_url) DO UPDATE SET name = excluded.name, homepage_url = excluded.homepage_url, favicon_url = excluded.favicon_url, '
+          'genre = excluded.genre, country = excluded.country, bitrate_kbps = excluded.bitrate_kbps, codec = excluded.codec, '
+          'is_favorite = excluded.is_favorite RETURNING id;',
+          [
+            station.name,
+            station.streamUrl,
+            station.homepageUrl,
+            station.faviconUrl,
+            station.genre,
+            station.country,
+            station.bitrateKbps,
+            station.codec,
+            station.isFavorite ? 1 : 0,
+            ts,
+          ],
+        );
+        final id = res.first['id'] as int;
+        return station.copyWith(id: id);
+      });
+
+  Future<void> deleteRadioStation(int id) => _runTask((db) {
+        db.execute('DELETE FROM radio_stations WHERE id = ?;', [id]);
+      });
+
+  Future<void> setRadioStationFavorite(int id, bool isFavorite) => _runTask((db) {
+        db.execute('UPDATE radio_stations SET is_favorite = ? WHERE id = ?;', [isFavorite ? 1 : 0, id]);
       });
 }

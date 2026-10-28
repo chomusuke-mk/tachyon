@@ -72,13 +72,13 @@ class _TestPlaybackController extends PlaybackController {
   int get currentIndex => _mockCurrentIndex;
 
   void emitPlaybackState(PlaybackState state) {
-    _mockIsPlaying = state.playing;
-    _mockQueue = state.playables;
-    _mockCurrentIndex = state.index;
-    if (state.playables.isNotEmpty &&
-        state.index >= 0 &&
-        state.index < state.playables.length) {
-      final p = state.playables[state.index].track;
+    _mockIsPlaying = state.isPlaying;
+    _mockQueue = state.queue;
+    _mockCurrentIndex = state.currentIndex;
+    if (state.queue.isNotEmpty &&
+        state.currentIndex >= 0 &&
+        state.currentIndex < state.queue.length) {
+      final p = state.queue[state.currentIndex].track;
       _mockCurrentTrack = p is Track ? p : null;
     } else {
       _mockCurrentTrack = null;
@@ -715,12 +715,12 @@ void main() {
 
       playbackCtrl.emitPlaybackState(
         PlaybackState(
-          playing: true,
-          playables: [
+          isPlaying: true,
+          queue: [
             playingTrack.toEngineItem(position: 0),
             otherTrack.toEngineItem(position: 1),
           ],
-          index: 0,
+          currentIndex: 0,
         ),
       );
 
@@ -817,11 +817,11 @@ void main() {
 
       playbackCtrl.emitPlaybackState(
         PlaybackState(
-          playing: true,
-          playables: [
+          isPlaying: true,
+          queue: [
             playingTrack.toEngineItem(position: 0),
           ],
-          index: 0,
+          currentIndex: 0,
         ),
       );
 
@@ -900,11 +900,11 @@ void main() {
 
       playbackCtrl.emitPlaybackState(
         PlaybackState(
-          playing: true,
-          playables: [
+          isPlaying: true,
+          queue: [
             playingTrack.toEngineItem(position: 0),
           ],
-          index: 0,
+          currentIndex: 0,
         ),
       );
 

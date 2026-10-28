@@ -125,6 +125,19 @@ class PlaybackController extends ChangeNotifier {
     return _engine!;
   }
 
+  bool _syncScheduled = false;
+
+  void _scheduleSyncState(ma.MiniaudioEngine<AudioPlayable> eng) {
+    if (_syncScheduled) return;
+    _syncScheduled = true;
+    scheduleMicrotask(() {
+      _syncScheduled = false;
+      if (!_isDisposed && _engine != null) {
+        _syncStateFromEngine(eng);
+      }
+    });
+  }
+
   void _bindEngine(ma.MiniaudioEngine<AudioPlayable> eng) {
     eng.action.setVisualizerEnabled(false);
     _syncStateFromEngine(eng);
@@ -132,43 +145,43 @@ class PlaybackController extends ChangeNotifier {
     _positionNotifier.value = eng.state.position;
 
     _engineSubscriptions.add(
-      eng.stream.playbackState.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.playbackState.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.playing.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.playing.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.buffering.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.buffering.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.completed.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.completed.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.duration.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.duration.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.queue.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.queue.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.currentIndex.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.currentIndex.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.shuffle.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.shuffle.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.loopMode.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.loopMode.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.infiniteMixEnabled.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.infiniteMixEnabled.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.volume.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.volume.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.rate.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.rate.listen((_) => _scheduleSyncState(eng)),
     );
     _engineSubscriptions.add(
-      eng.stream.pitch.listen((_) => _syncStateFromEngine(eng)),
+      eng.stream.pitch.listen((_) => _scheduleSyncState(eng)),
     );
 
     _positionSubscription = eng.stream.position.listen((pos) {
@@ -213,18 +226,18 @@ class PlaybackController extends ChangeNotifier {
     final queueItems = engState.queue;
 
     _state = PlaybackState(
-      index: engState.currentIndex,
-      playables: queueItems,
-      playing: engState.playing,
-      buffering: engState.buffering,
-      completed: engState.completed,
+      currentIndex: engState.currentIndex,
+      queue: queueItems,
+      isPlaying: engState.playing,
+      isBuffering: engState.buffering,
+      isCompleted: engState.completed,
       position: _positionNotifier.value,
       duration: engState.duration,
       rate: engState.rate,
       pitch: engState.pitch,
       volume: engState.volume,
-      shuffle: engState.shuffle,
-      loop: engState.loopMode,
+      isShuffled: engState.shuffle,
+      loopMode: engState.loopMode,
       crossfadeDuration: engState.crossfadeConfig.duration,
       skipSilence: engState.skipSilence,
       volumeNormalization: engState.volumeNormalization,
@@ -280,9 +293,9 @@ class PlaybackController extends ChangeNotifier {
                 cur?.filePath == track.filePath));
   }
 
-  bool get isPlaying => _engine?.state.playing ?? _state.playing;
-  bool get isBuffering => _engine?.state.buffering ?? _state.buffering;
-  bool get isCompleted => _engine?.state.completed ?? _state.completed;
+  bool get isPlaying => _engine?.state.playing ?? _state.isPlaying;
+  bool get isBuffering => _engine?.state.buffering ?? _state.isBuffering;
+  bool get isCompleted => _engine?.state.completed ?? _state.isCompleted;
 
   Duration get position => _positionNotifier.value;
   ValueNotifier<Duration> get positionNotifier => _positionNotifier;
@@ -344,12 +357,12 @@ class PlaybackController extends ChangeNotifier {
   double get rate => _engine?.state.rate ?? _state.rate;
   double get pitch => _engine?.state.pitch ?? _state.pitch;
 
-  LoopMode get loopMode => _engine?.state.loopMode ?? _state.loop;
-  bool get isShuffled => _engine?.state.shuffle ?? _state.shuffle;
+  LoopMode get loopMode => _engine?.state.loopMode ?? _state.loopMode;
+  bool get isShuffled => _engine?.state.shuffle ?? _state.isShuffled;
 
   List<ma.EngineItem<AudioPlayable>> get queue =>
-      _engine != null ? _engine!.state.queue : _state.playables;
-  int get currentIndex => _engine?.state.currentIndex ?? _state.index;
+      _engine != null ? _engine!.state.queue : _state.queue;
+  int get currentIndex => _engine?.state.currentIndex ?? _state.currentIndex;
 
   bool get hasNext => _engine?.state.hasNext ?? _state.hasNext;
   bool get hasPrevious => _engine?.state.hasPrevious ?? _state.hasPrevious;
@@ -824,21 +837,21 @@ class PlaybackController extends ChangeNotifier {
   }
 
   bool _hasDiscreteStateChanged(PlaybackState prev, PlaybackState next) {
-    return prev.index != next.index ||
-        prev.playing != next.playing ||
-        prev.buffering != next.buffering ||
-        prev.completed != next.completed ||
+    return prev.currentIndex != next.currentIndex ||
+        prev.isPlaying != next.isPlaying ||
+        prev.isBuffering != next.isBuffering ||
+        prev.isCompleted != next.isCompleted ||
         prev.duration != next.duration ||
         prev.rate != next.rate ||
         prev.pitch != next.pitch ||
         prev.volume != next.volume ||
-        prev.shuffle != next.shuffle ||
-        prev.loop != next.loop ||
+        prev.isShuffled != next.isShuffled ||
+        prev.loopMode != next.loopMode ||
         prev.hasPrevious != next.hasPrevious ||
         prev.hasNext != next.hasNext ||
         prev.isInfiniteMixEnabled != next.isInfiniteMixEnabled ||
         prev.currentTrack?.filePath != next.currentTrack?.filePath ||
-        !listEquals(prev.playables, next.playables);
+        !listEquals(prev.queue, next.queue);
   }
 
   void _checkStatePersistence(PlaybackState oldState, PlaybackState newState) {
@@ -847,11 +860,11 @@ class PlaybackController extends ChangeNotifier {
 
     final isTrackTransition =
         oldState.currentTrack?.filePath != current.filePath;
-    final isPauseTransition = oldState.playing && !newState.playing;
+    final isPauseTransition = oldState.isPlaying && !newState.isPlaying;
     final isSeekTransition =
         (newState.position - oldState.position).abs() >
         const Duration(seconds: 2);
-    final isStopOrCompleted = oldState.playing && newState.completed;
+    final isStopOrCompleted = oldState.isPlaying && newState.isCompleted;
 
     final shouldForceWrite =
         isTrackTransition ||
@@ -867,7 +880,7 @@ class PlaybackController extends ChangeNotifier {
       return;
     }
 
-    if (newState.playing) {
+    if (newState.isPlaying) {
       final now = DateTime.now();
       if (_lastPersistenceTime == null ||
           now.difference(_lastPersistenceTime!) >= _persistenceThrottle) {

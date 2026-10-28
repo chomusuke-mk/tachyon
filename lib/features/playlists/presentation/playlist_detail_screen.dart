@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
-import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 
 import 'package:tachyon/shared/widgets/album_art_image.dart';
@@ -128,10 +127,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         : widget.playlist;
     final tracks = isSelected && playlists.selectedPlaylistTracks.isNotEmpty
         ? playlists.selectedPlaylistTracks
-        : currentPlaylist.entries
-              .map((e) => e.track)
-              .whereType<Track>()
-              .toList();
+        : currentPlaylist.tracks;
     final isDesktop = TachyonBreakpoints.isDesktop(context);
 
     return Scaffold(

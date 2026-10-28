@@ -91,32 +91,26 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
   void _syncFromPlaybackState(PlaybackState state, {Duration? position}) {
     if (_isDisposed) return;
-    final track = state.currentTrack;
+    final playable = state.currentPlayable;
 
-    if (track != null) {
-      final artistNames = track.artists.map((a) => a.name).join(', ');
-      final albumName = track.album?.name ?? '';
-      final hash = (track.thumbnailHash != null &&
-              track.thumbnailHash!.isNotEmpty)
-          ? track.thumbnailHash!
-          : (track.album?.thumbnailHash ?? '');
+    if (playable != null) {
+      final artistNames = playable.artistNames.join(', ');
+      final albumName = playable.albumTitle ?? '';
+      final hash = playable.thumbnailHash ?? '';
       final signature =
-          '${track.filePath}|${track.title}|$artistNames|$albumName|${track.durationMs}|$hash';
+          '${playable.filePath}|${playable.title}|$artistNames|$albumName|${playable.duration.inMilliseconds}|$hash';
 
       if (signature != _lastEmittedMediaSignature) {
         _lastEmittedMediaSignature = signature;
-        final uri = resolveLowQualityArtUri(
-          track.thumbnailHash,
-          track.album?.thumbnailHash,
-        );
+        final uri = resolveLowQualityArtUri(playable.thumbnailHash);
 
         mediaItem.add(
           as_lib.MediaItem(
-            id: track.filePath,
-            title: track.title,
+            id: playable.filePath,
+            title: playable.title,
             artist: artistNames.isNotEmpty ? artistNames : null,
-            album: track.album?.name,
-            duration: Duration(milliseconds: track.durationMs),
+            album: playable.albumTitle,
+            duration: playable.isStream ? null : playable.duration,
             artUri: uri,
           ),
         );
@@ -127,19 +121,19 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     }
 
     if (_lastSyncedPlayables == null ||
-        (!identical(state.playables, _lastSyncedPlayables) &&
-            !listEquals(state.playables, _lastSyncedPlayables))) {
-      _lastSyncedPlayables = state.playables;
+        (!identical(state.queue, _lastSyncedPlayables) &&
+            !listEquals(state.queue, _lastSyncedPlayables))) {
+      _lastSyncedPlayables = state.queue;
       final bool shouldSyncQueue =
           !kIsWeb && (Platform.isAndroid || Platform.isIOS);
       if (shouldSyncQueue) {
-        final total = state.playables.length;
-        final curr = state.index.clamp(0, total > 0 ? total - 1 : 0);
+        final total = state.queue.length;
+        final curr = state.currentIndex.clamp(0, total > 0 ? total - 1 : 0);
         final start = math.max(0, curr - 10);
         final end = math.min(total, curr + 40);
         final queueItems = <as_lib.MediaItem>[];
         for (var i = start; i < end; i++) {
-          final entry = state.playables[i];
+          final entry = state.queue[i];
           final t = entry.track;
           if (t == null) continue;
           final artists = t.artistNames.join(', ');
@@ -160,26 +154,26 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     }
 
     final isPlaying = state.isPlaying;
-    final isBuffering = state.buffering;
+    final isBuffering = state.isBuffering;
 
     as_lib.AudioProcessingState processingState;
-    if (state.currentTrack == null) {
+    if (state.currentPlayable == null) {
       processingState = as_lib.AudioProcessingState.idle;
     } else if (isBuffering) {
       processingState = as_lib.AudioProcessingState.buffering;
-    } else if (state.completed) {
+    } else if (state.isCompleted) {
       processingState = as_lib.AudioProcessingState.completed;
     } else {
       processingState = as_lib.AudioProcessingState.ready;
     }
 
-    final asRepeatMode = switch (state.loop) {
+    final asRepeatMode = switch (state.loopMode) {
       LoopMode.off => as_lib.AudioServiceRepeatMode.none,
       LoopMode.one => as_lib.AudioServiceRepeatMode.one,
       LoopMode.all => as_lib.AudioServiceRepeatMode.all,
     };
 
-    final asShuffleMode = state.shuffle
+    final asShuffleMode = state.isShuffled
         ? as_lib.AudioServiceShuffleMode.all
         : as_lib.AudioServiceShuffleMode.none;
 

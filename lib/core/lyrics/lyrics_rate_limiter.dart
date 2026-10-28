@@ -1,9 +1,6 @@
 import 'dart:async';
 import 'package:tachyon/shared/utils/cancellation_token.dart';
 
-export 'package:tachyon/shared/utils/cancellation_token.dart'
-    show CancellationToken;
-
 /// Exception thrown when a throttled or in-flight lyrics request is cancelled
 /// before execution or while waiting in the pacing queue.
 class LyricsCancelledException implements Exception {

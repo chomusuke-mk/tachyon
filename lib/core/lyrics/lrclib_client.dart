@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import 'lyrics_rate_limiter.dart';
+import 'package:tachyon/shared/utils/cancellation_token.dart';
 
 /// Base sealed class representing the result of querying `lrclib.net`.
 sealed class LrclibResponse {

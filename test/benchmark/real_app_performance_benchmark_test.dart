@@ -90,9 +90,9 @@ class BenchmarkPlaybackController extends PlaybackController {
     _activeTrack = track is Track ? track : null;
     _activeIsPlaying = true;
     _benchmarkState = _benchmarkState.copyWith(
-      playing: true,
-      index: _activeCurrentIndex,
-      playables: _activeQueue,
+      isPlaying: true,
+      currentIndex: _activeCurrentIndex,
+      queue: _activeQueue,
     );
     notifyListeners();
   }
@@ -100,14 +100,14 @@ class BenchmarkPlaybackController extends PlaybackController {
   @override
   Future<void> play() async {
     _activeIsPlaying = true;
-    _benchmarkState = _benchmarkState.copyWith(playing: true);
+    _benchmarkState = _benchmarkState.copyWith(isPlaying: true);
     notifyListeners();
   }
 
   @override
   Future<void> pause() async {
     _activeIsPlaying = false;
-    _benchmarkState = _benchmarkState.copyWith(playing: false);
+    _benchmarkState = _benchmarkState.copyWith(isPlaying: false);
     notifyListeners();
   }
 

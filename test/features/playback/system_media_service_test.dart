@@ -38,7 +38,7 @@ class FakePlaybackController extends PlaybackController {
   Track? get currentTrack => _fakeState.currentTrack;
 
   @override
-  bool get isPlaying => _fakeState.playing;
+  bool get isPlaying => _fakeState.isPlaying;
 
   @override
   Duration get position => _fakeState.position;
@@ -53,10 +53,10 @@ class FakePlaybackController extends PlaybackController {
   ValueListenable<Duration> get positionListenable => _fakePositionNotifier;
 
   @override
-  bool get isShuffled => _fakeState.shuffle;
+  bool get isShuffled => _fakeState.isShuffled;
 
   @override
-  LoopMode get loopMode => _fakeState.loop;
+  LoopMode get loopMode => _fakeState.loopMode;
 
   @override
   double get rate => _fakeState.rate;
@@ -73,19 +73,19 @@ class FakePlaybackController extends PlaybackController {
   @override
   Future<void> play() async {
     playCount++;
-    emitPlaybackState(_fakeState.copyWith(playing: true));
+    emitPlaybackState(_fakeState.copyWith(isPlaying: true));
   }
 
   @override
   Future<void> pause() async {
     pauseCount++;
-    emitPlaybackState(_fakeState.copyWith(playing: false));
+    emitPlaybackState(_fakeState.copyWith(isPlaying: false));
   }
 
   @override
   Future<void> stop() async {
     pauseCount++;
-    emitPlaybackState(_fakeState.copyWith(playing: false));
+    emitPlaybackState(_fakeState.copyWith(isPlaying: false));
   }
 
   @override
@@ -97,13 +97,13 @@ class FakePlaybackController extends PlaybackController {
   @override
   Future<void> setLoopMode(LoopMode loop) async {
     lastSetLoop = loop;
-    emitPlaybackState(_fakeState.copyWith(loop: loop));
+    emitPlaybackState(_fakeState.copyWith(loopMode: loop));
   }
 
   @override
   Future<void> setShuffle(bool shuffle) async {
     lastShuffle = shuffle;
-    emitPlaybackState(_fakeState.copyWith(shuffle: shuffle));
+    emitPlaybackState(_fakeState.copyWith(isShuffled: shuffle));
   }
 
   @override
@@ -171,15 +171,15 @@ void main() {
 
       controller.emitPlaybackState(
         PlaybackState(
-          index: 0,
-          playables: [
+          currentIndex: 0,
+          queue: [
             track.toEngineItem(),
           ],
-          playing: true,
+          isPlaying: true,
           position: const Duration(seconds: 42),
           duration: const Duration(milliseconds: 240000),
-          loop: LoopMode.all,
-          shuffle: true,
+          loopMode: LoopMode.all,
+          isShuffled: true,
         ),
       );
 
@@ -217,7 +217,7 @@ void main() {
 
     test('onTaskRemoved stops playback only when not playing', () async {
       // 1. When not playing: onTaskRemoved should call stop
-      controller.emitPlaybackState(const PlaybackState(playing: false));
+      controller.emitPlaybackState(const PlaybackState(isPlaying: false));
       await Future<void>.delayed(Duration.zero);
 
       await handler.onTaskRemoved();
@@ -227,7 +227,7 @@ void main() {
       );
 
       // 2. When playing: onTaskRemoved preserves playing state for headless mode
-      controller.emitPlaybackState(const PlaybackState(playing: true));
+      controller.emitPlaybackState(const PlaybackState(isPlaying: true));
       await Future<void>.delayed(Duration.zero);
 
       await handler.onTaskRemoved();
@@ -254,15 +254,15 @@ void main() {
 
       controller.emitPlaybackState(
         PlaybackState(
-          index: 0,
-          playables: [
+          currentIndex: 0,
+          queue: [
             track.toEngineItem(),
           ],
-          playing: true,
+          isPlaying: true,
           position: const Duration(seconds: 15),
           duration: const Duration(milliseconds: 180000),
           volume: 0.75,
-          loop: LoopMode.all,
+          loopMode: LoopMode.all,
         ),
       );
       await Future<void>.delayed(Duration.zero);

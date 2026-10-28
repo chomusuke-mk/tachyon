@@ -15,18 +15,18 @@ enum PlaybackStatus { idle, loading, playing, paused, completed }
 
 @immutable
 class PlaybackState {
-  final int index;
-  final List<ma.EngineItem<AudioPlayable>> playables;
-  final bool playing;
-  final bool buffering;
-  final bool completed;
+  final int currentIndex;
+  final List<ma.EngineItem<AudioPlayable>> queue;
+  final bool isPlaying;
+  final bool isBuffering;
+  final bool isCompleted;
   final Duration position;
   final Duration duration;
   final double rate;
   final double pitch;
   final double volume;
-  final bool shuffle;
-  final LoopMode loop;
+  final bool isShuffled;
+  final LoopMode loopMode;
   final Duration crossfadeDuration;
   final bool skipSilence;
   final bool volumeNormalization;
@@ -42,18 +42,18 @@ class PlaybackState {
   final bool limiterEnabled;
 
   const PlaybackState({
-    this.index = 0,
-    this.playables = const [],
-    this.playing = false,
-    this.buffering = false,
-    this.completed = false,
+    this.currentIndex = 0,
+    this.queue = const [],
+    this.isPlaying = false,
+    this.isBuffering = false,
+    this.isCompleted = false,
     this.position = Duration.zero,
     this.duration = Duration.zero,
     this.rate = 1.0,
     this.pitch = 1.0,
     this.volume = 1.0,
-    this.shuffle = false,
-    this.loop = LoopMode.off,
+    this.isShuffled = false,
+    this.loopMode = LoopMode.off,
     this.crossfadeDuration = const Duration(seconds: 5),
     this.skipSilence = false,
     this.volumeNormalization = true,
@@ -72,7 +72,7 @@ class PlaybackState {
   const PlaybackState.initial() : this();
 
   ma.EngineItem<AudioPlayable>? get currentEntry =>
-      (index >= 0 && index < playables.length) ? playables[index] : null;
+      (currentIndex >= 0 && currentIndex < queue.length) ? queue[currentIndex] : null;
 
   AudioPlayable? get currentPlayable => currentEntry?.data;
 
@@ -80,12 +80,12 @@ class PlaybackState {
       currentPlayable is Track ? currentPlayable as Track : null;
 
   bool get hasNext =>
-      loop == LoopMode.all ||
-      loop == LoopMode.one ||
-      index < playables.length - 1 ||
-      (isInfiniteMixEnabled && playables.isNotEmpty);
+      loopMode == LoopMode.all ||
+      loopMode == LoopMode.one ||
+      currentIndex < queue.length - 1 ||
+      (isInfiniteMixEnabled && queue.isNotEmpty);
   bool get hasPrevious =>
-      loop == LoopMode.all || index > 0 || position.inSeconds > 3;
+      loopMode == LoopMode.all || currentIndex > 0 || position.inSeconds > 3;
 
   double get progress => duration.inMilliseconds > 0
       ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
@@ -95,37 +95,29 @@ class PlaybackState {
       duration > position ? duration - position : Duration.zero;
 
   PlaybackStatus get status {
-    if (buffering) return PlaybackStatus.loading;
-    if (completed) return PlaybackStatus.completed;
-    if (playing) return PlaybackStatus.playing;
-    if (position > Duration.zero && !playing) return PlaybackStatus.paused;
+    if (isBuffering) return PlaybackStatus.loading;
+    if (isCompleted) return PlaybackStatus.completed;
+    if (isPlaying) return PlaybackStatus.playing;
+    if (position > Duration.zero && !isPlaying) return PlaybackStatus.paused;
     return PlaybackStatus.idle;
   }
 
-  // Property aliases for interface contract & UI compatibility
-  bool get isPlaying => playing;
-  bool get isBuffering => buffering;
-  bool get isCompleted => completed;
-  List<ma.EngineItem<AudioPlayable>> get queue => playables;
-  int get currentIndex => index;
-  LoopMode get loopMode => loop;
-  bool get isShuffled => shuffle;
   CrossfadeConfig get crossfadeConfig =>
       CrossfadeConfig(duration: crossfadeDuration);
 
   PlaybackState copyWith({
-    int? index,
-    List<ma.EngineItem<AudioPlayable>>? playables,
-    bool? playing,
-    bool? buffering,
-    bool? completed,
+    int? currentIndex,
+    List<ma.EngineItem<AudioPlayable>>? queue,
+    bool? isPlaying,
+    bool? isBuffering,
+    bool? isCompleted,
     Duration? position,
     Duration? duration,
     double? rate,
     double? pitch,
     double? volume,
-    bool? shuffle,
-    LoopMode? loop,
+    bool? isShuffled,
+    LoopMode? loopMode,
     Duration? crossfadeDuration,
     CrossfadeConfig? crossfadeConfig,
     bool? skipSilence,
@@ -142,18 +134,18 @@ class PlaybackState {
     bool? limiterEnabled,
   }) {
     return PlaybackState(
-      index: index ?? this.index,
-      playables: playables ?? this.playables,
-      playing: playing ?? this.playing,
-      buffering: buffering ?? this.buffering,
-      completed: completed ?? this.completed,
+      currentIndex: currentIndex ?? this.currentIndex,
+      queue: queue ?? this.queue,
+      isPlaying: isPlaying ?? this.isPlaying,
+      isBuffering: isBuffering ?? this.isBuffering,
+      isCompleted: isCompleted ?? this.isCompleted,
       position: position ?? this.position,
       duration: duration ?? this.duration,
       rate: rate ?? this.rate,
       pitch: pitch ?? this.pitch,
       volume: volume ?? this.volume,
-      shuffle: shuffle ?? this.shuffle,
-      loop: loop ?? this.loop,
+      isShuffled: isShuffled ?? this.isShuffled,
+      loopMode: loopMode ?? this.loopMode,
       crossfadeDuration:
           crossfadeConfig?.duration ??
           crossfadeDuration ??
@@ -178,18 +170,18 @@ class PlaybackState {
       identical(this, other) ||
       other is PlaybackState &&
           runtimeType == other.runtimeType &&
-          index == other.index &&
-          listEquals(playables, other.playables) &&
-          playing == other.playing &&
-          buffering == other.buffering &&
-          completed == other.completed &&
+          currentIndex == other.currentIndex &&
+          listEquals(queue, other.queue) &&
+          isPlaying == other.isPlaying &&
+          isBuffering == other.isBuffering &&
+          isCompleted == other.isCompleted &&
           position == other.position &&
           duration == other.duration &&
           rate == other.rate &&
           pitch == other.pitch &&
           volume == other.volume &&
-          shuffle == other.shuffle &&
-          loop == other.loop &&
+          isShuffled == other.isShuffled &&
+          loopMode == other.loopMode &&
           crossfadeDuration == other.crossfadeDuration &&
           skipSilence == other.skipSilence &&
           volumeNormalization == other.volumeNormalization &&
@@ -206,18 +198,18 @@ class PlaybackState {
 
   @override
   int get hashCode => Object.hashAll([
-    index,
-    Object.hashAll(playables),
-    playing,
-    buffering,
-    completed,
+    currentIndex,
+    Object.hashAll(queue),
+    isPlaying,
+    isBuffering,
+    isCompleted,
     position,
     duration,
     rate,
     pitch,
     volume,
-    shuffle,
-    loop,
+    isShuffled,
+    loopMode,
     crossfadeDuration,
     skipSilence,
     volumeNormalization,

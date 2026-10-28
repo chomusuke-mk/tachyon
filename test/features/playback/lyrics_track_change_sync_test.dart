@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tachyon/core/lyrics/lyrics_rate_limiter.dart';
+import 'package:tachyon/shared/utils/cancellation_token.dart';
 import 'package:tachyon/core/lyrics/lrc_parser.dart';
 import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/core/database/app_database.dart';

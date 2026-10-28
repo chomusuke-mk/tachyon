@@ -8,6 +8,7 @@ import 'package:tachyon/core/lyrics/lrclib_client.dart';
 import 'package:tachyon/core/lyrics/lyrics_ovh_client.dart';
 import 'package:tachyon/core/lyrics/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/lyrics/lyrics_translation_client.dart';
+import 'package:tachyon/shared/utils/cancellation_token.dart';
 import 'package:tachyon/core/lyrics/domain/lyric_source.dart';
 import 'package:tachyon/core/store/library_store.dart';
 

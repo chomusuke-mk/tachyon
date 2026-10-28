@@ -64,14 +64,14 @@ class LinuxMprisBridge {
   }
 
   String get loopStatus {
-    return switch (playbackController.state.loop) {
+    return switch (playbackController.state.loopMode) {
       LoopMode.off => 'None',
       LoopMode.one => 'Track',
       LoopMode.all => 'Playlist',
     };
   }
 
-  bool get shuffle => playbackController.state.shuffle;
+  bool get shuffle => playbackController.state.isShuffled;
 
   double get volume =>
       playbackController.state.volume.clamp(0.0, 1.0);
@@ -200,7 +200,7 @@ class LinuxMprisBridge {
   }
 
   Future<void> setShuffle(bool enabled) async {
-    if (playbackController.state.shuffle != enabled) {
+    if (playbackController.state.isShuffled != enabled) {
       await playbackController.toggleShuffle();
     }
     _scheduleSync(isMetadataChange: false);

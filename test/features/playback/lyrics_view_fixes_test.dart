@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/core/lyrics/lrc_parser.dart';
 import 'package:tachyon/core/database/app_database.dart';
-import 'package:tachyon/core/lyrics/lyrics_rate_limiter.dart';
+import 'package:tachyon/shared/utils/cancellation_token.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/core/store/domain/album.dart';

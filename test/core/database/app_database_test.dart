@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/playback/domain/audio_playable.dart';
 import 'package:tachyon/core/store/library_store.dart';
 
 void main() {
@@ -365,6 +366,54 @@ void main() {
       expect(snapshot.tracks, isEmpty);
       expect(snapshot.albums, isEmpty);
       expect(snapshot.artists, isEmpty);
+    });
+
+    test('RadioStation persistence and AudioPlayable liveStream contract works', () async {
+      final now = DateTime.now();
+      final station = RadioStation(
+        name: 'Chillout Lounge',
+        streamUrl: 'https://stream.example.com/chill.mp3',
+        homepageUrl: 'https://example.com',
+        genre: 'Ambient',
+        country: 'Germany',
+        bitrateKbps: 320,
+        codec: 'mp3',
+        isFavorite: true,
+        createdAt: now,
+      );
+
+      // 1. AudioPlayable contracts
+      expect(station.title, equals('Chillout Lounge'));
+      expect(station.artistNames, equals(['Ambient']));
+      expect(station.albumTitle, equals('Germany'));
+      expect(station.duration, equals(Duration.zero));
+      expect(station.isStream, isTrue);
+
+      final engineItem = station.toEngineItem();
+      expect(engineItem.data, equals(station));
+      expect(engineItem.track, equals(station));
+
+      // 2. Database CRUD
+      final saved = await database.saveRadioStation(station);
+      expect(saved.id, isNotNull);
+      expect(saved.name, equals('Chillout Lounge'));
+      expect(saved.isFavorite, isTrue);
+
+      var list = await database.getRadioStations();
+      expect(list.length, equals(1));
+      expect(list.first.name, equals('Chillout Lounge'));
+      expect(list.first.streamUrl, equals('https://stream.example.com/chill.mp3'));
+      expect(list.first.isFavorite, isTrue);
+
+      // 3. Toggle favorite
+      await database.setRadioStationFavorite(saved.id!, false);
+      list = await database.getRadioStations();
+      expect(list.first.isFavorite, isFalse);
+
+      // 4. Delete station
+      await database.deleteRadioStation(saved.id!);
+      list = await database.getRadioStations();
+      expect(list, isEmpty);
     });
   });
 }

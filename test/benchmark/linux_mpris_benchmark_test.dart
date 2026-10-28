@@ -27,7 +27,7 @@ class _BenchmarkPlaybackController extends PlaybackController {
   Track? get currentTrack => _benchmarkState.currentTrack;
 
   @override
-  bool get isPlaying => _benchmarkState.playing;
+  bool get isPlaying => _benchmarkState.isPlaying;
 
   @override
   Duration get position => positionNotifier.value;
@@ -36,10 +36,10 @@ class _BenchmarkPlaybackController extends PlaybackController {
   Duration get duration => _benchmarkState.duration;
 
   @override
-  bool get isShuffled => _benchmarkState.shuffle;
+  bool get isShuffled => _benchmarkState.isShuffled;
 
   @override
-  LoopMode get loopMode => _benchmarkState.loop;
+  LoopMode get loopMode => _benchmarkState.loopMode;
 
   @override
   double get rate => _benchmarkState.rate;
@@ -60,45 +60,45 @@ class _BenchmarkPlaybackController extends PlaybackController {
 
   @override
   Future<void> next() async {
-    if (_benchmarkState.playables.isEmpty) return;
-    final nextIdx = (_benchmarkState.index + 1) % _benchmarkState.playables.length;
+    if (_benchmarkState.queue.isEmpty) return;
+    final nextIdx = (_benchmarkState.currentIndex + 1) % _benchmarkState.queue.length;
     emitState(
       _benchmarkState.copyWith(
-        index: nextIdx,
+        currentIndex: nextIdx,
         position: Duration.zero,
-        playing: true,
+        isPlaying: true,
       ),
     );
   }
 
   @override
   Future<void> previous() async {
-    if (_benchmarkState.playables.isEmpty) return;
+    if (_benchmarkState.queue.isEmpty) return;
     final prevIdx =
-        (_benchmarkState.index - 1 + _benchmarkState.playables.length) %
-        _benchmarkState.playables.length;
+        (_benchmarkState.currentIndex - 1 + _benchmarkState.queue.length) %
+        _benchmarkState.queue.length;
     emitState(
       _benchmarkState.copyWith(
-        index: prevIdx,
+        currentIndex: prevIdx,
         position: Duration.zero,
-        playing: true,
+        isPlaying: true,
       ),
     );
   }
 
   @override
   Future<void> play() async {
-    emitState(_benchmarkState.copyWith(playing: true));
+    emitState(_benchmarkState.copyWith(isPlaying: true));
   }
 
   @override
   Future<void> pause() async {
-    emitState(_benchmarkState.copyWith(playing: false));
+    emitState(_benchmarkState.copyWith(isPlaying: false));
   }
 
   @override
   Future<void> stop() async {
-    emitState(_benchmarkState.copyWith(playing: false));
+    emitState(_benchmarkState.copyWith(isPlaying: false));
   }
 
   @override
@@ -108,12 +108,12 @@ class _BenchmarkPlaybackController extends PlaybackController {
 
   @override
   Future<void> setShuffle(bool shuffle) async {
-    emitState(_benchmarkState.copyWith(shuffle: shuffle));
+    emitState(_benchmarkState.copyWith(isShuffled: shuffle));
   }
 
   @override
   Future<void> setLoopMode(LoopMode loop) async {
-    emitState(_benchmarkState.copyWith(loop: loop));
+    emitState(_benchmarkState.copyWith(loopMode: loop));
   }
 
   @override
@@ -191,9 +191,9 @@ void main() {
 
         controller.emitState(
           PlaybackState(
-            index: 0,
-            playables: [track.toEngineItem()],
-            playing: true,
+            currentIndex: 0,
+            queue: [track.toEngineItem()],
+            isPlaying: true,
           ),
         );
         await Future<void>.delayed(Duration.zero);
@@ -277,9 +277,9 @@ void main() {
         // 1. Start playback on Track 0 (NoTrack -> Track 0, Stopped -> Playing).
         controller.emitState(
           PlaybackState(
-            index: 0,
-            playables: playables,
-            playing: true,
+            currentIndex: 0,
+            queue: playables,
+            isPlaying: true,
             position: Duration.zero,
             duration: const Duration(milliseconds: 180000),
           ),

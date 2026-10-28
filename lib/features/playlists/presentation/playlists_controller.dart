@@ -63,10 +63,7 @@ class PlaylistsController extends ChangeNotifier {
       final found = s.getPlaylistById(_selectedPlaylist!.id!);
       if (found != null) {
         _selectedPlaylist = found;
-        _selectedPlaylistTracks = found.entries
-            .map((e) => e.track)
-            .whereType<Track>()
-            .toList();
+        _selectedPlaylistTracks = found.tracks;
       } else {
         _selectedPlaylist = null;
         _selectedPlaylistTracks = [];
@@ -97,20 +94,14 @@ class PlaylistsController extends ChangeNotifier {
         final found = store.getPlaylistById(playlist.id!);
         if (found != null) {
           _selectedPlaylist = found;
-          _selectedPlaylistTracks = found.entries
-              .map((e) => e.track)
-              .whereType<Track>()
-              .toList();
+          _selectedPlaylistTracks = found.tracks;
           return;
         }
       }
 
       // Resolve directly from memory pointers in playlist entries
       _selectedPlaylist = playlist;
-      _selectedPlaylistTracks = playlist.entries
-          .map((e) => e.track)
-          .whereType<Track>()
-          .toList();
+      _selectedPlaylistTracks = playlist.tracks;
     } catch (e) {
       _errorMessage = 'Failed to load playlist tracks: $e';
     } finally {

@@ -30,7 +30,7 @@ class _FakePlaybackController extends PlaybackController {
   Track? get currentTrack => _fakeState.currentTrack;
 
   @override
-  bool get isPlaying => _fakeState.playing;
+  bool get isPlaying => _fakeState.isPlaying;
 
   @override
   Duration get position => _fakeState.position;
@@ -45,10 +45,10 @@ class _FakePlaybackController extends PlaybackController {
   ValueListenable<Duration> get positionListenable => _fakePositionNotifier;
 
   @override
-  bool get isShuffled => _fakeState.shuffle;
+  bool get isShuffled => _fakeState.isShuffled;
 
   @override
-  LoopMode get loopMode => _fakeState.loop;
+  LoopMode get loopMode => _fakeState.loopMode;
 
   @override
   double get rate => _fakeState.rate;
@@ -64,22 +64,22 @@ class _FakePlaybackController extends PlaybackController {
 
   @override
   Future<void> play() async {
-    emitState(_fakeState.copyWith(playing: true));
+    emitState(_fakeState.copyWith(isPlaying: true));
   }
 
   @override
   Future<void> pause() async {
-    emitState(_fakeState.copyWith(playing: false));
+    emitState(_fakeState.copyWith(isPlaying: false));
   }
 
   @override
   Future<void> next() async {
-    if (_fakeState.playables.isEmpty) return;
-    final nextIdx = (_fakeState.index + 1) % _fakeState.playables.length;
+    if (_fakeState.queue.isEmpty) return;
+    final nextIdx = (_fakeState.currentIndex + 1) % _fakeState.queue.length;
     emitState(_fakeState.copyWith(
-      index: nextIdx,
+      currentIndex: nextIdx,
       position: Duration.zero,
-      playing: true,
+      isPlaying: true,
     ));
   }
 
@@ -93,7 +93,7 @@ class _FakePlaybackController extends PlaybackController {
 
   @override
   Future<void> stop() async {
-    emitState(_fakeState.copyWith(playing: false));
+    emitState(_fakeState.copyWith(isPlaying: false));
   }
 }
 
@@ -150,9 +150,9 @@ void main() {
       );
 
       controller.emitState(PlaybackState(
-        index: 0,
-        playables: [track.toEngineItem()],
-        playing: true,
+        currentIndex: 0,
+        queue: [track.toEngineItem()],
+        isPlaying: true,
       ));
 
       await Future<void>.delayed(Duration.zero);
@@ -188,9 +188,9 @@ void main() {
           .toList();
 
       controller.emitState(PlaybackState(
-        index: 0,
-        playables: playables,
-        playing: true,
+        currentIndex: 0,
+        queue: playables,
+        isPlaying: true,
       ));
 
       await Future<void>.delayed(Duration.zero);

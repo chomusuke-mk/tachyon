@@ -60,6 +60,10 @@ class Playlist {
   int get trackCount => entries.length;
   bool get isSpecial => type != PlaylistType.user;
 
+  /// Ordered list of non-null tracks contained in this playlist.
+  List<Track> get tracks =>
+      entries.map((e) => e.track).whereType<Track>().toList(growable: false);
+
   /// Dynamically resolved from the most recently added entry with a valid cover hash.
   String? get coverHash {
     if (entries.isEmpty) return null;
