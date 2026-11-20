@@ -80,12 +80,12 @@ class GenresScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    child: genre.coverHash != null
+                    child: genre.artworkUri != null
                         ? Stack(
                             fit: StackFit.expand,
                             children: [
                               AlbumArtImage(
-                                thumbnailHash: genre.coverHash,
+                                artworkUri: genre.artworkUri,
                                 quality: ThumbnailQuality.medium,
                                 fit: BoxFit.cover,
                               ),

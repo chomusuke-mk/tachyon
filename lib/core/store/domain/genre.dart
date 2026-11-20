@@ -13,12 +13,12 @@ class Genre {
   /// Returns the number of tracks associated with this genre.
   int get trackCount => tracks.length;
 
-  /// Dynamically resolved from the first track with a non-empty cover hash.
-  String? get coverHash {
+  /// Dynamically resolved from the first track with a non-empty artwork URI.
+  String? get artworkUri {
     for (final track in tracks) {
-      final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
-      if (hash != null && hash.trim().isNotEmpty) {
-        return hash.trim();
+      final uri = track.artworkUri ?? track.album?.artworkUri;
+      if (uri != null && uri.trim().isNotEmpty) {
+        return uri.trim();
       }
     }
     return null;

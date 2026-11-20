@@ -94,6 +94,9 @@ class _DelayedLyricsManager extends LyricsManager {
 
 class _Playback extends ChangeNotifier implements PlaybackController {
   @override
+  Listenable get trackListenable => this;
+
+  @override
   Track? currentTrack;
 
   final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);

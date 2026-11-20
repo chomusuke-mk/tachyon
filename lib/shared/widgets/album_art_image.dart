@@ -1,11 +1,23 @@
 import 'dart:io';
+import 'dart:math' as math;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/core/playback/domain/audio_playable.dart';
+import 'package:tachyon/core/playback/domain/radio_station.dart';
 
+/// Unified artwork presentation widget that transparently resolves and renders
+/// artwork from a single local image file, remote image URL, or an [AudioPlayable].
+///
+/// Implements on-the-fly RAM decode bounds via [cacheWidth] and [cacheHeight]
+/// (or [quality]) to ensure minimal memory consumption without needing multiple
+/// quality tiers on disk.
 class AlbumArtImage extends StatelessWidget {
-  final String? thumbnailHash;
+  final AudioPlayable? playable;
+  final String? artworkUri;
   final ThumbnailQuality quality;
   final double? width;
   final double? height;
@@ -15,15 +27,12 @@ class AlbumArtImage extends StatelessWidget {
   final BorderRadius? borderRadius;
   final Widget? fallback;
 
-  static final Map<String, String> _resolvedPaths = <String, String>{};
-
-  static void clearExistenceCache() {
-    _resolvedPaths.clear();
-  }
+  static void clearExistenceCache() {}
 
   const AlbumArtImage({
     super.key,
-    this.thumbnailHash,
+    this.playable,
+    this.artworkUri,
     this.quality = ThumbnailQuality.low,
     this.width,
     this.height,
@@ -34,23 +43,25 @@ class AlbumArtImage extends StatelessWidget {
     this.fallback,
   });
 
-  /// UI utility: returns the resolved thumbnail file path for [coverHash] if non-empty.
-  static Future<String?> getThumbnail(
-    String? coverHash, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  }) async {
-    if (coverHash == null ||
-        coverHash.trim().isEmpty ||
-        MetadataUtils.thumbnailsDirectory == null) {
-      return null;
-    }
-    final cleanHash = coverHash.trim();
-    return MetadataUtils.getThumbnailFilePath(cleanHash, quality: quality);
-  }
-
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    final uri = (artworkUri?.trim().isNotEmpty == true)
+        ? artworkUri!.trim()
+        : playable?.artworkUri?.trim();
+
+    final isRemote = uri != null &&
+        (uri.startsWith('http://') || uri.startsWith('https://'));
+    final isStreamItem = (playable is RadioStation) ||
+        (playable?.isStream ?? false) ||
+        isRemote;
+
+    final double iconSize = (width != null && height != null)
+        ? (width! < height! ? width! * 0.5 : height! * 0.5)
+        : (width != null
+            ? width! * 0.5
+            : (quality == ThumbnailQuality.high ? 64.0 : 24.0));
 
     final defaultFallback = Container(
       width: width,
@@ -58,26 +69,13 @@ class AlbumArtImage extends StatelessWidget {
       color: colorScheme.surfaceContainerHighest,
       child: Center(
         child: Icon(
-          Icons.album_rounded,
-          size: (width != null && height != null)
-              ? (width! < height! ? width! * 0.5 : height! * 0.5)
-              : (width != null ? width! * 0.5 : 24),
+          isStreamItem ? Icons.radio_rounded : Icons.album_rounded,
+          size: iconSize,
           color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
         ),
       ),
     );
     final effectiveFallback = fallback ?? defaultFallback;
-
-    // If thumbnailHash is null, empty or MetadataUtils is not initialized, synchronously return fallback!
-    final hash = thumbnailHash?.trim();
-    if (hash == null ||
-        hash.isEmpty ||
-        MetadataUtils.thumbnailsDirectory == null) {
-      if (borderRadius != null) {
-        return ClipRRect(borderRadius: borderRadius!, child: effectiveFallback);
-      }
-      return effectiveFallback;
-    }
 
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
     final int defaultBound = switch (quality) {
@@ -85,31 +83,50 @@ class AlbumArtImage extends StatelessWidget {
       ThumbnailQuality.medium => AppDefaults.mediumQualityResolution,
       ThumbnailQuality.low => AppDefaults.lowQualityResolution,
     };
-    final int targetCacheWidth =
-        cacheWidth ??
-        (width != null
-            ? (width! * dpr).round().clamp(
-                AppDefaults.lowQualityResolution,
-                AppDefaults.highQualityResolution,
-              )
-            : defaultBound);
-    final int targetCacheHeight =
-        cacheHeight ??
-        (height != null
-            ? (height! * dpr).round().clamp(
-                AppDefaults.lowQualityResolution,
-                AppDefaults.highQualityResolution,
-              )
-            : defaultBound);
+
+    // Calculate RAM decode bounds strictly along a single dimension.
+    // Specifying both cacheWidth and cacheHeight triggers ResizeImagePolicy.exact
+    // in Flutter's engine, which forcibly stretches any non-square image into an
+    // exact square raster prior to BoxFit.cover, permanently deforming it.
+    final int? targetCacheWidth;
+    final int? targetCacheHeight;
+
+    if (cacheWidth != null && cacheHeight == null) {
+      targetCacheWidth = cacheWidth;
+      targetCacheHeight = null;
+    } else if (cacheHeight != null && cacheWidth == null) {
+      targetCacheWidth = null;
+      targetCacheHeight = cacheHeight;
+    } else if (cacheWidth != null && cacheHeight != null) {
+      targetCacheWidth = math.max(cacheWidth!, cacheHeight!);
+      targetCacheHeight = null;
+    } else {
+      final double? targetExtent = (width != null && height != null)
+          ? math.max(width!, height!)
+          : (width ?? height);
+
+      final int extentBound = targetExtent != null
+          ? (targetExtent * math.max(dpr, 1.5)).round()
+          : defaultBound;
+
+      final int computed = math.max(extentBound, defaultBound).clamp(
+            AppDefaults.lowQualityResolution,
+            AppDefaults.highQualityResolution,
+          );
+
+      targetCacheWidth = computed;
+      targetCacheHeight = null;
+    }
 
     Widget buildImage(File file) {
       return Image.file(
         file,
         width: width,
         height: height,
-        cacheWidth: targetCacheWidth > 0 ? targetCacheWidth : null,
-        cacheHeight: targetCacheHeight > 0 ? targetCacheHeight : null,
+        cacheWidth: targetCacheWidth,
+        cacheHeight: targetCacheHeight,
         fit: fit,
+        filterQuality: FilterQuality.medium,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (wasSynchronouslyLoaded || frame != null) {
@@ -121,11 +138,39 @@ class AlbumArtImage extends StatelessWidget {
       );
     }
 
-    final filePath = MetadataUtils.getThumbnailFilePath(hash, quality: quality);
-    final image = buildImage(File(filePath));
-    if (borderRadius != null) {
-      return ClipRRect(borderRadius: borderRadius!, child: image);
+    final Widget content;
+
+    if (isRemote) {
+      content = CachedNetworkImage(
+        imageUrl: uri,
+        width: width,
+        height: height,
+        memCacheWidth: targetCacheWidth,
+        memCacheHeight: targetCacheHeight,
+        maxWidthDiskCache: targetCacheWidth != null
+            ? math.max(targetCacheWidth, AppDefaults.mediumQualityResolution)
+            : null,
+        fit: fit,
+        filterQuality: FilterQuality.medium,
+        placeholder: (context, url) => effectiveFallback,
+        errorWidget: (context, url, error) => effectiveFallback,
+      );
+    } else if (uri != null && uri.isNotEmpty) {
+      final cleanPath = uri.startsWith('file://')
+          ? uri.replaceFirst('file://', '')
+          : uri;
+      File file = File(cleanPath);
+      if (!file.existsSync() && MetadataUtils.thumbnailsDirectory != null) {
+        file = File(p.join(MetadataUtils.thumbnailsDirectory!.path, p.basename(cleanPath)));
+      }
+      content = file.existsSync() ? buildImage(file) : effectiveFallback;
+    } else {
+      content = effectiveFallback;
     }
-    return image;
+
+    if (borderRadius != null) {
+      return ClipRRect(borderRadius: borderRadius!, child: content);
+    }
+    return content;
   }
 }

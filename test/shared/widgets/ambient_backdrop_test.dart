@@ -48,7 +48,22 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: AmbientBackdrop(
-            thumbnailHash: 'test_hash_123',
+            artworkUri: 'test_hash_123',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(AmbientBackdrop), findsOneWidget);
+    expect(find.byType(ImageFiltered), findsOneWidget);
+  });
+
+  testWidgets('AmbientBackdrop with imageUrl renders blur filter', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: AmbientBackdrop(
+            artworkUri: 'https://radio.org/logo.png',
           ),
         ),
       ),
@@ -62,7 +77,7 @@ void main() {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
-          body: AmbientBackdrop(thumbnailHash: null),
+          body: AmbientBackdrop(artworkUri: null),
         ),
       ),
     );
@@ -71,7 +86,7 @@ void main() {
     expect(find.byType(ImageFiltered), findsNothing);
   });
 
-  testWidgets('AlbumDetailScreen renders AmbientBackdrop with thumbnailHash', (tester) async {
+  testWidgets('AlbumDetailScreen renders AmbientBackdrop with artworkUri', (tester) async {
     final track = Track(
       id: 1,
       filePath: '/music/album_track.mp3',
@@ -86,7 +101,7 @@ void main() {
       name: 'Greatest Hits',
       artist: const Artist(id: 1, name: 'The Band'),
       tracks: [track],
-      thumbnailHash: 'album_hash_123',
+      artworkUri: 'album_hash_123',
     );
 
     final playback = PlaybackController(settingsRepository: settingsRepo);
@@ -107,12 +122,12 @@ void main() {
     final backdropFinder = find.byType(AmbientBackdrop);
     expect(backdropFinder, findsOneWidget);
     final backdrop = tester.widget<AmbientBackdrop>(backdropFinder);
-    expect(backdrop.thumbnailHash, equals('album_hash_123'));
+    expect(backdrop.artworkUri, equals('album_hash_123'));
 
     playback.dispose();
   });
 
-  testWidgets('ArtistDetailScreen renders AmbientBackdrop with thumbnailHash', (tester) async {
+  testWidgets('ArtistDetailScreen renders AmbientBackdrop with artworkUri', (tester) async {
     final track = Track(
       id: 2,
       filePath: '/music/artist_track.mp3',
@@ -125,7 +140,7 @@ void main() {
       id: 5,
       name: 'Legendary Artist',
       tracks: [track],
-      thumbnailHash: 'artist_hash_456',
+      artworkUri: 'artist_hash_456',
     );
 
     final snapshot = CatalogSnapshot(
@@ -140,7 +155,7 @@ void main() {
         ),
       ],
       albums: const [],
-      artists: [const RawArtistDto(id: 5, name: 'Legendary Artist', thumbnailHash: 'artist_hash_456')],
+      artists: [const RawArtistDto(id: 5, name: 'Legendary Artist', artworkUri: 'artist_hash_456')],
       genres: const [],
       playlists: const [],
       playlistEntries: const [],
@@ -168,7 +183,7 @@ void main() {
     final backdropFinder = find.byType(AmbientBackdrop);
     expect(backdropFinder, findsOneWidget);
     final backdrop = tester.widget<AmbientBackdrop>(backdropFinder);
-    expect(backdrop.thumbnailHash, equals('artist_hash_456'));
+    expect(backdrop.artworkUri, equals('artist_hash_456'));
 
     library.dispose();
     playback.dispose();

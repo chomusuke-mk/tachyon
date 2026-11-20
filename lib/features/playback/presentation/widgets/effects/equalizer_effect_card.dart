@@ -68,14 +68,10 @@ class EqualizerEffectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsController>();
+    final settings = context.read<SettingsController>();
     final strings = context.watch<LocaleController>().localeStrings;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final gains = settings.equalizerGains;
-    final equalizer = Equalizer.fromList(
-      gains.length == 10 ? gains : List.filled(10, 0.0),
-    );
 
     return Card(
       elevation: 0,
@@ -88,9 +84,17 @@ class EqualizerEffectCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: ListenableBuilder(
+          listenable: settings.equalizerListenable,
+          builder: (context, _) {
+            final gains = settings.equalizerGains;
+            final equalizer = Equalizer.fromList(
+              gains.length == 10 ? gains : List.filled(10, 0.0),
+            );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             // Card Header with Icon and Title
             Row(
               children: [
@@ -360,19 +364,21 @@ class EqualizerEffectCard extends StatelessWidget {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(9),
-                        child: CustomPaint(
-                          size: Size(width, graphHeight),
-                          painter: EqCurvePainter(
-                            equalizer: equalizer,
-                            activeColor: colorScheme.primary,
-                            backgroundColor: colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.35),
-                            gridLineColor: colorScheme.outlineVariant
-                                .withValues(alpha: 0.3),
-                            zeroLineColor: colorScheme.outlineVariant
-                                .withValues(alpha: 0.5),
-                            labelColor: colorScheme.onSurfaceVariant
-                                .withValues(alpha: 0.75),
+                        child: RepaintBoundary(
+                          child: CustomPaint(
+                            size: Size(width, graphHeight),
+                            painter: EqCurvePainter(
+                              equalizer: equalizer,
+                              activeColor: colorScheme.primary,
+                              backgroundColor: colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.35),
+                              gridLineColor: colorScheme.outlineVariant
+                                  .withValues(alpha: 0.3),
+                              zeroLineColor: colorScheme.outlineVariant
+                                  .withValues(alpha: 0.5),
+                              labelColor: colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.75),
+                            ),
                           ),
                         ),
                       ),
@@ -432,9 +438,11 @@ class EqualizerEffectCard extends StatelessWidget {
                   );
                 },
               ),
-            ],
-          ),
+              ],
+            );
+          },
         ),
-      );
+      ),
+    );
   }
 }

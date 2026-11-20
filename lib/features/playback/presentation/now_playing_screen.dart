@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
@@ -163,10 +164,32 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         if (playlists != null) {
           await playlists.toggleLike(currentPlayable.id!);
         }
-      } else if (currentPlayable is RadioStation && currentPlayable.id != null) {
+      } else if (currentPlayable is RadioStation) {
         final store = context.read<LibraryStore?>();
         if (store != null) {
-          await store.toggleRadioStationFavoriteInStore(currentPlayable.id!);
+          final existing = store.radioStations.cast<RadioStation?>().firstWhere(
+            (st) =>
+                st != null &&
+                ((currentPlayable.id != null && st.id == currentPlayable.id) ||
+                    st.streamUrl == currentPlayable.streamUrl ||
+                    (st.stationUuid != null &&
+                        currentPlayable.stationUuid != null &&
+                        st.stationUuid == currentPlayable.stationUuid)),
+            orElse: () => null,
+          );
+
+          if (existing == null || existing.id == null) {
+            // Not in library -> Save to library AND like it
+            final saved = await store.saveRadioStationInStore(
+              currentPlayable.copyWith(isFavorite: true),
+            );
+            if (saved != null && saved.id != null && !saved.isFavorite) {
+              await store.toggleRadioStationFavoriteInStore(saved.id!);
+            }
+          } else {
+            // Already in library -> toggle like status
+            await store.toggleRadioStationFavoriteInStore(existing.id!);
+          }
         }
       }
     } catch (_) {}
@@ -273,199 +296,215 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
   @override
   Widget build(BuildContext context) {
-    final playback = context.watch<PlaybackController>();
+    final playback = context.read<PlaybackController>();
     final strings = context.watch<LocaleController>().localeStrings;
-    final currentPlayable = playback.currentPlayable;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    if (currentPlayable == null) {
-      final emptyScaffold = Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
-            tooltip: strings.commonMinimize,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        body: Center(
-          child: Text(strings.npQueueEmpty, style: theme.textTheme.titleMedium),
-        ),
-      );
+    return ListenableBuilder(
+      listenable: playback.trackListenable,
+      builder: (context, _) {
+        final currentPlayable = playback.currentPlayable;
 
-      return _wrapWithDragTransform(
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
+        if (currentPlayable == null) {
+          final emptyScaffold = Scaffold(
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
+                tooltip: strings.commonMinimize,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            body: Center(
+              child: Text(
+                strings.npQueueEmpty,
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+          );
+
+          return _wrapWithDragTransform(
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onVerticalDragStart: _onVerticalDragStart,
+              onVerticalDragUpdate: _onVerticalDragUpdate,
+              onVerticalDragEnd: _onVerticalDragEnd,
+              onVerticalDragCancel: _onVerticalDragCancel,
+              child: emptyScaffold,
+            ),
+          );
+        }
+
+        final double currentWidth = MediaQuery.sizeOf(context).width;
+        final currentTrack = currentPlayable is Track ? currentPlayable : null;
+        final isLiveStream = playback.isLiveStream;
+        final canShowLyrics =
+            !isLiveStream && currentTrack != null && _showLyrics;
+
+        final Widget appTopBar = GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onVerticalDragStart: _onVerticalDragStart,
           onVerticalDragUpdate: _onVerticalDragUpdate,
           onVerticalDragEnd: _onVerticalDragEnd,
           onVerticalDragCancel: _onVerticalDragCancel,
-          child: emptyScaffold,
-        ),
-      );
-    }
-
-    final double currentWidth = MediaQuery.sizeOf(context).width;
-    final currentTrack = currentPlayable is Track ? currentPlayable : null;
-    final isLiveStream = playback.isLiveStream;
-    final canShowLyrics = !isLiveStream && currentTrack != null && _showLyrics;
-
-    final Widget appTopBar = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: _onVerticalDragStart,
-      onVerticalDragUpdate: _onVerticalDragUpdate,
-      onVerticalDragEnd: _onVerticalDragEnd,
-      onVerticalDragCancel: _onVerticalDragCancel,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32),
-              tooltip: strings.commonMinimize,
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.speaker_group_rounded),
-              tooltip: strings.npAudioDevices,
-              color: colorScheme.onSurface,
-              onPressed: () => _showAudioDevicesDialog(context),
-            ),
-            if (!isLiveStream && currentTrack != null)
-              IconButton(
-                icon: Icon(
-                  Icons.lyrics_rounded,
-                  color: _showLyrics ? colorScheme.primary : colorScheme.onSurface,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32),
+                  tooltip: strings.commonMinimize,
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-                tooltip: strings.npLyrics,
-                onPressed: _toggleLyrics,
-              ),
-            IconButton(
-              icon: Icon(
-                Icons.queue_music_rounded,
-                color: _showQueue ? colorScheme.primary : colorScheme.onSurface,
-              ),
-              tooltip: strings.npQueue,
-              onPressed: _toggleQueue,
-            ),
-            IconButton(
-              icon: const Icon(Icons.equalizer_rounded),
-              tooltip: strings.npAudioControls,
-              color: colorScheme.onSurface,
-              onPressed: () => _openAudioControls(context),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    final Widget mainBody = currentWidth >= 588 && _showQueue
-        ? Row(
-            key: const ValueKey('queue_and_player'),
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragStart: _onVerticalDragStart,
-                  onVerticalDragUpdate: _onVerticalDragUpdate,
-                  onVerticalDragEnd: _onVerticalDragEnd,
-                  onVerticalDragCancel: _onVerticalDragCancel,
-                  child: _buildPlayer(
-                    currentPlayable,
-                    context,
-                    preferVertical: true,
-                    hideQueue: true,
-                    hideLyrics: true,
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.speaker_group_rounded),
+                  tooltip: strings.npAudioDevices,
+                  color: colorScheme.onSurface,
+                  onPressed: () => _showAudioDevicesDialog(context),
+                ),
+                if (!isLiveStream && currentTrack != null)
+                  IconButton(
+                    icon: Icon(
+                      Icons.lyrics_rounded,
+                      color: _showLyrics
+                          ? colorScheme.primary
+                          : colorScheme.onSurface,
+                    ),
+                    tooltip: strings.npLyrics,
+                    onPressed: _toggleLyrics,
                   ),
-                ),
-              ),
-              Expanded(child: QueueView()),
-            ],
-          )
-        : currentWidth >= 588 &&
-              canShowLyrics &&
-              !SystemMediaService.isMinimized &&
-              _isAppActive
-        ? Row(
-            key: const ValueKey('lyrics_and_player'),
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragStart: _onVerticalDragStart,
-                  onVerticalDragUpdate: _onVerticalDragUpdate,
-                  onVerticalDragEnd: _onVerticalDragEnd,
-                  onVerticalDragCancel: _onVerticalDragCancel,
-                  child: _buildPlayer(
-                    currentPlayable,
-                    context,
-                    preferVertical: true,
-                    hideQueue: false,
-                    hideLyrics: true,
+                IconButton(
+                  icon: Icon(
+                    Icons.queue_music_rounded,
+                    color: _showQueue
+                        ? colorScheme.primary
+                        : colorScheme.onSurface,
                   ),
+                  tooltip: strings.npQueue,
+                  onPressed: _toggleQueue,
                 ),
-              ),
-              Expanded(
-                child: LyricsView(
-                  key: const ValueKey('lyrics_view'),
-                  filePath: currentTrack.filePath,
-                  trackId: currentTrack.id,
-                  track: currentTrack,
-                  onSeek: playback.seek,
+                IconButton(
+                  icon: const Icon(Icons.equalizer_rounded),
+                  tooltip: strings.npAudioControls,
+                  color: colorScheme.onSurface,
+                  onPressed: () => _openAudioControls(context),
                 ),
-              ),
-            ],
-          )
-        : _buildPlayer(
-            currentPlayable,
-            context,
-            key: ValueKey(
-              _showQueue
-                  ? 'narrow_queue'
-                  : canShowLyrics
-                  ? 'narrow_lyrics'
-                  : 'player_only',
+              ],
             ),
-          );
-
-    final Widget responsiveContent = SafeArea(
-      child: Column(
-        children: [
-          // Top App Bar
-          appTopBar,
-          Expanded(child: mainBody),
-        ],
-      ),
-    );
-
-    final Widget interactiveContent = (!_showQueue && !canShowLyrics)
-        ? GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onVerticalDragStart: _onVerticalDragStart,
-            onVerticalDragUpdate: _onVerticalDragUpdate,
-            onVerticalDragEnd: _onVerticalDragEnd,
-            onVerticalDragCancel: _onVerticalDragCancel,
-            child: responsiveContent,
-          )
-        : responsiveContent;
-
-    final Widget scaffold = Scaffold(
-      backgroundColor: colorScheme.surface,
-      body: Stack(
-        children: [
-          // 1. Ambient Blurred Backdrop
-          Positioned.fill(
-            child: AmbientBackdrop(thumbnailHash: currentPlayable.thumbnailHash),
           ),
+        );
 
-          // 2. Main Responsive Content Layer
-          interactiveContent,
-        ],
-      ),
+        final Widget mainBody = currentWidth >= 588 && _showQueue
+            ? Row(
+                key: const ValueKey('queue_and_player'),
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onVerticalDragStart: _onVerticalDragStart,
+                      onVerticalDragUpdate: _onVerticalDragUpdate,
+                      onVerticalDragEnd: _onVerticalDragEnd,
+                      onVerticalDragCancel: _onVerticalDragCancel,
+                      child: _buildPlayer(
+                        currentPlayable,
+                        context,
+                        preferVertical: true,
+                        hideQueue: true,
+                        hideLyrics: true,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: QueueView()),
+                ],
+              )
+            : currentWidth >= 588 &&
+                  canShowLyrics &&
+                  !SystemMediaService.isMinimized &&
+                  _isAppActive
+            ? Row(
+                key: const ValueKey('lyrics_and_player'),
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onVerticalDragStart: _onVerticalDragStart,
+                      onVerticalDragUpdate: _onVerticalDragUpdate,
+                      onVerticalDragEnd: _onVerticalDragEnd,
+                      onVerticalDragCancel: _onVerticalDragCancel,
+                      child: _buildPlayer(
+                        currentPlayable,
+                        context,
+                        preferVertical: true,
+                        hideQueue: false,
+                        hideLyrics: true,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: LyricsView(
+                      key: const ValueKey('lyrics_view'),
+                      filePath: currentTrack.filePath,
+                      trackId: currentTrack.id,
+                      track: currentTrack,
+                      onSeek: playback.seek,
+                    ),
+                  ),
+                ],
+              )
+            : _buildPlayer(
+                currentPlayable,
+                context,
+                key: ValueKey(
+                  _showQueue
+                      ? 'narrow_queue'
+                      : canShowLyrics
+                      ? 'narrow_lyrics'
+                      : 'player_only',
+                ),
+              );
+
+        final Widget responsiveContent = SafeArea(
+          child: Column(
+            children: [
+              // Top App Bar
+              appTopBar,
+              Expanded(child: mainBody),
+            ],
+          ),
+        );
+
+        final Widget interactiveContent = (!_showQueue && !canShowLyrics)
+            ? GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onVerticalDragStart: _onVerticalDragStart,
+                onVerticalDragUpdate: _onVerticalDragUpdate,
+                onVerticalDragEnd: _onVerticalDragEnd,
+                onVerticalDragCancel: _onVerticalDragCancel,
+                child: responsiveContent,
+              )
+            : responsiveContent;
+
+        final Widget scaffold = Scaffold(
+          backgroundColor: colorScheme.surface,
+          body: Stack(
+            children: [
+              // 1. Ambient Blurred Backdrop
+              Positioned.fill(
+                child: AmbientBackdrop(
+                  artworkUri: currentPlayable.artworkUri,
+                ),
+              ),
+
+              // 2. Main Responsive Content Layer
+              interactiveContent,
+            ],
+          ),
+        );
+
+        return _wrapWithDragTransform(scaffold);
+      },
     );
-
-    return _wrapWithDragTransform(scaffold);
   }
 
   Object? _cachedQueueRef;
@@ -504,7 +543,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     bool hideQueue = false,
     Key? key,
   }) {
-    final playback = context.watch<PlaybackController>();
+    final playback = context.read<PlaybackController>();
     final strings = context.watch<LocaleController>().localeStrings;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -512,23 +551,44 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final currentRadio = currentPlayable is RadioStation ? currentPlayable : null;
 
     final bool isItemLiked;
+    final bool isRadioInLibrary;
     if (currentTrack != null) {
       final trackId = currentTrack.id;
       isItemLiked = context.select<PlaylistsController?, bool>(
         (p) => trackId != null && (p?.isTrackLiked(trackId) ?? false),
       );
+      isRadioInLibrary = false;
     } else if (currentRadio != null) {
-      final stationId = currentRadio.id;
       isItemLiked = context.select<LibraryStore?, bool>(
+        (s) {
+          final match = s?.radioStations.cast<RadioStation?>().firstWhere(
+            (st) =>
+                st != null &&
+                ((currentRadio.id != null && st.id == currentRadio.id) ||
+                    st.streamUrl == currentRadio.streamUrl ||
+                    (st.stationUuid != null &&
+                        currentRadio.stationUuid != null &&
+                        st.stationUuid == currentRadio.stationUuid)),
+            orElse: () => null,
+          );
+          return match?.isFavorite ?? currentRadio.isFavorite;
+        },
+      );
+      isRadioInLibrary = context.select<LibraryStore?, bool>(
         (s) =>
-            s?.radioStations
-                .where((st) => st.id == stationId)
-                .firstOrNull
-                ?.isFavorite ??
-            currentRadio.isFavorite,
+            s?.radioStations.any(
+              (st) =>
+                  (currentRadio.id != null && st.id == currentRadio.id) ||
+                  st.streamUrl == currentRadio.streamUrl ||
+                  (st.stationUuid != null &&
+                      currentRadio.stationUuid != null &&
+                      st.stationUuid == currentRadio.stationUuid),
+            ) ??
+            false,
       );
     } else {
       isItemLiked = false;
+      isRadioInLibrary = false;
     }
 
     final Widget playerControls = Padding(
@@ -549,8 +609,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               ),
               IconButton(
                 tooltip: isItemLiked
-                    ? strings.npUnlike
-                    : strings.npLike,
+                    ? (currentRadio != null ? strings.rdUnlike : strings.npUnlike)
+                    : (currentRadio != null ? strings.rdLike : strings.npLike),
                 onPressed: _toggleLike,
                 icon: AnimatedSwitcher(
                   // 1. Duración rápida y con energía
@@ -586,68 +646,111 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 ),
               ),
 
-              IconButton(
-                onPressed: currentTrack != null
-                    ? () => TrackActionHelper.showAddToPlaylistDialog(
-                          context,
-                          currentTrack,
-                        )
-                    : null,
-                icon: const Icon(Icons.add_rounded, size: 28),
-                tooltip: strings.npAddToPlaylist,
-              ),
+              if (currentRadio != null)
+                IconButton(
+                  onPressed: isRadioInLibrary
+                      ? null
+                      : () async {
+                          final store = context.read<LibraryStore?>();
+                          if (store != null) {
+                            await store.saveRadioStationInStore(currentRadio);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(strings.rdSavedToLibrary),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  icon: Icon(
+                    isRadioInLibrary
+                        ? Icons.bookmark_added_rounded
+                        : Icons.add_rounded,
+                    size: 28,
+                    color: isRadioInLibrary ? colorScheme.primary : null,
+                  ),
+                  tooltip: isRadioInLibrary
+                      ? strings.rdAlreadyInLibrary
+                      : strings.rdSaveToLibrary,
+                )
+              else
+                IconButton(
+                  onPressed: currentTrack != null
+                      ? () => TrackActionHelper.showAddToPlaylistDialog(
+                            context,
+                            currentTrack,
+                          )
+                      : null,
+                  icon: const Icon(Icons.add_rounded, size: 28),
+                  tooltip: strings.npAddToPlaylist,
+                ),
             ],
           ),
           RepaintBoundary(
-            child: WaveformSlider(
-              positionListenable: playback.positionListenable,
-              position: playback.position,
-              duration: playback.duration,
-              isBuffering: playback.isBuffering,
-              isLiveStream: playback.isLiveStream,
-              onSeek: playback.seek,
-              waveform: currentTrack?.waveform,
-              currentIndex: playback.currentIndex + 1,
-              totalCount: playback.queue.length,
-              playlistPosition: () {
-                _ensurePlaylistDurationsCached(playback);
-                return _cachedPrefixDuration + playback.position;
-              },
-              playlistDuration: () {
-                _ensurePlaylistDurationsCached(playback);
-                return _cachedTotalPlaylistDuration;
+            child: ListenableBuilder(
+              listenable: playback.queueListenable,
+              builder: (context, _) {
+                return WaveformSlider(
+                  positionListenable: playback.positionListenable,
+                  positionSecondsListenable: playback.positionSecondsListenable,
+                  bufferListenable: playback.bufferListenable,
+                  position: playback.position,
+                  duration: playback.duration,
+                  isBuffering: playback.isBuffering,
+                  isLiveStream: playback.isLiveStream,
+                  onSeek: playback.seek,
+                  waveform: currentTrack?.waveform,
+                  currentIndex: playback.currentIndex + 1,
+                  totalCount: playback.queue.length,
+                  playlistPosition: () {
+                    _ensurePlaylistDurationsCached(playback);
+                    return _cachedPrefixDuration + playback.position;
+                  },
+                  playlistDuration: () {
+                    _ensurePlaylistDurationsCached(playback);
+                    return _cachedTotalPlaylistDuration;
+                  },
+                );
               },
             ),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              IconButton(
-                icon: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    const Icon(Icons.shuffle_rounded, size: 24),
-                    if (playback.isShuffled)
-                      Positioned(
-                        left: 3,
-                        child: Container(
-                          width: 3,
-                          height: 3,
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            shape: BoxShape.circle,
+              ListenableBuilder(
+                listenable: playback.controlsListenable,
+                builder: (context, _) {
+                  final shuffled = playback.isShuffled;
+                  return IconButton(
+                    icon: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        const Icon(Icons.shuffle_rounded, size: 24),
+                        if (shuffled)
+                          Positioned(
+                            left: 3,
+                            child: Container(
+                              width: 3,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                  ],
-                ),
-                color: playback.isShuffled
-                    ? colorScheme.primary
-                    : colorScheme.onSurfaceVariant,
-                tooltip: playback.isShuffled
-                    ? strings.npShuffleOn
-                    : strings.npShuffleOff,
-                onPressed: playback.toggleShuffle,
+                      ],
+                    ),
+                    color: shuffled
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                    tooltip: shuffled
+                        ? strings.npShuffleOn
+                        : strings.npShuffleOff,
+                    onPressed: playback.toggleShuffle,
+                  );
+                },
               ),
               IconButton(
                 icon: const Icon(Icons.skip_previous_rounded, size: 36),
@@ -662,20 +765,26 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                   ),
                   child: AspectRatio(
                     aspectRatio: 1.0,
-                    child: IconButton.filled(
-                      constraints: const BoxConstraints(),
-                      padding: EdgeInsets.zero,
-                      style: IconButton.styleFrom(
-                        minimumSize: const Size(500, 500),
-                        backgroundColor: colorScheme.primary,
-                        foregroundColor: colorScheme.onPrimary,
-                      ),
-                      icon: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 150),
-                          transitionBuilder:
-                              (Widget child, Animation<double> animation) {
+                    child: ListenableBuilder(
+                      listenable: playback.transportListenable,
+                      builder: (context, _) {
+                        final playing = playback.isPlaying;
+                        return IconButton.filled(
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                          style: IconButton.styleFrom(
+                            minimumSize: const Size(500, 500),
+                            backgroundColor: colorScheme.primary,
+                            foregroundColor: colorScheme.onPrimary,
+                          ),
+                          icon: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 150),
+                              transitionBuilder: (
+                                Widget child,
+                                Animation<double> animation,
+                              ) {
                                 return ScaleTransition(
                                   scale: animation,
                                   child: RotationTransition(
@@ -687,64 +796,71 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                                   ),
                                 );
                               },
-                          child: Icon(
-                            playback.isPlaying
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                            key: ValueKey<bool>(playback.isPlaying),
-                            size: 40,
+                              child: Icon(
+                                playing
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                key: ValueKey<bool>(playing),
+                                size: 40,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      tooltip: playback.isPlaying
-                          ? strings.npPause
-                          : strings.npPlay,
-                      onPressed: () {
-                        playback.playOrPause();
+                          tooltip: playing ? strings.npPause : strings.npPlay,
+                          onPressed: playback.playOrPause,
+                        );
                       },
                     ),
                   ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.skip_next_rounded, size: 36),
-                tooltip: strings.npNext,
-                onPressed: playback.hasNext ? playback.next : null,
+              ListenableBuilder(
+                listenable: playback.transportListenable,
+                builder: (context, _) {
+                  return IconButton(
+                    icon: const Icon(Icons.skip_next_rounded, size: 36),
+                    tooltip: strings.npNext,
+                    onPressed: playback.hasNext ? playback.next : null,
+                  );
+                },
               ),
-              IconButton(
-                icon: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Icon(
-                      playback.loopMode != LoopMode.off
-                          ? (playback.loopMode == LoopMode.one
-                                ? Icons.repeat_one_rounded
-                                : Icons.repeat_rounded)
-                          : Icons.repeat_rounded,
-                      size: 24,
-                    ),
-                    if (playback.loopMode == LoopMode.all)
-                      Positioned(
-                        child: Text(
-                          'A',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.primary,
-                          ),
+              ListenableBuilder(
+                listenable: playback.controlsListenable,
+                builder: (context, _) {
+                  final loop = playback.loopMode;
+                  return IconButton(
+                    icon: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          loop == LoopMode.one
+                              ? Icons.repeat_one_rounded
+                              : Icons.repeat_rounded,
+                          size: 24,
                         ),
-                      ),
-                  ],
-                ),
-                color: playback.loopMode != LoopMode.off
-                    ? colorScheme.primary
-                    : colorScheme.onSurfaceVariant,
-                tooltip: playback.loopMode == LoopMode.one
-                    ? strings.npRepeatOne
-                    : (playback.loopMode == LoopMode.all
-                          ? strings.npRepeatAll
-                          : strings.npRepeatOff),
-                onPressed: playback.toggleLoopMode,
+                        if (loop == LoopMode.all)
+                          Positioned(
+                            child: Text(
+                              'A',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    color: loop != LoopMode.off
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                    tooltip: loop == LoopMode.one
+                        ? strings.npRepeatOne
+                        : (loop == LoopMode.all
+                              ? strings.npRepeatAll
+                              : strings.npRepeatOff),
+                    onPressed: playback.toggleLoopMode,
+                  );
+                },
               ),
             ],
           ),
@@ -767,13 +883,35 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 2),
-          _ClickableArtistNames(
-            artists: currentTrack?.artists ?? const [],
-            fallbackName: currentPlayable.artistNames.join(', '),
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: colorScheme.onSurfaceVariant),
-            colorScheme: colorScheme,
-          ),
+          if (currentPlayable.isStream)
+            ValueListenableBuilder<ma.AudioMetadata?>(
+              valueListenable: playback.liveMetadataListenable,
+              builder: (context, liveMeta, _) {
+                final icyTitle = liveMeta?.icy?.streamTitle?.trim();
+                final metaTitle = liveMeta?.title?.trim();
+                final liveLabel =
+                    (icyTitle != null && icyTitle.isNotEmpty)
+                        ? icyTitle
+                        : (metaTitle != null && metaTitle.isNotEmpty
+                            ? metaTitle
+                            : currentPlayable.artistNames.join(', '));
+                return Text(
+                  liveLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyLarge
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
+                );
+              },
+            )
+          else
+            _ClickableArtistNames(
+              artists: currentTrack?.artists ?? const [],
+              fallbackName: currentPlayable.artistNames.join(', '),
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
+              colorScheme: colorScheme,
+            ),
         ],
       ),
     );
@@ -1046,7 +1184,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             Flexible(
               child: SingleChildScrollView(
                 child: ListenableBuilder(
-                  listenable: playback,
+                  listenable: playback.devicesListenable,
                   builder: (context, _) {
                     final devices = playback.audioDevices;
                     final currentDeviceId = settings.audioOutputDeviceId;
@@ -1068,7 +1206,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: devices.map((device) {
-                        final isSelected = currentDeviceId == device.id;
+                        final isSelected = (currentDeviceId != null &&
+                                currentDeviceId.isNotEmpty)
+                            ? currentDeviceId == device.id
+                            : (playback.currentDevice != null
+                                ? playback.currentDevice!.id == device.id
+                                : device.isAuto);
 
                         final String title = device.displayName;
                         final devName = device.name.toLowerCase();
@@ -1228,12 +1371,10 @@ class _PopupVolumeControlState extends State<_PopupVolumeControl>
                         ),
                       ],
                     ),
-                    // Usar ListenableBuilder permite que el interior se actualice en vivo
-                    // con el estado del PlaybackController
-                    child: ListenableBuilder(
-                      listenable: widget.playback,
-                      builder: (context, _) {
-                        final volume = widget.playback.volume;
+                    // Scoped strictly to volumeListenable
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: widget.playback.volumeListenable,
+                      builder: (context, volume, _) {
                         return Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -1304,10 +1445,9 @@ class _PopupVolumeControlState extends State<_PopupVolumeControl>
     return RepaintBoundary(
       child: CompositedTransformTarget(
         link: _layerLink,
-        child: ListenableBuilder(
-          listenable: widget.playback,
-          builder: (context, _) {
-            final vol = widget.playback.volume;
+        child: ValueListenableBuilder<double>(
+          valueListenable: widget.playback.volumeListenable,
+          builder: (context, vol, _) {
             return IconButton(
               icon: Icon(
                 vol == 0.0

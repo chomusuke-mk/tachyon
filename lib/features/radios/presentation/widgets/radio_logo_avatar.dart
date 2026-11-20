@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:tachyon/core/constants/app_defaults.dart';
 
 /// Reusable widget that renders a station's remote favicon/logo with animated
 /// playback overlay and graceful fallback to theme-colored vector icons.
@@ -38,6 +41,12 @@ class RadioLogoAvatar extends StatelessWidget {
         faviconUrl!.trim().isNotEmpty &&
         Uri.tryParse(faviconUrl!)?.hasScheme == true;
 
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+    final int cacheDimension = math.max(
+      (size * math.max(dpr, 1.5)).round(),
+      AppDefaults.lowQualityResolution,
+    );
+
     final Widget content;
     if (hasFavicon) {
       content = Stack(
@@ -47,6 +56,9 @@ class RadioLogoAvatar extends StatelessWidget {
             imageUrl: faviconUrl!,
             width: size,
             height: size,
+            memCacheWidth: cacheDimension,
+            maxWidthDiskCache: cacheDimension * 2,
+            filterQuality: FilterQuality.medium,
             fit: BoxFit.cover,
             placeholder: (context, url) => fallbackIcon(),
             errorWidget: (context, url, error) => fallbackIcon(),

@@ -79,7 +79,6 @@ class _AppBackgroundState extends State<AppBackground> {
                   file,
                   fit: BoxFit.cover,
                   cacheWidth: 640,
-                  cacheHeight: 360,
                   errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
               ),
@@ -89,7 +88,6 @@ class _AppBackgroundState extends State<AppBackground> {
               file,
               fit: BoxFit.cover,
               cacheWidth: 1280,
-              cacheHeight: 720,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           Container(

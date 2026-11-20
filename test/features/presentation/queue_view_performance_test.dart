@@ -28,7 +28,13 @@ class _FileSystemLocaleRepository extends LocaleRepository {
 
 class MockPlaybackController extends ChangeNotifier implements PlaybackController {
   @override
-  List<EngineItem<AudioPlayable>> queue = List.generate(
+  Listenable get queueListenable => this;
+
+  @override
+  Listenable get transportListenable => this;
+
+  @override
+  List<AudioSource<AudioPlayable>> queue = List.generate(
     1500,
     (i) => Track(
       id: i,
@@ -38,7 +44,7 @@ class MockPlaybackController extends ChangeNotifier implements PlaybackControlle
       durationMs: 210000,
       fileSize: 1000,
       modifiedAt: 1000,
-    ).toEngineItem(position: i),
+    ).toAudioSource(),
   );
 
   @override

@@ -52,7 +52,7 @@ class _AlbumCardState extends State<AlbumCard> {
       fit: StackFit.expand,
       children: [
         AlbumArtImage(
-          thumbnailHash: widget.album.thumbnailHash,
+          artworkUri: widget.album.artworkUri,
           quality: ThumbnailQuality.medium,
           fit: BoxFit.cover,
         ),
@@ -214,7 +214,7 @@ class _AlbumListTileState extends State<AlbumListTile> {
                 fit: StackFit.expand,
                 children: [
                   AlbumArtImage(
-                    thumbnailHash: widget.album.thumbnailHash,
+                    artworkUri: widget.album.artworkUri,
                     quality: ThumbnailQuality.low,
                     fit: BoxFit.cover,
                   ),

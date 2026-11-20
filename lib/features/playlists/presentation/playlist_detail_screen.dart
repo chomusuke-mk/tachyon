@@ -37,7 +37,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   Widget _buildHeaderCover(
     BuildContext context,
     Playlist playlist,
-    String? coverHash,
+    String? artworkUri,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -59,7 +59,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       ),
     );
 
-    if (coverHash == null || coverHash.isEmpty) {
+    if (artworkUri == null || artworkUri.isEmpty) {
       return fallbackWidget;
     }
 
@@ -71,7 +71,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
             width: 140,
             height: 140,
             child: AlbumArtImage(
-              thumbnailHash: coverHash,
+              artworkUri: artworkUri,
               quality: ThumbnailQuality.high,
               fit: BoxFit.cover,
               fallback: fallbackWidget,
@@ -189,7 +189,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(child: AmbientBackdrop(thumbnailHash: currentPlaylist.coverHash)),
+          Positioned.fill(child: AmbientBackdrop(artworkUri: currentPlaylist.artworkUri)),
           CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
@@ -202,7 +202,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                   padding: const EdgeInsets.all(20.0),
                   child: Column(
                     children: [
-                      _buildHeaderCover(context, currentPlaylist, currentPlaylist.coverHash),
+                      _buildHeaderCover(context, currentPlaylist, currentPlaylist.artworkUri),
                       const SizedBox(height: 16),
                       Text(
                         currentPlaylist.name,

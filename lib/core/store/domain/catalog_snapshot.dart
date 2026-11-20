@@ -18,7 +18,7 @@ class RawTrackDto {
   final double? replayGainTrackPeak;
   final String? waveformData;
   final int? albumId;
-  final String? thumbnailHash;
+  final String? artworkUri;
 
   const RawTrackDto({
     required this.id,
@@ -38,7 +38,7 @@ class RawTrackDto {
     this.replayGainTrackPeak,
     this.waveformData,
     this.albumId,
-    this.thumbnailHash,
+    this.artworkUri,
   });
 }
 
@@ -47,26 +47,26 @@ class RawAlbumDto {
   final String name;
   final int? year;
   final int? artistId;
-  final String? thumbnailHash;
+  final String? artworkUri;
 
   const RawAlbumDto({
     required this.id,
     required this.name,
     this.year,
     this.artistId,
-    this.thumbnailHash,
+    this.artworkUri,
   });
 }
 
 class RawArtistDto {
   final int id;
   final String name;
-  final String? thumbnailHash;
+  final String? artworkUri;
 
   const RawArtistDto({
     required this.id,
     required this.name,
-    this.thumbnailHash,
+    this.artworkUri,
   });
 }
 

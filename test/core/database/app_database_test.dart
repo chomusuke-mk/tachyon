@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/playback/domain/audio_playable.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
@@ -318,7 +319,7 @@ void main() {
       expect(snapshot.playlists.any((p) => p.id == playlistId), isFalse);
     });
 
-    test('LibraryStore.getAllThumbnailHashes retrieves unique non-empty thumbnail hashes across tracks, albums, artists', () async {
+    test('LibraryStore.getAllArtworkUris retrieves unique non-empty artwork URIs across tracks, albums, artists', () async {
       final track = ExtractedTrackData(
         filePath: '/music/t1.mp3',
         title: 'T1',
@@ -327,15 +328,18 @@ void main() {
         durationMs: 1000,
         fileSize: 1000,
         modifiedAt: 1,
-        thumbnailHash: 'track_hash_1',
-        artistThumbnailHash: 'artist_hash_1',
+        artworkUri: 'track_hash_1',
+        artistArtworkUri: 'artist_hash_1',
       );
       await database.upsertTracks([track]);
 
       final store = LibraryStore(database);
       await store.reloadFromDatabase();
-      final hashes = store.getAllThumbnailHashes();
-      expect(hashes, containsAll({'track_hash_1', 'artist_hash_1'}));
+      final uris = store.getAllArtworkUris();
+      expect(
+        uris.map((u) => p.basename(u)),
+        containsAll({'track_hash_1', 'artist_hash_1'}),
+      );
     });
 
     test('LibraryStore.getStoredTracks and deleteTracksAndPurgeOrphans work correctly', () async {
@@ -390,7 +394,7 @@ void main() {
       expect(station.duration, equals(Duration.zero));
       expect(station.isStream, isTrue);
 
-      final engineItem = station.toEngineItem();
+        final engineItem = station.toAudioSource();
       expect(engineItem.data, equals(station));
       expect(engineItem.track, equals(station));
 

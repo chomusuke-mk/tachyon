@@ -1,4 +1,5 @@
 // ignore_for_file: prefer_initializing_formals
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,11 +11,33 @@ import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 import 'package:tachyon/shared/utils/folder_utils.dart';
 
+class _SettingsDomainNotifier extends ChangeNotifier {
+  void notify() => notifyListeners();
+}
+
 class SettingsController extends ChangeNotifier {
   final SettingsRepository _repository;
   final PlaybackController? _playbackController;
 
   late AppSettings _settings;
+  bool _isDisposed = false;
+  bool _inScopedNotify = false;
+
+  // Scoped domain listenables
+  final _SettingsDomainNotifier _themeNotifier = _SettingsDomainNotifier();
+  final _SettingsDomainNotifier _libraryNotifier = _SettingsDomainNotifier();
+  final _SettingsDomainNotifier _crossfadeNotifier = _SettingsDomainNotifier();
+  final _SettingsDomainNotifier _enhancementsNotifier =
+      _SettingsDomainNotifier();
+  final _SettingsDomainNotifier _spatialNotifier = _SettingsDomainNotifier();
+  final _SettingsDomainNotifier _reverbNotifier = _SettingsDomainNotifier();
+  final _SettingsDomainNotifier _equalizerNotifier = _SettingsDomainNotifier();
+  final _SettingsDomainNotifier _lyricsNotifier = _SettingsDomainNotifier();
+  final _SettingsDomainNotifier _localeNotifier = _SettingsDomainNotifier();
+
+  // Future-based latest-wins persistence coalescing (no timers)
+  final Map<String, Future<void>> _persistInFlight = {};
+  final Map<String, Future<void> Function()> _persistPending = {};
 
   SettingsController({
     required SettingsRepository repository,
@@ -25,8 +48,18 @@ class SettingsController extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // Getters
+  // Scoped Listenables & Getters
   // ---------------------------------------------------------------------------
+  Listenable get themeListenable => _themeNotifier;
+  Listenable get libraryListenable => _libraryNotifier;
+  Listenable get crossfadeListenable => _crossfadeNotifier;
+  Listenable get enhancementsListenable => _enhancementsNotifier;
+  Listenable get spatialListenable => _spatialNotifier;
+  Listenable get reverbListenable => _reverbNotifier;
+  Listenable get equalizerListenable => _equalizerNotifier;
+  Listenable get lyricsListenable => _lyricsNotifier;
+  Listenable get localeListenable => _localeNotifier;
+
   AppSettings get settings => _settings;
   SettingsRepository get repository => _repository;
 
@@ -40,11 +73,12 @@ class SettingsController extends ChangeNotifier {
   LoopMode get loopMode => _settings.loopMode;
   bool get shuffle => _settings.shuffle;
   bool get skipSilence => _settings.skipSilence;
+  SilenceSkipMode get silenceSkipMode => _settings.silenceSkipMode;
   bool get volumeNormalization => _settings.volumeNormalization;
   double get preampDb => _settings.preampDb;
   double get balance => _settings.balance;
   bool get mono => _settings.mono;
-  CrossfeedMode get crossfeedMode => _settings.crossfeedMode;
+  Crossfeed get crossfeed => _settings.crossfeed;
   double get spatializerWidth => _settings.spatializerWidth;
   bool get limiterEnabled => _settings.limiterEnabled;
   double get volumeBoost => _settings.volumeBoost;
@@ -56,8 +90,10 @@ class SettingsController extends ChangeNotifier {
   double get backgroundBlurSigma => _settings.backgroundBlurSigma;
   double get backgroundDimOpacity => _settings.backgroundDimOpacity;
   String get appLanguage => _settings.appLanguage;
-  String get lyricsTranslationTargetLang => _settings.lyricsTranslationTargetLang;
-  String get lyricsTranslationSourceLang => _settings.lyricsTranslationSourceLang;
+  String get lyricsTranslationTargetLang =>
+      _settings.lyricsTranslationTargetLang;
+  String get lyricsTranslationSourceLang =>
+      _settings.lyricsTranslationSourceLang;
   String? get audioOutputDeviceId => _settings.audioOutputDeviceId;
   bool get pauseOnDeviceChange => _settings.pauseOnDeviceChange;
   bool get equalizerEnabled => _settings.equalizerEnabled;
@@ -71,6 +107,53 @@ class SettingsController extends ChangeNotifier {
   double get reverbWet => _settings.reverbWet;
   double get reverbDry => _settings.reverbDry;
   Reverb get reverbConfig => _settings.reverbConfig;
+
+  void _emitScoped(List<_SettingsDomainNotifier> domains) {
+    if (_isDisposed) return;
+    for (final d in domains) {
+      d.notify();
+    }
+    _inScopedNotify = true;
+    try {
+      super.notifyListeners();
+    } finally {
+      _inScopedNotify = false;
+    }
+  }
+
+  Future<void> _coalescePersist(String key, Future<void> Function() task) {
+    final existing = _persistInFlight[key];
+    if (existing != null) {
+      _persistPending[key] = task;
+      return existing;
+    }
+    Future<void> drain() async {
+      var current = task;
+      while (true) {
+        try {
+          await current();
+        } catch (e) {
+          debugPrint('[SettingsController] Persist ($key) error: $e');
+        }
+        final next = _persistPending.remove(key);
+        if (next == null || _isDisposed) break;
+        current = next;
+      }
+    }
+
+    late final Future<void> tracked;
+    var syncCompleted = false;
+    tracked = drain().whenComplete(() {
+      syncCompleted = true;
+      if (identical(_persistInFlight[key], tracked)) {
+        _persistInFlight.remove(key);
+      }
+    });
+    if (!syncCompleted) {
+      _persistInFlight[key] = tracked;
+    }
+    return tracked;
+  }
 
   // ---------------------------------------------------------------------------
   // Initialization & Service Sync
@@ -90,12 +173,12 @@ class SettingsController extends ChangeNotifier {
       await pb.setVolume(_settings.volume);
       await pb.setRate(_settings.playbackRate);
       await pb.setPitch(_settings.playbackPitch);
-      await pb.setSkipSilence(_settings.skipSilence);
-      await pb.setVolumeNormalization(_settings.volumeNormalization);
+      await pb.setSilenceConfig(_settings.silenceSkipConfig);
+      await pb.setReplayGainMode(_settings.replayGainMode);
       await pb.setPreamp(_settings.preampDb);
       await pb.setBalance(_settings.balance);
       await pb.setMono(_settings.mono);
-      await pb.setCrossfeed(_settings.crossfeedMode);
+      await pb.setCrossfeed(_settings.crossfeed);
       await pb.setSpatializer(_settings.spatializerWidth);
       await pb.setLimiter(_settings.limiterEnabled);
       await pb.setPauseOnDeviceChange(_settings.pauseOnDeviceChange);
@@ -105,11 +188,21 @@ class SettingsController extends ChangeNotifier {
       if (_settings.equalizerEnabled) {
         await pb.setEqualizer(Equalizer.fromList(_settings.equalizerGains));
       } else {
-        await pb.setEqualizer(Equalizer.flat);
+        await pb.setEqualizer(Equalizer.off);
       }
     }
 
-    notifyListeners();
+    _emitScoped([
+      _themeNotifier,
+      _libraryNotifier,
+      _crossfadeNotifier,
+      _enhancementsNotifier,
+      _spatialNotifier,
+      _reverbNotifier,
+      _equalizerNotifier,
+      _lyricsNotifier,
+      _localeNotifier,
+    ]);
   }
 
   // ---------------------------------------------------------------------------
@@ -128,7 +221,7 @@ class SettingsController extends ChangeNotifier {
       ..add(cleanPath);
     _settings = _settings.copyWith(musicDirectories: updated);
     await _repository.setMusicDirectories(updated);
-    notifyListeners();
+    _emitScoped([_libraryNotifier]);
     return true;
   }
 
@@ -137,7 +230,7 @@ class SettingsController extends ChangeNotifier {
       ..remove(directoryPath);
     _settings = _settings.copyWith(musicDirectories: updated);
     await _repository.setMusicDirectories(updated);
-    notifyListeners();
+    _emitScoped([_libraryNotifier]);
   }
 
   /// Adds the platform's default music directory when [musicDirectories]
@@ -157,35 +250,42 @@ class SettingsController extends ChangeNotifier {
       AppDefaults.crossfadeMinDuration,
       AppDefaults.crossfadeMaxDuration,
     );
-    _settings = _settings.copyWith(
-      crossfadeDuration: clamped,
-    );
-    await _repository.setCrossfadeDuration(clamped);
-    await _playbackController?.setCrossfadeConfig(
+    _settings = _settings.copyWith(crossfadeDuration: clamped);
+    _emitScoped([_crossfadeNotifier]);
+    final rpc = _playbackController?.setCrossfadeConfig(
       CrossfadeConfig(
         duration: Duration(seconds: clamped),
         manualDuration: Duration(seconds: _settings.crossfadeManualDuration),
         curve: _settings.crossfadeCurve,
       ),
     );
-    notifyListeners();
+    final persist = _coalescePersist(
+      'crossfadeDuration',
+      () => _repository.setCrossfadeDuration(clamped),
+    );
+    await Future.wait([?rpc, persist]);
   }
 
   Future<void> setCrossfadeManualDuration(int durationSeconds) async {
     _settings = _settings.copyWith(crossfadeManualDuration: durationSeconds);
-    await _repository.setCrossfadeManualDuration(durationSeconds);
-    await _playbackController?.setCrossfadeConfig(
+    _emitScoped([_crossfadeNotifier]);
+    final rpc = _playbackController?.setCrossfadeConfig(
       CrossfadeConfig(
         duration: Duration(seconds: _settings.crossfadeDuration),
         manualDuration: Duration(seconds: durationSeconds),
         curve: _settings.crossfadeCurve,
       ),
     );
-    notifyListeners();
+    final persist = _coalescePersist(
+      'crossfadeManualDuration',
+      () => _repository.setCrossfadeManualDuration(durationSeconds),
+    );
+    await Future.wait([?rpc, persist]);
   }
 
   Future<void> setCrossfadeCurve(CrossfadeCurve curve) async {
     _settings = _settings.copyWith(crossfadeCurve: curve);
+    _emitScoped([_crossfadeNotifier]);
     await _repository.setCrossfadeCurve(curve);
     await _playbackController?.setCrossfadeConfig(
       CrossfadeConfig(
@@ -194,20 +294,19 @@ class SettingsController extends ChangeNotifier {
         curve: curve,
       ),
     );
-    notifyListeners();
   }
 
   Future<void> setEqualizerEnabled(bool enabled) async {
     _settings = _settings.copyWith(equalizerEnabled: enabled);
+    _emitScoped([_equalizerNotifier]);
     await _repository.setEqualizerEnabled(enabled);
     if (enabled) {
       await _playbackController?.setEqualizer(
         Equalizer.fromList(_settings.equalizerGains),
       );
     } else {
-      await _playbackController?.setEqualizer(Equalizer.flat);
+      await _playbackController?.setEqualizer(Equalizer.off);
     }
-    notifyListeners();
   }
 
   Future<void> setEqualizerGains(List<double> gains) async {
@@ -215,10 +314,13 @@ class SettingsController extends ChangeNotifier {
       equalizerGains: gains,
       equalizerEnabled: true,
     );
-    await _repository.setEqualizerGains(gains);
-    await _repository.setEqualizerEnabled(true);
-    await _playbackController?.setEqualizer(Equalizer.fromList(gains));
-    notifyListeners();
+    _emitScoped([_equalizerNotifier]);
+    final rpc = _playbackController?.setEqualizer(Equalizer.fromList(gains));
+    final persist = _coalescePersist('equalizerGains', () async {
+      await _repository.setEqualizerGains(gains);
+      await _repository.setEqualizerEnabled(true);
+    });
+    await Future.wait([?rpc, persist]);
   }
 
   Future<void> setEqualizerPreset(String preset) async {
@@ -257,85 +359,123 @@ class SettingsController extends ChangeNotifier {
       newGains.add(0.0);
     }
     newGains[bandIndex] = gain;
-    _settings = _settings.copyWith(equalizerPreset: 'custom');
-    await _repository.setEqualizerPreset('custom');
-    await setEqualizerGains(newGains);
+    _settings = _settings.copyWith(
+      equalizerPreset: 'custom',
+      equalizerGains: newGains,
+      equalizerEnabled: true,
+    );
+    _emitScoped([_equalizerNotifier]);
+    final rpc = _playbackController?.setEqualizer(Equalizer.fromList(newGains));
+    final persist = _coalescePersist('equalizerBand', () async {
+      await _repository.setEqualizerPreset('custom');
+      await _repository.setEqualizerGains(newGains);
+      await _repository.setEqualizerEnabled(true);
+    });
+    await Future.wait([?rpc, persist]);
   }
 
   Future<void> setAudioOutputDeviceId(String? deviceId) async {
     _settings = _settings.copyWith(audioOutputDeviceId: deviceId);
     await _repository.setAudioOutputDeviceId(deviceId);
-    notifyListeners();
+    _emitScoped([_enhancementsNotifier]);
   }
 
   Future<void> setPauseOnDeviceChange(bool pause) async {
     _settings = _settings.copyWith(pauseOnDeviceChange: pause);
+    _emitScoped([_enhancementsNotifier]);
     await _repository.setPauseOnDeviceChange(pause);
     await _playbackController?.setPauseOnDeviceChange(pause);
-    notifyListeners();
   }
 
   Future<void> setSkipSilence(bool enabled) async {
     _settings = _settings.copyWith(skipSilence: enabled);
+    _emitScoped([_enhancementsNotifier]);
     await _repository.setSkipSilence(enabled);
-    await _playbackController?.setSkipSilence(enabled);
-    notifyListeners();
+    await _playbackController?.setSilenceConfig(_settings.silenceSkipConfig);
+  }
+
+  Future<void> setSilenceSkipMode(SilenceSkipMode mode) async {
+    final effectiveMode =
+        mode == SilenceSkipMode.disabled ? SilenceSkipMode.all : mode;
+    _settings = _settings.copyWith(
+      silenceSkipMode: effectiveMode,
+      skipSilence: true,
+    );
+    _emitScoped([_enhancementsNotifier]);
+    await _repository.setSilenceSkipMode(effectiveMode);
+    await _repository.setSkipSilence(true);
+    await _playbackController?.setSilenceConfig(_settings.silenceSkipConfig);
   }
 
   Future<void> setVolumeNormalization(bool enabled) async {
     _settings = _settings.copyWith(volumeNormalization: enabled);
+    _emitScoped([_enhancementsNotifier]);
     await _repository.setVolumeNormalization(enabled);
-    await _playbackController?.setVolumeNormalization(enabled);
-    notifyListeners();
+    await _playbackController?.setReplayGainMode(_settings.replayGainMode);
   }
 
   Future<void> setPreamp(double preampDb) async {
     final clamped = preampDb.clamp(-12.0, 12.0);
     _settings = _settings.copyWith(preampDb: clamped);
-    await _repository.setPreamp(clamped);
-    await _playbackController?.setPreamp(clamped);
-    notifyListeners();
+    _emitScoped([_equalizerNotifier]);
+    final rpc = _playbackController?.setPreamp(clamped);
+    final persist = _coalescePersist(
+      'preamp',
+      () => _repository.setPreamp(clamped),
+    );
+    await Future.wait([?rpc, persist]);
   }
 
   Future<void> setBalance(double balance) async {
     final clamped = balance.clamp(-1.0, 1.0);
     _settings = _settings.copyWith(balance: clamped);
-    await _repository.setBalance(clamped);
-    await _playbackController?.setBalance(clamped);
-    notifyListeners();
+    _emitScoped([_spatialNotifier]);
+    final rpc = _playbackController?.setBalance(clamped);
+    final persist = _coalescePersist(
+      'balance',
+      () => _repository.setBalance(clamped),
+    );
+    await Future.wait([?rpc, persist]);
   }
 
   Future<void> setMono(bool mono) async {
     _settings = _settings.copyWith(mono: mono);
+    _emitScoped([_enhancementsNotifier]);
     await _repository.setMono(mono);
     await _playbackController?.setMono(mono);
-    notifyListeners();
   }
 
-  Future<void> setCrossfeed(CrossfeedMode mode) async {
-    _settings = _settings.copyWith(crossfeedMode: mode);
-    await _repository.setCrossfeed(mode);
-    await _playbackController?.setCrossfeed(mode);
-    notifyListeners();
+  Future<void> setCrossfeed(Crossfeed crossfeed) async {
+    _settings = _settings.copyWith(crossfeed: crossfeed);
+    _emitScoped([_spatialNotifier]);
+    await _repository.setCrossfeed(crossfeed);
+    await _playbackController?.setCrossfeed(crossfeed);
   }
 
   Future<void> setSpatializer(double width) async {
     final clamped = width.clamp(0.0, 2.0);
     _settings = _settings.copyWith(spatializerWidth: clamped);
-    await _repository.setSpatializer(clamped);
-    await _playbackController?.setSpatializer(clamped);
-    notifyListeners();
+    _emitScoped([_spatialNotifier]);
+    final rpc = _playbackController?.setSpatializer(clamped);
+    final persist = _coalescePersist(
+      'spatializer',
+      () => _repository.setSpatializer(clamped),
+    );
+    await Future.wait([?rpc, persist]);
   }
 
   Future<void> setLimiter(bool limiter) async {
     _settings = _settings.copyWith(limiterEnabled: limiter);
+    _emitScoped([_enhancementsNotifier]);
     await _repository.setLimiter(limiter);
     await _playbackController?.setLimiter(limiter);
-    notifyListeners();
   }
 
   Future<void> setReverbEnabled(bool enabled) async {
-    if (enabled && (_settings.reverbPreset == 'off' || _settings.reverbPreset == 'Off' || _settings.reverbRoomSize == 0.0)) {
+    if (enabled &&
+        (_settings.reverbPreset == 'off' ||
+            _settings.reverbPreset == 'Off' ||
+            _settings.reverbRoomSize == 0.0)) {
       const preset = 'studio';
       const target = Reverb.studio;
       _settings = _settings.copyWith(
@@ -347,19 +487,22 @@ class SettingsController extends ChangeNotifier {
         reverbWet: target.wet,
         reverbDry: target.dry,
       );
-      await _repository.setReverbEnabled(true);
-      await _repository.setReverbPreset(preset);
-      await _repository.setReverbRoomSize(target.roomSize);
-      await _repository.setReverbDamping(target.damping);
-      await _repository.setReverbWidth(target.width);
-      await _repository.setReverbWet(target.wet);
-      await _repository.setReverbDry(target.dry);
+      _emitScoped([_reverbNotifier]);
+      await Future.wait([
+        _repository.setReverbEnabled(true),
+        _repository.setReverbPreset(preset),
+        _repository.setReverbRoomSize(target.roomSize),
+        _repository.setReverbDamping(target.damping),
+        _repository.setReverbWidth(target.width),
+        _repository.setReverbWet(target.wet),
+        _repository.setReverbDry(target.dry),
+      ]);
     } else {
       _settings = _settings.copyWith(reverbEnabled: enabled);
+      _emitScoped([_reverbNotifier]);
       await _repository.setReverbEnabled(enabled);
     }
     await _playbackController?.setReverb(_settings.reverbConfig);
-    notifyListeners();
   }
 
   Future<void> setReverbPreset(String preset) async {
@@ -401,89 +544,85 @@ class SettingsController extends ChangeNotifier {
         reverbWet: target.wet,
         reverbDry: target.dry,
       );
-      await _repository.setReverbEnabled(!isOff);
-      await _repository.setReverbPreset(preset);
-      await _repository.setReverbRoomSize(target.roomSize);
-      await _repository.setReverbDamping(target.damping);
-      await _repository.setReverbWidth(target.width);
-      await _repository.setReverbWet(target.wet);
-      await _repository.setReverbDry(target.dry);
+      _emitScoped([_reverbNotifier]);
+      await Future.wait([
+        _repository.setReverbEnabled(!isOff),
+        _repository.setReverbPreset(preset),
+        _repository.setReverbRoomSize(target.roomSize),
+        _repository.setReverbDamping(target.damping),
+        _repository.setReverbWidth(target.width),
+        _repository.setReverbWet(target.wet),
+        _repository.setReverbDry(target.dry),
+      ]);
     } else {
       _settings = _settings.copyWith(reverbPreset: preset);
+      _emitScoped([_reverbNotifier]);
       await _repository.setReverbPreset(preset);
     }
     await _playbackController?.setReverb(_settings.reverbConfig);
-    notifyListeners();
   }
 
-  Future<void> setReverbRoomSize(double val) async {
-    final clamped = val.clamp(0.0, 1.0);
-    _settings = _settings.copyWith(
-      reverbEnabled: true,
-      reverbRoomSize: clamped,
-      reverbPreset: 'custom',
+  Future<void> _updateReverbParam({
+    required String persistKey,
+    required AppSettings Function(AppSettings current) updateSettings,
+    required Future<void> Function() persistValue,
+  }) async {
+    _settings = updateSettings(
+      _settings.copyWith(reverbEnabled: true, reverbPreset: 'custom'),
     );
-    await _repository.setReverbEnabled(true);
-    await _repository.setReverbPreset('custom');
-    await _repository.setReverbRoomSize(clamped);
-    await _playbackController?.setReverb(_settings.reverbConfig);
-    notifyListeners();
+    _emitScoped([_reverbNotifier]);
+    final rpc = _playbackController?.setReverb(_settings.reverbConfig);
+    final persist = _coalescePersist(persistKey, () async {
+      await _repository.setReverbEnabled(true);
+      await _repository.setReverbPreset('custom');
+      await persistValue();
+    });
+    await Future.wait([?rpc, persist]);
   }
 
-  Future<void> setReverbDamping(double val) async {
+  Future<void> setReverbRoomSize(double val) {
     final clamped = val.clamp(0.0, 1.0);
-    _settings = _settings.copyWith(
-      reverbEnabled: true,
-      reverbDamping: clamped,
-      reverbPreset: 'custom',
+    return _updateReverbParam(
+      persistKey: 'reverbRoomSize',
+      updateSettings: (s) => s.copyWith(reverbRoomSize: clamped),
+      persistValue: () => _repository.setReverbRoomSize(clamped),
     );
-    await _repository.setReverbEnabled(true);
-    await _repository.setReverbPreset('custom');
-    await _repository.setReverbDamping(clamped);
-    await _playbackController?.setReverb(_settings.reverbConfig);
-    notifyListeners();
   }
 
-  Future<void> setReverbWidth(double val) async {
+  Future<void> setReverbDamping(double val) {
     final clamped = val.clamp(0.0, 1.0);
-    _settings = _settings.copyWith(
-      reverbEnabled: true,
-      reverbWidth: clamped,
-      reverbPreset: 'custom',
+    return _updateReverbParam(
+      persistKey: 'reverbDamping',
+      updateSettings: (s) => s.copyWith(reverbDamping: clamped),
+      persistValue: () => _repository.setReverbDamping(clamped),
     );
-    await _repository.setReverbEnabled(true);
-    await _repository.setReverbPreset('custom');
-    await _repository.setReverbWidth(clamped);
-    await _playbackController?.setReverb(_settings.reverbConfig);
-    notifyListeners();
   }
 
-  Future<void> setReverbWet(double val) async {
+  Future<void> setReverbWidth(double val) {
+    final clamped = val.clamp(0.0, 1.0);
+    return _updateReverbParam(
+      persistKey: 'reverbWidth',
+      updateSettings: (s) => s.copyWith(reverbWidth: clamped),
+      persistValue: () => _repository.setReverbWidth(clamped),
+    );
+  }
+
+  Future<void> setReverbWet(double val) {
     final clamped = val.clamp(0.0, 2.0);
-    _settings = _settings.copyWith(
-      reverbEnabled: true,
-      reverbWet: clamped,
-      reverbPreset: 'custom',
+    return _updateReverbParam(
+      persistKey: 'reverbWet',
+      updateSettings: (s) => s.copyWith(reverbWet: clamped),
+      persistValue: () => _repository.setReverbWet(clamped),
     );
-    await _repository.setReverbEnabled(true);
-    await _repository.setReverbPreset('custom');
-    await _repository.setReverbWet(clamped);
-    await _playbackController?.setReverb(_settings.reverbConfig);
-    notifyListeners();
   }
 
-  Future<void> setReverbDry(double val) async {
+  Future<void> setReverbDry(double val) {
     final clamped = val.clamp(0.0, 2.0);
-    _settings = _settings.copyWith(
-      reverbEnabled: true,
-      reverbDry: clamped,
-      reverbPreset: 'custom',
+    return _updateReverbParam(
+      persistKey: 'reverbDry',
+      updateSettings: (s) => s.copyWith(reverbDry: clamped),
+      persistValue: () => _repository.setReverbDry(clamped),
     );
-    await _repository.setReverbEnabled(true);
-    await _repository.setReverbPreset('custom');
-    await _repository.setReverbDry(clamped);
-    await _playbackController?.setReverb(_settings.reverbConfig);
-    notifyListeners();
   }
 
   Future<void> setVolumeBoost(double boost) async {
@@ -492,8 +631,8 @@ class SettingsController extends ChangeNotifier {
       AppDefaults.volumeBoostMax,
     );
     _settings = _settings.copyWith(volumeBoost: clamped);
+    _emitScoped([_enhancementsNotifier]);
     await _repository.setVolumeBoost(clamped);
-    notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
@@ -501,27 +640,27 @@ class SettingsController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   Future<void> setThemeMode(ThemeMode mode) async {
     _settings = _settings.copyWith(themeMode: mode);
+    _emitScoped([_themeNotifier]);
     await _repository.setThemeMode(mode);
-    notifyListeners();
   }
 
   Future<void> setAccentColor(int colorValue) async {
     _settings = _settings.copyWith(accentColorValue: colorValue);
+    _emitScoped([_themeNotifier]);
     await _repository.setAccentColor(colorValue);
-    notifyListeners();
   }
 
   Future<void> setIsOledMode(bool isOled) async {
     _settings = _settings.copyWith(isOledMode: isOled);
+    _emitScoped([_themeNotifier]);
     await _repository.setIsOledMode(isOled);
-    notifyListeners();
   }
 
   Future<bool> setCustomBackground(String? sourceImagePath) async {
     if (sourceImagePath == null) {
       _settings = _settings.copyWith(clearCustomBackground: true);
+      _emitScoped([_themeNotifier]);
       await _repository.setCustomBackgroundPath(null);
-      notifyListeners();
       return true;
     }
 
@@ -541,8 +680,8 @@ class SettingsController extends ChangeNotifier {
       final targetFile = await sourceFile.copy(targetPath);
 
       _settings = _settings.copyWith(customBackgroundPath: targetFile.path);
+      _emitScoped([_themeNotifier]);
       await _repository.setCustomBackgroundPath(targetFile.path);
-      notifyListeners();
       return true;
     } catch (_) {
       return false;
@@ -552,37 +691,75 @@ class SettingsController extends ChangeNotifier {
   Future<void> setBackgroundBlurSigma(double sigma) async {
     final clamped = sigma.clamp(0.0, 50.0);
     _settings = _settings.copyWith(backgroundBlurSigma: clamped);
-    await _repository.setBackgroundBlurSigma(clamped);
-    notifyListeners();
+    _emitScoped([_themeNotifier]);
+    await _coalescePersist(
+      'bgBlurSigma',
+      () => _repository.setBackgroundBlurSigma(clamped),
+    );
   }
 
   Future<void> setBackgroundDimOpacity(double opacity) async {
     final clamped = opacity.clamp(0.1, 0.95);
     _settings = _settings.copyWith(backgroundDimOpacity: clamped);
-    await _repository.setBackgroundDimOpacity(clamped);
-    notifyListeners();
+    _emitScoped([_themeNotifier]);
+    await _coalescePersist(
+      'bgDimOpacity',
+      () => _repository.setBackgroundDimOpacity(clamped),
+    );
   }
 
   Future<void> setAppLanguage(String languageCode) async {
     _settings = _settings.copyWith(appLanguage: languageCode);
+    _emitScoped([_localeNotifier]);
     await _repository.setAppLanguage(languageCode);
-    notifyListeners();
   }
 
   Future<void> setLyricsTranslationTargetLang(String languageCode) async {
     _settings = _settings.copyWith(lyricsTranslationTargetLang: languageCode);
+    _emitScoped([_lyricsNotifier]);
     await _repository.setLyricsTranslationTargetLang(languageCode);
-    notifyListeners();
   }
 
   Future<void> setLyricsTranslationSourceLang(String languageCode) async {
     _settings = _settings.copyWith(lyricsTranslationSourceLang: languageCode);
+    _emitScoped([_lyricsNotifier]);
     await _repository.setLyricsTranslationSourceLang(languageCode);
-    notifyListeners();
   }
 
   Future<void> resetToDefaults() async {
     await _repository.resetToDefaults();
     await init();
+  }
+
+  @override
+  void notifyListeners() {
+    if (_isDisposed) return;
+    if (!_inScopedNotify) {
+      _themeNotifier.notify();
+      _libraryNotifier.notify();
+      _crossfadeNotifier.notify();
+      _enhancementsNotifier.notify();
+      _spatialNotifier.notify();
+      _reverbNotifier.notify();
+      _equalizerNotifier.notify();
+      _lyricsNotifier.notify();
+      _localeNotifier.notify();
+    }
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _themeNotifier.dispose();
+    _libraryNotifier.dispose();
+    _crossfadeNotifier.dispose();
+    _enhancementsNotifier.dispose();
+    _spatialNotifier.dispose();
+    _reverbNotifier.dispose();
+    _equalizerNotifier.dispose();
+    _lyricsNotifier.dispose();
+    _localeNotifier.dispose();
+    super.dispose();
   }
 }

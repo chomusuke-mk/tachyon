@@ -64,8 +64,8 @@ class Playlist {
   List<Track> get tracks =>
       entries.map((e) => e.track).whereType<Track>().toList(growable: false);
 
-  /// Dynamically resolved from the most recently added entry with a valid cover hash.
-  String? get coverHash {
+  /// Dynamically resolved from the most recently added entry with a valid artwork URI.
+  String? get artworkUri {
     if (entries.isEmpty) return null;
     final sorted = List<PlaylistEntry>.from(entries)
       ..sort((a, b) {
@@ -76,9 +76,9 @@ class Playlist {
     for (final entry in sorted) {
       final track = entry.track;
       if (track != null) {
-        final hash = track.thumbnailHash ?? track.album?.thumbnailHash;
-        if (hash != null && hash.trim().isNotEmpty) {
-          return hash.trim();
+        final uri = track.artworkUri ?? track.album?.artworkUri;
+        if (uri != null && uri.trim().isNotEmpty) {
+          return uri.trim();
         }
       }
     }

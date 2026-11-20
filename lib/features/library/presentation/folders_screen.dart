@@ -26,9 +26,10 @@ class FoldersScreen extends StatelessWidget {
       (c) => c.currentTrack,
     );
     final playback = context.read<PlaybackController>();
-    final settings = context.watch<SettingsController>();
-
-    final musicDirs = settings.musicDirectories;
+    final musicDirs = context.select<SettingsController, List<String>>(
+      (s) => s.musicDirectories,
+    );
+    final settings = context.read<SettingsController>();
     final isAtRoot = library.isAtFolderRoot;
     final isDesktop = TachyonBreakpoints.isDesktop(context);
 

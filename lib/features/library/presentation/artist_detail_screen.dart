@@ -44,7 +44,7 @@ class ArtistDetailScreen extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(
-            child: AmbientBackdrop(thumbnailHash: currentArtist.thumbnailHash),
+            child: AmbientBackdrop(artworkUri: currentArtist.artworkUri),
           ),
           CustomScrollView(
             slivers: [
@@ -68,7 +68,7 @@ class ArtistDetailScreen extends StatelessWidget {
                             width: 128,
                             height: 128,
                             child: AlbumArtImage(
-                              thumbnailHash: currentArtist.thumbnailHash,
+                              artworkUri: currentArtist.artworkUri,
                               quality: ThumbnailQuality.medium,
                               width: 128,
                               height: 128,

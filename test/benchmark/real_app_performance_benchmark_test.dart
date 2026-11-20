@@ -49,7 +49,7 @@ class BenchmarkPlaybackController extends PlaybackController {
   PlaybackState _benchmarkState = const PlaybackState.initial();
   Track? _activeTrack;
   bool _activeIsPlaying = false;
-  List<EngineItem<AudioPlayable>> _activeQueue = [];
+  List<AudioSource<AudioPlayable>> _activeQueue = [];
   int _activeCurrentIndex = 0;
 
   @override
@@ -62,7 +62,7 @@ class BenchmarkPlaybackController extends PlaybackController {
   bool get isPlaying => _activeIsPlaying;
 
   @override
-  List<EngineItem<AudioPlayable>> get queue => _activeQueue;
+  List<AudioSource<AudioPlayable>> get queue => _activeQueue;
 
   @override
   int get currentIndex => _activeCurrentIndex;
@@ -83,7 +83,7 @@ class BenchmarkPlaybackController extends PlaybackController {
   }) async {
     final list = contextTracks ?? [track];
     _activeQueue = [
-      for (int i = 0; i < list.length; i++) list[i].toEngineItem(position: i),
+      for (int i = 0; i < list.length; i++) list[i].toAudioSource(),
     ];
     _activeCurrentIndex = list.indexOf(track);
     if (_activeCurrentIndex == -1) _activeCurrentIndex = 0;
@@ -142,7 +142,7 @@ class BenchmarkPlaybackController extends PlaybackController {
   Future<void> setPreamp(double preampDb) async {}
 
   @override
-  Future<void> setCrossfeed(CrossfeedMode mode) async {}
+  Future<void> setCrossfeed(Crossfeed crossfeed) async {}
 
   @override
   Future<void> setSpatializer(double width) async {}

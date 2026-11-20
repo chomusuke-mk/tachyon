@@ -29,7 +29,6 @@ dependencies:
   open_filex: ^5.0.0
   file_picker: ^13.3.0
   flutter_markdown_plus: ^1.0.12
-  haudiotagger: ^3.1.0
   sqlite3: ^3.8.0
   miniaudio_player:
     path: ../miniaudio_player

@@ -86,8 +86,8 @@ class LinuxMprisBridge {
     if (playable != null) {
       final artistNames = playable.artistNames.join(', ');
       final albumName = playable.albumTitle ?? '';
-      final hash = playable.thumbnailHash ?? '';
-      return '${playable.id ?? playable.filePath}|${playable.title}|$artistNames|$albumName|${playable.duration.inMilliseconds}|$hash';
+      final artworkUri = playable.artworkUri ?? '';
+      return '${playable.id ?? playable.filePath}|${playable.title}|$artistNames|$albumName|${playable.duration.inMilliseconds}|$artworkUri';
     }
     final item = handler.mediaItem.value;
     if (item == null) return '';
@@ -103,8 +103,8 @@ class LinuxMprisBridge {
           .where((n) => n.isNotEmpty)
           .toList(growable: false);
       final albumName = playable.albumTitle;
-      final artUri = TachyonAudioHandler.resolveLowQualityArtUri(
-        playable.thumbnailHash,
+      final artUri = TachyonAudioHandler.resolveArtworkUri(
+        playable.artworkUri,
       )?.toString();
 
       return DBusDict.stringVariant({

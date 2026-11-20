@@ -20,6 +20,16 @@ abstract class NowPlayingVisualizerRenderer {
     required Color waveColor,
     required bool isPlaying,
     Color? trackColor,
+    double rawPeak = 0.0,
+    double leftChannel = 0.0,
+    double rightChannel = 0.0,
+    Listenable? frameListenable,
+    List<double> Function()? bandsProvider,
+    double Function()? smoothedRmsProvider,
+    double Function()? rawPeakProvider,
+    double Function()? leftChannelProvider,
+    double Function()? rightChannelProvider,
+    bool Function()? isPlayingProvider,
   });
 
   /// Scale multiplier applied to the artwork container (e.g. bass pulse).
@@ -42,6 +52,16 @@ class OffVisualizerRenderer extends NowPlayingVisualizerRenderer {
     required Color waveColor,
     required bool isPlaying,
     Color? trackColor,
+    double rawPeak = 0.0,
+    double leftChannel = 0.0,
+    double rightChannel = 0.0,
+    Listenable? frameListenable,
+    List<double> Function()? bandsProvider,
+    double Function()? smoothedRmsProvider,
+    double Function()? rawPeakProvider,
+    double Function()? leftChannelProvider,
+    double Function()? rightChannelProvider,
+    bool Function()? isPlayingProvider,
   }) {
     return Container(
       width: size,
@@ -79,6 +99,16 @@ class WaveVisualizerRenderer extends NowPlayingVisualizerRenderer {
     required Color waveColor,
     required bool isPlaying,
     Color? trackColor,
+    double rawPeak = 0.0,
+    double leftChannel = 0.0,
+    double rightChannel = 0.0,
+    Listenable? frameListenable,
+    List<double> Function()? bandsProvider,
+    double Function()? smoothedRmsProvider,
+    double Function()? rawPeakProvider,
+    double Function()? leftChannelProvider,
+    double Function()? rightChannelProvider,
+    bool Function()? isPlayingProvider,
   }) {
     return SizedBox(
       width: size,
@@ -95,7 +125,9 @@ class WaveVisualizerRenderer extends NowPlayingVisualizerRenderer {
             child: CustomPaint(
               size: Size(size, visualizerHeight),
               painter: WaveVisualizerPainter(
+                repaint: frameListenable,
                 bands: displayBands,
+                bandsProvider: bandsProvider,
                 color: waveColor,
                 cornerRadius: cornerRadius,
               ),
@@ -140,17 +172,35 @@ class BarsVisualizerRenderer extends NowPlayingVisualizerRenderer {
     required Color waveColor,
     required bool isPlaying,
     Color? trackColor,
+    double rawPeak = 0.0,
+    double leftChannel = 0.0,
+    double rightChannel = 0.0,
+    Listenable? frameListenable,
+    List<double> Function()? bandsProvider,
+    double Function()? smoothedRmsProvider,
+    double Function()? rawPeakProvider,
+    double Function()? leftChannelProvider,
+    double Function()? rightChannelProvider,
+    bool Function()? isPlayingProvider,
   }) {
+    final accentColor = resolveReactiveCircleColor(
+      trackColor: trackColor,
+      theme: Theme.of(context),
+    );
+
     return SizedBox(
       width: size,
       height: size,
       child: CustomPaint(
         size: Size(size, size),
         painter: SpectrumBarsPainter(
+          repaint: frameListenable,
           magnitudes: displayBands,
+          magnitudesProvider: bandsProvider,
           isActive: isPlaying,
+          isActiveProvider: isPlayingProvider,
           cornerRadius: cornerRadius,
-          accentColor: trackColor ?? waveColor,
+          accentColor: accentColor,
         ),
       ),
     );
@@ -177,6 +227,16 @@ class ReactiveCircleVisualizerRenderer extends NowPlayingVisualizerRenderer {
     required Color waveColor,
     required bool isPlaying,
     Color? trackColor,
+    double rawPeak = 0.0,
+    double leftChannel = 0.0,
+    double rightChannel = 0.0,
+    Listenable? frameListenable,
+    List<double> Function()? bandsProvider,
+    double Function()? smoothedRmsProvider,
+    double Function()? rawPeakProvider,
+    double Function()? leftChannelProvider,
+    double Function()? rightChannelProvider,
+    bool Function()? isPlayingProvider,
   }) {
     final accentColor = resolveReactiveCircleColor(
       trackColor: trackColor,
@@ -192,8 +252,18 @@ class ReactiveCircleVisualizerRenderer extends NowPlayingVisualizerRenderer {
         displayBands: displayBands,
         smoothedBass: smoothedBass,
         smoothedRms: smoothedRms,
+        rawPeak: rawPeak,
+        leftChannel: leftChannel,
+        rightChannel: rightChannel,
         accentColor: accentColor,
         isPlaying: isPlaying,
+        frameListenable: frameListenable,
+        displayBandsProvider: bandsProvider,
+        smoothedRmsProvider: smoothedRmsProvider,
+        rawPeakProvider: rawPeakProvider,
+        leftChannelProvider: leftChannelProvider,
+        rightChannelProvider: rightChannelProvider,
+        isPlayingProvider: isPlayingProvider,
       ),
     );
   }

@@ -173,7 +173,7 @@ void main() {
         PlaybackState(
           currentIndex: 0,
           queue: [
-            track.toEngineItem(),
+            track.toAudioSource(),
           ],
           isPlaying: true,
           position: const Duration(seconds: 42),
@@ -256,7 +256,7 @@ void main() {
         PlaybackState(
           currentIndex: 0,
           queue: [
-            track.toEngineItem(),
+            track.toAudioSource(),
           ],
           isPlaying: true,
           position: const Duration(seconds: 15),

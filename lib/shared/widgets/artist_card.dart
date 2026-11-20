@@ -75,7 +75,7 @@ class _ArtistCardState extends State<ArtistCard> {
                       width: avatarSize,
                       height: avatarSize,
                       child: AlbumArtImage(
-                        thumbnailHash: widget.artist.thumbnailHash,
+                        artworkUri: widget.artist.artworkUri,
                         quality: ThumbnailQuality.medium,
                         fit: BoxFit.cover,
                         fallback: Icon(
@@ -215,7 +215,7 @@ class _ArtistListTileState extends State<ArtistListTile> {
                       width: 48,
                       height: 48,
                       child: AlbumArtImage(
-                        thumbnailHash: widget.artist.thumbnailHash,
+                        artworkUri: widget.artist.artworkUri,
                         quality: ThumbnailQuality.low,
                         fit: BoxFit.cover,
                         fallback: Icon(

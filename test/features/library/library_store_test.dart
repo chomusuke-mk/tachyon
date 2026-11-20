@@ -603,11 +603,11 @@ void main() {
       await db.close();
     });
 
-    test('Hydrates Track thumbnailHash with fallback to album.thumbnailHash', () {
+    test('Hydrates Track artworkUri with fallback to album.artworkUri', () {
       final snapshot = CatalogSnapshot(
         albums: const [
-          RawAlbumDto(id: 1, name: 'Album With Cover', thumbnailHash: 'album_hash'),
-          RawAlbumDto(id: 2, name: 'Album Without Cover', thumbnailHash: null),
+          RawAlbumDto(id: 1, name: 'Album With Cover', artworkUri: 'album_hash'),
+          RawAlbumDto(id: 2, name: 'Album Without Cover', artworkUri: null),
         ],
         tracks: const [
           RawTrackDto(
@@ -618,7 +618,7 @@ void main() {
             fileSize: 100,
             modifiedAt: 100,
             albumId: 1,
-            thumbnailHash: 'own_track_hash',
+            artworkUri: 'own_track_hash',
           ),
           RawTrackDto(
             id: 102,
@@ -628,7 +628,7 @@ void main() {
             fileSize: 100,
             modifiedAt: 100,
             albumId: 1,
-            thumbnailHash: null,
+            artworkUri: null,
           ),
           RawTrackDto(
             id: 103,
@@ -638,7 +638,7 @@ void main() {
             fileSize: 100,
             modifiedAt: 100,
             albumId: 1,
-            thumbnailHash: '',
+            artworkUri: '',
           ),
           RawTrackDto(
             id: 104,
@@ -648,7 +648,7 @@ void main() {
             fileSize: 100,
             modifiedAt: 100,
             albumId: 2,
-            thumbnailHash: null,
+            artworkUri: null,
           ),
         ],
         artists: const [],
@@ -660,13 +660,13 @@ void main() {
       );
 
       final store = LibraryStore.fromSnapshot(snapshot);
-      expect(store.getTrackById(101)?.thumbnailHash, equals('own_track_hash'));
-      expect(store.getTrackById(102)?.thumbnailHash, equals('album_hash'));
-      expect(store.getTrackById(103)?.thumbnailHash, equals('album_hash'));
-      expect(store.getTrackById(104)?.thumbnailHash, isNull);
+      expect(store.getTrackById(101)?.artworkUri, endsWith('own_track_hash'));
+      expect(store.getTrackById(102)?.artworkUri, endsWith('album_hash'));
+      expect(store.getTrackById(103)?.artworkUri, endsWith('album_hash'));
+      expect(store.getTrackById(104)?.artworkUri, isNull);
     });
 
-    test('Hydrates Genre coverHash from its tracks and updates upon track removal', () {
+    test('Hydrates Genre artworkUri from its tracks and updates upon track removal', () {
       final snapshot = CatalogSnapshot(
         albums: const [],
         artists: const [],
@@ -682,7 +682,7 @@ void main() {
             durationMs: 1000,
             fileSize: 100,
             modifiedAt: 100,
-            thumbnailHash: null,
+            artworkUri: null,
           ),
           RawTrackDto(
             id: 2,
@@ -691,7 +691,7 @@ void main() {
             durationMs: 1000,
             fileSize: 100,
             modifiedAt: 100,
-            thumbnailHash: 'rock_cover_hash',
+            artworkUri: 'rock_cover_hash',
           ),
         ],
         playlists: const [],
@@ -704,15 +704,15 @@ void main() {
       );
 
       final store = LibraryStore.fromSnapshot(snapshot);
-      expect(store.getGenreById(10)?.coverHash, equals('rock_cover_hash'));
-      expect(store.getGenreById(20)?.coverHash, isNull);
+      expect(store.getGenreById(10)?.artworkUri, endsWith('rock_cover_hash'));
+      expect(store.getGenreById(20)?.artworkUri, isNull);
 
       // Remove the track that had the cover
       store.removeTrack(2);
-      expect(store.getGenreById(10)?.coverHash, isNull);
+      expect(store.getGenreById(10)?.artworkUri, isNull);
     });
 
-    test('Hydrates Playlist coverHash and updates on setTrackLiked and mutations', () {
+    test('Hydrates Playlist artworkUri and updates on setTrackLiked and mutations', () {
       final snapshot = CatalogSnapshot(
         albums: const [],
         artists: const [],
@@ -725,7 +725,7 @@ void main() {
             durationMs: 1000,
             fileSize: 100,
             modifiedAt: 100,
-            thumbnailHash: 'hash_1',
+            artworkUri: 'hash_1',
           ),
           RawTrackDto(
             id: 2,
@@ -734,7 +734,7 @@ void main() {
             durationMs: 1000,
             fileSize: 100,
             modifiedAt: 100,
-            thumbnailHash: 'hash_2',
+            artworkUri: 'hash_2',
           ),
           RawTrackDto(
             id: 3,
@@ -743,7 +743,7 @@ void main() {
             durationMs: 1000,
             fileSize: 100,
             modifiedAt: 100,
-            thumbnailHash: null,
+            artworkUri: null,
           ),
         ],
         playlists: [
@@ -775,44 +775,44 @@ void main() {
 
       final store = LibraryStore.fromSnapshot(snapshot);
       final likedPl = store.likedSongsPlaylist!;
-      expect(likedPl.coverHash, equals('hash_1'));
+      expect(likedPl.artworkUri, endsWith('hash_1'));
 
       // Like track 2 (more recent timestamp)
       store.setTrackLiked(2, true);
-      expect(likedPl.coverHash, equals('hash_2'));
+      expect(likedPl.artworkUri, endsWith('hash_2'));
 
-      // Like track 3 (no cover) -> coverHash remains hash_2
+      // Like track 3 (no cover) -> artworkUri remains hash_2
       store.setTrackLiked(3, true);
-      expect(likedPl.coverHash, equals('hash_2'));
+      expect(likedPl.artworkUri, endsWith('hash_2'));
 
-      // Unlike track 2 -> coverHash falls back to hash_1
+      // Unlike track 2 -> artworkUri falls back to hash_1
       store.setTrackLiked(2, false);
-      expect(likedPl.coverHash, equals('hash_1'));
+      expect(likedPl.artworkUri, endsWith('hash_1'));
 
-      // Unlike track 1 -> coverHash becomes null
+      // Unlike track 1 -> artworkUri becomes null
       store.setTrackLiked(1, false);
-      expect(likedPl.coverHash, isNull);
+      expect(likedPl.artworkUri, isNull);
 
       // Custom playlist mutations
       final customPl = store.getPlaylistById(200)!;
-      expect(customPl.coverHash, isNull);
+      expect(customPl.artworkUri, isNull);
       store.addTrackToPlaylist(200, 2);
-      expect(customPl.coverHash, equals('hash_2'));
+      expect(customPl.artworkUri, endsWith('hash_2'));
       store.removeTrackFromPlaylist(200, 2);
-      expect(customPl.coverHash, isNull);
+      expect(customPl.artworkUri, isNull);
     });
 
-    test('Hydrates Artist thumbnailHash with fallback to album and track thumbnailHash', () {
+    test('Hydrates Artist artworkUri with fallback to album and track artworkUri', () {
       final snapshot = CatalogSnapshot(
         artists: const [
-          RawArtistDto(id: 1, name: 'Artist With Own Cover', thumbnailHash: 'own_artist_hash'),
-          RawArtistDto(id: 2, name: 'Artist With Album Fallback', thumbnailHash: null),
-          RawArtistDto(id: 3, name: 'Artist With Track Fallback', thumbnailHash: null),
-          RawArtistDto(id: 4, name: 'Artist Without Any Cover', thumbnailHash: null),
+          RawArtistDto(id: 1, name: 'Artist With Own Cover', artworkUri: 'own_artist_hash'),
+          RawArtistDto(id: 2, name: 'Artist With Album Fallback', artworkUri: null),
+          RawArtistDto(id: 3, name: 'Artist With Track Fallback', artworkUri: null),
+          RawArtistDto(id: 4, name: 'Artist Without Any Cover', artworkUri: null),
         ],
         albums: const [
-          RawAlbumDto(id: 10, name: 'Album 1', artistId: 2, thumbnailHash: 'album_10_hash'),
-          RawAlbumDto(id: 20, name: 'Album Without Cover', artistId: 3, thumbnailHash: null),
+          RawAlbumDto(id: 10, name: 'Album 1', artistId: 2, artworkUri: 'album_10_hash'),
+          RawAlbumDto(id: 20, name: 'Album Without Cover', artistId: 3, artworkUri: null),
         ],
         tracks: const [
           RawTrackDto(
@@ -823,7 +823,7 @@ void main() {
             fileSize: 100,
             modifiedAt: 100,
             albumId: 20,
-            thumbnailHash: 'track_100_hash',
+            artworkUri: 'track_100_hash',
           ),
           RawTrackDto(
             id: 200,
@@ -833,7 +833,7 @@ void main() {
             fileSize: 100,
             modifiedAt: 100,
             albumId: null,
-            thumbnailHash: null,
+            artworkUri: null,
           ),
         ],
         genres: const [],
@@ -847,10 +847,10 @@ void main() {
       );
 
       final store = LibraryStore.fromSnapshot(snapshot);
-      expect(store.getArtistById(1)?.thumbnailHash, equals('own_artist_hash'));
-      expect(store.getArtistById(2)?.thumbnailHash, equals('album_10_hash'));
-      expect(store.getArtistById(3)?.thumbnailHash, equals('track_100_hash'));
-      expect(store.getArtistById(4)?.thumbnailHash, isNull);
+      expect(store.getArtistById(1)?.artworkUri, endsWith('own_artist_hash'));
+      expect(store.getArtistById(2)?.artworkUri, endsWith('album_10_hash'));
+      expect(store.getArtistById(3)?.artworkUri, endsWith('track_100_hash'));
+      expect(store.getArtistById(4)?.artworkUri, isNull);
     });
 
     test('Ephemeral tracks (id < 0) register, resolve in O(1), and do not pollute catalog', () {

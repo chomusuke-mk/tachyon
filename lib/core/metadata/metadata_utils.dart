@@ -1,18 +1,14 @@
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:haudiotagger/haudiotagger.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:path/path.dart' as p;
-import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/shared/utils/crypto_utils.dart';
 import 'package:tachyon/shared/utils/parse_utils.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
 
-/// Quality levels for thumbnail images and cover art.
+/// Quality levels for thumbnail images and cover art (used for RAM decoding bounds).
 enum ThumbnailQuality { low, medium, high }
 
 const Map<PictureType, int> coverPriority = {
@@ -65,9 +61,9 @@ class ExtractedTrackData {
   final String? waveformData;
   final List<String> genreNames;
   final String? embeddedLyrics;
-  final String? thumbnailHash;
-  final String? albumThumbnailHash;
-  final String? artistThumbnailHash;
+  final String? artworkUri;
+  final String? albumArtworkUri;
+  final String? artistArtworkUri;
 
   const ExtractedTrackData({
     required this.filePath,
@@ -90,19 +86,15 @@ class ExtractedTrackData {
     this.waveformData,
     this.genreNames = const [],
     this.embeddedLyrics,
-    this.thumbnailHash,
-    this.albumThumbnailHash,
-    this.artistThumbnailHash,
+    this.artworkUri,
+    this.albumArtworkUri,
+    this.artistArtworkUri,
   });
 }
 
 abstract final class MetadataUtils {
   static Directory? tempDirectory;
   static Directory? thumbnailsDirectory;
-  static const String _kGpuBridgePortName = 'cover_utils_dart_ui_gpu_bridge';
-  static RawReceivePort? _gpuBridgePort;
-
-  static final Map<String, Future<void>> _inFlightHashes = {};
 
   static void init(String thumbnailsPath, String tempPath) {
     tempDirectory = Directory(tempPath);
@@ -113,29 +105,6 @@ abstract final class MetadataUtils {
     if (!tempDirectory!.existsSync()) {
       tempDirectory!.createSync(recursive: true);
     }
-    if (ui.RootIsolateToken.instance == null) return;
-    if (_gpuBridgePort != null) return;
-
-    _gpuBridgePort = RawReceivePort((dynamic message) async {
-      if (message is! List || message.length != 3) return;
-      final SendPort replyPort = message[0] as SendPort;
-      final TransferableTypedData transferableRaw =
-          message[1] as TransferableTypedData;
-      final String hash = message[2] as String;
-      try {
-        final rawBytes = transferableRaw.materialize().asUint8List();
-        await _deduplicatedWriteOnRootIsolate(rawBytes, hash);
-        replyPort.send(null);
-      } catch (e) {
-        replyPort.send('ERROR:$e');
-      }
-    });
-
-    ui.IsolateNameServer.removePortNameMapping(_kGpuBridgePortName);
-    ui.IsolateNameServer.registerPortWithName(
-      _gpuBridgePort!.sendPort,
-      _kGpuBridgePortName,
-    );
   }
 
   static void _ensureInitialized() {
@@ -158,39 +127,39 @@ abstract final class MetadataUtils {
     } catch (_) {}
   }
 
-  /// Returns the file path for the thumbnail image
-  static String getThumbnailFilePath(
-    String hash, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  }) {
+  /// Returns the canonical file path for an artwork file with given [hash] without extension.
+  static String getArtworkPath(String hash) {
     _ensureInitialized();
-    return p.join(thumbnailsDirectory!.path, '${hash}_${quality.name}.png');
+    final cleanHash = p.basename(hash);
+    return p.join(thumbnailsDirectory!.path, cleanHash);
   }
 
-  /// Extracts the hash from a thumbnail file path.
-  static String extractHashFromThumbnailPath(String thumbnailPath) {
-    final fileName = p.basename(thumbnailPath);
-    final parts = fileName.split('_');
-    if (parts.isEmpty) return '';
-    return parts.first;
+  /// Extracts the hash from an artwork file path.
+  static String extractHashFromArtworkPath(String artworkPath) {
+    return p.basename(artworkPath);
   }
 
-  static bool hasCachedThumbnail(
-    String hash, {
-    ThumbnailQuality quality = ThumbnailQuality.low,
-  }) {
+  /// Checks whether an artwork file exists in cache for [artworkUri].
+  static bool hasCachedArtwork(String artworkUri) {
     _ensureInitialized();
-    final f = File(getThumbnailFilePath(hash, quality: quality));
-    return f.existsSync() && f.lengthSync() > 0;
+    final f = File(artworkUri);
+    if (f.existsSync() && f.lengthSync() > 0) return true;
+    final fallback = File(getArtworkPath(p.basename(artworkUri)));
+    return fallback.existsSync() && fallback.lengthSync() > 0;
   }
 
-  @visibleForTesting
-  static Future<void> saveThumbnailBytes(
-    String hash,
-    Uint8List rawBytes,
-  ) async {
+  /// Persists raw image bytes once into disk deduplicated by SHA-256 hash without extension.
+  /// Flutter image codecs inspect binary magic numbers directly, avoiding extension dependencies.
+  /// Returns the content hash of the persisted cover art image.
+  static Future<String?> saveCoverBytes(Uint8List rawBytes) async {
     _ensureInitialized();
-    await _writeTripleQualityImages(rawBytes, hash);
+    if (rawBytes.isEmpty) return null;
+    final hash = CryptoUtils.computeBytesHash(rawBytes);
+    final targetFile = File(getArtworkPath(hash));
+    if (!targetFile.existsSync() || targetFile.lengthSync() == 0) {
+      await _safeAtomicWrite(targetFile, rawBytes);
+    }
+    return hash;
   }
 
   static Future<ExtractedTrackData?> extractTrackMetadata({
@@ -209,66 +178,57 @@ abstract final class MetadataUtils {
       modifiedAt = stat.modified.millisecondsSinceEpoch;
     } catch (_) {}
 
-    // Get Track Metadata
-    double? trackGain;
-    double? trackPeak;
-    String? waveformData;
-    Tag? tag;
-    try {
-      tag = await Haudiotagger.read(filePath);
-      trackGain = ParseUtils.parseDouble(tag?.replayGainTrackGain);
-      trackPeak = ParseUtils.parseDouble(tag?.replayGainTrackPeak);
-    } catch (e) {
-      debugPrint('[MetadataService] readMetadata error for $filePath: $e');
-    }
-
-    // Get Track Analysis
+    // Single-pass native Rust extraction (metadata, audio info, ReplayGain, waveform).
+    // Chromaprint is explicitly disabled.
     AudioAnalysisResult? analysis;
     try {
       if (useSync) {
         analysis = MiniaudioPlayer.analyzeAudioSync(
           filePath,
-          replayGain: trackGain == null,
+          metadata: true,
+          replayGain: true,
           waveform: true,
+          chromaprint: false,
           waveformPoints: 100,
         );
       } else {
         analysis = await MiniaudioPlayer.analyzeAudio(
           filePath,
-          replayGain: trackGain == null,
+          metadata: true,
+          replayGain: true,
           waveform: true,
+          chromaprint: false,
           waveformPoints: 100,
         );
       }
-      trackGain = trackGain ?? analysis.replayGain?.gainDb;
-      trackPeak = trackPeak ?? analysis.replayGain?.peak;
-      waveformData = WaveformCodec.encode(analysis.waveform?.points);
     } catch (e) {
       debugPrint('[MetadataService] analyzeAudio error for $filePath: $e');
     }
 
-    // Extract and cache cover art, album art, and artist images
-    String? coverHash;
-    String? albumThumbnailHash;
-    String? artistThumbnailHash;
-    final Map<String, Uint8List> hashToBytes = {};
-    if (tag != null && tag.pictures.isNotEmpty) {
-      final pictures = tag.pictures;
-      final Map<Picture, String> pictureHashes = {};
-      String? getOrComputeHash(Picture? pic) {
-        if (pic == null || pic.bytes.isEmpty) return null;
-        return pictureHashes.putIfAbsent(pic, () {
-          final h = CryptoUtils.computeBytesHash(pic.bytes);
-          hashToBytes[h] = pic.bytes;
-          return h;
-        });
-      }
+    final AudioMetadata? meta = analysis?.metadata;
+    final AudioInfo? info = analysis?.audioInfo;
 
-      Picture? pickBest(
+    final double? trackGain =
+        ParseUtils.parseDouble(meta?.replayGainTrackGain) ??
+        analysis?.replayGain?.gainDb;
+    final double? trackPeak =
+        ParseUtils.parseDouble(meta?.replayGainTrackPeak) ??
+        analysis?.replayGain?.peak;
+    final String? waveformData =
+        WaveformCodec.encode(analysis?.waveform?.points);
+
+    // Extract and cache embedded cover art deduplicated by hash
+    String? coverUri;
+    String? albumArtworkUri;
+    String? artistArtworkUri;
+
+    final pictures = meta?.pictures ?? const <AudioPicture>[];
+    if (pictures.isNotEmpty) {
+      AudioPicture? pickBest(
         Map<PictureType, int> priorityMap, {
         bool fallbackToFirst = false,
       }) {
-        Picture? best;
+        AudioPicture? best;
         int bestPriority = 99;
         for (final pic in pictures) {
           final p = priorityMap[pic.pictureType];
@@ -280,273 +240,39 @@ abstract final class MetadataUtils {
         return best ?? (fallbackToFirst ? pictures.first : null);
       }
 
-      coverHash = getOrComputeHash(
-        pickBest(coverPriority, fallbackToFirst: true),
-      );
-      albumThumbnailHash = getOrComputeHash(
-        pickBest(albumPriority, fallbackToFirst: false),
-      );
-      artistThumbnailHash = getOrComputeHash(
-        pickBest(artistPriority, fallbackToFirst: false),
-      );
-    }
+      final coverPic = pickBest(coverPriority, fallbackToFirst: true);
+      final albumPic = pickBest(albumPriority, fallbackToFirst: false);
+      final artistPic = pickBest(artistPriority, fallbackToFirst: false);
 
-    for (final entry in hashToBytes.entries) {
-      final hash = entry.key;
-      final bytes = entry.value;
-      if (!_allQualitiesExistSync(hash)) {
-        await _writeTripleQualityImages(bytes, hash);
+      if (coverPic != null && coverPic.bytes.isNotEmpty) {
+        coverUri = await saveCoverBytes(coverPic.bytes);
+      }
+      if (albumPic != null && albumPic.bytes.isNotEmpty) {
+        albumArtworkUri = (albumPic == coverPic)
+            ? coverUri
+            : await saveCoverBytes(albumPic.bytes);
+      }
+      if (artistPic != null && artistPic.bytes.isNotEmpty) {
+        artistArtworkUri = (artistPic == coverPic)
+            ? coverUri
+            : ((artistPic == albumPic)
+                ? albumArtworkUri
+                : await saveCoverBytes(artistPic.bytes));
       }
     }
+
     return _buildExtractedTrackData(
       filePath: filePath,
       fileSize: size,
       modifiedAt: modifiedAt,
-      tag: tag,
-      analysis: analysis,
+      meta: meta,
+      info: info,
       replayGainTrackGain: trackGain,
       replayGainTrackPeak: trackPeak,
       waveformData: waveformData,
-      thumbnailHash: coverHash,
-      albumThumbnailHash: albumThumbnailHash,
-      artistThumbnailHash: artistThumbnailHash,
-    );
-  }
-
-  static bool _allQualitiesExistSync(String hash) {
-    return File(getThumbnailFilePath(hash, quality: ThumbnailQuality.low))
-            .existsSync() &&
-        File(getThumbnailFilePath(hash, quality: ThumbnailQuality.medium))
-            .existsSync() &&
-        File(getThumbnailFilePath(hash, quality: ThumbnailQuality.high))
-            .existsSync();
-  }
-
-  static Future<void> _writeTripleQualityImages(
-    Uint8List rawBytes,
-    String hash,
-  ) async {
-    _ensureInitialized();
-    if (ui.RootIsolateToken.instance != null) {
-      return _deduplicatedWriteOnRootIsolate(rawBytes, hash);
-    }
-    final SendPort? gpuSendPort = ui.IsolateNameServer.lookupPortByName(
-      _kGpuBridgePortName,
-    );
-    if (gpuSendPort == null) {
-      throw StateError(
-        'El puente GPU de MetadataUtils no fue inicializado en el Root Isolate. '
-        'Llama a MetadataUtils.init() antes de crear el Isolate.',
-      );
-    }
-    final responsePort = ReceivePort();
-    try {
-      gpuSendPort.send(<Object>[
-        responsePort.sendPort,
-        TransferableTypedData.fromList([rawBytes]),
-        hash,
-      ]);
-
-      final dynamic response = await responsePort.first;
-      if (response is String && response.startsWith('ERROR:')) {
-        throw Exception(response.substring(6));
-      }
-    } finally {
-      responsePort.close();
-    }
-  }
-
-  static Future<void> _deduplicatedWriteOnRootIsolate(
-    Uint8List rawBytes,
-    String hash,
-  ) {
-    if (_allQualitiesExistSync(hash)) return Future.value();
-    final existingTask = _inFlightHashes[hash];
-    if (existingTask != null) return existingTask;
-
-    final future = _writeTripleQualityImagesOnRootIsolate(rawBytes, hash)
-        .whenComplete(() async {
-          _inFlightHashes.remove(hash);
-          return Future.value();
-        });
-    _inFlightHashes[hash] = future;
-    return future;
-  }
-
-  static Future<void> _writeTripleQualityImagesOnRootIsolate(
-    Uint8List rawBytes,
-    String hash,
-  ) async {
-    _ensureInitialized();
-    final fileHq = File(
-      getThumbnailFilePath(hash, quality: ThumbnailQuality.high),
-    );
-    final fileMq = File(
-      getThumbnailFilePath(hash, quality: ThumbnailQuality.medium),
-    );
-    final fileLq = File(
-      getThumbnailFilePath(hash, quality: ThumbnailQuality.low),
-    );
-
-    ui.ImmutableBuffer? buffer;
-    ui.ImageDescriptor? descriptor;
-    ui.Codec? codec;
-    ui.Image? decodedImage;
-    ui.Image? hqImage;
-    ui.Image? mqImage;
-    ui.Image? lqImage;
-
-    try {
-      buffer = await ui.ImmutableBuffer.fromUint8List(rawBytes);
-      descriptor = await ui.ImageDescriptor.encoded(buffer);
-      final int origWidth = descriptor.width;
-      final int origHeight = descriptor.height;
-      final int side = math.min(origWidth, origHeight);
-
-      final int targetLarge = math.min(side, AppDefaults.highQualityResolution);
-      final int targetMedium = math.min(
-        side,
-        AppDefaults.mediumQualityResolution,
-      );
-      final int targetSmall = math.min(side, AppDefaults.lowQualityResolution);
-
-      final double scale = targetLarge / side;
-      final int decodeWidth = math.max(1, (origWidth * scale).round());
-      final int decodeHeight = math.max(1, (origHeight * scale).round());
-
-      codec = await descriptor.instantiateCodec(
-        targetWidth: decodeWidth,
-        targetHeight: decodeHeight,
-      );
-      final ui.FrameInfo frame = await codec.getNextFrame();
-      decodedImage = frame.image;
-
-      if (decodedImage.width == targetLarge &&
-          decodedImage.height == targetLarge) {
-        hqImage = decodedImage;
-      } else {
-        final int minDecoded = math.min(
-          decodedImage.width,
-          decodedImage.height,
-        );
-        final ui.Rect cropRect = ui.Rect.fromLTWH(
-          (decodedImage.width - minDecoded) / 2.0,
-          (decodedImage.height - minDecoded) / 2.0,
-          minDecoded.toDouble(),
-          minDecoded.toDouble(),
-        );
-        hqImage = await _renderResizedUiImage(
-          sourceImage: decodedImage,
-          srcRect: cropRect,
-          size: targetLarge,
-        );
-      }
-
-      final ui.Rect fullHqRect = ui.Rect.fromLTWH(
-        0,
-        0,
-        hqImage.width.toDouble(),
-        hqImage.height.toDouble(),
-      );
-
-      mqImage = (targetMedium == targetLarge)
-          ? hqImage
-          : await _renderResizedUiImage(
-              sourceImage: hqImage,
-              srcRect: fullHqRect,
-              size: targetMedium,
-            );
-
-      final ui.Rect fullMqRect = ui.Rect.fromLTWH(
-        0,
-        0,
-        mqImage.width.toDouble(),
-        mqImage.height.toDouble(),
-      );
-
-      lqImage = (targetSmall == targetMedium)
-          ? mqImage
-          : await _renderResizedUiImage(
-              sourceImage: mqImage,
-              srcRect: fullMqRect,
-              size: targetSmall,
-            );
-
-      final Future<Uint8List> hqFuture = _encodeUiImageToPng(hqImage);
-      final Future<Uint8List> mqFuture = identical(mqImage, hqImage)
-          ? hqFuture
-          : _encodeUiImageToPng(mqImage);
-      final Future<Uint8List> lqFuture = identical(lqImage, mqImage)
-          ? mqFuture
-          : _encodeUiImageToPng(lqImage);
-
-      final results = await Future.wait([hqFuture, mqFuture, lqFuture]);
-
-      await Future.wait([
-        _safeAtomicWrite(fileHq, results[0]),
-        _safeAtomicWrite(fileMq, results[1]),
-        _safeAtomicWrite(fileLq, results[2]),
-      ]);
-    } finally {
-      if (lqImage != null && !identical(lqImage, mqImage)) {
-        lqImage.dispose();
-      }
-      if (mqImage != null && !identical(mqImage, hqImage)) {
-        mqImage.dispose();
-      }
-      if (hqImage != null && !identical(hqImage, decodedImage)) {
-        hqImage.dispose();
-      }
-      decodedImage?.dispose();
-      codec?.dispose();
-      descriptor?.dispose();
-      buffer?.dispose();
-    }
-  }
-
-  static Future<ui.Image> _renderResizedUiImage({
-    required ui.Image sourceImage,
-    required ui.Rect srcRect,
-    required int size,
-  }) async {
-    final ui.PictureRecorder recorder = ui.PictureRecorder();
-    final ui.Canvas canvas = ui.Canvas(recorder);
-    final ui.Rect dstRect = ui.Rect.fromLTWH(
-      0,
-      0,
-      size.toDouble(),
-      size.toDouble(),
-    );
-
-    canvas.drawImageRect(
-      sourceImage,
-      srcRect,
-      dstRect,
-      ui.Paint()
-        ..isAntiAlias = true
-        ..filterQuality = ui.FilterQuality.low,
-    );
-
-    final ui.Picture picture = recorder.endRecording();
-    try {
-      return await picture.toImage(size, size);
-    } finally {
-      picture.dispose();
-    }
-  }
-
-  static Future<Uint8List> _encodeUiImageToPng(ui.Image image) async {
-    final ByteData? byteData = await image.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-    if (byteData == null) {
-      throw StateError(
-        'No se pudo codificar la miniatura (${image.width} px) a PNG.',
-      );
-    }
-    return byteData.buffer.asUint8List(
-      byteData.offsetInBytes,
-      byteData.lengthInBytes,
+      artworkUri: coverUri,
+      albumArtworkUri: albumArtworkUri,
+      artistArtworkUri: artistArtworkUri,
     );
   }
 
@@ -584,48 +310,53 @@ abstract final class MetadataUtils {
     required String filePath,
     required int fileSize,
     required int modifiedAt,
-    Tag? tag,
-    AudioAnalysisResult? analysis,
+    AudioMetadata? meta,
+    AudioInfo? info,
     double? replayGainTrackGain,
     double? replayGainTrackPeak,
     String? waveformData,
-    String? thumbnailHash,
-    String? albumThumbnailHash,
-    String? artistThumbnailHash,
+    String? artworkUri,
+    String? albumArtworkUri,
+    String? artistArtworkUri,
   }) {
     final ext = p.extension(filePath).toLowerCase();
     final extClean = ext.replaceAll('.', '').toUpperCase();
 
-    final effectiveBitrate = analysis != null && analysis.bitrate > 0
-        ? analysis.bitrate
-        : null;
-    final effectiveSampleRate = analysis != null && analysis.sampleRate > 0
-        ? analysis.sampleRate
-        : null;
-    final effectiveChannels = analysis != null && analysis.channels > 0
-        ? analysis.channels
+    final effectiveBitrate = info != null && info.bitrate > 0
+        ? info.bitrate
         : null;
 
-    var durationMs = tag?.duration != null ? tag!.duration! * 1000 : 0;
-    if (durationMs <= 0 && analysis != null) {
-      durationMs = analysis.duration.inMilliseconds;
-    }
+    final effectiveSampleRate = info != null && info.sampleRate > 0
+        ? info.sampleRate
+        : null;
+
+    final effectiveChannels = info != null && info.channels > 0
+        ? info.channels
+        : null;
+
+    final durationMs = info?.duration?.inMilliseconds ?? 0;
+
+    final codec =
+        (info != null && info.codec.isNotEmpty && info.codec != 'Unknown')
+            ? info.codec
+            : (extClean.isNotEmpty ? extClean : null);
 
     final artists =
-        tag?.trackArtist
+        meta?.trackArtist
             ?.split(',')
             .map((e) => e.trim())
             .where((e) => e.isNotEmpty)
             .toList() ??
         const [];
+    final trimmedAlbumArtist = meta?.albumArtist?.trim();
     final resolvedArtists = artists.isNotEmpty
         ? artists
-        : (tag?.albumArtist != null
-              ? [tag!.albumArtist!.trim()]
-              : const <String>[]);
+        : (trimmedAlbumArtist != null && trimmedAlbumArtist.isNotEmpty
+            ? [trimmedAlbumArtist]
+            : const <String>[]);
 
     final genres =
-        tag?.genre
+        meta?.genre
             ?.split(RegExp(r'[,;/]'))
             .map((e) => e.trim())
             .where((e) => e.isNotEmpty)
@@ -634,34 +365,37 @@ abstract final class MetadataUtils {
 
     return ExtractedTrackData(
       filePath: filePath,
-      title: tag?.title?.trim().isNotEmpty == true
-          ? tag!.title!.trim()
+      title: meta?.title?.trim().isNotEmpty == true
+          ? meta!.title!.trim()
           : p.basenameWithoutExtension(filePath),
-      albumName: tag?.album?.trim().isNotEmpty == true
-          ? tag!.album!.trim()
+      albumName: meta?.album?.trim().isNotEmpty == true
+          ? meta!.album!.trim()
           : null,
       artistNames: resolvedArtists,
-      albumArtistName: tag?.albumArtist?.trim().isNotEmpty == true
-          ? tag!.albumArtist!.trim()
-          : null,
+      albumArtistName:
+          trimmedAlbumArtist != null && trimmedAlbumArtist.isNotEmpty
+              ? trimmedAlbumArtist
+              : null,
       genreNames: genres,
-      trackNumber: tag?.trackNumber,
-      discNumber: tag?.discNumber ?? 1,
-      year: tag?.year,
+      trackNumber: meta?.trackNumber,
+      discNumber: meta?.discNumber ?? 1,
+      year: meta?.year,
       durationMs: durationMs,
       bitrate: effectiveBitrate,
       sampleRate: effectiveSampleRate,
       channels: effectiveChannels,
-      codec: extClean.isNotEmpty ? extClean : null,
+      codec: codec,
       fileSize: fileSize,
       modifiedAt: modifiedAt,
-      embeddedLyrics: tag?.lyrics,
+      embeddedLyrics: meta?.lyrics?.trim().isNotEmpty == true
+          ? meta!.lyrics
+          : null,
       replayGainTrackGain: replayGainTrackGain,
       replayGainTrackPeak: replayGainTrackPeak,
       waveformData: waveformData,
-      thumbnailHash: thumbnailHash,
-      albumThumbnailHash: albumThumbnailHash,
-      artistThumbnailHash: artistThumbnailHash,
+      artworkUri: artworkUri,
+      albumArtworkUri: albumArtworkUri,
+      artistArtworkUri: artistArtworkUri,
     );
   }
 

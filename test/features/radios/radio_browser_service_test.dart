@@ -2,8 +2,11 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
+import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/radios/data/radio_browser_service.dart';
+import 'package:tachyon/features/radios/presentation/radio_controller.dart';
 
 void main() {
   group('RadioBrowserService Unit Tests', () {
@@ -203,6 +206,59 @@ void main() {
       expect(updated.faviconUrl, 'https://new.fav/hd_logo.png'); // Favicon updated!
       expect(updated.codec, 'AAC');
       expect(updated.bitrateKbps, 320);
+    });
+  });
+
+  group('RadioController Tab & Debounce Tests', () {
+    late AppDatabase db;
+    late LibraryStore store;
+
+    setUp(() {
+      db = AppDatabase.inMemory();
+      store = LibraryStore(db);
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    test('currentTabIndex persists and updates correctly', () {
+      final service = RadioBrowserService();
+      final controller = RadioController(service: service, store: store);
+
+      expect(controller.currentTabIndex, 0);
+      controller.setTabIndex(1);
+      expect(controller.currentTabIndex, 1);
+      controller.dispose();
+    });
+
+    test('search debounces and executes latest query only', () async {
+      int requestCount = 0;
+      final mockClient = MockClient((request) async {
+        requestCount++;
+        return http.Response('[]', 200);
+      });
+
+      final service = RadioBrowserService(client: mockClient);
+      final controller = RadioController(service: service, store: store);
+
+      // Rapidly type letters 'r', 'ro', 'roc', 'rock'
+      controller.search('r');
+      controller.search('ro');
+      controller.search('roc');
+      controller.search('rock');
+
+      // Before 320ms timer fires, 0 requests should have been made
+      expect(requestCount, 0);
+
+      // Wait for debounce timer to fire
+      await Future<void>.delayed(const Duration(milliseconds: 380));
+
+      // Exactly 1 network request made for the full word 'rock'!
+      expect(requestCount, 1);
+      expect(controller.searchQuery, 'rock');
+
+      controller.dispose();
     });
   });
 }

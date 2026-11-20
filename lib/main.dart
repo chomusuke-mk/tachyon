@@ -32,9 +32,14 @@ import 'package:tachyon/shared/utils/permission_utils.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await MiniaudioPlayer.ensureInitialized(
+    rootIsolateToken: ServicesBinding.rootIsolateToken,
+  );
   PaintingBinding.instance.imageCache.maximumSize = 25;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 4 * 1024 * 1024;
-  MiniaudioPlayer.config(logLevel: MiniaudioLogLevel.verbose);
+  MiniaudioPlayer.config(
+    logLevel: kDebugMode ? MiniaudioLogLevel.info : MiniaudioLogLevel.error,
+  );
   try {
     SystemChannels.skia.invokeMethod<void>(
       'Skia.setResourceCacheMaxBytes',
@@ -101,7 +106,7 @@ Future<void> main() async {
     initialLang = resolveDefaultLanguage();
   }
   final localeController = LocaleController(localeRepository, initialLang);
-  settingsController.addListener(() {
+  settingsController.localeListenable.addListener(() {
     final lang = settingsController.appLanguage;
     final effective = (lang == "defaultOption")
         ? resolveDefaultLanguage()

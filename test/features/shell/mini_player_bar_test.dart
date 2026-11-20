@@ -150,13 +150,27 @@ void main() {
       expect(lightColor.a, 1.0);
     });
 
-    test('resolveColor returns null gracefully when thumbnail file is absent', () async {
+    test('resolveColor returns null gracefully when artwork file is absent', () async {
       final darkTheme = TachyonTheme.darkTheme;
       final color = await ArtworkColorResolver.resolveColor(
-        thumbnailHash: 'non_existent_hash',
+        artworkUri: 'non_existent_hash',
         theme: darkTheme,
       );
       expect(color, isNull);
+    });
+
+    test('getColor and resolveColor with null or empty artworkUri returns application surface color', () async {
+      final darkTheme = TachyonTheme.darkTheme;
+      final expectedColor = ArtworkColorResolver.getApplicationColor(theme: darkTheme);
+
+      expect(ArtworkColorResolver.getColor(artworkUri: null, theme: darkTheme), equals(expectedColor));
+      expect(ArtworkColorResolver.getColor(artworkUri: '', theme: darkTheme), equals(expectedColor));
+
+      final color = await ArtworkColorResolver.resolveColor(
+        artworkUri: null,
+        theme: darkTheme,
+      );
+      expect(color, equals(expectedColor));
     });
 
     test('resolveColor uses cached value on subsequent calls', () async {
@@ -166,7 +180,7 @@ void main() {
       ArtworkColorResolver.cache[cacheKey] = fakeColor;
 
       final color = await ArtworkColorResolver.resolveColor(
-        thumbnailHash: testHash,
+        artworkUri: testHash,
         theme: TachyonTheme.darkTheme,
       );
       expect(color, equals(fakeColor));
@@ -307,7 +321,7 @@ void main() {
         durationMs: 240000,
         fileSize: 2000,
         modifiedAt: 0,
-        thumbnailHash: customHash,
+        artworkUri: customHash,
         artists: const [Artist(id: 2, name: 'Vibrant Band')],
       );
       playback.setMockTrack(track);

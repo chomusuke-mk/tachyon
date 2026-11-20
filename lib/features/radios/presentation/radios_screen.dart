@@ -6,6 +6,7 @@ import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/radios/presentation/radio_controller.dart';
+import 'package:tachyon/features/radios/presentation/widgets/radio_filter_picker_dialog.dart';
 import 'package:tachyon/features/radios/presentation/widgets/radio_logo_avatar.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
@@ -21,15 +22,38 @@ class RadiosScreen extends StatefulWidget {
 }
 
 class _RadiosScreenState extends State<RadiosScreen>
-    with SingleTickerProviderStateMixin {
+    with
+        SingleTickerProviderStateMixin,
+        AutomaticKeepAliveClientMixin<RadiosScreen> {
   late final TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   bool _isCardView = false;
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    final initialTab = Provider.of<RadioController?>(
+          context,
+          listen: false,
+        )?.currentTabIndex ??
+        0;
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: initialTab.clamp(0, 1),
+    );
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        Provider.of<RadioController?>(
+          context,
+          listen: false,
+        )?.setTabIndex(_tabController.index);
+      }
+    });
+
     final repo = Provider.of<SettingsRepository?>(context, listen: false);
     if (repo != null) {
       _isCardView = repo.getCardView('radios', defaultValue: false);
@@ -53,10 +77,14 @@ class _RadiosScreenState extends State<RadiosScreen>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
     final strings = context.watch<LocaleController>().localeStrings;
     final store = context.watch<LibraryStore>();
-    final playback = context.watch<PlaybackController>();
+    context.select<PlaybackController, (String?, bool)>(
+      (c) => (c.currentPlayable?.filePath, c.isPlaying),
+    );
+    final playback = context.read<PlaybackController>();
     final radioCtrl = context.watch<RadioController>();
 
     final myStations = store.radioStations;
@@ -252,35 +280,84 @@ class _RadiosScreenState extends State<RadiosScreen>
           ),
         ),
 
-        // Filter Chips Header (Popular Genres / Tags)
-        if (radioCtrl.popularTags.isNotEmpty)
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              itemCount: radioCtrl.popularTags.length + 1,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  final isSelected = radioCtrl.selectedTag == 'All';
-                  return FilterChip(
-                    label: Text(strings.rdAllGenres),
-                    selected: isSelected,
-                    onSelected: (_) => radioCtrl.setTag('All'),
-                  );
-                }
-                final tag = radioCtrl.popularTags[index - 1];
-                final isSelected = radioCtrl.selectedTag == tag;
-                return FilterChip(
-                  label: Text(tag),
-                  selected: isSelected,
-                  onSelected: (_) =>
-                      radioCtrl.setTag(isSelected ? 'All' : tag),
-                );
-              },
-            ),
+        // 2 Selectors: Genre & Country (Searchable modal pickers to prevent lag)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
+          child: Row(
+            children: [
+              // 1. Genre Picker Button
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.style_rounded, size: 18),
+                  label: Text(
+                    radioCtrl.selectedTag == 'All' ||
+                            radioCtrl.selectedTag.isEmpty
+                        ? strings.rdAllGenres
+                        : radioCtrl.selectedTag,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    alignment: Alignment.centerLeft,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () {
+                    RadioFilterPickerDialog.show(
+                      context,
+                      title: strings.rdGenre,
+                      currentSelectedValue: radioCtrl.selectedTag,
+                      allLabel: strings.rdAllGenres,
+                      items: radioCtrl.popularTags,
+                      onSelected: (val) => radioCtrl.setTag(val),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // 2. Country Picker Button
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.public_rounded, size: 18),
+                  label: Text(
+                    radioCtrl.selectedCountry == 'All' ||
+                            radioCtrl.selectedCountry.isEmpty
+                        ? strings.rdAllCountries
+                        : radioCtrl.selectedCountry,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    alignment: Alignment.centerLeft,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () {
+                    RadioFilterPickerDialog.show(
+                      context,
+                      title: strings.rdCountry,
+                      currentSelectedValue: radioCtrl.selectedCountry,
+                      allLabel: strings.rdAllCountries,
+                      items: radioCtrl.popularCountries,
+                      onSelected: (val) => radioCtrl.setCountry(val),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
+        ),
 
         const SizedBox(height: 6),
 

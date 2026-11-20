@@ -335,6 +335,8 @@ class AppStringKey {
   String get rdSavedToLibrary => _localizedStrings['rd_saved_to_library'] ?? '';
   String get rdAlreadyInLibrary =>
       _localizedStrings['rd_already_in_library'] ?? '';
+  String get rdLike => _localizedStrings['rd_like'] ?? '';
+  String get rdUnlike => _localizedStrings['rd_unlike'] ?? '';
   String get rdRefresh => _localizedStrings['rd_refresh'] ?? '';
   String get rdPopular => _localizedStrings['rd_popular'] ?? '';
   String get rdLoading => _localizedStrings['rd_loading'] ?? '';

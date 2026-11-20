@@ -1,7 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:miniaudio_player/miniaudio_player.dart'
-    show CrossfeedMode, Reverb;
+    show
+        Crossfeed,
+        ReplayGainMode,
+        Reverb,
+        SilenceSkipConfig,
+        SilenceSkipMode;
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
 import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist_sort_option.dart';
@@ -24,11 +29,12 @@ class AppSettings {
   final LoopMode loopMode; // LoopMode.off (default)
   final bool shuffle; // default false
   final bool skipSilence; // default false
+  final SilenceSkipMode silenceSkipMode; // default SilenceSkipMode.all
   final bool volumeNormalization; // default true
   final double preampDb; // -12.0 to +12.0 dB (default 0.0)
   final double balance; // -1.0 to +1.0 (default 0.0)
   final bool mono; // default false
-  final CrossfeedMode crossfeedMode; // CrossfeedMode.off (default)
+  final Crossfeed crossfeed; // Crossfeed.off (default)
   final double spatializerWidth; // 0.0 to 2.0 (default 1.0)
   final bool limiterEnabled; // default true
   final double volumeBoost; // 1.0 to 2.0 (default 1.0)
@@ -89,11 +95,12 @@ class AppSettings {
     this.loopMode = LoopMode.off,
     this.shuffle = false,
     this.skipSilence = false,
+    this.silenceSkipMode = SilenceSkipMode.all,
     this.volumeNormalization = true,
     this.preampDb = 0.0,
     this.balance = 0.0,
     this.mono = false,
-    this.crossfeedMode = CrossfeedMode.off,
+    this.crossfeed = Crossfeed.off,
     this.spatializerWidth = 1.0,
     this.limiterEnabled = true,
     this.volumeBoost = 1.0,
@@ -145,6 +152,18 @@ class AppSettings {
 
   Color get accentColor => Color(accentColorValue);
 
+  SilenceSkipConfig get silenceSkipConfig => skipSilence
+      ? SilenceSkipConfig(
+          enabled: true,
+          mode: silenceSkipMode == SilenceSkipMode.disabled
+              ? SilenceSkipMode.all
+              : silenceSkipMode,
+        )
+      : const SilenceSkipConfig.off();
+
+  ReplayGainMode get replayGainMode =>
+      volumeNormalization ? ReplayGainMode.track : ReplayGainMode.disabled;
+
   Reverb get reverbConfig => (reverbEnabled && reverbPreset != 'off')
       ? Reverb(
           enabled: true,
@@ -171,11 +190,12 @@ class AppSettings {
           loopMode == other.loopMode &&
           shuffle == other.shuffle &&
           skipSilence == other.skipSilence &&
+          silenceSkipMode == other.silenceSkipMode &&
           volumeNormalization == other.volumeNormalization &&
           preampDb == other.preampDb &&
           balance == other.balance &&
           mono == other.mono &&
-          crossfeedMode == other.crossfeedMode &&
+          crossfeed == other.crossfeed &&
           spatializerWidth == other.spatializerWidth &&
           limiterEnabled == other.limiterEnabled &&
           volumeBoost == other.volumeBoost &&
@@ -224,11 +244,12 @@ class AppSettings {
     LoopMode? loopMode,
     bool? shuffle,
     bool? skipSilence,
+    SilenceSkipMode? silenceSkipMode,
     bool? volumeNormalization,
     double? preampDb,
     double? balance,
     bool? mono,
-    CrossfeedMode? crossfeedMode,
+    Crossfeed? crossfeed,
     double? spatializerWidth,
     bool? limiterEnabled,
     double? volumeBoost,
@@ -279,11 +300,12 @@ class AppSettings {
       loopMode: loopMode ?? this.loopMode,
       shuffle: shuffle ?? this.shuffle,
       skipSilence: skipSilence ?? this.skipSilence,
+      silenceSkipMode: silenceSkipMode ?? this.silenceSkipMode,
       volumeNormalization: volumeNormalization ?? this.volumeNormalization,
       preampDb: preampDb ?? this.preampDb,
       balance: balance ?? this.balance,
       mono: mono ?? this.mono,
-      crossfeedMode: crossfeedMode ?? this.crossfeedMode,
+      crossfeed: crossfeed ?? this.crossfeed,
       spatializerWidth: spatializerWidth ?? this.spatializerWidth,
       limiterEnabled: limiterEnabled ?? this.limiterEnabled,
       volumeBoost: volumeBoost ?? this.volumeBoost,
@@ -339,11 +361,12 @@ class AppSettings {
     loopMode,
     shuffle,
     skipSilence,
+    silenceSkipMode,
     volumeNormalization,
     preampDb,
     balance,
     mono,
-    crossfeedMode,
+    crossfeed,
     spatializerWidth,
     limiterEnabled,
     volumeBoost,

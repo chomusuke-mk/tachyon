@@ -24,7 +24,7 @@ class PlaylistLeadingArt extends StatelessWidget {
 
     switch (playlist.type) {
       case PlaylistType.liked:
-        if (playlist.coverHash != null) {
+        if (playlist.artworkUri != null) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(8.0),
             child: SizedBox(
@@ -34,7 +34,7 @@ class PlaylistLeadingArt extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   AlbumArtImage(
-                    thumbnailHash: playlist.coverHash,
+                    artworkUri: playlist.artworkUri,
                     quality: ThumbnailQuality.low,
                     fit: BoxFit.cover,
                   ),
@@ -64,7 +64,7 @@ class PlaylistLeadingArt extends StatelessWidget {
         );
 
       case PlaylistType.history:
-        if (playlist.coverHash != null) {
+        if (playlist.artworkUri != null) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(8.0),
             child: SizedBox(
@@ -74,7 +74,7 @@ class PlaylistLeadingArt extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   AlbumArtImage(
-                    thumbnailHash: playlist.coverHash,
+                    artworkUri: playlist.artworkUri,
                     quality: ThumbnailQuality.low,
                     fit: BoxFit.cover,
                   ),
@@ -104,14 +104,14 @@ class PlaylistLeadingArt extends StatelessWidget {
         );
 
       case PlaylistType.user:
-        if (playlist.coverHash != null) {
+        if (playlist.artworkUri != null) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(8.0),
             child: SizedBox(
               width: size,
               height: size,
               child: AlbumArtImage(
-                thumbnailHash: playlist.coverHash,
+                artworkUri: playlist.artworkUri,
                 quality: ThumbnailQuality.low,
                 fit: BoxFit.cover,
               ),

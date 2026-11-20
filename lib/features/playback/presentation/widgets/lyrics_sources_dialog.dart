@@ -291,16 +291,21 @@ class _LyricsSourcesDialogState extends State<LyricsSourcesDialog> {
     final currentLocale = localeController.currentLocaleCode;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final settings = context.watch<SettingsController>();
+    final (sourceCode, targetCode) =
+        context.select<SettingsController, (String, String)>(
+          (s) => (
+            s.lyricsTranslationSourceLang,
+            s.lyricsTranslationTargetLang,
+          ),
+        );
+    final settings = context.read<SettingsController>();
 
     final hasAnySource = _enableLocal || _enableLrclib || _enableLyricsOvh;
 
-    final sourceCode = settings.lyricsTranslationSourceLang;
     final sourceLangDisplay = (sourceCode == 'autodetect')
         ? strings.npLyricsLangAuto
         : (languagesEndonyms[sourceCode] ?? sourceCode);
 
-    final targetCode = settings.lyricsTranslationTargetLang;
     final isTargetDefault = targetCode == 'defaultOption';
     final effectiveTarget = isTargetDefault ? currentLocale : targetCode;
     final targetLangDisplay = isTargetDefault

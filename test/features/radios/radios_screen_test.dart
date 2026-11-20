@@ -15,6 +15,7 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/radios/data/radio_browser_service.dart';
 import 'package:tachyon/features/radios/presentation/radio_controller.dart';
 import 'package:tachyon/features/radios/presentation/radios_screen.dart';
+import 'package:tachyon/features/radios/presentation/widgets/radio_filter_picker_dialog.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 class _TestLocaleRepo extends LocaleRepository {
@@ -317,7 +318,7 @@ void main() {
       expect(store.radioStations, isEmpty);
     });
 
-    testWidgets('Switching to Discover tab shows preloaded stations and search bar',
+    testWidgets('Switching to Discover tab shows preloaded stations, search bar, and filter dialogs',
         (tester) async {
       await tester.pumpWidget(createSubject());
       await tester.pumpAndSettle();
@@ -329,8 +330,22 @@ void main() {
       expect(find.text('Planet Rock'), findsOneWidget);
       expect(find.text('FIP Jazz'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('All Genres'), findsOneWidget);
+      expect(find.text('All Countries'), findsOneWidget);
+
+      // Tap Genre picker button -> opens RadioFilterPickerDialog
+      await tester.tap(find.text('All Genres'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RadioFilterPickerDialog), findsOneWidget);
       expect(find.text('Rock'), findsOneWidget);
       expect(find.text('Jazz'), findsOneWidget);
+
+      // Select 'Rock'
+      await tester.tap(find.text('Rock'));
+      await tester.pumpAndSettle();
+
+      expect(radioController.selectedTag, 'Rock');
     });
 
     testWidgets('Saving a station from Discover tab persists into LibraryStore',

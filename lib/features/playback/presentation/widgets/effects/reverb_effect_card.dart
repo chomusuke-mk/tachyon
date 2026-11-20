@@ -30,7 +30,7 @@ class ReverbEffectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsController>();
+    final settings = context.read<SettingsController>();
     final strings = context.watch<LocaleController>().localeStrings;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -46,9 +46,12 @@ class ReverbEffectCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: ListenableBuilder(
+          listenable: settings.reverbListenable,
+          builder: (context, _) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             // Section Header
             Row(
               children: [
@@ -301,9 +304,11 @@ class ReverbEffectCard extends StatelessWidget {
                   );
                 },
               ),
-            ],
-          ),
+              ],
+            );
+          },
         ),
-      );
+      ),
+    );
   }
 }

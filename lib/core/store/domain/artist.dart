@@ -7,7 +7,7 @@ class Artist {
 
   /// The name of the artist.
   final String name;
-  final String? thumbnailHash;
+  final String? artworkUri;
 
   /// The list of albums associated with this artist.
   final List<Album> albums;
@@ -24,7 +24,7 @@ class Artist {
   const Artist({
     this.id,
     required this.name,
-    this.thumbnailHash,
+    this.artworkUri,
     this.albums = const [],
     this.tracks = const [],
   });

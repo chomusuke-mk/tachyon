@@ -1,11 +1,12 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:tachyon/core/metadata/metadata_utils.dart';
-import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 /// Service responsible for extracting and caching a harmonized background color
-/// from an audio track or album's low-quality thumbnail image.
+/// from an audio track or album's artwork image.
 abstract final class ArtworkColorResolver {
   static final Map<String, Color> _cache = <String, Color>{};
 
@@ -15,16 +16,52 @@ abstract final class ArtworkColorResolver {
   @visibleForTesting
   static void clearCache() => _cache.clear();
 
-  /// Synchronously returns cached color for [thumbnailHash] and [theme] if available.
-  static Color? getCachedColor({
-    required String thumbnailHash,
+  /// Returns the application's default container color for surfaces like the miniplayer
+  /// when artwork is null, missing, or unresolvable.
+  static Color getApplicationColor({
     required ThemeData theme,
   }) {
     final isDark = theme.brightness == Brightness.dark;
     final isOled =
         isDark && theme.colorScheme.surface == const Color(0xFF000000);
+    return isOled
+        ? theme.colorScheme.surface
+        : theme.colorScheme.surfaceContainerHigh;
+  }
+
+  /// Returns the harmonized color for [artworkUri]. If [artworkUri] is null, empty,
+  /// or not yet resolved in cache, gracefully falls back to the application's surface color.
+  static Color getColor({
+    String? artworkUri,
+    required ThemeData theme,
+  }) {
+    if (artworkUri == null || artworkUri.trim().isEmpty) {
+      return getApplicationColor(theme: theme);
+    }
+    final clean = artworkUri.trim();
+    final isDark = theme.brightness == Brightness.dark;
+    final isOled =
+        isDark && theme.colorScheme.surface == const Color(0xFF000000);
     final cacheKey =
-        '$thumbnailHash:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
+        '$clean:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
+    return _cache[cacheKey] ?? getApplicationColor(theme: theme);
+  }
+
+  /// Synchronously returns cached color for [artworkUri] and [theme] if available.
+  /// If [artworkUri] is null or empty, returns the application surface color.
+  static Color? getCachedColor({
+    String? artworkUri,
+    required ThemeData theme,
+  }) {
+    if (artworkUri == null || artworkUri.trim().isEmpty) {
+      return getApplicationColor(theme: theme);
+    }
+    final clean = artworkUri.trim();
+    final isDark = theme.brightness == Brightness.dark;
+    final isOled =
+        isDark && theme.colorScheme.surface == const Color(0xFF000000);
+    final cacheKey =
+        '$clean:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
     return _cache[cacheKey];
   }
 
@@ -54,34 +91,46 @@ abstract final class ArtworkColorResolver {
     }
   }
 
-  /// Asynchronously loads the low-quality thumbnail and extracts
-  /// a Material ColorScheme seeded from the artwork.
+  /// Asynchronously loads the artwork image and extracts a Material ColorScheme seeded from it.
+  /// If [artworkUri] is null or empty, returns the application surface color.
   static Future<Color?> resolveColor({
-    required String thumbnailHash,
+    String? artworkUri,
     required ThemeData theme,
   }) async {
+    if (artworkUri == null || artworkUri.trim().isEmpty) {
+      return getApplicationColor(theme: theme);
+    }
+    final clean = artworkUri.trim();
+
     final isDark = theme.brightness == Brightness.dark;
     final isOled =
         isDark && theme.colorScheme.surface == const Color(0xFF000000);
     final cacheKey =
-        '$thumbnailHash:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
+        '$clean:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
 
     if (_cache.containsKey(cacheKey)) {
       return _cache[cacheKey];
     }
 
     try {
-      final filePath = await AlbumArtImage.getThumbnail(
-        thumbnailHash,
-        quality: ThumbnailQuality.low,
-      );
-      if (filePath == null) return null;
-
-      final file = File(filePath);
-      if (!await file.exists() || await file.length() <= 0) return null;
+      final ImageProvider provider;
+      if (clean.startsWith('http://') || clean.startsWith('https://')) {
+        provider = CachedNetworkImageProvider(
+          clean,
+          maxWidth: 150,
+          maxHeight: 150,
+        );
+      } else {
+        File file = File(clean.startsWith('file://') ? clean.replaceFirst('file://', '') : clean);
+        if (!await file.exists() && MetadataUtils.thumbnailsDirectory != null) {
+          file = File(p.join(MetadataUtils.thumbnailsDirectory!.path, p.basename(clean)));
+        }
+        if (!await file.exists() || await file.length() <= 0) return null;
+        provider = ResizeImage.resizeIfNeeded(150, null, FileImage(file));
+      }
 
       final scheme = await ColorScheme.fromImageProvider(
-        provider: FileImage(file),
+        provider: provider,
         brightness: theme.brightness,
       );
 

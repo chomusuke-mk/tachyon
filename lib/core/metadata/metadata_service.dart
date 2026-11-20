@@ -4,6 +4,8 @@ import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:path/path.dart' as p;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
@@ -312,6 +314,11 @@ class MetadataService {
         scanToken.onCancel(killWorkers);
 
         try {
+          RootIsolateToken? rootIsolateToken;
+          try {
+            rootIsolateToken = ServicesBinding.rootIsolateToken;
+          } catch (_) {}
+
           for (int i = 0; i < numWorkers; i++) {
             if (scanToken.isCancelled) break;
             final config = _MetadataWorkerConfig(
@@ -320,6 +327,7 @@ class MetadataService {
               filePaths: fileChunks[i],
               thumbnailsPath: thumbnailsPath,
               tempPath: tempPath,
+              rootIsolateToken: rootIsolateToken,
             );
             final isolate = await Isolate.spawn(
               _metadataWorkerEntryPoint,
@@ -462,24 +470,27 @@ class MetadataService {
         );
 
         try {
-          final activeHashes = store.getAllThumbnailHashes();
-          final coverFiles = MetadataUtils.listCachedCoverFiles();
-          final validHashes = activeHashes
-              .where((h) => h.trim().isNotEmpty)
-              .toSet();
-
-          final orphanedFiles = <File>[];
-          for (final file in coverFiles) {
-            final hash = MetadataUtils.extractHashFromThumbnailPath(file.path);
-            if (!validHashes.contains(hash)) {
-              orphanedFiles.add(file);
+          final activeUris = store.getAllArtworkUris();
+          final validHashes = <String>{};
+          for (final u in activeUris) {
+            final trimmed = u.trim();
+            if (trimmed.isNotEmpty) {
+              validHashes.add(p.basename(trimmed));
             }
           }
 
-          for (final file in orphanedFiles) {
-            try {
-              await file.delete();
-            } catch (_) {}
+          final dir = MetadataUtils.thumbnailsDirectory;
+          if (dir != null && await dir.exists()) {
+            await for (final entity in dir.list(recursive: false, followLinks: false)) {
+              if (entity is File) {
+                final fileName = p.basename(entity.path);
+                if (!validHashes.contains(fileName)) {
+                  try {
+                    await entity.delete();
+                  } catch (_) {}
+                }
+              }
+            }
           }
         } catch (e) {
           debugPrint('[MetadataService] cleaningThumbnails error: $e');
@@ -581,6 +592,7 @@ class _MetadataWorkerConfig {
   final List<String> filePaths;
   final String? thumbnailsPath;
   final String? tempPath;
+  final RootIsolateToken? rootIsolateToken;
 
   const _MetadataWorkerConfig({
     required this.workerIndex,
@@ -588,6 +600,7 @@ class _MetadataWorkerConfig {
     required this.filePaths,
     this.thumbnailsPath,
     this.tempPath,
+    this.rootIsolateToken,
   });
 }
 
@@ -609,6 +622,14 @@ class _WorkerDone extends _MetadataWorkerMessage {
 
 void _metadataWorkerEntryPoint(_MetadataWorkerConfig config) async {
   try {
+    try {
+      await MiniaudioPlayer.ensureInitialized(
+        rootIsolateToken: config.rootIsolateToken,
+      );
+    } catch (e) {
+      debugPrint('[MetadataService] Worker MiniaudioPlayer init warning: $e');
+    }
+
     if (config.thumbnailsPath != null && config.tempPath != null) {
       MetadataUtils.init(config.thumbnailsPath!, config.tempPath!);
     }

@@ -141,9 +141,9 @@ void main() {
     expect(settingsController.spatializerWidth, equals(1.4));
 
     // Change Crossfeed Mode
-    expect(settingsController.crossfeedMode, equals(CrossfeedMode.off));
-    await settingsController.setCrossfeed(CrossfeedMode.moffatBauer);
-    expect(settingsController.crossfeedMode, equals(CrossfeedMode.moffatBauer));
+    expect(settingsController.crossfeed, equals(Crossfeed.off));
+    await settingsController.setCrossfeed(Crossfeed.moffatBauer);
+    expect(settingsController.crossfeed, equals(Crossfeed.moffatBauer));
 
     // Toggle Reverb & adjust parameters
     expect(settingsController.reverbEnabled, isFalse);
@@ -187,5 +187,82 @@ void main() {
     expect(settingsController.equalizerPreset, equals('flat'));
     expect(settingsController.preampDb, equals(0.0));
     await tester.pumpAndSettle();
+  });
+
+  group('Scoped reactivity & v4 persistence round-trips', () {
+    test('DSP changes notify only their scoped domain listenable, not themeListenable', () async {
+      int themeNotifications = 0;
+      int eqNotifications = 0;
+      int reverbNotifications = 0;
+      int spatialNotifications = 0;
+      int enhancementsNotifications = 0;
+
+      settingsController.themeListenable.addListener(() => themeNotifications++);
+      settingsController.equalizerListenable.addListener(() => eqNotifications++);
+      settingsController.reverbListenable.addListener(() => reverbNotifications++);
+      settingsController.spatialListenable.addListener(() => spatialNotifications++);
+      settingsController.enhancementsListenable.addListener(
+        () => enhancementsNotifications++,
+      );
+
+      await settingsController.setPreamp(-4.0);
+      await settingsController.setEqualizerBandGain(2, 3.5);
+      await settingsController.setReverbRoomSize(0.7);
+      await settingsController.setBalance(-0.25);
+      await settingsController.setCrossfeed(Crossfeed.chuMoy);
+      await settingsController.setSilenceSkipMode(SilenceSkipMode.continuous);
+
+      expect(themeNotifications, equals(0));
+      expect(eqNotifications, equals(2));
+      expect(reverbNotifications, equals(1));
+      expect(spatialNotifications, equals(2));
+      expect(enhancementsNotifications, equals(1));
+    });
+
+    test('PlaybackController volume updates notify tuningListenable and volumeListenable without trackListenable', () async {
+      int trackNotifications = 0;
+      int queueNotifications = 0;
+      int tuningNotifications = 0;
+      int volumeNotifications = 0;
+
+      playbackController.trackListenable.addListener(() => trackNotifications++);
+      playbackController.queueListenable.addListener(() => queueNotifications++);
+      playbackController.tuningListenable.addListener(() => tuningNotifications++);
+      playbackController.volumeListenable.addListener(() => volumeNotifications++);
+
+      await playbackController.setVolume(0.65);
+
+      expect(playbackController.volume, closeTo(0.65, 1e-6));
+      expect(playbackController.volumeListenable.value, closeTo(0.65, 1e-6));
+      expect(tuningNotifications, equals(1));
+      expect(volumeNotifications, equals(1));
+      expect(trackNotifications, equals(0));
+      expect(queueNotifications, equals(0));
+    });
+
+    test('Crossfeed legacy index migration and custom Crossfeed + SilenceSkipMode persistence', () async {
+      // Legacy integer index 0 -> off, 1 -> moffatBauer, 2 -> chuMoy
+      await prefs.setInt('s_crossfeed', 1);
+      expect(SettingsRepository(prefs).getSettings().crossfeed, equals(Crossfeed.moffatBauer));
+
+      await prefs.setInt('s_crossfeed', 2);
+      expect(SettingsRepository(prefs).getSettings().crossfeed, equals(Crossfeed.chuMoy));
+
+      await prefs.setInt('s_crossfeed', 0);
+      expect(SettingsRepository(prefs).getSettings().crossfeed, equals(Crossfeed.off));
+
+      // Custom Crossfeed parameters round-trip
+      const customCf = Crossfeed(enabled: true, cutoffHz: 950.0, feedDb: 8.5);
+      await settingsController.setCrossfeed(customCf);
+      expect(SettingsRepository(prefs).getSettings().crossfeed, equals(customCf));
+
+      // SilenceSkipMode round-trip
+      await settingsController.setSilenceSkipMode(SilenceSkipMode.trimEdges);
+      final reloaded = SettingsRepository(prefs).getSettings();
+      expect(reloaded.skipSilence, isTrue);
+      expect(reloaded.silenceSkipMode, equals(SilenceSkipMode.trimEdges));
+      expect(reloaded.silenceSkipConfig.enabled, isTrue);
+      expect(reloaded.silenceSkipConfig.mode, equals(SilenceSkipMode.trimEdges));
+    });
   });
 }

@@ -133,17 +133,17 @@ void main() {
       } catch (_) {}
     });
 
-    test('TachyonAudioHandler uses low-quality cover and caches queue synchronization', () async {
-      final coverPath = MetadataUtils.getThumbnailFilePath('hash_lq', quality: ThumbnailQuality.low);
+    test('TachyonAudioHandler resolves artworkUri and caches queue synchronization', () async {
+      final coverPath = MetadataUtils.getArtworkPath('hash_lq');
       final coverLq = File(coverPath);
       coverLq.parent.createSync(recursive: true);
       coverLq.writeAsBytesSync([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46]);
 
-      const track = Track(
+      final track = Track(
         id: 1,
         filePath: 'C:\\Music\\Song.mp3',
         title: 'Song',
-        thumbnailHash: 'hash_lq',
+        artworkUri: coverPath,
         durationMs: 180000,
         fileSize: 1000,
         modifiedAt: 1000,
@@ -151,7 +151,7 @@ void main() {
 
       controller.emitState(PlaybackState(
         currentIndex: 0,
-        queue: [track.toEngineItem()],
+          queue: [track.toAudioSource()],
         isPlaying: true,
       ));
 
@@ -160,13 +160,12 @@ void main() {
       final item = handler.mediaItem.value;
       expect(item, isNotNull);
       expect(item!.artUri, isNotNull);
-      // Verify small / LQ thumbnail is selected
-      expect(item.artUri!.toFilePath().contains('_low.png'), isTrue);
+      expect(item.artUri!.toFilePath().endsWith('hash_lq'), isTrue);
     });
 
     test('30 rapid skips execute smoothly without queue re-scan or bridge freeze', () async {
       final tracks = List.generate(50, (i) {
-        final coverPath = MetadataUtils.getThumbnailFilePath('track_$i', quality: ThumbnailQuality.low);
+          final coverPath = MetadataUtils.getArtworkPath('track_$i');
         final coverLq = File(coverPath);
         coverLq.parent.createSync(recursive: true);
         coverLq.writeAsBytesSync([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46]);
@@ -178,13 +177,13 @@ void main() {
           durationMs: 200000,
           fileSize: 1000,
           modifiedAt: 1000,
-          thumbnailHash: 'track_$i',
+            artworkUri: coverPath,
           artists: [Artist(id: i, name: 'Artist $i')],
         );
       });
 
       final playables = tracks
-          .map((t) => t.toEngineItem())
+          .map((t) => t.toAudioSource())
           .toList();
 
       controller.emitState(PlaybackState(

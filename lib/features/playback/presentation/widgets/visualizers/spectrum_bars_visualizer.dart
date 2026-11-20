@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 /// transparently with peak caps and zero dB/Hz clutter.
 class SpectrumBarsPainter extends CustomPainter {
   final List<double> magnitudes;
+  final List<double> Function()? magnitudesProvider;
   final bool isActive;
+  final bool Function()? isActiveProvider;
   final double cornerRadius;
   final Color? accentColor;
 
@@ -21,35 +23,70 @@ class SpectrumBarsPainter extends CustomPainter {
     end: Alignment.topCenter,
   );
 
-  const SpectrumBarsPainter({
+  final Paint _barPaint = Paint()..style = PaintingStyle.fill;
+  final Paint _capPaint = Paint()
+    ..color = Colors.white.withValues(alpha: 0.95)
+    ..strokeWidth = 2.0;
+
+  Size? _cachedShaderSize;
+  Color? _cachedAccentColor;
+  Shader? _cachedShader;
+
+  SpectrumBarsPainter({
+    super.repaint,
     required this.magnitudes,
+    this.magnitudesProvider,
     this.isActive = true,
+    this.isActiveProvider,
     this.cornerRadius = 20.0,
     this.accentColor,
   });
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bandCount = math.max(1, magnitudes.isEmpty ? 10 : magnitudes.length);
-    const spacing = 4.0;
-    final totalSpacing = spacing * (bandCount - 1);
-    final barWidth = math.max(2.0, (size.width - totalSpacing) / bandCount);
-
-    final barGradient = accentColor != null
+  Shader _resolveShader(Size size) {
+    if (_cachedShader != null &&
+        _cachedShaderSize == size &&
+        _cachedAccentColor == accentColor) {
+      return _cachedShader!;
+    }
+    final gradient = accentColor != null
         ? LinearGradient(
             colors: [
-              accentColor!.withValues(alpha: 0.40),
               accentColor!,
-              Colors.white.withValues(alpha: 0.90),
+              HSLColor.fromColor(accentColor!)
+                  .withLightness(
+                    (HSLColor.fromColor(accentColor!).lightness + 0.15)
+                        .clamp(0.0, 1.0),
+                  )
+                  .toColor(),
+              Colors.white.withValues(alpha: 0.95),
             ],
             begin: Alignment.bottomCenter,
             end: Alignment.topCenter,
           )
         : defaultSpectrumGradient;
+    _cachedShader = gradient.createShader(Offset.zero & size);
+    _cachedShaderSize = size;
+    _cachedAccentColor = accentColor;
+    return _cachedShader!;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final activeMagnitudes = magnitudesProvider?.call() ?? magnitudes;
+    final active = isActiveProvider?.call() ?? isActive;
+    final bandCount = math.max(
+      1,
+      activeMagnitudes.isEmpty ? 10 : activeMagnitudes.length,
+    );
+    const spacing = 4.0;
+    final totalSpacing = spacing * (bandCount - 1);
+    final barWidth = math.max(2.0, (size.width - totalSpacing) / bandCount);
+
+    _barPaint.shader = _resolveShader(size);
 
     for (int i = 0; i < bandCount; i++) {
-      final mag = (i < magnitudes.length && isActive)
-          ? magnitudes[i].clamp(0.0, 1.0)
+      final mag = (i < activeMagnitudes.length && active)
+          ? activeMagnitudes[i].clamp(0.0, 1.0)
           : 0.03;
 
       final x = i * (barWidth + spacing);
@@ -57,27 +94,20 @@ class SpectrumBarsPainter extends CustomPainter {
       final y = size.height - barHeight;
 
       final barRect = Rect.fromLTWH(x, y, barWidth, barHeight);
-      final barPaint = Paint()
-        ..shader = barGradient.createShader(barRect)
-        ..style = PaintingStyle.fill;
-
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           barRect,
           Radius.circular(math.min(barWidth / 2, 4.0)),
         ),
-        barPaint,
+        _barPaint,
       );
 
       // Peak cap line
-      if (isActive && mag > 0.06) {
-        final capPaint = Paint()
-          ..color = Colors.white.withValues(alpha: 0.95)
-          ..strokeWidth = 2.0;
+      if (active && mag > 0.06) {
         canvas.drawLine(
           Offset(x, y - 3),
           Offset(x + barWidth, y - 3),
-          capPaint,
+          _capPaint,
         );
       }
     }
@@ -85,9 +115,16 @@ class SpectrumBarsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant SpectrumBarsPainter oldDelegate) {
-    return oldDelegate.isActive != isActive ||
+    if (oldDelegate.isActive != isActive ||
         oldDelegate.cornerRadius != cornerRadius ||
         oldDelegate.accentColor != accentColor ||
-        oldDelegate.magnitudes != magnitudes;
+        oldDelegate.magnitudesProvider != magnitudesProvider ||
+        oldDelegate.isActiveProvider != isActiveProvider) {
+      return true;
+    }
+    if (magnitudesProvider != null) {
+      return false;
+    }
+    return oldDelegate.magnitudes != magnitudes;
   }
 }

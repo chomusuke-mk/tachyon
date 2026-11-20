@@ -246,7 +246,7 @@ abstract final class TrackActionHelper {
 
   static void showAddQueueToPlaylistDialog(
     BuildContext context,
-    List<EngineItem<AudioPlayable>> queue,
+    List<AudioSource<AudioPlayable>> queue,
   ) {
     final strings = context.read<LocaleController>().localeStrings;
     final controller = context.read<PlaylistsController>();

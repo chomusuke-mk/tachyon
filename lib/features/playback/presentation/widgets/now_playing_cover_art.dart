@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
-import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
@@ -17,21 +17,60 @@ import 'package:tachyon/features/settings/presentation/settings_controller.dart'
 import 'package:tachyon/shared/utils/artwork_color_resolver.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
+class _VisualizerBallistics extends ChangeNotifier {
+  final Float32List bands = Float32List(10);
+  double smoothedBass = 0.0;
+  double smoothedRms = 0.0;
+  double rawPeak = 0.0;
+  double leftChannel = 0.0;
+  double rightChannel = 0.0;
+  bool isPlaying = false;
+  bool enabled = true;
+
+  void reset() {
+    bands.fillRange(0, 10, 0.0);
+    smoothedBass = 0.0;
+    smoothedRms = 0.0;
+    rawPeak = 0.0;
+    leftChannel = 0.0;
+    rightChannel = 0.0;
+    notifyListeners();
+  }
+
+  void updateFromVisualizer(ma.VisualizerData vis) {
+    if (!enabled) return;
+    final active = isPlaying;
+    final rawRms = active ? vis.rms : 0.0;
+    rawPeak = active ? vis.peak : 0.0;
+    leftChannel = active ? vis.left : 0.0;
+    rightChannel = active ? vis.right : 0.0;
+
+    final visBands = vis.bands;
+    final hasLiveBands = active && visBands.length >= 10;
+
+    for (int i = 0; i < 10; i++) {
+      final target = hasLiveBands ? visBands[i].clamp(0.0, 1.0) : 0.0;
+      final cur = bands[i];
+      var next = cur + (target - cur) * (target > cur ? 0.38 : 0.15);
+      if (next < 0.01) next = 0.0;
+      bands[i] = next;
+    }
+
+    final rawBass = hasLiveBands ? math.max(visBands[0], visBands[1]) : 0.0;
+    final targetBass = active && rawBass > 0.16
+        ? ((rawBass - 0.16) / (1.0 - 0.16)).clamp(0.0, 1.0)
+        : 0.0;
+    smoothedBass +=
+        (targetBass - smoothedBass) * (targetBass > smoothedBass ? 0.35 : 0.14);
+    if (smoothedBass < 0.01) smoothedBass = 0.0;
+
+    smoothedRms = (smoothedRms * 0.85) + (rawRms * 0.15);
+    notifyListeners();
+  }
+}
+
 /// Self-contained, beat-reactive artwork and multi-mode visualizer component
 /// for the Now Playing view.
-///
-/// Supports 4 distinct visual display modes (extensible via [NowPlayingVisualizerRenderer]):
-/// 1. [NowPlayingVisualizerMode.off]: Pure album art cover without visualizer or pulsation.
-/// 2. [NowPlayingVisualizerMode.wave]: Cover art with continuous reactive wave underneath and bass pulse.
-/// 3. [NowPlayingVisualizerMode.bars]: Studio 10-band spectrum analyzer from miniaudio_player,
-///    replacing the cover art.
-/// 4. [NowPlayingVisualizerMode.circle]: Reactive circular audio visualizer
-///    with pulsing neon ring and 3D undulating particle wave lattice ribbons
-///    (inspired by the iconic NCS visualizer style).
-///
-/// Tapping on the artwork seamlessly cycles through the modes with HUD pill confirmation
-/// and persists the user preference across app restarts. Horizontal drag gestures
-/// handle next/previous track navigation.
 class NowPlayingCoverArt extends StatefulWidget {
   const NowPlayingCoverArt({super.key});
 
@@ -43,29 +82,15 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
     with TickerProviderStateMixin {
   static const double _cornerRadius = 20.0;
 
-  static const List<double> _zeroBands = <double>[
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-  ];
+  final _VisualizerBallistics _ballistics = _VisualizerBallistics();
+  final ValueNotifier<double> _dragOffsetNotifier = ValueNotifier<double>(0.0);
 
-  // Inertia and damping tracking arrays:
-  // Smooth Exponential Moving Average filters to eliminate high-frequency jitter/trembling
-  final List<double> _smoothedBands = List<double>.filled(10, 0.0);
-  double _smoothedBass = 0.0;
-  double _smoothedRms = 0.0;
+  PlaybackController? _playback;
+  ValueListenable<ma.VisualizerData>? _visListenable;
 
-  String? _lastThumbnailHash;
+  String? _lastArtworkUri;
   Color? _resolvedColor;
 
-  double _dragOffset = 0.0;
   late final AnimationController _resetController;
   Animation<double>? _resetAnimation;
 
@@ -80,9 +105,7 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
       vsync: this,
       duration: const Duration(milliseconds: 200),
     )..addListener(() {
-        setState(() {
-          _dragOffset = _resetAnimation?.value ?? 0.0;
-        });
+        _dragOffsetNotifier.value = _resetAnimation?.value ?? 0.0;
       });
 
     _hudController = AnimationController(
@@ -90,37 +113,84 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
       duration: const Duration(milliseconds: 200),
     );
 
-    // Read persisted mode and enable hardware visualizer DSP on mount
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        final repo = Provider.of<SettingsRepository?>(context, listen: false) ??
-            Provider.of<SettingsController?>(context, listen: false)?.repository;
-        if (repo != null) {
+      if (!mounted) return;
+      final repo = Provider.of<SettingsRepository?>(context, listen: false) ??
+          Provider.of<SettingsController?>(context, listen: false)?.repository;
+      if (repo != null) {
+        final savedMode = repo.getNowPlayingVisualizerMode();
+        if (savedMode != _mode) {
           setState(() {
-            _mode = repo.getNowPlayingVisualizerMode();
+            _mode = savedMode;
           });
         }
-        context.read<PlaybackController>().setVisualizerEnabled(true);
       }
+      _bindPlaybackController();
     });
+  }
+
+  void _bindPlaybackController() {
+    final playback = _playback ?? context.read<PlaybackController>();
+    _playback = playback;
+    _ballistics.enabled = _mode != NowPlayingVisualizerMode.off;
+    _ballistics.isPlaying = playback.isPlaying;
+
+    if (_visListenable == null) {
+      _visListenable = playback.visualizerDataListenable;
+      _visListenable!.addListener(_onVisualizerTick);
+      playback.transportListenable.addListener(_onTransportChanged);
+    }
+
+    playback.setVisualizerEnabled(_mode != NowPlayingVisualizerMode.off);
+  }
+
+  void _onTransportChanged() {
+    final p = _playback;
+    if (p == null) return;
+    final playing = p.isPlaying;
+    if (_ballistics.isPlaying != playing) {
+      _ballistics.isPlaying = playing;
+      if (!playing) {
+        _ballistics.reset();
+      } else {
+        _ballistics.updateFromVisualizer(_visListenable!.value);
+      }
+    }
+  }
+
+  void _onVisualizerTick() {
+    final vis = _visListenable?.value;
+    if (vis == null) return;
+    _ballistics.updateFromVisualizer(vis);
   }
 
   @override
   void dispose() {
+    _visListenable?.removeListener(_onVisualizerTick);
+    _playback?.transportListenable.removeListener(_onTransportChanged);
     _hudTimer?.cancel();
     _hudController.dispose();
     _resetController.dispose();
+    _dragOffsetNotifier.dispose();
+    _ballistics.dispose();
     super.dispose();
   }
 
   void _cycleVisualizerMode() {
+    final nextMode = _mode.next;
+    final visEnabled = nextMode != NowPlayingVisualizerMode.off;
     setState(() {
-      _mode = _mode.next;
+      _mode = nextMode;
     });
+    _ballistics.enabled = visEnabled;
+    if (!visEnabled) {
+      _ballistics.reset();
+    }
+    _playback?.setVisualizerEnabled(visEnabled);
 
     final repo = Provider.of<SettingsRepository?>(context, listen: false) ??
         Provider.of<SettingsController?>(context, listen: false)?.repository;
-    repo?.setNowPlayingVisualizerMode(_mode);
+    repo?.setNowPlayingVisualizerMode(nextMode);
 
     // Trigger HUD pill overlay
     _hudTimer?.cancel();
@@ -139,9 +209,7 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    setState(() {
-      _dragOffset += details.primaryDelta ?? 0.0;
-    });
+    _dragOffsetNotifier.value += details.primaryDelta ?? 0.0;
   }
 
   void _onHorizontalDragEnd(
@@ -151,13 +219,14 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
     final velocity = details.primaryVelocity ?? 0.0;
     const threshold = 40.0;
     const velocityThreshold = 250.0;
+    final offset = _dragOffsetNotifier.value;
 
-    if (_dragOffset < -threshold || velocity < -velocityThreshold) {
+    if (offset < -threshold || velocity < -velocityThreshold) {
       // Swiped forward (finger moved right to left) -> next track
       if (playback.hasNext) {
         playback.next();
       }
-    } else if (_dragOffset > threshold || velocity > velocityThreshold) {
+    } else if (offset > threshold || velocity > velocityThreshold) {
       // Swiped backward (finger moved left to right) -> previous track
       if (playback.hasPrevious) {
         playback.previous();
@@ -175,7 +244,7 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
 
   void _animateReset() {
     _resetAnimation = Tween<double>(
-      begin: _dragOffset,
+      begin: _dragOffsetNotifier.value,
       end: 0.0,
     ).animate(
       CurvedAnimation(
@@ -188,7 +257,7 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
 
   @override
   void deactivate() {
-    final controller = context.read<PlaybackController>();
+    final controller = _playback ?? context.read<PlaybackController>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         controller.setVisualizerEnabled(false);
@@ -197,22 +266,22 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
     super.deactivate();
   }
 
-  void _resolveThumbnailColor(String? hash, ThemeData theme) {
-    if (hash == null || hash.isEmpty) {
+  void _resolveArtworkColor(String? artworkUri, ThemeData theme) {
+    if (artworkUri == null || artworkUri.isEmpty) {
       if (_resolvedColor != null) {
         _resolvedColor = null;
-        _lastThumbnailHash = null;
+        _lastArtworkUri = null;
       }
       return;
     }
-    if (hash == _lastThumbnailHash) return;
-    _lastThumbnailHash = hash;
+    if (artworkUri == _lastArtworkUri) return;
+    _lastArtworkUri = artworkUri;
 
     ArtworkColorResolver.resolveColor(
-      thumbnailHash: hash,
+      artworkUri: artworkUri,
       theme: theme,
     ).then((color) {
-      if (mounted && _lastThumbnailHash == hash && _resolvedColor != color) {
+      if (mounted && _lastArtworkUri == artworkUri && _resolvedColor != color) {
         setState(() {
           _resolvedColor = color;
         });
@@ -304,96 +373,59 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
 
   @override
   Widget build(BuildContext context) {
-    final playback = context.watch<PlaybackController>();
-    final currentPlayable = playback.currentPlayable;
-    if (currentPlayable == null) {
-      return const SizedBox.shrink();
-    }
-
-    final filePath = currentPlayable.filePath;
-    final thumbnailHash = currentPlayable.thumbnailHash;
-    final isPlaying = playback.isPlaying;
+    final playback = context.read<PlaybackController>();
     final theme = Theme.of(context);
     final strings = context.watch<LocaleController>().localeStrings;
-
-    _resolveThumbnailColor(thumbnailHash, theme);
-
-    // Compute solid color matching miniplayer background
-    final isDark = theme.brightness == Brightness.dark;
-    final isOled =
-        isDark && theme.colorScheme.surface == const Color(0xFF000000);
-    final waveColor = _resolvedColor ??
-        (isOled
-            ? theme.colorScheme.surface
-            : theme.colorScheme.surfaceContainerHigh);
-
     final renderer = NowPlayingVisualizerFactory.getRenderer(_mode);
+    final motionListenable = Listenable.merge([
+      _ballistics,
+      _dragOffsetNotifier,
+    ]);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _cycleVisualizerMode,
-      onHorizontalDragStart: _onHorizontalDragStart,
-      onHorizontalDragUpdate: _onHorizontalDragUpdate,
-      onHorizontalDragEnd: (details) => _onHorizontalDragEnd(details, playback),
-      onHorizontalDragCancel: _onHorizontalDragCancel,
-      child: RepaintBoundary(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final maxSide =
-                math.min(constraints.maxWidth, constraints.maxHeight);
-            final size =
-                maxSide.isFinite && maxSide > 0 ? maxSide * 0.84 : 280.0;
+    return ListenableBuilder(
+      listenable: playback.trackListenable,
+      builder: (context, _) {
+        final currentPlayable = playback.currentPlayable;
+        if (currentPlayable == null) {
+          return const SizedBox.shrink();
+        }
 
-            return ValueListenableBuilder<List<double>>(
-              valueListenable: playback.visualizerListenable,
-              builder: (context, vis, cachedHeroChild) {
-                // Raw hardware snapshot: [0] rms, [1] peak, [2] left, [3] right, [4..13] bands
-                final hasLiveBands = isPlaying && vis.length >= 14;
-                final double rawRms =
-                    (isPlaying && vis.isNotEmpty) ? vis[0] : 0.0;
+        _ballistics.isPlaying = playback.isPlaying;
+        final filePath = currentPlayable.filePath;
+        _resolveArtworkColor(currentPlayable.artworkUri, theme);
+        final waveColor = _resolvedColor ?? theme.colorScheme.primary;
 
-                // 1. Audio Ballistics with Fluid Inertia for Frequency Bands:
-                var hasNonZeroBand = false;
-                for (int i = 0; i < 10; i++) {
-                  final target =
-                      hasLiveBands ? vis[4 + i].clamp(0.0, 1.0) : 0.0;
-                  if (target > _smoothedBands[i]) {
-                    _smoothedBands[i] += (target - _smoothedBands[i]) * 0.38;
-                  } else {
-                    _smoothedBands[i] += (target - _smoothedBands[i]) * 0.15;
-                  }
-                  if (_smoothedBands[i] < 0.01) {
-                    _smoothedBands[i] = 0.0;
-                  } else {
-                    hasNonZeroBand = true;
-                  }
-                }
-                final List<double> displayBands = hasNonZeroBand
-                    ? List<double>.of(_smoothedBands, growable: false)
-                    : _zeroBands;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _cycleVisualizerMode,
+          onHorizontalDragStart: _onHorizontalDragStart,
+          onHorizontalDragUpdate: _onHorizontalDragUpdate,
+          onHorizontalDragEnd: (details) =>
+              _onHorizontalDragEnd(details, playback),
+          onHorizontalDragCancel: _onHorizontalDragCancel,
+          child: RepaintBoundary(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final maxSide = math.min(
+                  constraints.maxWidth,
+                  constraints.maxHeight,
+                );
+                final size = maxSide.isFinite && maxSide > 0
+                    ? maxSide * 0.84
+                    : 280.0;
 
-                // 2. Audio Ballistics with Inertia for Bass ONLY (Sub-bass & Kick drum: bands 0 and 1)
-                final rawBass =
-                    hasLiveBands ? math.max(vis[4], vis[5]) : 0.0;
+                final coverHero = Hero(
+                  tag: 'now_playing_art_$filePath',
+                  child: AlbumArtImage(
+                    playable: currentPlayable,
+                    quality: ThumbnailQuality.high,
+                    width: size,
+                    height: size,
+                    fit: BoxFit.cover,
+                  ),
+                );
 
-                final targetBass = isPlaying && rawBass > 0.16
-                    ? ((rawBass - 0.16) / (1.0 - 0.16)).clamp(0.0, 1.0)
-                    : 0.0;
-
-                if (targetBass > _smoothedBass) {
-                  _smoothedBass += (targetBass - _smoothedBass) * 0.35;
-                } else {
-                  _smoothedBass += (targetBass - _smoothedBass) * 0.14;
-                }
-                if (_smoothedBass < 0.01) _smoothedBass = 0.0;
-
-                // 3. Ambient RMS smoothing
-                _smoothedRms = (_smoothedRms * 0.85) + (rawRms * 0.15);
-
-                // 4. Delegate visual presentation to selected strategy renderer
-                final scale = renderer.computeScale(_smoothedBass);
-
-                Widget cardStack = SizedBox(
+                final stableCardStack = SizedBox(
                   width: size,
                   height: size,
                   child: Stack(
@@ -403,70 +435,55 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
                         context: context,
                         size: size,
                         cornerRadius: _cornerRadius,
-                        coverArt: cachedHeroChild!,
-                        displayBands: displayBands,
-                        smoothedBass: _smoothedBass,
-                        smoothedRms: _smoothedRms,
+                        coverArt: coverHero,
+                        displayBands: _ballistics.bands,
+                        smoothedBass: _ballistics.smoothedBass,
+                        smoothedRms: _ballistics.smoothedRms,
                         waveColor: waveColor,
                         trackColor: _resolvedColor,
-                        isPlaying: isPlaying,
+                        isPlaying: _ballistics.isPlaying,
+                        rawPeak: _ballistics.rawPeak,
+                        leftChannel: _ballistics.leftChannel,
+                        rightChannel: _ballistics.rightChannel,
+                        frameListenable: _ballistics,
+                        bandsProvider: () => _ballistics.bands,
+                        smoothedRmsProvider: () => _ballistics.smoothedRms,
+                        rawPeakProvider: () => _ballistics.rawPeak,
+                        leftChannelProvider: () => _ballistics.leftChannel,
+                        rightChannelProvider: () => _ballistics.rightChannel,
+                        isPlayingProvider: () => _ballistics.isPlaying,
                       ),
                       _buildHudBadge(strings),
                     ],
                   ),
                 );
 
-                if (scale != 1.0) {
-                  cardStack = Transform.scale(scale: scale, child: cardStack);
-                }
-                if (_dragOffset != 0.0) {
-                  cardStack = Transform.translate(
-                    offset: Offset(_dragOffset.clamp(-120.0, 120.0), 0.0),
-                    child: cardStack,
-                  );
-                }
-                return cardStack;
+                return AnimatedBuilder(
+                  animation: motionListenable,
+                  child: stableCardStack,
+                  builder: (context, child) {
+                    final scale = renderer.computeScale(
+                      _ballistics.smoothedBass,
+                    );
+                    final dragOffset = _dragOffsetNotifier.value;
+                    Widget result = child!;
+                    if (scale != 1.0) {
+                      result = Transform.scale(scale: scale, child: result);
+                    }
+                    if (dragOffset != 0.0) {
+                      result = Transform.translate(
+                        offset: Offset(dragOffset.clamp(-120.0, 120.0), 0.0),
+                        child: result,
+                      );
+                    }
+                    return result;
+                  },
+                );
               },
-              child: Hero(
-                tag: 'now_playing_art_$filePath',
-                child: (currentPlayable is RadioStation &&
-                        currentPlayable.faviconUrl?.isNotEmpty == true)
-                    ? Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        child: Center(
-                          child: CachedNetworkImage(
-                            imageUrl: currentPlayable.faviconUrl!,
-                            fit: BoxFit.contain,
-                            placeholder: (context, url) => Icon(
-                              Icons.radio_rounded,
-                              size: 64,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            errorWidget: (context, url, error) => Icon(
-                              Icons.radio_rounded,
-                              size: 64,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      )
-                    : AlbumArtImage(
-                        thumbnailHash: thumbnailHash,
-                        quality: ThumbnailQuality.high,
-                        fit: BoxFit.cover,
-                        fallback: Icon(
-                          currentPlayable.isStream
-                              ? Icons.radio_rounded
-                              : Icons.album_rounded,
-                          size: 64,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-              ),
-            );
-          },
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

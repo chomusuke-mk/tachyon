@@ -366,7 +366,7 @@ class _TracksScreenState extends State<TracksScreen> {
                                 child: AspectRatio(
                                   aspectRatio: 1.0,
                                   child: AlbumArtImage(
-                                    thumbnailHash: track.thumbnailHash,
+                                    artworkUri: track.artworkUri,
                                     quality: ThumbnailQuality.medium,
                                     fit: BoxFit.cover,
                                   ),

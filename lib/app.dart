@@ -20,57 +20,65 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsController>();
-    final hasCustomBg = AppBackground.fileExists(settings.customBackgroundPath);
+    final settings = context.read<SettingsController>();
 
-    final lightTheme = TachyonTheme.buildLightTheme(
-      seedColor: settings.accentColor,
-      hasCustomBackground: hasCustomBg,
-    );
-    final darkTheme = settings.isOledMode
-        ? TachyonTheme.buildOledTheme(
-            seedColor: settings.accentColor,
-            hasCustomBackground: hasCustomBg,
-          )
-        : TachyonTheme.buildDarkTheme(
-            seedColor: settings.accentColor,
-            hasCustomBackground: hasCustomBg,
-          );
+    return ListenableBuilder(
+      listenable: settings.themeListenable,
+      builder: (context, _) {
+        final hasCustomBg = AppBackground.fileExists(
+          settings.customBackgroundPath,
+        );
 
-    return MaterialApp(
-      navigatorKey: navigatorKey,
-      title: 'Tachyon',
-      debugShowCheckedModeBanner: false,
-      themeMode: settings.themeMode,
-      theme: lightTheme,
-      darkTheme: darkTheme,
-      builder: (context, child) {
-        return ValueListenableBuilder<bool>(
-          valueListenable: SystemMediaService.isMinimizedListenable,
-          child: child,
-          builder: (context, isMinimized, routeChild) {
-            return DesktopShortcutsHandler(
-              navigatorKey: navigatorKey,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (hasCustomBg && !isMinimized)
-                    AppBackground(
-                      imagePath: settings.customBackgroundPath,
-                      blurSigma: settings.backgroundBlurSigma,
-                      dimOpacity: settings.backgroundDimOpacity,
-                    ),
-                  routeChild ?? const SizedBox.shrink(),
-                ],
-              ),
+        final lightTheme = TachyonTheme.buildLightTheme(
+          seedColor: settings.accentColor,
+          hasCustomBackground: hasCustomBg,
+        );
+        final darkTheme = settings.isOledMode
+            ? TachyonTheme.buildOledTheme(
+                seedColor: settings.accentColor,
+                hasCustomBackground: hasCustomBg,
+              )
+            : TachyonTheme.buildDarkTheme(
+                seedColor: settings.accentColor,
+                hasCustomBackground: hasCustomBg,
+              );
+
+        return MaterialApp(
+          navigatorKey: navigatorKey,
+          title: 'Tachyon',
+          debugShowCheckedModeBanner: false,
+          themeMode: settings.themeMode,
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          builder: (context, child) {
+            return ValueListenableBuilder<bool>(
+              valueListenable: SystemMediaService.isMinimizedListenable,
+              child: child,
+              builder: (context, isMinimized, routeChild) {
+                return DesktopShortcutsHandler(
+                  navigatorKey: navigatorKey,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (hasCustomBg && !isMinimized)
+                        AppBackground(
+                          imagePath: settings.customBackgroundPath,
+                          blurSigma: settings.backgroundBlurSigma,
+                          dimOpacity: settings.backgroundDimOpacity,
+                        ),
+                      routeChild ?? const SizedBox.shrink(),
+                    ],
+                  ),
+                );
+              },
             );
           },
+          home: PermissionsGate(
+            initiallyGranted: permissionsGranted,
+            child: const TachyonShell(),
+          ),
         );
       },
-      home: PermissionsGate(
-        initiallyGranted: permissionsGranted,
-        child: const TachyonShell(),
-      ),
     );
   }
 }

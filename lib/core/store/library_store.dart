@@ -14,6 +14,7 @@ import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
 import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist_sort_option.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
 
 /// In-memory relational graph for the Main Isolate.
@@ -235,25 +236,25 @@ class LibraryStore extends ChangeNotifier {
     ];
   }
 
-  /// Collects all active cover art hashes across tracks, albums, and artists in RAM.
-  Set<String> getAllThumbnailHashes() {
-    final hashes = <String>{};
+  /// Collects all active cover art URIs/paths across tracks, albums, and artists in RAM.
+  Set<String> getAllArtworkUris() {
+    final uris = <String>{};
     for (final t in _allTracks) {
-      if (t.thumbnailHash != null && t.thumbnailHash!.isNotEmpty) {
-        hashes.add(t.thumbnailHash!);
+      if (t.artworkUri != null && t.artworkUri!.isNotEmpty) {
+        uris.add(t.artworkUri!);
       }
     }
     for (final a in _allAlbums) {
-      if (a.thumbnailHash != null && a.thumbnailHash!.isNotEmpty) {
-        hashes.add(a.thumbnailHash!);
+      if (a.artworkUri != null && a.artworkUri!.isNotEmpty) {
+        uris.add(a.artworkUri!);
       }
     }
     for (final ar in _allArtists) {
-      if (ar.thumbnailHash != null && ar.thumbnailHash!.isNotEmpty) {
-        hashes.add(ar.thumbnailHash!);
+      if (ar.artworkUri != null && ar.artworkUri!.isNotEmpty) {
+        uris.add(ar.artworkUri!);
       }
     }
-    return hashes;
+    return uris;
   }
 
   // ---------------------------------------------------------------------------
@@ -298,48 +299,64 @@ class LibraryStore extends ChangeNotifier {
       return internedStrings.putIfAbsent(trimmed, () => trimmed);
     }
 
-    // Pre-calculate thumbnail fallbacks from snapshot
-    final albumFirstTrackThumbnail = <int, String>{};
+    String? resolveArtwork(String? value) {
+      if (value == null) return null;
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return null;
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return internString(trimmed);
+      }
+      if (p.isAbsolute(trimmed)) {
+        return internString(trimmed);
+      }
+      if (MetadataUtils.thumbnailsDirectory != null) {
+        return internString(MetadataUtils.getArtworkPath(trimmed));
+      }
+      return internString(trimmed);
+    }
+
+    // Pre-calculate artwork fallbacks from snapshot
+    final albumFirstTrackArtwork = <int, String>{};
     for (final rawTrack in snapshot.tracks) {
       if (rawTrack.albumId != null) {
-        final hash = internString(rawTrack.thumbnailHash);
-        if (hash != null) {
-          albumFirstTrackThumbnail.putIfAbsent(rawTrack.albumId!, () => hash);
+        final uri = resolveArtwork(rawTrack.artworkUri);
+        if (uri != null) {
+          albumFirstTrackArtwork.putIfAbsent(rawTrack.albumId!, () => uri);
         }
       }
     }
 
-    final effectiveAlbumThumbnails = <int, String>{};
-    final artistFirstAlbumThumbnail = <int, String>{};
+    final effectiveAlbumArtworks = <int, String>{};
+    final artistFirstAlbumArtwork = <int, String>{};
     for (final rawAlbum in snapshot.albums) {
-      final hash =
-          internString(rawAlbum.thumbnailHash) ??
-          albumFirstTrackThumbnail[rawAlbum.id];
-      if (hash != null) {
-        effectiveAlbumThumbnails[rawAlbum.id] = hash;
+      final uri =
+          resolveArtwork(rawAlbum.artworkUri) ??
+          albumFirstTrackArtwork[rawAlbum.id];
+      if (uri != null) {
+        effectiveAlbumArtworks[rawAlbum.id] = uri;
         if (rawAlbum.artistId != null) {
-          artistFirstAlbumThumbnail.putIfAbsent(rawAlbum.artistId!, () => hash);
+          artistFirstAlbumArtwork.putIfAbsent(rawAlbum.artistId!, () => uri);
         }
       }
     }
 
-    final trackEffectiveThumbnail = <int, String>{};
+    final trackEffectiveArtwork = <int, String>{};
     for (final rawTrack in snapshot.tracks) {
-      final hash =
-          internString(rawTrack.thumbnailHash) ??
+      final uri =
+          resolveArtwork(rawTrack.artworkUri) ??
           (rawTrack.albumId != null
-              ? effectiveAlbumThumbnails[rawTrack.albumId]
+              ? effectiveAlbumArtworks[rawTrack.albumId]
               : null);
-      if (hash != null) {
-        trackEffectiveThumbnail[rawTrack.id] = hash;
+      if (uri != null) {
+        trackEffectiveArtwork[rawTrack.id] = uri;
       }
     }
 
-    final artistFirstTrackThumbnail = <int, String>{};
+    final artistFirstTrackArtwork = <int, String>{};
     for (final pair in snapshot.trackArtists) {
-      final hash = trackEffectiveThumbnail[pair.trackId];
-      if (hash != null) {
-        artistFirstTrackThumbnail.putIfAbsent(pair.artistId, () => hash);
+      final uri = trackEffectiveArtwork[pair.trackId];
+      if (uri != null) {
+        artistFirstTrackArtwork.putIfAbsent(pair.artistId, () => uri);
       }
     }
 
@@ -353,15 +370,15 @@ class LibraryStore extends ChangeNotifier {
       artistAlbumsMap[rawArtist.id] = albumsList;
       artistTracksMap[rawArtist.id] = tracksList;
 
-      final effectiveThumbnail =
-          internString(rawArtist.thumbnailHash) ??
-          artistFirstAlbumThumbnail[rawArtist.id] ??
-          artistFirstTrackThumbnail[rawArtist.id];
+      final effectiveArtwork =
+          resolveArtwork(rawArtist.artworkUri) ??
+          artistFirstAlbumArtwork[rawArtist.id] ??
+          artistFirstTrackArtwork[rawArtist.id];
 
       final artist = Artist(
         id: rawArtist.id,
         name: rawArtist.name,
-        thumbnailHash: effectiveThumbnail,
+        artworkUri: effectiveArtwork,
         albums: albumsList,
         tracks: tracksList,
       );
@@ -396,15 +413,15 @@ class LibraryStore extends ChangeNotifier {
           ? _artistsById[rawAlbum.artistId]
           : null;
 
-      final effectiveAlbumThumbnail =
-          internString(rawAlbum.thumbnailHash) ??
-          effectiveAlbumThumbnails[rawAlbum.id];
+      final effectiveAlbumArtwork =
+          resolveArtwork(rawAlbum.artworkUri) ??
+          effectiveAlbumArtworks[rawAlbum.id];
 
       final album = Album(
         id: rawAlbum.id,
         name: rawAlbum.name,
         year: rawAlbum.year,
-        thumbnailHash: effectiveAlbumThumbnail,
+        artworkUri: effectiveAlbumArtwork,
         artist: artist,
         tracks: tracksList,
       );
@@ -476,8 +493,8 @@ class LibraryStore extends ChangeNotifier {
         replayGainTrackGain: rawTrack.replayGainTrackGain,
         replayGainTrackPeak: rawTrack.replayGainTrackPeak,
         waveform: WaveformCodec.decode(rawTrack.waveformData),
-        thumbnailHash:
-            internString(rawTrack.thumbnailHash) ?? album?.thumbnailHash,
+        artworkUri:
+            resolveArtwork(rawTrack.artworkUri) ?? album?.artworkUri,
         album: album,
         artists: linkedArtists,
         genres: linkedGenres,

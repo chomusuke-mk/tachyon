@@ -164,7 +164,7 @@ void main() {
     });
 
     test(
-      'O(1) hydrated metadata resolves _low.png artUrl without disk existence checks',
+      'O(1) hydrated metadata resolves artworkUri without disk existence checks',
       () async {
         final mpris = LinuxMprisBridge(
           handler: handler,
@@ -175,7 +175,7 @@ void main() {
         final album = Album(
           id: 3,
           name: 'Benchmark Album',
-          thumbnailHash: 'album_hash_without_file_on_disk',
+        artworkUri: '/thumbnails/album_hash_without_file_on_disk',
         );
         final track = Track(
           id: 42,
@@ -184,7 +184,7 @@ void main() {
           durationMs: 215000,
           fileSize: 12000000,
           modifiedAt: 1700000000,
-          thumbnailHash: 'track_hash_without_file_on_disk',
+          artworkUri: '/thumbnails/track_hash_without_file_on_disk',
           artists: const [artist],
           album: album,
         );
@@ -192,7 +192,7 @@ void main() {
         controller.emitState(
           PlaybackState(
             currentIndex: 0,
-            queue: [track.toEngineItem()],
+          queue: [track.toAudioSource()],
             isPlaying: true,
           ),
         );
@@ -215,9 +215,9 @@ void main() {
         expect(artUrl, startsWith('file://'));
         expect(
           artUrl,
-          endsWith('track_hash_without_file_on_disk_low.png'),
+        endsWith('track_hash_without_file_on_disk'),
           reason:
-              'MPRIS must always use ThumbnailQuality.low (_low.png) in O(1) without disk validation',
+              'MPRIS must always resolve artworkUri directly in O(1) without disk validation',
         );
 
         final mprisObj = TachyonMprisObject(mpris);
@@ -254,7 +254,7 @@ void main() {
         final album = Album(
           id: 1,
           name: 'Stress Test Album',
-          thumbnailHash: 'stress_album_hash',
+        artworkUri: '/thumbnails/stress_album_hash',
         );
         final tracks = List.generate(
           60,
@@ -265,13 +265,13 @@ void main() {
             durationMs: 180000 + (i * 1000),
             fileSize: 4000000,
             modifiedAt: 1700000000 + i,
-            thumbnailHash: 'hash_track_$i',
+          artworkUri: '/thumbnails/hash_track_$i',
             artists: const [artist],
             album: album,
           ),
         );
         final playables = tracks
-            .map((t) => t.toEngineItem())
+            .map((t) => t.toAudioSource())
             .toList(growable: false);
 
         // 1. Start playback on Track 0 (NoTrack -> Track 0, Stopped -> Playing).
@@ -350,7 +350,7 @@ void main() {
         );
         expect(
           currentMeta['mpris:artUrl']?.asString(),
-          endsWith('hash_track_1_low.png'),
+          endsWith('hash_track_1'),
         );
 
         mpris.dispose();

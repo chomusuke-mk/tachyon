@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/library_store.dart';
@@ -25,6 +26,10 @@ class RadioController extends ChangeNotifier {
   String _selectedTag = 'All';
   String _selectedCountry = 'All';
   String _searchQuery = '';
+  int _currentTabIndex = 0;
+
+  Timer? _debounceTimer;
+  int _searchRequestId = 0;
 
   bool _isLoading = false;
   bool _isPreloaded = false;
@@ -41,6 +46,14 @@ class RadioController extends ChangeNotifier {
   String get selectedTag => _selectedTag;
   String get selectedCountry => _selectedCountry;
   String get searchQuery => _searchQuery;
+  int get currentTabIndex => _currentTabIndex;
+
+  void setTabIndex(int index) {
+    if (_currentTabIndex != index) {
+      _currentTabIndex = index;
+      notifyListeners();
+    }
+  }
 
   bool get isLoading => _isLoading;
   bool get isPreloaded => _isPreloaded;
@@ -70,8 +83,8 @@ class RadioController extends ChangeNotifier {
     try {
       final results = await Future.wait([
         service.getTopStations(limit: 60),
-        service.getPopularTags(limit: 30),
-        service.getPopularCountries(limit: 30),
+        service.getPopularTags(limit: 150),
+        service.getPopularCountries(limit: 150),
       ]);
 
       _discoverStations = results[0] as List<RadioStation>;
@@ -114,16 +127,24 @@ class RadioController extends ChangeNotifier {
     }
   }
 
-  /// Live search by station name or keywords.
-  Future<void> search(String query) async {
+  /// Live search by station name or keywords with automatic debouncing.
+  void search(String query) {
     _searchQuery = query;
-    await _executeSearch();
+    _debounceTimer?.cancel();
+    if (query.trim().isEmpty) {
+      _executeSearch();
+    } else {
+      _debounceTimer = Timer(const Duration(milliseconds: 320), () {
+        _executeSearch();
+      });
+    }
   }
 
   /// Selects a genre/tag filter.
   Future<void> setTag(String tag) async {
     if (_selectedTag == tag) return;
     _selectedTag = tag;
+    _debounceTimer?.cancel();
     await _executeSearch();
   }
 
@@ -131,25 +152,17 @@ class RadioController extends ChangeNotifier {
   Future<void> setCountry(String country) async {
     if (_selectedCountry == country) return;
     _selectedCountry = country;
+    _debounceTimer?.cancel();
     await _executeSearch();
   }
 
   /// Clears active search keywords and filters back to global top stations.
   Future<void> clearFilters() async {
+    _debounceTimer?.cancel();
     _searchQuery = '';
     _selectedTag = 'All';
     _selectedCountry = 'All';
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      _discoverStations = await service.getTopStations(limit: 60);
-    } catch (e) {
-      _errorMessage = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    await _executeSearch();
   }
 
   /// Saves a remote station into the local library catalog.
@@ -159,11 +172,18 @@ class RadioController extends ChangeNotifier {
     return saved;
   }
 
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
   // ---------------------------------------------------------------------------
   // Internal Helpers
   // ---------------------------------------------------------------------------
 
   Future<void> _executeSearch() async {
+    final requestId = ++_searchRequestId;
     _isLoading = true;
     notifyListeners();
 
@@ -172,23 +192,32 @@ class RadioController extends ChangeNotifier {
           (_selectedTag == 'All' || _selectedTag.isEmpty) &&
           (_selectedCountry == 'All' || _selectedCountry.isEmpty);
 
+      final List<RadioStation> results;
       if (isFilterEmpty) {
-        _discoverStations = await service.getTopStations(limit: 60);
+        results = await service.getTopStations(limit: 60);
       } else {
-        _discoverStations = await service.searchStations(
+        results = await service.searchStations(
           name: _searchQuery.trim().isNotEmpty ? _searchQuery : null,
           tag: _selectedTag != 'All' ? _selectedTag : null,
           country: _selectedCountry != 'All' ? _selectedCountry : null,
           limit: 60,
         );
       }
+
+      // Discard results if a newer search request has already been issued
+      if (requestId != _searchRequestId) return;
+
+      _discoverStations = results;
       _errorMessage = null;
     } catch (e) {
+      if (requestId != _searchRequestId) return;
       _errorMessage = e.toString();
       debugPrint('[RadioController] _executeSearch error: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (requestId == _searchRequestId) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 

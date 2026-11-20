@@ -55,7 +55,7 @@ class _TestPlaybackController extends PlaybackController {
 
   Track? _mockCurrentTrack;
   bool _mockIsPlaying = false;
-  List<EngineItem<AudioPlayable>> _mockQueue = [];
+  List<AudioSource<AudioPlayable>> _mockQueue = [];
   int _mockCurrentIndex = 0;
 
   @override
@@ -65,7 +65,7 @@ class _TestPlaybackController extends PlaybackController {
   bool get isPlaying => _mockIsPlaying;
 
   @override
-  List<EngineItem<AudioPlayable>> get queue =>
+  List<AudioSource<AudioPlayable>> get queue =>
       _mockQueue.isNotEmpty ? _mockQueue : super.queue;
 
   @override
@@ -469,7 +469,7 @@ void main() {
         durationMs: 1000,
         fileSize: 100,
         modifiedAt: 100,
-        thumbnailHash: 'hash_old',
+          artworkUri: 'hash_old',
       );
       final track2 = const Track(
         id: 2,
@@ -478,7 +478,7 @@ void main() {
         durationMs: 1000,
         fileSize: 100,
         modifiedAt: 100,
-        thumbnailHash: null,
+          artworkUri: null,
       );
       final track3 = const Track(
         id: 3,
@@ -487,7 +487,7 @@ void main() {
         durationMs: 1000,
         fileSize: 100,
         modifiedAt: 100,
-        thumbnailHash: 'hash_latest',
+          artworkUri: 'hash_latest',
       );
       final track4 = const Track(
         id: 4,
@@ -496,7 +496,7 @@ void main() {
         durationMs: 1000,
         fileSize: 100,
         modifiedAt: 100,
-        thumbnailHash: null, // added most recently, but has no hash
+          artworkUri: null, // added most recently, but has no hash
       );
 
       final playlist = Playlist(
@@ -512,7 +512,7 @@ void main() {
       );
 
       // Should skip track 4 (addedAt 400, null hash) and pick track 3 (addedAt 300, 'hash_latest')
-      expect(playlist.coverHash, equals('hash_latest'));
+        expect(playlist.artworkUri, equals('hash_latest'));
     });
 
     testWidgets('PlaylistsScreen renders cover with heart overlay for liked songs and clock for history', (tester) async {
@@ -525,7 +525,7 @@ void main() {
             durationMs: 180000,
             fileSize: 1000,
             modifiedAt: 1000,
-            thumbnailHash: 'liked_track_hash',
+              artworkUri: 'liked_track_hash',
           ),
         ],
         albums: const [],
@@ -615,7 +615,7 @@ void main() {
         durationMs: 200000,
         fileSize: 1000,
         modifiedAt: 1000,
-        thumbnailHash: 'playlist_top_hash',
+          artworkUri: 'playlist_top_hash',
       );
 
       final playlist = Playlist(
@@ -651,14 +651,14 @@ void main() {
       final backdropFinder = find.byType(AmbientBackdrop);
       expect(backdropFinder, findsOneWidget);
       final backdrop = tester.widget<AmbientBackdrop>(backdropFinder);
-      expect(backdrop.thumbnailHash, equals('playlist_top_hash'));
+        expect(backdrop.artworkUri, equals('playlist_top_hash'));
 
       // Verify that the header artwork uses ThumbnailQuality.high
       final hqImages = tester.widgetList<AlbumArtImage>(find.byType(AlbumArtImage)).where(
         (img) => img.quality == ThumbnailQuality.high,
       );
       expect(hqImages, hasLength(1));
-      expect(hqImages.first.thumbnailHash, equals('playlist_top_hash'));
+        expect(hqImages.first.artworkUri, equals('playlist_top_hash'));
 
       // Verify that track item in the list uses ThumbnailQuality.low
       final trackArtFinder = find.descendant(
@@ -668,7 +668,7 @@ void main() {
       expect(trackArtFinder, findsOneWidget);
       final trackArt = tester.widget<AlbumArtImage>(trackArtFinder);
       expect(trackArt.quality, equals(ThumbnailQuality.low));
-      expect(trackArt.thumbnailHash, equals('playlist_top_hash'));
+        expect(trackArt.artworkUri, equals('playlist_top_hash'));
 
       playlistsCtrl.dispose();
       playbackCtrl.dispose();
@@ -682,7 +682,7 @@ void main() {
         durationMs: 240000,
         fileSize: 1000,
         modifiedAt: 1000,
-        thumbnailHash: 'active_jam_hash',
+          artworkUri: 'active_jam_hash',
       );
 
       final otherTrack = const Track(
@@ -717,8 +717,8 @@ void main() {
         PlaybackState(
           isPlaying: true,
           queue: [
-            playingTrack.toEngineItem(position: 0),
-            otherTrack.toEngineItem(position: 1),
+              playingTrack.toAudioSource(),
+              otherTrack.toAudioSource(),
           ],
           currentIndex: 0,
         ),
@@ -762,7 +762,7 @@ void main() {
         durationMs: 200000,
         fileSize: 1000,
         modifiedAt: 1000,
-        thumbnailHash: 'album_track_hash',
+          artworkUri: 'album_track_hash',
       );
 
       final rawTracks = [
@@ -773,7 +773,7 @@ void main() {
           durationMs: 200000,
           fileSize: 1000,
           modifiedAt: 1000,
-          thumbnailHash: 'album_track_hash',
+            artworkUri: 'album_track_hash',
           albumId: 10,
         ),
         const RawTrackDto(
@@ -819,7 +819,7 @@ void main() {
         PlaybackState(
           isPlaying: true,
           queue: [
-            playingTrack.toEngineItem(position: 0),
+            playingTrack.toAudioSource(),
           ],
           currentIndex: 0,
         ),
@@ -862,7 +862,7 @@ void main() {
           durationMs: 220000,
           fileSize: 1000,
           modifiedAt: 1000,
-          thumbnailHash: 'lib_track_hash',
+            artworkUri: 'lib_track_hash',
         ),
         const RawTrackDto(
           id: 202,
@@ -902,7 +902,7 @@ void main() {
         PlaybackState(
           isPlaying: true,
           queue: [
-            playingTrack.toEngineItem(position: 0),
+            playingTrack.toAudioSource(),
           ],
           currentIndex: 0,
         ),
@@ -946,18 +946,18 @@ void main() {
         durationMs: 150000,
         fileSize: 1000,
         modifiedAt: 1000,
-        thumbnailHash: 'genre_track_cover_hash',
+        artworkUri: 'genre_track_cover_hash',
       );
 
       final emptyGenre = Genre(id: 1, name: 'Empty Genre', tracks: []);
-      expect(emptyGenre.coverHash, isNull);
+      expect(emptyGenre.artworkUri, isNull);
 
       final genreWithCover = Genre(
         id: 2,
         name: 'Rock',
         tracks: [trackWithoutCover, trackWithCover],
       );
-      expect(genreWithCover.coverHash, 'genre_track_cover_hash');
+      expect(genreWithCover.artworkUri, 'genre_track_cover_hash');
     });
 
     testWidgets('GenresScreen renders cover with ThumbnailQuality.medium on genre card', (tester) async {
@@ -973,7 +973,7 @@ void main() {
           durationMs: 200000,
           fileSize: 1000,
           modifiedAt: 1000,
-          thumbnailHash: 'synth_cover_hash',
+            artworkUri: 'synth_cover_hash',
         ),
       ];
 
@@ -1009,7 +1009,7 @@ void main() {
       expect(find.text('Synthwave'), findsOneWidget);
 
       final albumArt = tester.widget<AlbumArtImage>(find.byType(AlbumArtImage));
-      expect(albumArt.thumbnailHash, 'synth_cover_hash');
+        expect(albumArt.artworkUri, 'synth_cover_hash');
       expect(albumArt.quality, ThumbnailQuality.medium);
 
       libraryCtrl.dispose();
@@ -1028,7 +1028,7 @@ void main() {
           durationMs: 300000,
           fileSize: 1000,
           modifiedAt: 1000,
-          thumbnailHash: 'ambient_hash_99',
+            artworkUri: 'ambient_hash_99',
         ),
       ];
 
@@ -1067,13 +1067,13 @@ void main() {
       expect(find.text('Deep Space'), findsOneWidget);
 
       final backdrop = tester.widget<AmbientBackdrop>(find.byType(AmbientBackdrop));
-      expect(backdrop.thumbnailHash, 'ambient_hash_99');
+        expect(backdrop.artworkUri, 'ambient_hash_99');
 
       final albumArtImages = tester.widgetList<AlbumArtImage>(find.byType(AlbumArtImage));
       final headerArt = albumArtImages.firstWhere(
         (img) => img.quality == ThumbnailQuality.medium,
       );
-      expect(headerArt.thumbnailHash, 'ambient_hash_99');
+        expect(headerArt.artworkUri, 'ambient_hash_99');
 
       playbackCtrl.dispose();
     });

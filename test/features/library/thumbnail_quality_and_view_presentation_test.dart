@@ -121,13 +121,13 @@ void main() {
     });
 
     test('AppDefaults thumbnail resolutions match specification', () {
-      expect(AppDefaults.lowQualityResolution, 50);
-      expect(AppDefaults.mediumQualityResolution, 250);
-      expect(AppDefaults.highQualityResolution, 800);
+      expect(AppDefaults.lowQualityResolution, 150);
+      expect(AppDefaults.mediumQualityResolution, 500);
+      expect(AppDefaults.highQualityResolution, 1200);
     });
   });
 
-  group('MetadataUtils Triple-Quality PNG Caching', () {
+  group('MetadataUtils Single-File Artwork Caching', () {
     late Directory tempDir;
     late Directory thumbnailsDir;
 
@@ -146,42 +146,21 @@ void main() {
       }
     });
 
-    test('File path resolution follows _low.png, _medium.png, _high.png naming', () {
+    test('File path resolution follows extensionless <hash> naming', () {
       const testHash = 'a1b2c3d4e5f6';
 
-      final lqPath = MetadataUtils.getThumbnailFilePath(
-        testHash,
-        quality: ThumbnailQuality.low,
-      );
-      final mqPath = MetadataUtils.getThumbnailFilePath(
-        testHash,
-        quality: ThumbnailQuality.medium,
-      );
-      final hqPath = MetadataUtils.getThumbnailFilePath(
-        testHash,
-        quality: ThumbnailQuality.high,
-      );
-
-      expect(lqPath.endsWith('_low.png'), isTrue);
-      expect(mqPath.endsWith('_medium.png'), isTrue);
-      expect(hqPath.endsWith('_high.png'), isTrue);
+      final path = MetadataUtils.getArtworkPath(testHash);
+      expect(path.endsWith('a1b2c3d4e5f6'), isTrue);
+      expect(path.endsWith('.jpg'), isFalse);
     });
 
-    test('extractHashFromThumbnailPath extracts content hash from thumbnail filenames', () {
+    test('extractHashFromArtworkPath extracts content hash from artwork filenames', () {
       expect(
-        MetadataUtils.extractHashFromThumbnailPath('/path/to/covers/a1b2c3d4_low.png'),
+        MetadataUtils.extractHashFromArtworkPath('/path/to/covers/a1b2c3d4'),
         'a1b2c3d4',
       );
       expect(
-        MetadataUtils.extractHashFromThumbnailPath('/path/to/covers/a1b2c3d4_medium.png'),
-        'a1b2c3d4',
-      );
-      expect(
-        MetadataUtils.extractHashFromThumbnailPath('/path/to/covers/a1b2c3d4_high.png'),
-        'a1b2c3d4',
-      );
-      expect(
-        MetadataUtils.extractHashFromThumbnailPath('a1b2c3d4_high.png'),
+        MetadataUtils.extractHashFromArtworkPath('a1b2c3d4'),
         'a1b2c3d4',
       );
     });
@@ -194,31 +173,33 @@ void main() {
       expect(strHash, CryptoUtils.computeStringHash('Queen'));
     });
 
-    test('hasCachedThumbnail and listCachedThumbnails track saved files', () {
+    test('hasCachedArtwork and listCachedCoverFiles track saved files', () {
       const hash = 'a1b2c3d4e5f6';
-      expect(MetadataUtils.hasCachedThumbnail(hash), isFalse);
+      final path = MetadataUtils.getArtworkPath(hash);
+      expect(MetadataUtils.hasCachedArtwork(path), isFalse);
 
-      final lqFile = File(
-        MetadataUtils.getThumbnailFilePath(hash, quality: ThumbnailQuality.low),
-      );
-      lqFile.writeAsStringSync('dummy_thumbnail_content');
+      final file = File(path);
+      file.writeAsStringSync('dummy_artwork_content');
 
-      expect(
-        MetadataUtils.hasCachedThumbnail(hash, quality: ThumbnailQuality.low),
-        isTrue,
-      );
-      expect(
-        MetadataUtils.hasCachedThumbnail(hash, quality: ThumbnailQuality.high),
-        isFalse,
-      );
+      expect(MetadataUtils.hasCachedArtwork(path), isTrue);
       expect(MetadataUtils.listCachedCoverFiles().length, 1);
+    });
+
+    test('saveCoverBytes writes single file directly without extension and returns hash', () async {
+      final bytes = Uint8List.fromList([10, 20, 30, 40]);
+      final savedHash = await MetadataUtils.saveCoverBytes(bytes);
+
+      expect(savedHash, isNotNull);
+      final targetPath = MetadataUtils.getArtworkPath(savedHash!);
+      expect(File(targetPath).existsSync(), isTrue);
+      expect(File(targetPath).readAsBytesSync(), equals(bytes));
+      expect(MetadataUtils.hasCachedArtwork(savedHash), isTrue);
+      expect(savedHash.endsWith('.jpg'), isFalse);
     });
 
     test('clearTempDirectory removes temporary files without touching saved covers', () async {
       const hash = 'saved_hash_123';
-      final savedFile = File(
-        MetadataUtils.getThumbnailFilePath(hash, quality: ThumbnailQuality.low),
-      );
+      final savedFile = File(MetadataUtils.getArtworkPath(hash));
       savedFile.writeAsStringSync('saved cover content');
       expect(savedFile.existsSync(), isTrue);
 

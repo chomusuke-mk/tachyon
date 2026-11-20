@@ -6,7 +6,15 @@ import 'package:tachyon/core/store/domain/track.dart';
 import 'crossfade_config.dart';
 import 'loop_mode.dart';
 
-export 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
+export 'package:miniaudio_player/miniaudio_player.dart'
+    show
+        Crossfeed,
+        SilenceSkipMode,
+        ReplayGainMode,
+        Buffer,
+        VisualizerData,
+        AudioMetadata,
+        AudioInfo;
 export 'package:tachyon/core/playback/domain/audio_playable.dart';
 export 'crossfade_config.dart';
 export 'loop_mode.dart';
@@ -16,7 +24,7 @@ enum PlaybackStatus { idle, loading, playing, paused, completed }
 @immutable
 class PlaybackState {
   final int currentIndex;
-  final List<ma.EngineItem<AudioPlayable>> queue;
+  final List<ma.AudioSource<AudioPlayable>> queue;
   final bool isPlaying;
   final bool isBuffering;
   final bool isCompleted;
@@ -29,7 +37,9 @@ class PlaybackState {
   final LoopMode loopMode;
   final Duration crossfadeDuration;
   final bool skipSilence;
+  final ma.SilenceSkipMode silenceSkipMode;
   final bool volumeNormalization;
+  final ma.ReplayGainMode replayGainMode;
   final bool isInfiniteMixEnabled;
   final double? audioBitrate;
   final int? audioSampleRate;
@@ -37,7 +47,7 @@ class PlaybackState {
   final double preampDb;
   final double balance;
   final bool mono;
-  final ma.CrossfeedMode crossfeedMode;
+  final ma.Crossfeed crossfeed;
   final double spatializerWidth;
   final bool limiterEnabled;
 
@@ -56,7 +66,9 @@ class PlaybackState {
     this.loopMode = LoopMode.off,
     this.crossfadeDuration = const Duration(seconds: 5),
     this.skipSilence = false,
+    this.silenceSkipMode = ma.SilenceSkipMode.disabled,
     this.volumeNormalization = true,
+    this.replayGainMode = ma.ReplayGainMode.track,
     this.isInfiniteMixEnabled = false,
     this.audioBitrate,
     this.audioSampleRate,
@@ -64,14 +76,14 @@ class PlaybackState {
     this.preampDb = 0.0,
     this.balance = 0.0,
     this.mono = false,
-    this.crossfeedMode = ma.CrossfeedMode.off,
+    this.crossfeed = ma.Crossfeed.off,
     this.spatializerWidth = 1.0,
     this.limiterEnabled = true,
   });
 
   const PlaybackState.initial() : this();
 
-  ma.EngineItem<AudioPlayable>? get currentEntry =>
+  ma.AudioSource<AudioPlayable>? get currentEntry =>
       (currentIndex >= 0 && currentIndex < queue.length) ? queue[currentIndex] : null;
 
   AudioPlayable? get currentPlayable => currentEntry?.data;
@@ -80,7 +92,7 @@ class PlaybackState {
       currentPlayable is Track ? currentPlayable as Track : null;
 
   bool get isLiveStream =>
-      currentPlayable?.isStream ?? (currentEntry?.isLiveStream ?? false);
+      currentPlayable?.isStream ?? (currentEntry?.data?.isStream ?? false);
 
   bool get hasNext =>
       loopMode == LoopMode.all ||
@@ -107,10 +119,9 @@ class PlaybackState {
 
   CrossfadeConfig get crossfadeConfig =>
       CrossfadeConfig(duration: crossfadeDuration);
-
   PlaybackState copyWith({
     int? currentIndex,
-    List<ma.EngineItem<AudioPlayable>>? queue,
+    List<ma.AudioSource<AudioPlayable>>? queue,
     bool? isPlaying,
     bool? isBuffering,
     bool? isCompleted,
@@ -124,7 +135,9 @@ class PlaybackState {
     Duration? crossfadeDuration,
     CrossfadeConfig? crossfadeConfig,
     bool? skipSilence,
+    ma.SilenceSkipMode? silenceSkipMode,
     bool? volumeNormalization,
+    ma.ReplayGainMode? replayGainMode,
     bool? isInfiniteMixEnabled,
     double? audioBitrate,
     int? audioSampleRate,
@@ -132,7 +145,7 @@ class PlaybackState {
     double? preampDb,
     double? balance,
     bool? mono,
-    ma.CrossfeedMode? crossfeedMode,
+    ma.Crossfeed? crossfeed,
     double? spatializerWidth,
     bool? limiterEnabled,
   }) {
@@ -154,7 +167,9 @@ class PlaybackState {
           crossfadeDuration ??
           this.crossfadeDuration,
       skipSilence: skipSilence ?? this.skipSilence,
+      silenceSkipMode: silenceSkipMode ?? this.silenceSkipMode,
       volumeNormalization: volumeNormalization ?? this.volumeNormalization,
+      replayGainMode: replayGainMode ?? this.replayGainMode,
       isInfiniteMixEnabled: isInfiniteMixEnabled ?? this.isInfiniteMixEnabled,
       audioBitrate: audioBitrate ?? this.audioBitrate,
       audioSampleRate: audioSampleRate ?? this.audioSampleRate,
@@ -162,7 +177,7 @@ class PlaybackState {
       preampDb: preampDb ?? this.preampDb,
       balance: balance ?? this.balance,
       mono: mono ?? this.mono,
-      crossfeedMode: crossfeedMode ?? this.crossfeedMode,
+      crossfeed: crossfeed ?? this.crossfeed,
       spatializerWidth: spatializerWidth ?? this.spatializerWidth,
       limiterEnabled: limiterEnabled ?? this.limiterEnabled,
     );
@@ -187,7 +202,9 @@ class PlaybackState {
           loopMode == other.loopMode &&
           crossfadeDuration == other.crossfadeDuration &&
           skipSilence == other.skipSilence &&
+          silenceSkipMode == other.silenceSkipMode &&
           volumeNormalization == other.volumeNormalization &&
+          replayGainMode == other.replayGainMode &&
           isInfiniteMixEnabled == other.isInfiniteMixEnabled &&
           audioBitrate == other.audioBitrate &&
           audioSampleRate == other.audioSampleRate &&
@@ -195,7 +212,7 @@ class PlaybackState {
           preampDb == other.preampDb &&
           balance == other.balance &&
           mono == other.mono &&
-          crossfeedMode == other.crossfeedMode &&
+          crossfeed == other.crossfeed &&
           spatializerWidth == other.spatializerWidth &&
           limiterEnabled == other.limiterEnabled;
 
@@ -215,7 +232,9 @@ class PlaybackState {
     loopMode,
     crossfadeDuration,
     skipSilence,
+    silenceSkipMode,
     volumeNormalization,
+    replayGainMode,
     isInfiniteMixEnabled,
     audioBitrate,
     audioSampleRate,
@@ -223,7 +242,7 @@ class PlaybackState {
     preampDb,
     balance,
     mono,
-    crossfeedMode,
+    crossfeed,
     spatializerWidth,
     limiterEnabled,
   ]);

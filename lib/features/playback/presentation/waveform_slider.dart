@@ -2,13 +2,40 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:tachyon/shared/utils/duration_formatter.dart';
 
-/// Interactive seek slider with optimistic local drag state, simulated aesthetic
-/// waveform rendering, buffered progress indicator, and tabular numeric time readouts.
+class _SliderDragNotifier extends ChangeNotifier {
+  bool isDragging = false;
+  double dragValueMs = 0.0;
+
+  void start(double ms) {
+    isDragging = true;
+    dragValueMs = ms;
+    notifyListeners();
+  }
+
+  void update(double ms) {
+    if (dragValueMs == ms && isDragging) return;
+    isDragging = true;
+    dragValueMs = ms;
+    notifyListeners();
+  }
+
+  void end() {
+    if (!isDragging) return;
+    isDragging = false;
+    notifyListeners();
+  }
+}
+
+/// Interactive seek slider with optimistic local drag state, simulated/extracted
+/// waveform rendering, real prefetch buffer indicator, and 1 Hz tabular time readouts.
 class WaveformSlider extends StatefulWidget {
   final Duration? position;
   final ValueListenable<Duration>? positionListenable;
+  final ValueListenable<int>? positionSecondsListenable;
+  final ValueListenable<ma.Buffer>? bufferListenable;
   final Duration duration;
   final bool isBuffering;
   final bool isLiveStream;
@@ -28,6 +55,8 @@ class WaveformSlider extends StatefulWidget {
     super.key,
     this.position,
     this.positionListenable,
+    this.positionSecondsListenable,
+    this.bufferListenable,
     required this.duration,
     required this.onSeek,
     this.isBuffering = false,
@@ -38,28 +67,95 @@ class WaveformSlider extends StatefulWidget {
     this.playlistPosition,
     this.waveform,
   }) : assert(
-          position != null || positionListenable != null,
-          'Either position or positionListenable must be provided',
-        );
+         position != null || positionListenable != null,
+         'Either position or positionListenable must be provided',
+       );
 
   @override
   State<WaveformSlider> createState() => _WaveformSliderState();
 }
 
 class _WaveformSliderState extends State<WaveformSlider> {
-  bool _isDragging = false;
-  double _dragValue = 0.0;
+  final _SliderDragNotifier _dragNotifier = _SliderDragNotifier();
+  ValueNotifier<int>? _fallbackSecondsNotifier;
+
   bool _showRemaining = true;
   bool _showPlaylistProgressTime = false;
 
-  int? _lastRenderedSecond;
-  bool? _lastShowRemaining;
-  bool? _lastShowPlaylistProgressTime;
-  int? _lastCurrentIndex;
-  int? _lastTotalCount;
-  Duration? _lastDuration;
-  ColorScheme? _lastColorScheme;
-  Widget? _cachedTimeCounterRow;
+  ValueListenable<int>? get _effectiveSecondsListenable {
+    if (widget.positionSecondsListenable != null) {
+      return widget.positionSecondsListenable;
+    }
+    return _fallbackSecondsNotifier;
+  }
+
+  void _syncFallbackSecondsListener() {
+    final posListenable = widget.positionListenable;
+    if (widget.positionSecondsListenable != null || posListenable == null) {
+      _detachFallbackSecondsListener();
+      return;
+    }
+    if (_fallbackSecondsNotifier == null) {
+      _fallbackSecondsNotifier = ValueNotifier<int>(
+        posListenable.value.inSeconds,
+      );
+      posListenable.addListener(_onFallbackPositionChanged);
+    } else {
+      _fallbackSecondsNotifier!.value = posListenable.value.inSeconds;
+    }
+  }
+
+  void _detachFallbackSecondsListener([ValueListenable<Duration>? target]) {
+    if (_fallbackSecondsNotifier != null) {
+      (target ?? widget.positionListenable)?.removeListener(
+        _onFallbackPositionChanged,
+      );
+      _fallbackSecondsNotifier!.dispose();
+      _fallbackSecondsNotifier = null;
+    }
+  }
+
+  void _onFallbackPositionChanged() {
+    final sec = widget.positionListenable?.value.inSeconds ?? 0;
+    if (_fallbackSecondsNotifier != null &&
+        _fallbackSecondsNotifier!.value != sec) {
+      _fallbackSecondsNotifier!.value = sec;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _syncFallbackSecondsListener();
+  }
+
+  @override
+  void didUpdateWidget(covariant WaveformSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.positionListenable != widget.positionListenable ||
+        oldWidget.positionSecondsListenable !=
+            widget.positionSecondsListenable) {
+      if (oldWidget.positionListenable != null &&
+          oldWidget.positionListenable != widget.positionListenable) {
+        oldWidget.positionListenable!.removeListener(_onFallbackPositionChanged);
+      }
+      _syncFallbackSecondsListener();
+    }
+  }
+
+  @override
+  void dispose() {
+    _detachFallbackSecondsListener();
+    _dragNotifier.dispose();
+    super.dispose();
+  }
+
+  Duration _currentPositionSnapshot() {
+    if (_dragNotifier.isDragging) {
+      return Duration(milliseconds: _dragNotifier.dragValueMs.round());
+    }
+    return widget.positionListenable?.value ?? widget.position ?? Duration.zero;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +188,27 @@ class _WaveformSliderState extends State<WaveformSlider> {
                   letterSpacing: 2.0,
                 ),
               ),
-              if (widget.isBuffering) ...[
+              if (widget.bufferListenable != null)
+                ValueListenableBuilder<ma.Buffer>(
+                  valueListenable: widget.bufferListenable!,
+                  builder: (context, buf, _) {
+                    if (!buf.isBuffering && !widget.isBuffering) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    );
+                  },
+                )
+              else if (widget.isBuffering) ...[
                 const SizedBox(width: 12),
                 SizedBox(
                   width: 14,
@@ -104,12 +220,14 @@ class _WaveformSliderState extends State<WaveformSlider> {
                 ),
               ],
               const SizedBox(width: 16),
-              if (widget.positionListenable != null)
-                ValueListenableBuilder<Duration>(
-                  valueListenable: widget.positionListenable!,
-                  builder: (context, pos, _) {
+              if (_effectiveSecondsListenable != null)
+                ValueListenableBuilder<int>(
+                  valueListenable: _effectiveSecondsListenable!,
+                  builder: (context, sec, _) {
                     return Text(
-                      pos.toFormattedString(padMinutes: true),
+                      Duration(
+                        seconds: sec,
+                      ).toFormattedString(padMinutes: true),
                       style: textTheme.bodySmall?.copyWith(
                         fontFeatures: const [FontFeature.tabularFigures()],
                         color: colorScheme.onSurfaceVariant,
@@ -119,8 +237,9 @@ class _WaveformSliderState extends State<WaveformSlider> {
                 )
               else
                 Text(
-                  (widget.position ?? Duration.zero)
-                      .toFormattedString(padMinutes: true),
+                  (widget.position ?? Duration.zero).toFormattedString(
+                    padMinutes: true,
+                  ),
                   style: textTheme.bodySmall?.copyWith(
                     fontFeatures: const [FontFeature.tabularFigures()],
                     color: colorScheme.onSurfaceVariant,
@@ -135,11 +254,22 @@ class _WaveformSliderState extends State<WaveformSlider> {
     final totalMs = widget.duration.inMilliseconds.toDouble();
     final effectiveTotalMs = totalMs > 0 ? totalMs : 1.0;
 
+    final Listenable paintRepaint = Listenable.merge([
+      _dragNotifier,
+      ?widget.positionListenable,
+      ?widget.bufferListenable,
+    ]);
+
+    final Listenable counterListenable = Listenable.merge([
+      _dragNotifier,
+      ?_effectiveSecondsListenable,
+    ]);
+
     return RepaintBoundary(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Waveform & Slider Area
+          // Waveform & Slider Area (0 widget rebuilds per tick or drag frame)
           SizedBox(
             height: 38,
             child: LayoutBuilder(
@@ -147,35 +277,35 @@ class _WaveformSliderState extends State<WaveformSlider> {
                 return GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onHorizontalDragStart: (details) {
-                    setState(() {
-                      _isDragging = true;
-                      final fraction =
-                          (details.localPosition.dx / constraints.maxWidth)
-                              .clamp(0.0, 1.0);
-                      _dragValue = fraction * effectiveTotalMs;
-                    });
+                    final fraction =
+                        (details.localPosition.dx / constraints.maxWidth).clamp(
+                          0.0,
+                          1.0,
+                        );
+                    _dragNotifier.start(fraction * effectiveTotalMs);
                   },
                   onHorizontalDragUpdate: (details) {
-                    setState(() {
-                      final fraction =
-                          (details.localPosition.dx / constraints.maxWidth)
-                              .clamp(0.0, 1.0);
-                      _dragValue = fraction * effectiveTotalMs;
-                    });
+                    final fraction =
+                        (details.localPosition.dx / constraints.maxWidth).clamp(
+                          0.0,
+                          1.0,
+                        );
+                    _dragNotifier.update(fraction * effectiveTotalMs);
                   },
-                  onHorizontalDragEnd: (details) {
-                    final target = Duration(milliseconds: _dragValue.round());
+                  onHorizontalDragEnd: (_) {
+                    final target = Duration(
+                      milliseconds: _dragNotifier.dragValueMs.round(),
+                    );
+                    _dragNotifier.end();
                     widget.onSeek(target);
-                    setState(() {
-                      _isDragging = false;
-                    });
                   },
+                  onHorizontalDragCancel: _dragNotifier.end,
                   onTapDown: (details) {
                     final fraction =
                         (details.localPosition.dx / constraints.maxWidth).clamp(
-                      0.0,
-                      1.0,
-                    );
+                          0.0,
+                          1.0,
+                        );
                     final target = Duration(
                       milliseconds: (fraction * effectiveTotalMs).round(),
                     );
@@ -184,24 +314,24 @@ class _WaveformSliderState extends State<WaveformSlider> {
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: RepaintBoundary(
-                      child: (widget.positionListenable != null && !_isDragging)
-                          ? ValueListenableBuilder<Duration>(
-                              valueListenable: widget.positionListenable!,
-                              builder: (context, pos, _) {
-                                return _buildWaveformPaint(
-                                  constraints.maxWidth,
-                                  pos,
-                                  effectiveTotalMs,
-                                  colorScheme,
-                                );
-                              },
-                            )
-                          : _buildWaveformPaint(
-                              constraints.maxWidth,
-                              widget.position ?? Duration.zero,
-                              effectiveTotalMs,
-                              colorScheme,
-                            ),
+                      child: CustomPaint(
+                        size: Size(constraints.maxWidth, 38),
+                        painter: _WaveformSliderPainter(
+                          repaint: paintRepaint,
+                          dragNotifier: _dragNotifier,
+                          positionListenable: widget.positionListenable,
+                          bufferListenable: widget.bufferListenable,
+                          fallbackPosition: widget.position ?? Duration.zero,
+                          effectiveTotalMs: effectiveTotalMs,
+                          isBufferingFallback: widget.isBuffering,
+                          activeColor: colorScheme.primary,
+                          inactiveColor: colorScheme.surfaceContainerHighest,
+                          bufferedColor: colorScheme.primary.withValues(
+                            alpha: 0.35,
+                          ),
+                          waveform: widget.waveform,
+                        ),
+                      ),
                     ),
                   ),
                 );
@@ -210,58 +340,19 @@ class _WaveformSliderState extends State<WaveformSlider> {
           ),
           const SizedBox(height: 4),
 
-          // Time Counter Row with Tabular Figures (quantized to 1Hz when not dragging)
-          if (widget.positionListenable != null && !_isDragging)
-            ValueListenableBuilder<Duration>(
-              valueListenable: widget.positionListenable!,
-              builder: (context, pos, _) {
-                return _buildTimeCounterRow(
-                  pos,
-                  effectiveTotalMs,
-                  colorScheme,
-                  textTheme,
-                );
-              },
-            )
-          else
-            _buildTimeCounterRow(
-              widget.position ?? Duration.zero,
-              effectiveTotalMs,
-              colorScheme,
-              textTheme,
-            ),
+          // Time Counter Row quantized to 1 Hz (or live during drag)
+          ListenableBuilder(
+            listenable: counterListenable,
+            builder: (context, _) {
+              return _buildTimeCounterRow(
+                _currentPositionSnapshot(),
+                effectiveTotalMs,
+                colorScheme,
+                textTheme,
+              );
+            },
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildWaveformPaint(
-    double maxWidth,
-    Duration currentPosition,
-    double effectiveTotalMs,
-    ColorScheme colorScheme,
-  ) {
-    final currentMs = _isDragging
-        ? _dragValue
-        : currentPosition.inMilliseconds.toDouble().clamp(
-            0.0,
-            effectiveTotalMs,
-          );
-    final progressFraction = (currentMs / effectiveTotalMs).clamp(0.0, 1.0);
-
-    return CustomPaint(
-      size: Size(maxWidth, 38),
-      painter: _WaveformSliderPainter(
-        progress: progressFraction,
-        bufferedFraction: widget.isBuffering
-            ? (progressFraction + 0.15).clamp(0.0, 1.0)
-            : 1.0,
-        activeColor: colorScheme.primary,
-        inactiveColor: colorScheme.surfaceContainerHighest,
-        bufferedColor: colorScheme.primary.withValues(alpha: 0.35),
-        isDragging: _isDragging,
-        waveform: widget.waveform,
-        positionMs: currentMs.round(),
       ),
     );
   }
@@ -272,23 +363,10 @@ class _WaveformSliderState extends State<WaveformSlider> {
     ColorScheme colorScheme,
     TextTheme textTheme,
   ) {
-    final currentMs = _isDragging
-        ? _dragValue.round()
-        : currentPosition.inMilliseconds.clamp(0, effectiveTotalMs.round());
-    final currentSecond = currentMs ~/ 1000;
-
-    if (!_isDragging &&
-        _cachedTimeCounterRow != null &&
-        _lastRenderedSecond == currentSecond &&
-        _lastShowRemaining == _showRemaining &&
-        _lastShowPlaylistProgressTime == _showPlaylistProgressTime &&
-        _lastCurrentIndex == widget.currentIndex &&
-        _lastTotalCount == widget.totalCount &&
-        _lastDuration == widget.duration &&
-        _lastColorScheme == colorScheme) {
-      return _cachedTimeCounterRow!;
-    }
-
+    final currentMs = currentPosition.inMilliseconds.clamp(
+      0,
+      effectiveTotalMs.round(),
+    );
     final elapsedDuration = Duration(milliseconds: currentMs);
     final remainingDuration = widget.duration - elapsedDuration;
     final counterStyle = textTheme.bodySmall?.copyWith(
@@ -297,7 +375,7 @@ class _WaveformSliderState extends State<WaveformSlider> {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
 
-    final row = Row(
+    return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         // Elapsed Time
@@ -306,7 +384,6 @@ class _WaveformSliderState extends State<WaveformSlider> {
           GestureDetector(
             onTap: () => setState(() {
               _showPlaylistProgressTime = !_showPlaylistProgressTime;
-              _cachedTimeCounterRow = null;
             }),
             child: Text(
               _showPlaylistProgressTime &&
@@ -322,47 +399,34 @@ class _WaveformSliderState extends State<WaveformSlider> {
         GestureDetector(
           onTap: () => setState(() {
             _showRemaining = !_showRemaining;
-            _cachedTimeCounterRow = null;
           }),
           child: Text(
             _showRemaining
-                ? remainingDuration.toFormattedString(prefix: "-")
+                ? remainingDuration.toFormattedString(prefix: '-')
                 : widget.duration.toFormattedString(),
             style: counterStyle,
           ),
         ),
       ],
     );
-
-    if (!_isDragging) {
-      _lastRenderedSecond = currentSecond;
-      _lastShowRemaining = _showRemaining;
-      _lastShowPlaylistProgressTime = _showPlaylistProgressTime;
-      _lastCurrentIndex = widget.currentIndex;
-      _lastTotalCount = widget.totalCount;
-      _lastDuration = widget.duration;
-      _lastColorScheme = colorScheme;
-      _cachedTimeCounterRow = row;
-    }
-
-    return row;
   }
 }
 
 class _WaveformSliderPainter extends CustomPainter {
-  final double progress;
-  final double bufferedFraction;
+  final _SliderDragNotifier dragNotifier;
+  final ValueListenable<Duration>? positionListenable;
+  final ValueListenable<ma.Buffer>? bufferListenable;
+  final Duration fallbackPosition;
+  final double effectiveTotalMs;
+  final bool isBufferingFallback;
   final Color activeColor;
   final Color inactiveColor;
   final Color bufferedColor;
-  final bool isDragging;
   final List<double>? waveform;
-  final int positionMs;
 
   static const int _barCount = 55;
   static const double _barWidth = 3.5;
   static const double _barRadius = 2.0;
-  static const int _positionQuantizationMs = 50;
 
   // Precomputed bar fractions [0.0 ... 1.0]
   static final List<double> _barFractions = List<double>.generate(
@@ -436,20 +500,51 @@ class _WaveformSliderPainter extends CustomPainter {
     ..style = PaintingStyle.fill;
 
   _WaveformSliderPainter({
-    required this.progress,
-    required this.bufferedFraction,
+    required super.repaint,
+    required this.dragNotifier,
+    required this.positionListenable,
+    required this.bufferListenable,
+    required this.fallbackPosition,
+    required this.effectiveTotalMs,
+    required this.isBufferingFallback,
     required this.activeColor,
     required this.inactiveColor,
     required this.bufferedColor,
-    required this.isDragging,
     this.waveform,
-    this.positionMs = 0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final bars = _getBars(size, waveform);
     final centerY = size.height / 2;
+
+    final isDragging = dragNotifier.isDragging;
+    final currentMs = isDragging
+        ? dragNotifier.dragValueMs.clamp(0.0, effectiveTotalMs)
+        : (positionListenable?.value ?? fallbackPosition).inMilliseconds
+            .toDouble()
+            .clamp(0.0, effectiveTotalMs);
+    final progress = (currentMs / effectiveTotalMs).clamp(0.0, 1.0);
+
+    final buf = bufferListenable?.value;
+    final double bufStartFraction;
+    final double bufEndFraction;
+    if (buf != null && buf.end > Duration.zero) {
+      bufStartFraction = (buf.start.inMilliseconds / effectiveTotalMs).clamp(
+        0.0,
+        1.0,
+      );
+      bufEndFraction = (buf.end.inMilliseconds / effectiveTotalMs).clamp(
+        0.0,
+        1.0,
+      );
+    } else if (buf?.isBuffering ?? isBufferingFallback) {
+      bufStartFraction = progress;
+      bufEndFraction = (progress + 0.15).clamp(0.0, 1.0);
+    } else {
+      bufStartFraction = progress;
+      bufEndFraction = 1.0;
+    }
 
     _activePaint.color = activeColor;
     _bufferedPaint.color = bufferedColor;
@@ -464,13 +559,13 @@ class _WaveformSliderPainter extends CustomPainter {
     int bufferedCount = 0;
     int inactiveCount = 0;
 
-    // Batch 55 bars into played, buffered, and inactive Paths
+    // Batch 55 bars into played, buffered (real Buffer range), and inactive Paths
     for (int i = 0; i < _barCount; i++) {
       final fraction = _barFractions[i];
       if (fraction <= progress) {
         _playedPath.addRRect(bars[i]);
         playedCount++;
-      } else if (fraction <= bufferedFraction) {
+      } else if (fraction >= bufStartFraction && fraction <= bufEndFraction) {
         _bufferedPath.addRRect(bars[i]);
         bufferedCount++;
       } else {
@@ -479,7 +574,6 @@ class _WaveformSliderPainter extends CustomPainter {
       }
     }
 
-    // Execute batched drawPath calls (only 2 calls when bufferedFraction >= 1.0)
     if (playedCount > 0) {
       canvas.drawPath(_playedPath, _activePaint);
     }
@@ -503,33 +597,15 @@ class _WaveformSliderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WaveformSliderPainter oldDelegate) {
-    if (identical(this, oldDelegate)) return false;
-    if (!identical(oldDelegate.waveform, waveform)) return true;
-    if (oldDelegate.isDragging != isDragging) return true;
-    if (isDragging && oldDelegate.progress != progress) return true;
-    if (oldDelegate.activeColor != activeColor ||
+    return oldDelegate.dragNotifier != dragNotifier ||
+        oldDelegate.positionListenable != positionListenable ||
+        oldDelegate.bufferListenable != bufferListenable ||
+        oldDelegate.fallbackPosition != fallbackPosition ||
+        oldDelegate.effectiveTotalMs != effectiveTotalMs ||
+        oldDelegate.isBufferingFallback != isBufferingFallback ||
+        oldDelegate.activeColor != activeColor ||
         oldDelegate.inactiveColor != inactiveColor ||
-        oldDelegate.bufferedColor != bufferedColor) {
-      return true;
-    }
-
-    // Active bar boundary check: 55 discrete bar positions
-    final oldBar = (oldDelegate.progress * (_barCount - 1)).floor();
-    final newBar = (progress * (_barCount - 1)).floor();
-    if (oldBar != newBar) return true;
-
-    // Buffered bar boundary check
-    final oldBufferedBar =
-        (oldDelegate.bufferedFraction * (_barCount - 1)).floor();
-    final newBufferedBar =
-        (bufferedFraction * (_barCount - 1)).floor();
-    if (oldBufferedBar != newBufferedBar) return true;
-
-    // Quantize position into 50ms buckets (~20fps maximum thumb repaint rate)
-    final oldBucket = oldDelegate.positionMs ~/ _positionQuantizationMs;
-    final newBucket = positionMs ~/ _positionQuantizationMs;
-    if (oldBucket != newBucket) return true;
-
-    return false;
+        oldDelegate.bufferedColor != bufferedColor ||
+        !identical(oldDelegate.waveform, waveform);
   }
 }

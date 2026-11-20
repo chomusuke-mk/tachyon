@@ -27,7 +27,7 @@ class Track implements AudioPlayable {
   final double? replayGainTrackPeak;
   final List<double>? waveform;
   @override
-  final String? thumbnailHash;
+  final String? artworkUri;
 
   final Album? album;
   final List<Artist> artists;
@@ -50,7 +50,7 @@ class Track implements AudioPlayable {
     this.replayGainTrackGain,
     this.replayGainTrackPeak,
     this.waveform,
-    this.thumbnailHash,
+    this.artworkUri,
     this.album,
     this.genres = const [],
     this.artists = const [],
@@ -89,12 +89,10 @@ class Track implements AudioPlayable {
   bool get isStream => false;
 
   @override
-  ma.EngineItem<AudioPlayable> toEngineItem({int position = 0}) {
-    return ma.EngineItem<AudioPlayable>.file(
+  ma.AudioSource<AudioPlayable> toAudioSource() {
+    return ma.AudioSource<AudioPlayable>(
       filePath,
       data: this,
-      id: id,
-      position: position,
       replayGainDb: replayGainTrackGain,
       replayPeak: replayGainTrackPeak,
     );

@@ -120,7 +120,9 @@ class _LyricsViewState extends State<LyricsView> {
 
     try {
       _settingsController = context.read<SettingsController>();
-      _settingsController!.addListener(_onLocaleOrSettingsChanged);
+      _settingsController!.lyricsListenable.addListener(
+        _onLocaleOrSettingsChanged,
+      );
     } catch (_) {
       _settingsController = null;
     }
@@ -133,7 +135,7 @@ class _LyricsViewState extends State<LyricsView> {
     if (playback != null) {
       _lastObservedTrackId = playback.currentTrack?.id;
       _lastObservedTrackPath = playback.currentTrack?.filePath;
-      playback.addListener(_onPlaybackChanged);
+      playback.trackListenable.addListener(_onPlaybackChanged);
       playback.positionListenable.addListener(_onPositionChanged);
     }
 
@@ -454,10 +456,12 @@ class _LyricsViewState extends State<LyricsView> {
   void dispose() {
     _viewRequestGen++;
     _thresholdSub?.cancel();
-    _playback?.removeListener(_onPlaybackChanged);
+    _playback?.trackListenable.removeListener(_onPlaybackChanged);
     _playback?.positionListenable.removeListener(_onPositionChanged);
     _localeController?.removeListener(_onLocaleOrSettingsChanged);
-    _settingsController?.removeListener(_onLocaleOrSettingsChanged);
+    _settingsController?.lyricsListenable.removeListener(
+      _onLocaleOrSettingsChanged,
+    );
     _lyricsManager.cancelPending();
     _scrollController.dispose();
     super.dispose();

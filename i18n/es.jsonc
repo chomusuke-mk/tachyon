@@ -233,6 +233,8 @@
   "rd_save_to_library": "Guardar en biblioteca",
   "rd_saved_to_library": "Emisora guardada en tu biblioteca",
   "rd_already_in_library": "Emisora ya en la biblioteca",
+  "rd_like": "Añadir a emisoras favoritas",
+  "rd_unlike": "Eliminar de emisoras favoritas",
   "rd_refresh": "Actualizar",
   "rd_popular": "Populares",
   "rd_loading": "Cargando emisoras...",

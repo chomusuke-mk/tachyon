@@ -105,7 +105,7 @@ class _TestPlaybackController extends PlaybackController {
     required super.settingsRepository,
   });
 
-  List<EngineItem<AudioPlayable>>? openedItems;
+  List<AudioSource<AudioPlayable>>? openedItems;
   int? openedIndex;
   Track? _activeTrack;
 
@@ -120,7 +120,7 @@ class _TestPlaybackController extends PlaybackController {
     final list = contextTracks ?? [track];
     openedItems = [
       for (int i = 0; i < list.length; i++)
-        list[i].toEngineItem(position: i),
+        list[i].toAudioSource(),
     ];
     openedIndex = list.indexOf(track);
     if (openedIndex == -1) openedIndex = 0;

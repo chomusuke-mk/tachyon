@@ -5,7 +5,6 @@ import 'dart:math' as math;
 import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
-import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 
@@ -18,7 +17,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
   bool _isDisposed = false;
   String? _lastEmittedMediaSignature;
-  List<ma.EngineItem<AudioPlayable>>? _lastSyncedPlayables;
+  List<ma.AudioSource<AudioPlayable>>? _lastSyncedPlayables;
   DateTime? _lastPositionUpdateTime;
   Duration _lastEmittedPosition = Duration.zero;
 
@@ -33,11 +32,19 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   }) {
     playbackController.addListener(_syncFromPlaybackController);
     playbackController.positionListenable.addListener(_onPositionChanged);
+    playbackController.liveMetadataListenable.addListener(
+      _syncFromPlaybackController,
+    );
     _syncFromPlaybackController();
   }
 
   void _onPositionChanged() {
     _onPositionUpdate(playbackController.position);
+  }
+
+  Duration _resolveBufferedPosition(Duration pos) {
+    final bufEnd = playbackController.buffer.end;
+    return bufEnd > pos ? bufEnd : pos;
   }
 
   void _onPositionUpdate(Duration pos) {
@@ -55,7 +62,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
         playbackState.add(
           current.copyWith(
             updatePosition: pos,
-            bufferedPosition: pos,
+            bufferedPosition: _resolveBufferedPosition(pos),
           ),
         );
       }
@@ -70,23 +77,13 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     );
   }
 
-  static Uri? resolveLowQualityArtUri(
-    String? thumbnailHash, [
-    String? albumThumbnailHash,
-  ]) {
-    if (MetadataUtils.thumbnailsDirectory == null) return null;
-    final hash = (thumbnailHash != null && thumbnailHash.isNotEmpty)
-        ? thumbnailHash
-        : ((albumThumbnailHash != null && albumThumbnailHash.isNotEmpty)
-            ? albumThumbnailHash
-            : null);
-    if (hash == null) return null;
-    return Uri.file(
-      MetadataUtils.getThumbnailFilePath(
-        hash,
-        quality: ThumbnailQuality.low,
-      ),
-    );
+  static Uri? resolveArtworkUri(String? artworkUri) {
+    if (artworkUri == null || artworkUri.trim().isEmpty) return null;
+    final clean = artworkUri.trim();
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      return Uri.tryParse(clean);
+    }
+    return Uri.file(clean);
   }
 
   void _syncFromPlaybackState(PlaybackState state, {Duration? position}) {
@@ -94,20 +91,35 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     final playable = state.currentPlayable;
 
     if (playable != null) {
-      final artistNames = playable.artistNames.join(', ');
+      final liveMeta = playbackController.liveMetadata;
+      final icyStreamTitle = liveMeta?.icy?.streamTitle?.trim();
+      final metaTitle = liveMeta?.title?.trim();
+      final metaArtist = liveMeta?.trackArtist?.trim();
+
+      final effectiveTitle =
+          (playable.isStream && icyStreamTitle != null && icyStreamTitle.isNotEmpty)
+              ? icyStreamTitle
+              : (playable.isStream && metaTitle != null && metaTitle.isNotEmpty
+                  ? metaTitle
+                  : playable.title);
+
+      final artistNames =
+          (playable.isStream && metaArtist != null && metaArtist.isNotEmpty)
+              ? metaArtist
+              : playable.artistNames.join(', ');
       final albumName = playable.albumTitle ?? '';
-      final hash = playable.thumbnailHash ?? '';
+      final artworkUri = playable.artworkUri ?? '';
       final signature =
-          '${playable.filePath}|${playable.title}|$artistNames|$albumName|${playable.duration.inMilliseconds}|$hash';
+          '${playable.filePath}|$effectiveTitle|$artistNames|$albumName|${playable.duration.inMilliseconds}|$artworkUri';
 
       if (signature != _lastEmittedMediaSignature) {
         _lastEmittedMediaSignature = signature;
-        final uri = resolveLowQualityArtUri(playable.thumbnailHash);
+        final uri = resolveArtworkUri(playable.artworkUri);
 
         mediaItem.add(
           as_lib.MediaItem(
             id: playable.filePath,
-            title: playable.title,
+            title: effectiveTitle,
             artist: artistNames.isNotEmpty ? artistNames : null,
             album: playable.albumTitle,
             duration: playable.isStream ? null : playable.duration,
@@ -137,7 +149,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
           final t = entry.track;
           if (t == null) continue;
           final artists = t.artistNames.join(', ');
-          final uri = resolveLowQualityArtUri(t.thumbnailHash);
+          final uri = resolveArtworkUri(t.artworkUri);
           queueItems.add(
             as_lib.MediaItem(
               id: t.filePath,
@@ -222,7 +234,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
         processingState: processingState,
         playing: isPlaying,
         updatePosition: livePosition,
-        bufferedPosition: livePosition,
+        bufferedPosition: _resolveBufferedPosition(livePosition),
         speed: speed,
         repeatMode: asRepeatMode,
         shuffleMode: asShuffleMode,
@@ -293,6 +305,9 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
   void dispose() {
     _isDisposed = true;
+    playbackController.liveMetadataListenable.removeListener(
+      _syncFromPlaybackController,
+    );
     playbackController.positionListenable.removeListener(_onPositionChanged);
     playbackController.removeListener(_syncFromPlaybackController);
   }

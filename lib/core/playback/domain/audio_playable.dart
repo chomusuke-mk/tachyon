@@ -20,8 +20,8 @@ abstract interface class AudioPlayable {
   /// Total duration of the track (or [Duration.zero] for infinite livestreams).
   Duration get duration;
 
-  /// Optional thumbnail hash used by [AlbumArtImage] to resolve cached artwork.
-  String? get thumbnailHash;
+  /// Unified artwork URI (local cached image path or remote stream/station URL).
+  String? get artworkUri;
 
   /// Primary file system path or stream URI string.
   String get filePath;
@@ -35,12 +35,12 @@ abstract interface class AudioPlayable {
   /// Whether this item represents a continuous livestream without bounded duration.
   bool get isStream;
 
-  /// Converts this playable item into an engine-compatible [ma.EngineItem].
-  ma.EngineItem<AudioPlayable> toEngineItem({int position = 0});
+  /// Converts this playable item into an engine-compatible [ma.AudioSource].
+  ma.AudioSource<AudioPlayable> toAudioSource();
 }
 
-/// Convenience extension on [ma.EngineItem] when parameterized with [AudioPlayable].
-extension EngineItemPlayableExtension on ma.EngineItem<AudioPlayable> {
+/// Convenience extension on [ma.AudioSource<AudioPlayable>] when parameterized with [AudioPlayable].
+extension EngineItemPlayableExtension on ma.AudioSource<AudioPlayable> {
   /// Unboxes the caller-owned domain object [data] as an [AudioPlayable].
   AudioPlayable? get track => data;
 }

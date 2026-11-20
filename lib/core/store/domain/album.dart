@@ -10,7 +10,7 @@ class Album {
 
   /// The year the album was released. This is optional and may not be available for all albums.
   final int? year;
-  final String? thumbnailHash;
+  final String? artworkUri;
 
   final Artist? artist;
   final List<Track> tracks;
@@ -21,7 +21,7 @@ class Album {
     this.id,
     required this.name,
     this.year,
-    this.thumbnailHash,
+    this.artworkUri,
     this.artist,
     this.tracks = const [],
   });

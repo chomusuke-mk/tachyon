@@ -523,8 +523,8 @@ void main() {
     expect(userPl.entries.isEmpty, isTrue);
 
     final queue = [
-      trackA.toEngineItem(position: 0),
-      trackB.toEngineItem(position: 1),
+        trackA.toAudioSource(),
+        trackB.toAudioSource(),
     ];
 
     await tester.pumpWidget(
@@ -575,8 +575,8 @@ void main() {
     expect(userPl.entries.length, 1);
 
     final queue = [
-      trackA.toEngineItem(position: 0),
-      trackB.toEngineItem(position: 1),
+        trackA.toAudioSource(),
+        trackB.toAudioSource(),
     ];
 
     await tester.pumpWidget(

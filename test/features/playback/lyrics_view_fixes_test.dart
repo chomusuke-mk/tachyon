@@ -132,7 +132,10 @@ Line 10 plain
 
 class MockPlaybackController extends ChangeNotifier implements PlaybackController {
   @override
-  List<EngineItem<AudioPlayable>> queue = [];
+  Listenable get trackListenable => this;
+
+  @override
+  List<AudioSource<AudioPlayable>> queue = [];
 
   @override
   int currentIndex = 0;
@@ -144,7 +147,7 @@ class MockPlaybackController extends ChangeNotifier implements PlaybackControlle
   AudioPlayable? get currentPlayable => currentTrack;
 
   @override
-  EngineItem<AudioPlayable>? get currentEntry =>
+  AudioSource<AudioPlayable>? get currentEntry =>
       queue.isNotEmpty && currentIndex >= 0 && currentIndex < queue.length
           ? queue[currentIndex]
           : null;
@@ -237,7 +240,7 @@ void main() {
       modifiedAt: 1000,
     );
 
-    playback.queue = [testTrack.toEngineItem()];
+      playback.queue = [testTrack.toAudioSource()];
     playback.currentIndex = 0;
     playback.setCurrentTrack(testTrack);
     playback.position = const Duration(seconds: 2);
@@ -301,7 +304,7 @@ void main() {
       modifiedAt: 1000,
     );
 
-    playback.queue = [testTrack.toEngineItem()];
+      playback.queue = [testTrack.toAudioSource()];
     playback.currentIndex = 0;
     playback.setCurrentTrack(testTrack);
 
@@ -412,8 +415,7 @@ void main() {
     );
 
     playback.queue = [
-      track1.toEngineItem(),
-      track2.toEngineItem(),
+      track1.toAudioSource(), track2.toAudioSource(),
     ];
     playback.currentIndex = 0;
     playback.setCurrentTrack(track1);
@@ -490,7 +492,7 @@ void main() {
       album: Album(id: 2, name: 'Album 2'),
     );
 
-    playback.queue = [track.toEngineItem()];
+      playback.queue = [track.toAudioSource()];
     playback.currentIndex = 0;
     playback.setCurrentTrack(track);
     playback.position = const Duration(seconds: 4); // Line 2

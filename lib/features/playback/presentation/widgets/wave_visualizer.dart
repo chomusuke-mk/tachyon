@@ -3,15 +3,9 @@ import 'package:flutter/material.dart';
 /// Custom painter that renders a continuous, steep audio spectrum wave with
 /// smoothly rounded crest summits (no sharp triangle spikes) directly beneath
 /// the flat dock of a rounded album art container.
-///
-/// Key design attributes:
-/// - Starts and ends exactly at the flat bottom segment ([cornerRadius] to [size.width - cornerRadius]).
-/// - Natural L -> R spectrum: 60 Hz sub-bass on the left up to 16 kHz air on the right.
-/// - Steep flanks with rounded crest tops: uses cubic Bézier curves with horizontal summit
-///   tangents to form dramatic, fluid crests without sharp corner points.
-/// - 100% solid color matching the resolved thumbnail / miniplayer background (no borders, no gradients).
 class WaveVisualizerPainter extends CustomPainter {
   final List<double> bands;
+  final List<double> Function()? bandsProvider;
   final Color color;
   final double cornerRadius;
 
@@ -21,7 +15,9 @@ class WaveVisualizerPainter extends CustomPainter {
     ..isAntiAlias = true;
 
   WaveVisualizerPainter({
+    super.repaint,
     required this.bands,
+    this.bandsProvider,
     required this.color,
     required this.cornerRadius,
   });
@@ -37,7 +33,8 @@ class WaveVisualizerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final bandsCount = bands.length;
+    final activeBands = bandsProvider?.call() ?? bands;
+    final bandsCount = activeBands.length;
     if (bandsCount == 0) return;
 
     final startX = cornerRadius;
@@ -45,7 +42,7 @@ class WaveVisualizerPainter extends CustomPainter {
     if (endX <= startX) return;
 
     // Check if there is audible energy; if silent, do not draw protruding geometry
-    if (_maxBandEnergy(bands) < 0.01) return;
+    if (_maxBandEnergy(activeBands) < 0.01) return;
 
     final spanX = endX - startX;
 
@@ -54,7 +51,7 @@ class WaveVisualizerPainter extends CustomPainter {
     _fillPath.moveTo(startX, 0.0);
 
     var prevX = startX + (0.5 / bandsCount) * spanX;
-    var prevY = bands[0].clamp(0.0, 1.0) * size.height;
+    var prevY = activeBands[0].clamp(0.0, 1.0) * size.height;
 
     // Curve from start dock anchor (startX, 0) to first band summit
     final firstDx = (prevX - startX) / 3.0;
@@ -70,7 +67,7 @@ class WaveVisualizerPainter extends CustomPainter {
     // Smoothly connect band summits with horizontal tangent crests
     for (int i = 1; i < bandsCount; i++) {
       final nextX = startX + ((i + 0.5) / bandsCount) * spanX;
-      final nextY = bands[i].clamp(0.0, 1.0) * size.height;
+      final nextY = activeBands[i].clamp(0.0, 1.0) * size.height;
       final dx = (nextX - prevX) / 3.0;
 
       _fillPath.cubicTo(
@@ -106,8 +103,13 @@ class WaveVisualizerPainter extends CustomPainter {
   @override
   bool shouldRepaint(WaveVisualizerPainter oldDelegate) {
     if (identical(this, oldDelegate)) return false;
-    if (color != oldDelegate.color || cornerRadius != oldDelegate.cornerRadius) {
+    if (color != oldDelegate.color ||
+        cornerRadius != oldDelegate.cornerRadius ||
+        bandsProvider != oldDelegate.bandsProvider) {
       return true;
+    }
+    if (bandsProvider != null) {
+      return false;
     }
     if (bands.length != oldDelegate.bands.length) return true;
 

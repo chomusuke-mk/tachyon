@@ -156,7 +156,7 @@ void main() {
         durationMs: 200000,
         fileSize: 1024,
         modifiedAt: 1000,
-        thumbnailHash: 'hash_test_123',
+        artworkUri: 'hash_test_123',
       );
 
       playbackController.setMockTrack(track, isPlaying: true);
@@ -320,13 +320,13 @@ void main() {
         isTrue,
       );
       expect(find.byType(ReactiveCircleVisualizerWidget), findsOneWidget);
-      // Center app icon is rendered within ClipOval
+      // Logo has been cleanly removed from the circular visualizer
       expect(
         find.descendant(
           of: find.byType(ReactiveCircleVisualizerWidget),
           matching: find.byType(ClipOval),
         ),
-        findsOneWidget,
+        findsNothing,
       );
 
       // 3. Tap artwork -> switches from circle to off (pure cover)
@@ -384,9 +384,9 @@ void main() {
       final darkTheme = ThemeData.dark();
       final lightTheme = ThemeData.light();
 
-      // Dark mode fallback without track color -> Electric neon yellow
+      // Dark mode fallback without track color -> Vibrant theme primary
       final darkFallback = resolveReactiveCircleColor(trackColor: null, theme: darkTheme);
-      expect(darkFallback, equals(const Color(0xFFFFEE00)));
+      expect(darkFallback, equals(darkTheme.colorScheme.primary));
 
       // Dark mode with very dark track color -> adjusts lightness for neon visibility
       const darkBlue = Color(0xFF0A1028);

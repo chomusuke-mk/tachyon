@@ -46,7 +46,7 @@ class RadioStation implements AudioPlayable {
   Duration get duration => Duration.zero;
 
   @override
-  String? get thumbnailHash => null;
+  String? get artworkUri => faviconUrl;
 
   @override
   String get filePath => streamUrl;
@@ -61,12 +61,10 @@ class RadioStation implements AudioPlayable {
   bool get isStream => true;
 
   @override
-  ma.EngineItem<AudioPlayable> toEngineItem({int position = 0}) {
-    return ma.EngineItem.liveStream(
+  ma.AudioSource<AudioPlayable> toAudioSource() {
+    return ma.AudioSource<AudioPlayable>(
       Uri.parse(streamUrl),
-      jitterBuffer: const Duration(seconds: 5),
       data: this,
-      position: position,
     );
   }
 

@@ -63,7 +63,7 @@ class GenreDetailScreen extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(
-            child: AmbientBackdrop(thumbnailHash: currentGenre.coverHash),
+            child: AmbientBackdrop(artworkUri: currentGenre.artworkUri),
           ),
           CustomScrollView(
             slivers: [
@@ -83,7 +83,7 @@ class GenreDetailScreen extends StatelessWidget {
                           width: 200,
                           height: 200,
                           child: AlbumArtImage(
-                            thumbnailHash: currentGenre.coverHash,
+                            artworkUri: currentGenre.artworkUri,
                             quality: ThumbnailQuality.medium,
                             width: 200,
                             height: 200,

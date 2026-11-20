@@ -43,7 +43,7 @@ class AlbumDetailScreen extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(
-            child: AmbientBackdrop(thumbnailHash: album.thumbnailHash),
+            child: AmbientBackdrop(artworkUri: album.artworkUri),
           ),
           CustomScrollView(
             slivers: [
@@ -63,7 +63,7 @@ class AlbumDetailScreen extends StatelessWidget {
                           width: 200,
                           height: 200,
                           child: AlbumArtImage(
-                            thumbnailHash: album.thumbnailHash,
+                            artworkUri: album.artworkUri,
                             quality: ThumbnailQuality.medium,
                             width: 200,
                             height: 200,

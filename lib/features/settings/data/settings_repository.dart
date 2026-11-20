@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:miniaudio_player/miniaudio_player.dart' show CrossfeedMode;
+import 'package:miniaudio_player/miniaudio_player.dart'
+    show Crossfeed, SilenceSkipMode;
 import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist_sort_option.dart';
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
@@ -26,11 +27,14 @@ class SettingsRepository {
   static const _keyLoopMode = 's_loop_mode';
   static const _keyShuffle = 's_shuffle';
   static const _keySkipSilence = 's_skip_silence';
+  static const _keySilenceSkipMode = 's_silence_skip_mode';
   static const _keyVolumeNormalization = 's_volume_normalization';
   static const _keyPreamp = 's_preamp';
   static const _keyBalance = 's_balance';
   static const _keyMono = 's_mono';
   static const _keyCrossfeed = 's_crossfeed';
+  static const _keyCrossfeedCutoffHz = 's_crossfeed_cutoff_hz';
+  static const _keyCrossfeedFeedDb = 's_crossfeed_feed_db';
   static const _keySpatializer = 's_spatializer';
   static const _keyLimiter = 's_limiter';
   static const _keyReverbEnabled = 's_reverb_enabled';
@@ -101,14 +105,12 @@ class SettingsRepository {
       loopMode: LoopModeExtension.fromString(_prefs.getString(_keyLoopMode)),
       shuffle: _prefs.getBool(_keyShuffle) ?? false,
       skipSilence: _prefs.getBool(_keySkipSilence) ?? false,
+      silenceSkipMode: getSilenceSkipMode(),
       volumeNormalization: _prefs.getBool(_keyVolumeNormalization) ?? true,
       preampDb: _prefs.getDouble(_keyPreamp) ?? 0.0,
       balance: _prefs.getDouble(_keyBalance) ?? 0.0,
       mono: _prefs.getBool(_keyMono) ?? false,
-      crossfeedMode: CrossfeedMode.values.elementAtOrNull(
-            _prefs.getInt(_keyCrossfeed) ?? 0,
-          ) ??
-          CrossfeedMode.off,
+      crossfeed: _getCrossfeed(),
       spatializerWidth: _prefs.getDouble(_keySpatializer) ?? 1.0,
       limiterEnabled: _prefs.getBool(_keyLimiter) ?? true,
       volumeBoost: () {
@@ -176,11 +178,14 @@ class SettingsRepository {
       _prefs.setString(_keyLoopMode, settings.loopMode.repr),
       _prefs.setBool(_keyShuffle, settings.shuffle),
       _prefs.setBool(_keySkipSilence, settings.skipSilence),
+      _prefs.setInt(_keySilenceSkipMode, settings.silenceSkipMode.value),
       _prefs.setBool(_keyVolumeNormalization, settings.volumeNormalization),
       _prefs.setDouble(_keyPreamp, settings.preampDb),
       _prefs.setDouble(_keyBalance, settings.balance),
       _prefs.setBool(_keyMono, settings.mono),
-      _prefs.setInt(_keyCrossfeed, settings.crossfeedMode.index),
+      _prefs.setInt(_keyCrossfeed, _encodeCrossfeedModeIndex(settings.crossfeed)),
+      _prefs.setDouble(_keyCrossfeedCutoffHz, settings.crossfeed.cutoffHz),
+      _prefs.setDouble(_keyCrossfeedFeedDb, settings.crossfeed.feedDb),
       _prefs.setDouble(_keySpatializer, settings.spatializerWidth),
       _prefs.setBool(_keyLimiter, settings.limiterEnabled),
       _prefs.setBool(_keyReverbEnabled, settings.reverbEnabled),
@@ -377,6 +382,44 @@ class SettingsRepository {
 
   Future<void> setShuffle(bool shuffle) => _prefs.setBool(_keyShuffle, shuffle);
 
+  Crossfeed _getCrossfeed() {
+    final index = _prefs.getInt(_keyCrossfeed) ?? 0;
+    return switch (index) {
+      1 => Crossfeed.moffatBauer,
+      2 => Crossfeed.chuMoy,
+      3 => Crossfeed(
+          enabled: true,
+          cutoffHz: (_prefs.getDouble(_keyCrossfeedCutoffHz) ?? 700.0)
+              .clamp(300.0, 2000.0),
+          feedDb: (_prefs.getDouble(_keyCrossfeedFeedDb) ?? 4.5)
+              .clamp(1.0, 15.0),
+        ),
+      _ => Crossfeed.off,
+    };
+  }
+
+  static int _encodeCrossfeedModeIndex(Crossfeed crossfeed) {
+    if (!crossfeed.enabled) return 0;
+    if (crossfeed == Crossfeed.moffatBauer) return 1;
+    if (crossfeed == Crossfeed.chuMoy) return 2;
+    return 3;
+  }
+
+  SilenceSkipMode getSilenceSkipMode() {
+    final val = _prefs.getInt(_keySilenceSkipMode);
+    if (val == null || val == SilenceSkipMode.disabled.value) {
+      return SilenceSkipMode.all;
+    }
+    return SilenceSkipMode.fromValue(val);
+  }
+
+  Future<void> setSilenceSkipMode(SilenceSkipMode mode) {
+    final effective = mode == SilenceSkipMode.disabled
+        ? SilenceSkipMode.all
+        : mode;
+    return _prefs.setInt(_keySilenceSkipMode, effective.value);
+  }
+
   Future<void> setSkipSilence(bool skip) =>
       _prefs.setBool(_keySkipSilence, skip);
 
@@ -391,8 +434,13 @@ class SettingsRepository {
 
   Future<void> setMono(bool mono) => _prefs.setBool(_keyMono, mono);
 
-  Future<void> setCrossfeed(CrossfeedMode mode) =>
-      _prefs.setInt(_keyCrossfeed, mode.index);
+  Future<void> setCrossfeed(Crossfeed crossfeed) async {
+    await Future.wait([
+      _prefs.setInt(_keyCrossfeed, _encodeCrossfeedModeIndex(crossfeed)),
+      _prefs.setDouble(_keyCrossfeedCutoffHz, crossfeed.cutoffHz),
+      _prefs.setDouble(_keyCrossfeedFeedDb, crossfeed.feedDb),
+    ]);
+  }
 
   Future<void> setSpatializer(double width) =>
       _prefs.setDouble(_keySpatializer, width.clamp(0.0, 2.0));

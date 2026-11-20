@@ -16,9 +16,9 @@ export 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackDa
 
 abstract final class AppDatabaseSchema {
   static const List<String> createTables = [
-    'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE, thumbnail_hash TEXT);',
-    'CREATE TABLE IF NOT EXISTS albums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE, year INTEGER, artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL, thumbnail_hash TEXT, UNIQUE(name COLLATE NOCASE, artist_id));',
-    'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT UNIQUE NOT NULL, title TEXT NOT NULL, track_number INTEGER, disc_number INTEGER DEFAULT 1, year INTEGER, duration_ms INTEGER NOT NULL, bitrate INTEGER, sample_rate INTEGER, channels INTEGER, codec TEXT, file_size INTEGER NOT NULL, modified_at INTEGER NOT NULL, replay_gain_track_gain REAL, replay_gain_track_peak REAL, waveform_data TEXT, album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL, thumbnail_hash TEXT);',
+    'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE, artwork_uri TEXT);',
+    'CREATE TABLE IF NOT EXISTS albums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE, year INTEGER, artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL, artwork_uri TEXT, UNIQUE(name COLLATE NOCASE, artist_id));',
+    'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT UNIQUE NOT NULL, title TEXT NOT NULL, track_number INTEGER, disc_number INTEGER DEFAULT 1, year INTEGER, duration_ms INTEGER NOT NULL, bitrate INTEGER, sample_rate INTEGER, channels INTEGER, codec TEXT, file_size INTEGER NOT NULL, modified_at INTEGER NOT NULL, replay_gain_track_gain REAL, replay_gain_track_peak REAL, waveform_data TEXT, album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL, artwork_uri TEXT);',
     'CREATE TABLE IF NOT EXISTS genres (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE);',
     'CREATE TABLE IF NOT EXISTS track_genres (track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, genre_id INTEGER NOT NULL REFERENCES genres(id) ON DELETE CASCADE, PRIMARY KEY(track_id, genre_id));',
     'CREATE TABLE IF NOT EXISTS track_artists (track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE, PRIMARY KEY(track_id, artist_id));',
@@ -133,6 +133,15 @@ class AppDatabase {
     try {
       db.execute('ALTER TABLE radio_stations ADD COLUMN station_uuid TEXT;');
     } catch (_) {}
+    try {
+      db.execute('ALTER TABLE tracks ADD COLUMN artwork_uri TEXT;');
+    } catch (_) {}
+    try {
+      db.execute('ALTER TABLE albums ADD COLUMN artwork_uri TEXT;');
+    } catch (_) {}
+    try {
+      db.execute('ALTER TABLE artists ADD COLUMN artwork_uri TEXT;');
+    } catch (_) {}
     for (final sql in AppDatabaseSchema.indexes) {
       db.execute(sql);
     }
@@ -164,19 +173,19 @@ class AppDatabase {
     db.execute('BEGIN TRANSACTION;');
     try {
       final artists = db
-          .select('SELECT id, name, thumbnail_hash FROM artists ORDER BY name COLLATE NOCASE;')
-          .map((r) => RawArtistDto(id: r['id'] as int, name: r['name'] as String, thumbnailHash: r['thumbnail_hash'] as String?))
+          .select('SELECT id, name, artwork_uri FROM artists ORDER BY name COLLATE NOCASE;')
+          .map((r) => RawArtistDto(id: r['id'] as int, name: r['name'] as String, artworkUri: r['artwork_uri'] as String?))
           .toList();
       final albums = db
-          .select('SELECT id, name, year, artist_id, thumbnail_hash FROM albums ORDER BY name COLLATE NOCASE;')
-          .map((r) => RawAlbumDto(id: r['id'] as int, name: r['name'] as String, year: r['year'] as int?, artistId: r['artist_id'] as int?, thumbnailHash: r['thumbnail_hash'] as String?))
+          .select('SELECT id, name, year, artist_id, artwork_uri FROM albums ORDER BY name COLLATE NOCASE;')
+          .map((r) => RawAlbumDto(id: r['id'] as int, name: r['name'] as String, year: r['year'] as int?, artistId: r['artist_id'] as int?, artworkUri: r['artwork_uri'] as String?))
           .toList();
       final genres = db
           .select('SELECT id, name FROM genres ORDER BY name COLLATE NOCASE;')
           .map((r) => RawGenreDto(id: r['id'] as int, name: r['name'] as String))
           .toList();
       final tracks = db
-          .select('SELECT id, file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, thumbnail_hash FROM tracks ORDER BY title COLLATE NOCASE;')
+          .select('SELECT id, file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, artwork_uri FROM tracks ORDER BY title COLLATE NOCASE;')
           .map((r) => RawTrackDto(
                 id: r['id'] as int,
                 filePath: r['file_path'] as String,
@@ -195,7 +204,7 @@ class AppDatabase {
                 replayGainTrackPeak: (r['replay_gain_track_peak'] as num?)?.toDouble(),
                 waveformData: r['waveform_data'] as String?,
                 albumId: r['album_id'] as int?,
-                thumbnailHash: r['thumbnail_hash'] as String?,
+                artworkUri: r['artwork_uri'] as String?,
               ))
           .toList();
       final trackArtists = db
@@ -262,18 +271,18 @@ class AppDatabase {
       final albumCache = <String, int>{};
       final genreCache = <String, int>{};
 
-      final stmtInsertArtist = prep('INSERT OR IGNORE INTO artists (name, thumbnail_hash) VALUES (?, ?);');
-      final stmtSelectArtist = prep('SELECT id, thumbnail_hash FROM artists WHERE name = ? COLLATE NOCASE LIMIT 1;');
-      final stmtUpdateArtistThumbnail = prep('UPDATE artists SET thumbnail_hash = ? WHERE id = ? AND thumbnail_hash IS NULL;');
-      final stmtInsertAlbum = prep('INSERT OR IGNORE INTO albums (name, artist_id, year, thumbnail_hash) VALUES (?, ?, ?, ?);');
-      final stmtSelectAlbum = prep('SELECT id, thumbnail_hash FROM albums WHERE name = ? COLLATE NOCASE AND (artist_id = ? OR (? IS NULL AND artist_id IS NULL)) LIMIT 1;');
-      final stmtUpdateAlbumThumbnail = prep('UPDATE albums SET thumbnail_hash = ? WHERE id = ? AND thumbnail_hash IS NULL;');
+      final stmtInsertArtist = prep('INSERT OR IGNORE INTO artists (name, artwork_uri) VALUES (?, ?);');
+      final stmtSelectArtist = prep('SELECT id, artwork_uri FROM artists WHERE name = ? COLLATE NOCASE LIMIT 1;');
+      final stmtUpdateArtistArtwork = prep('UPDATE artists SET artwork_uri = ? WHERE id = ? AND artwork_uri IS NULL;');
+      final stmtInsertAlbum = prep('INSERT OR IGNORE INTO albums (name, artist_id, year, artwork_uri) VALUES (?, ?, ?, ?);');
+      final stmtSelectAlbum = prep('SELECT id, artwork_uri FROM albums WHERE name = ? COLLATE NOCASE AND (artist_id = ? OR (? IS NULL AND artist_id IS NULL)) LIMIT 1;');
+      final stmtUpdateAlbumArtwork = prep('UPDATE albums SET artwork_uri = ? WHERE id = ? AND artwork_uri IS NULL;');
       final stmtInsertGenre = prep('INSERT OR IGNORE INTO genres (name) VALUES (?);');
       final stmtSelectGenre = prep('SELECT id FROM genres WHERE name = ? COLLATE NOCASE LIMIT 1;');
       final stmtUpsertTrack = prep(
-        'INSERT INTO tracks (file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, thumbnail_hash) '
+        'INSERT INTO tracks (file_path, title, track_number, disc_number, year, duration_ms, bitrate, sample_rate, channels, codec, file_size, modified_at, replay_gain_track_gain, replay_gain_track_peak, waveform_data, album_id, artwork_uri) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
-        'ON CONFLICT(file_path) DO UPDATE SET title = excluded.title, track_number = excluded.track_number, disc_number = excluded.disc_number, year = excluded.year, duration_ms = excluded.duration_ms, bitrate = excluded.bitrate, sample_rate = excluded.sample_rate, channels = excluded.channels, codec = excluded.codec, file_size = excluded.file_size, modified_at = excluded.modified_at, replay_gain_track_gain = excluded.replay_gain_track_gain, replay_gain_track_peak = excluded.replay_gain_track_peak, waveform_data = excluded.waveform_data, album_id = excluded.album_id, thumbnail_hash = excluded.thumbnail_hash '
+        'ON CONFLICT(file_path) DO UPDATE SET title = excluded.title, track_number = excluded.track_number, disc_number = excluded.disc_number, year = excluded.year, duration_ms = excluded.duration_ms, bitrate = excluded.bitrate, sample_rate = excluded.sample_rate, channels = excluded.channels, codec = excluded.codec, file_size = excluded.file_size, modified_at = excluded.modified_at, replay_gain_track_gain = excluded.replay_gain_track_gain, replay_gain_track_peak = excluded.replay_gain_track_peak, waveform_data = excluded.waveform_data, album_id = excluded.album_id, artwork_uri = excluded.artwork_uri '
         'RETURNING id;',
       );
       final stmtDeleteEmbeddedLyrics = prep("DELETE FROM lyrics WHERE track_id = ? AND source = 'embedded';");
@@ -283,7 +292,7 @@ class AppDatabase {
       final stmtDeleteTrackGenres = prep('DELETE FROM track_genres WHERE track_id = ?;');
       final stmtInsertTrackGenre = prep('INSERT OR IGNORE INTO track_genres (track_id, genre_id) VALUES (?, ?);');
 
-      int? resolveArtist(String name, {String? artistThumbnailHash}) {
+      int? resolveArtist(String name, {String? artistArtworkUri}) {
         final clean = name.trim();
         if (clean.isEmpty) return null;
         final lower = clean.toLowerCase();
@@ -292,17 +301,17 @@ class AppDatabase {
           final rows = stmtSelectArtist.select([clean]);
           if (rows.isNotEmpty) {
             id = rows.first['id'] as int;
-            if (rows.first['thumbnail_hash'] == null && artistThumbnailHash != null) {
-              stmtUpdateArtistThumbnail.execute([artistThumbnailHash, id]);
+            if (rows.first['artwork_uri'] == null && artistArtworkUri != null) {
+              stmtUpdateArtistArtwork.execute([artistArtworkUri, id]);
             }
           } else {
-            stmtInsertArtist.execute([clean, artistThumbnailHash]);
+            stmtInsertArtist.execute([clean, artistArtworkUri]);
             final ins = stmtSelectArtist.select([clean]);
             if (ins.isNotEmpty) id = ins.first['id'] as int;
           }
           if (id != null) artistCache[lower] = id;
-        } else if (artistThumbnailHash != null) {
-          stmtUpdateArtistThumbnail.execute([artistThumbnailHash, id]);
+        } else if (artistArtworkUri != null) {
+          stmtUpdateArtistArtwork.execute([artistArtworkUri, id]);
         }
         return id;
       }
@@ -329,7 +338,7 @@ class AppDatabase {
       for (final t in tracks) {
         final resolvedArtistIds = <int>[];
         for (final aName in t.artistNames) {
-          final aId = resolveArtist(aName, artistThumbnailHash: t.artistThumbnailHash);
+          final aId = resolveArtist(aName, artistArtworkUri: t.artistArtworkUri);
           if (aId != null && !resolvedArtistIds.contains(aId)) resolvedArtistIds.add(aId);
         }
 
@@ -337,34 +346,34 @@ class AppDatabase {
         if (t.albumName != null && t.albumName!.trim().isNotEmpty) {
           final alClean = t.albumName!.trim();
           final albumArtistId = (t.albumArtistName != null && t.albumArtistName!.trim().isNotEmpty)
-              ? resolveArtist(t.albumArtistName!, artistThumbnailHash: t.artistThumbnailHash)
+              ? resolveArtist(t.albumArtistName!, artistArtworkUri: t.artistArtworkUri)
               : null;
           final primaryArtistId = albumArtistId ?? resolvedArtistIds.firstOrNull;
-          final albumThumb = t.albumThumbnailHash ?? t.thumbnailHash;
+          final albumArtwork = t.albumArtworkUri ?? t.artworkUri;
           final cacheKey = '${alClean.toLowerCase()}|$primaryArtistId';
           resolvedAlbumId = albumCache[cacheKey];
           if (resolvedAlbumId == null) {
             final rows = stmtSelectAlbum.select([alClean, primaryArtistId, primaryArtistId]);
             if (rows.isNotEmpty) {
               resolvedAlbumId = rows.first['id'] as int;
-              if (rows.first['thumbnail_hash'] == null && albumThumb != null) {
-                stmtUpdateAlbumThumbnail.execute([albumThumb, resolvedAlbumId]);
+              if (rows.first['artwork_uri'] == null && albumArtwork != null) {
+                stmtUpdateAlbumArtwork.execute([albumArtwork, resolvedAlbumId]);
               }
             } else {
-              stmtInsertAlbum.execute([alClean, primaryArtistId, t.year, albumThumb]);
+              stmtInsertAlbum.execute([alClean, primaryArtistId, t.year, albumArtwork]);
               final ins = stmtSelectAlbum.select([alClean, primaryArtistId, primaryArtistId]);
               if (ins.isNotEmpty) resolvedAlbumId = ins.first['id'] as int;
             }
             if (resolvedAlbumId != null) albumCache[cacheKey] = resolvedAlbumId;
-          } else if (albumThumb != null) {
-            stmtUpdateAlbumThumbnail.execute([albumThumb, resolvedAlbumId]);
+          } else if (albumArtwork != null) {
+            stmtUpdateAlbumArtwork.execute([albumArtwork, resolvedAlbumId]);
           }
         }
 
         final trackRes = stmtUpsertTrack.select([
           t.filePath, t.title, t.trackNumber, t.discNumber ?? 1, t.year, t.durationMs,
           t.bitrate, t.sampleRate, t.channels, t.codec, t.fileSize, t.modifiedAt,
-          t.replayGainTrackGain, t.replayGainTrackPeak, t.waveformData, resolvedAlbumId, t.thumbnailHash,
+          t.replayGainTrackGain, t.replayGainTrackPeak, t.waveformData, resolvedAlbumId, t.artworkUri,
         ]);
         final trackId = trackRes.first['id'] as int;
 

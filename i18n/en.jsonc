@@ -233,6 +233,8 @@
   "rd_save_to_library": "Save to Library",
   "rd_saved_to_library": "Saved to your library",
   "rd_already_in_library": "Already in library",
+  "rd_like": "Add to Favorite Stations",
+  "rd_unlike": "Remove from Favorite Stations",
   "rd_refresh": "Refresh",
   "rd_popular": "Popular",
   "rd_loading": "Loading stations...",

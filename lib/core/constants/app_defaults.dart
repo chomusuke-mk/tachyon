@@ -79,9 +79,16 @@ class AppDefaults {
     'oga',
     'aac',
     'm4a',
+    'webm',
+    'mkv',
+    'mka',
+    'caf',
+    'wv',
+    'ape',
+    'dsf',
   };
 
-  static const int lowQualityResolution = 50;
-  static const int mediumQualityResolution = 250;
-  static const int highQualityResolution = 800;
+  static const int lowQualityResolution = 150;
+  static const int mediumQualityResolution = 500;
+  static const int highQualityResolution = 1200;
 }
