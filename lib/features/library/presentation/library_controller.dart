@@ -240,6 +240,19 @@ class LibraryController extends ChangeNotifier {
       _selectedGenre = _store.getGenreById(_selectedGenre!.id!);
     }
 
+    if (_folderNavigationStack.isNotEmpty) {
+      final currentFolder = _folderNavigationStack.last;
+      final refreshed = List<Track>.from(_store.getTracksInDirectory(currentFolder));
+      refreshed.sort((a, b) {
+        final discComp = (a.discNumber ?? 1).compareTo(b.discNumber ?? 1);
+        if (discComp != 0) return discComp;
+        final trackComp = (a.trackNumber ?? 0).compareTo(b.trackNumber ?? 0);
+        if (trackComp != 0) return trackComp;
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      });
+      _currentFolderTracks = refreshed;
+    }
+
     _applyFilters();
   }
 

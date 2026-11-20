@@ -2,8 +2,10 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:path/path.dart' as p;
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/metadata/domain/discovered_audio_file.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
@@ -15,6 +17,7 @@ import 'package:tachyon/core/store/domain/track_sort_option.dart';
 import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist_sort_option.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/shared/utils/parse_utils.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
 
 /// In-memory relational graph for the Main Isolate.
@@ -44,6 +47,12 @@ class LibraryStore extends ChangeNotifier {
   // Ephemeral external tracks (id < 0) for instant zero-latency playback
   final Map<int, Track> _ephemeralTracksById = {};
   int _nextEphemeralId = -1;
+
+  // Provisional discovered tracks staged before background metadata extraction finishes
+  final Map<String, Track> _pendingDiscoveredByPath = {};
+
+  bool get hasPendingDiscoveredTracks => _pendingDiscoveredByPath.isNotEmpty;
+  int get pendingDiscoveredCount => _pendingDiscoveredByPath.length;
 
   // Ordered lists
   final List<Track> _allTracks = [];
@@ -227,13 +236,261 @@ class LibraryStore extends ChangeNotifier {
   List<({int id, String filePath, int modifiedAt})> getStoredTracks() {
     return <({int id, String filePath, int modifiedAt})>[
       for (final track in _allTracks)
-        if (track.id != null)
+        if (track.id != null && track.id! > 0 && !track.isMetadataPending)
           (
             id: track.id!,
             filePath: track.filePath,
             modifiedAt: track.modifiedAt,
           ),
     ];
+  }
+
+  /// Stages newly discovered audio files as provisional [Track] entries in RAM
+  /// so they are immediately visible and playable while background analysis runs.
+  void stageDiscoveredFiles(List<DiscoveredAudioFile> files) {
+    final incomingPaths = <String>{for (final f in files) f.path};
+    var changed = false;
+
+    final stalePaths = <String>[
+      for (final path in _pendingDiscoveredByPath.keys)
+        if (!incomingPaths.contains(path)) path,
+    ];
+    for (final path in stalePaths) {
+      final removed = _pendingDiscoveredByPath.remove(path);
+      if (removed == null) continue;
+      if (identical(_tracksByPath[path], removed)) {
+        _tracksByPath.remove(path);
+      }
+      final dir = p.normalize(p.dirname(path));
+      _tracksByDirectory[dir]?.removeWhere((t) => identical(t, removed));
+      _allTracks.removeWhere((t) => identical(t, removed));
+      changed = true;
+    }
+
+    for (final file in files) {
+      if (_tracksByPath.containsKey(file.path)) continue;
+      final extClean = p.extension(file.path).replaceAll('.', '').toUpperCase();
+      final baseName = p.basenameWithoutExtension(file.path);
+      final title = baseName.isNotEmpty ? baseName : p.basename(file.path);
+      final provisional = Track(
+        id: null,
+        filePath: file.path,
+        title: title,
+        durationMs: 0,
+        codec: extClean.isNotEmpty ? extClean : null,
+        fileSize: file.size,
+        modifiedAt: file.modifiedAt,
+        isMetadataPending: true,
+      );
+      _pendingDiscoveredByPath[file.path] = provisional;
+      _tracksByPath[file.path] = provisional;
+      final dir = p.normalize(p.dirname(file.path));
+      _tracksByDirectory.putIfAbsent(dir, () => []).add(provisional);
+      _allTracks.add(provisional);
+      changed = true;
+    }
+
+    if (changed) {
+      _invalidateViews();
+      notifyListeners();
+    }
+  }
+
+  /// Removes all provisional pending tracks staged during discovery.
+  void clearPendingDiscoveredTracks({bool notify = true}) {
+    if (_pendingDiscoveredByPath.isEmpty) return;
+    for (final entry in _pendingDiscoveredByPath.entries) {
+      final path = entry.key;
+      final track = entry.value;
+      if (identical(_tracksByPath[path], track)) {
+        _tracksByPath.remove(path);
+      }
+      final dir = p.normalize(p.dirname(path));
+      _tracksByDirectory[dir]?.removeWhere((t) => identical(t, track));
+      _allTracks.removeWhere((t) => identical(t, track));
+    }
+    _pendingDiscoveredByPath.clear();
+    _invalidateViews();
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  /// Enriches a provisional pending track using metadata received during live
+  /// playback. Never mutates already-persisted database tracks.
+  Track? updatePendingTrackFromLivePlayback({
+    required String filePath,
+    ma.AudioMetadata? metadata,
+    ma.AudioInfo? audioInfo,
+    String? artworkUri,
+    Duration? duration,
+  }) {
+    final existing = _pendingDiscoveredByPath[filePath];
+    if (existing == null) return null;
+
+    String? nonEmpty(String? v) {
+      final trimmed = v?.trim();
+      return (trimmed != null && trimmed.isNotEmpty) ? trimmed : null;
+    }
+
+    final nextTitle = nonEmpty(metadata?.title) ?? existing.title;
+
+    List<Artist> nextArtists = existing.artists;
+    final rawTrackArtist = nonEmpty(metadata?.trackArtist);
+    final rawAlbumArtist = nonEmpty(metadata?.albumArtist);
+    if (rawTrackArtist != null) {
+      final parsed = rawTrackArtist
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .map((name) => Artist(name: name))
+          .toList(growable: false);
+      if (parsed.isNotEmpty) {
+        nextArtists = parsed;
+      }
+    } else if (rawAlbumArtist != null) {
+      nextArtists = [Artist(name: rawAlbumArtist)];
+    }
+
+    final albumName = nonEmpty(metadata?.album);
+    final nextYear = metadata?.year ?? existing.year;
+    final Album? nextAlbum = albumName != null
+        ? Album(name: albumName, year: nextYear)
+        : existing.album;
+
+    final infoDurMs = audioInfo?.duration?.inMilliseconds ?? 0;
+    final argDurMs = duration?.inMilliseconds ?? 0;
+    final nextDurationMs = infoDurMs > 0
+        ? infoDurMs
+        : (argDurMs > 0 ? argDurMs : existing.durationMs);
+
+    final nextBitrate =
+        (audioInfo != null && audioInfo.bitrate > 0)
+            ? audioInfo.bitrate
+            : existing.bitrate;
+    final nextSampleRate =
+        (audioInfo != null && audioInfo.sampleRate > 0)
+            ? audioInfo.sampleRate
+            : existing.sampleRate;
+    final nextChannels =
+        (audioInfo != null && audioInfo.channels > 0)
+            ? audioInfo.channels
+            : existing.channels;
+    final nextCodec =
+        (audioInfo != null &&
+                audioInfo.codec.isNotEmpty &&
+                audioInfo.codec != 'Unknown')
+            ? audioInfo.codec
+            : existing.codec;
+
+    final nextTrackNumber = metadata?.trackNumber ?? existing.trackNumber;
+    final nextDiscNumber = metadata?.discNumber ?? existing.discNumber;
+
+    String? nextArtworkUri = existing.artworkUri;
+    final cleanArt = nonEmpty(artworkUri);
+    if (cleanArt != null) {
+      if (cleanArt.startsWith('http://') ||
+          cleanArt.startsWith('https://') ||
+          p.isAbsolute(cleanArt)) {
+        nextArtworkUri = cleanArt;
+      } else if (MetadataUtils.thumbnailsDirectory != null) {
+        nextArtworkUri = MetadataUtils.getArtworkPath(cleanArt);
+      } else {
+        nextArtworkUri = cleanArt;
+      }
+    }
+
+    final nextGain =
+        ParseUtils.parseDouble(metadata?.replayGainTrackGain) ??
+        existing.replayGainTrackGain;
+    final nextPeak =
+        ParseUtils.parseDouble(metadata?.replayGainTrackPeak) ??
+        existing.replayGainTrackPeak;
+
+    bool artistsEqual(List<Artist> a, List<Artist> b) {
+      if (identical(a, b)) return true;
+      if (a.length != b.length) return false;
+      for (int i = 0; i < a.length; i++) {
+        if (a[i].name != b[i].name) return false;
+      }
+      return true;
+    }
+
+    if (nextTitle == existing.title &&
+        artistsEqual(existing.artists, nextArtists) &&
+        nextAlbum?.name == existing.album?.name &&
+        nextYear == existing.year &&
+        nextTrackNumber == existing.trackNumber &&
+        nextDiscNumber == existing.discNumber &&
+        nextDurationMs == existing.durationMs &&
+        nextBitrate == existing.bitrate &&
+        nextSampleRate == existing.sampleRate &&
+        nextChannels == existing.channels &&
+        nextCodec == existing.codec &&
+        nextArtworkUri == existing.artworkUri &&
+        nextGain == existing.replayGainTrackGain &&
+        nextPeak == existing.replayGainTrackPeak) {
+      return existing;
+    }
+
+    final updated = Track(
+      id: null,
+      filePath: existing.filePath,
+      title: nextTitle,
+      trackNumber: nextTrackNumber,
+      discNumber: nextDiscNumber,
+      year: nextYear,
+      durationMs: nextDurationMs,
+      bitrate: nextBitrate,
+      sampleRate: nextSampleRate,
+      channels: nextChannels,
+      codec: nextCodec,
+      fileSize: existing.fileSize,
+      modifiedAt: existing.modifiedAt,
+      replayGainTrackGain: nextGain,
+      replayGainTrackPeak: nextPeak,
+      waveform: existing.waveform,
+      artworkUri: nextArtworkUri,
+      album: nextAlbum,
+      genres: existing.genres,
+      artists: nextArtists,
+      isMetadataPending: true,
+    );
+
+    _pendingDiscoveredByPath[filePath] = updated;
+    _tracksByPath[filePath] = updated;
+
+    final allIdx = _allTracks.indexWhere((t) => identical(t, existing));
+    if (allIdx != -1) {
+      _allTracks[allIdx] = updated;
+    } else {
+      final pathIdx = _allTracks.indexWhere(
+        (t) => t.filePath == filePath && t.isMetadataPending,
+      );
+      if (pathIdx != -1) {
+        _allTracks[pathIdx] = updated;
+      }
+    }
+
+    final dir = p.normalize(p.dirname(filePath));
+    final dirList = _tracksByDirectory[dir];
+    if (dirList != null) {
+      final dirIdx = dirList.indexWhere((t) => identical(t, existing));
+      if (dirIdx != -1) {
+        dirList[dirIdx] = updated;
+      } else {
+        final pathIdx = dirList.indexWhere(
+          (t) => t.filePath == filePath && t.isMetadataPending,
+        );
+        if (pathIdx != -1) {
+          dirList[pathIdx] = updated;
+        }
+      }
+    }
+
+    _invalidateViews();
+    notifyListeners();
+    return updated;
   }
 
   /// Collects all active cover art URIs/paths across tracks, albums, and artists in RAM.
@@ -265,6 +522,7 @@ class LibraryStore extends ChangeNotifier {
     List<RadioStation>? radioStations,
   }) {
     _invalidateViews();
+    _pendingDiscoveredByPath.clear();
     _tracksById.clear();
     _tracksByPath.clear();
     _tracksByDirectory.clear();

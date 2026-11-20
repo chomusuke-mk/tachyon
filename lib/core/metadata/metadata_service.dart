@@ -9,29 +9,16 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:path/path.dart' as p;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/metadata/domain/discovered_audio_file.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
 
+export 'package:tachyon/core/metadata/domain/discovered_audio_file.dart';
+
 /// Stored track metadata snapshot in RAM used during differential folder scanning.
 typedef StoredTrackInfo = ({int id, String filePath, int modifiedAt});
-
-/// Discovered audio file entity awaiting metadata extraction.
-class DiscoveredAudioFile {
-  final String path;
-  final int size;
-  final int modifiedAt;
-
-  const DiscoveredAudioFile({
-    required this.path,
-    required this.size,
-    required this.modifiedAt,
-  });
-
-  @override
-  String toString() => 'DiscoveredAudioFile($path, $size bytes)';
-}
 
 class _QueuedScan {
   final List<String> directories;
@@ -88,8 +75,8 @@ class MetadataService {
   bool get isScanning =>
       _currentScanToken != null && !_currentScanToken!.isCancelled;
 
-  /// Starts the scan pipeline using a pool of [Isolate] workers proportional
-  /// to CPU cores and returns a [Stream<ScanProgress>].
+  /// Starts the scan pipeline using a pull-based pool of [Isolate] workers
+  /// proportional to CPU cores and returns a [Stream<ScanProgress>].
   Stream<ScanProgress> scanDirectories(
     List<String> directories, {
     CancellationToken? cancellationToken,
@@ -154,7 +141,7 @@ class MetadataService {
   }
 
   // ---------------------------------------------------------------------------
-  // Private: Isolate pool orchestration
+  // Private: Background discovery & dynamic work-stealing Isolate pool
   // ---------------------------------------------------------------------------
 
   Future<void> _runScanPipeline(
@@ -222,6 +209,7 @@ class MetadataService {
       final trackStored = store.getStoredTracks();
 
       if (scanToken.isCancelled) {
+        store.clearPendingDiscoveredTracks();
         sendProgress(
           const ScanProgress(stage: ScanStage.cancelled),
           force: true,
@@ -235,16 +223,13 @@ class MetadataService {
         force: true,
       );
 
-      final trackDiscover = <DiscoveredAudioFile>[];
-      await for (final file in _discoverFilesLocal(
+      final trackDiscover = await _discoverFilesInIsolate(
         directories,
         cancellationToken: scanToken,
-      )) {
-        if (scanToken.isCancelled) break;
-        trackDiscover.add(file);
-      }
+      );
 
       if (scanToken.isCancelled) {
+        store.clearPendingDiscoveredTracks();
         sendProgress(
           const ScanProgress(stage: ScanStage.cancelled),
           force: true,
@@ -257,6 +242,7 @@ class MetadataService {
 
       final storedByPath = {for (final s in trackStored) s.filePath: s};
       final toExtract = <DiscoveredAudioFile>[];
+      final newlyDiscovered = <DiscoveredAudioFile>[];
       final toDeleteMap = Map<String, StoredTrackInfo>.from(storedByPath);
 
       for (final file in trackDiscover) {
@@ -269,9 +255,16 @@ class MetadataService {
           }
         } else {
           toExtract.add(file);
+          newlyDiscovered.add(file);
         }
       }
       final toDeleteStored = toDeleteMap.values.toList();
+
+      // Publish newly discovered files immediately so the user can browse and
+      // start playback while background metadata extraction proceeds.
+      if (newlyDiscovered.isNotEmpty || store.hasPendingDiscoveredTracks) {
+        store.stageDiscoveredFiles(newlyDiscovered);
+      }
 
       final totalExtract = toExtract.length;
       final extractedTracks = <ExtractedTrackData>[];
@@ -287,12 +280,11 @@ class MetadataService {
       );
 
       if (totalExtract > 0 && !scanToken.isCancelled) {
-        final numWorkers = math.min(workerCount, totalExtract);
-        final fileChunks = List.generate(numWorkers, (_) => <String>[]);
-        for (int i = 0; i < totalExtract; i++) {
-          fileChunks[i % numWorkers].add(toExtract[i].path);
-        }
+        // Longest-Processing-Time-first ordering prevents tail stragglers when
+        // large lossless tracks are mixed with short lossy files.
+        toExtract.sort((a, b) => b.size.compareTo(a.size));
 
+        final numWorkers = math.min(workerCount, totalExtract);
         final receivePort = ReceivePort();
         final exitPort = ReceivePort();
         final spawnedIsolates = <Isolate>[];
@@ -301,14 +293,37 @@ class MetadataService {
 
         final completer = Completer<void>();
         final remainingWorkers = List.generate(numWorkers, (i) => i).toSet();
+        final workerPorts = <int, SendPort>{};
+        int nextIndex = 0;
+        bool poolClosed = false;
 
         void killWorkers() {
+          poolClosed = true;
           for (final iso in spawnedIsolates) {
             iso.kill(priority: Isolate.immediate);
           }
           if (!completer.isCompleted) {
             completer.complete();
           }
+        }
+
+        void dispatchNextBatch(int workerIndex) {
+          if (poolClosed || scanToken.isCancelled) return;
+          final port = workerPorts[workerIndex];
+          if (port == null) return;
+          if (nextIndex >= totalExtract) {
+            port.send(null);
+            return;
+          }
+          final remaining = totalExtract - nextIndex;
+          final take = math.min(
+            4,
+            math.max(1, (remaining / (numWorkers * 2)).ceil()),
+          );
+          final end = math.min(totalExtract, nextIndex + take);
+          final slice = toExtract.sublist(nextIndex, end);
+          nextIndex = end;
+          port.send(slice);
         }
 
         scanToken.onCancel(killWorkers);
@@ -324,7 +339,6 @@ class MetadataService {
             final config = _MetadataWorkerConfig(
               workerIndex: i,
               sendPort: receivePort.sendPort,
-              filePaths: fileChunks[i],
               thumbnailsPath: thumbnailsPath,
               tempPath: tempPath,
               rootIsolateToken: rootIsolateToken,
@@ -354,7 +368,10 @@ class MetadataService {
                 return;
               }
 
-              if (message is _WorkerTrackResult) {
+              if (message is _WorkerReady) {
+                workerPorts[message.workerIndex] = message.workerSendPort;
+                dispatchNextBatch(message.workerIndex);
+              } else if (message is _WorkerTrackResult) {
                 extractedCount++;
                 if (message.track != null) {
                   extractedTracks.add(message.track!);
@@ -369,6 +386,8 @@ class MetadataService {
                     progressValue: progressVal,
                   ),
                 );
+              } else if (message is _WorkerBatchDone) {
+                dispatchNextBatch(message.workerIndex);
               } else if (message is _WorkerDone) {
                 remainingWorkers.remove(message.workerIndex);
                 if (remainingWorkers.isEmpty && !completer.isCompleted) {
@@ -394,6 +413,7 @@ class MetadataService {
             }
           }
         } finally {
+          poolClosed = true;
           for (final iso in spawnedIsolates) {
             iso.kill(priority: Isolate.immediate);
           }
@@ -403,6 +423,7 @@ class MetadataService {
       }
 
       if (scanToken.isCancelled) {
+        store.clearPendingDiscoveredTracks();
         sendProgress(
           const ScanProgress(stage: ScanStage.cancelled),
           force: true,
@@ -432,6 +453,7 @@ class MetadataService {
         extractedTracks.clear();
 
         if (scanToken.isCancelled) {
+          store.clearPendingDiscoveredTracks();
           sendProgress(
             const ScanProgress(stage: ScanStage.cancelled),
             force: true,
@@ -481,7 +503,10 @@ class MetadataService {
 
           final dir = MetadataUtils.thumbnailsDirectory;
           if (dir != null && await dir.exists()) {
-            await for (final entity in dir.list(recursive: false, followLinks: false)) {
+            await for (final entity in dir.list(
+              recursive: false,
+              followLinks: false,
+            )) {
               if (entity is File) {
                 final fileName = p.basename(entity.path);
                 if (!validHashes.contains(fileName)) {
@@ -498,6 +523,7 @@ class MetadataService {
       } else {
         toExtract.clear();
         extractedTracks.clear();
+        store.clearPendingDiscoveredTracks();
       }
 
       sendProgress(
@@ -512,6 +538,7 @@ class MetadataService {
       if (!controller.isClosed) controller.close();
     } catch (e, st) {
       debugPrint('[MetadataService] Pipeline failed: $e\n$st');
+      store.clearPendingDiscoveredTracks();
       sendProgress(
         ScanProgress(stage: ScanStage.failed, errorMessage: e.toString()),
         force: true,
@@ -527,6 +554,110 @@ class MetadataService {
       _processNextQueuedScan();
     }
   }
+}
+
+Future<List<DiscoveredAudioFile>> _discoverFilesInIsolate(
+  List<String> directories, {
+  CancellationToken? cancellationToken,
+}) async {
+  if (directories.isEmpty || (cancellationToken?.isCancelled ?? false)) {
+    return const <DiscoveredAudioFile>[];
+  }
+
+  final receivePort = ReceivePort();
+  final exitPort = ReceivePort();
+  final completer = Completer<List<DiscoveredAudioFile>>();
+  Isolate? iso;
+
+  void abortDiscovery() {
+    iso?.kill(priority: Isolate.immediate);
+    if (!completer.isCompleted) {
+      completer.complete(const <DiscoveredAudioFile>[]);
+    }
+  }
+
+  cancellationToken?.onCancel(abortDiscovery);
+
+  try {
+    iso = await Isolate.spawn(_discoveryIsolateEntryPoint, (
+      directories: directories,
+      sendPort: receivePort.sendPort,
+    ));
+    iso.addOnExitListener(exitPort.sendPort);
+
+    if (cancellationToken?.isCancelled ?? false) {
+      abortDiscovery();
+      return await completer.future;
+    }
+
+    receivePort.listen((dynamic message) {
+      if (!completer.isCompleted && message is List<DiscoveredAudioFile>) {
+        completer.complete(message);
+      }
+    });
+
+    exitPort.listen((_) {
+      if (!completer.isCompleted) {
+        completer.complete(const <DiscoveredAudioFile>[]);
+      }
+    });
+
+    return await completer.future;
+  } finally {
+    iso?.kill(priority: Isolate.immediate);
+    receivePort.close();
+    exitPort.close();
+  }
+}
+
+Future<void> _discoveryIsolateEntryPoint(
+  ({List<String> directories, SendPort sendPort}) config,
+) async {
+  final results = <DiscoveredAudioFile>[];
+
+  for (final dirPath in config.directories) {
+    final dir = Directory(dirPath);
+    if (!dir.existsSync()) continue;
+
+    Stream<FileSystemEntity> entityStream;
+    try {
+      entityStream = dir.list(recursive: true, followLinks: false);
+    } catch (e) {
+      debugPrint('[MetadataService] Unable to list directory $dirPath: $e');
+      continue;
+    }
+
+    await for (final entity in entityStream.handleError((Object e) {
+      debugPrint('[MetadataService] Error accessing filesystem entity: $e');
+    })) {
+      if (entity is! File) continue;
+
+      final path = entity.path;
+      final filename = p.basename(path);
+      if (filename.startsWith('.')) continue;
+
+      final dotIndex = filename.lastIndexOf('.');
+      if (dotIndex <= 0 || dotIndex == filename.length - 1) continue;
+      final ext = filename.substring(dotIndex + 1).toLowerCase();
+      if (!AppDefaults.supportedAudioExtensions.contains(ext)) continue;
+
+      try {
+        final stat = entity.statSync();
+        if (stat.size <= 0) continue;
+        results.add(
+          DiscoveredAudioFile(
+            path: path,
+            size: stat.size,
+            modifiedAt: stat.modified.millisecondsSinceEpoch,
+          ),
+        );
+      } catch (_) {
+        continue;
+      }
+    }
+  }
+
+  config.sendPort.send(results);
 }
 
 Stream<DiscoveredAudioFile> _discoverFilesLocal(
@@ -589,7 +720,6 @@ Stream<DiscoveredAudioFile> _discoverFilesLocal(
 class _MetadataWorkerConfig {
   final int workerIndex;
   final SendPort sendPort;
-  final List<String> filePaths;
   final String? thumbnailsPath;
   final String? tempPath;
   final RootIsolateToken? rootIsolateToken;
@@ -597,7 +727,6 @@ class _MetadataWorkerConfig {
   const _MetadataWorkerConfig({
     required this.workerIndex,
     required this.sendPort,
-    required this.filePaths,
     this.thumbnailsPath,
     this.tempPath,
     this.rootIsolateToken,
@@ -608,6 +737,12 @@ sealed class _MetadataWorkerMessage {
   const _MetadataWorkerMessage();
 }
 
+class _WorkerReady extends _MetadataWorkerMessage {
+  final int workerIndex;
+  final SendPort workerSendPort;
+  const _WorkerReady({required this.workerIndex, required this.workerSendPort});
+}
+
 class _WorkerTrackResult extends _MetadataWorkerMessage {
   final ExtractedTrackData? track;
   final String filePath;
@@ -615,12 +750,18 @@ class _WorkerTrackResult extends _MetadataWorkerMessage {
   _WorkerTrackResult({required this.track, required this.filePath});
 }
 
+class _WorkerBatchDone extends _MetadataWorkerMessage {
+  final int workerIndex;
+  const _WorkerBatchDone({required this.workerIndex});
+}
+
 class _WorkerDone extends _MetadataWorkerMessage {
   final int workerIndex;
   const _WorkerDone({required this.workerIndex});
 }
 
-void _metadataWorkerEntryPoint(_MetadataWorkerConfig config) async {
+Future<void> _metadataWorkerEntryPoint(_MetadataWorkerConfig config) async {
+  final workerReceivePort = ReceivePort();
   try {
     try {
       await MiniaudioPlayer.ensureInitialized(
@@ -634,24 +775,43 @@ void _metadataWorkerEntryPoint(_MetadataWorkerConfig config) async {
       MetadataUtils.init(config.thumbnailsPath!, config.tempPath!);
     }
 
-    for (final filePath in config.filePaths) {
-      ExtractedTrackData? track;
-      try {
-        track = await MetadataUtils.extractTrackMetadata(
-          filePath: filePath,
-          useSync: true,
+    final savedCoverHashes = <String>{};
+    config.sendPort.send(
+      _WorkerReady(
+        workerIndex: config.workerIndex,
+        workerSendPort: workerReceivePort.sendPort,
+      ),
+    );
+
+    await for (final dynamic batch in workerReceivePort) {
+      if (batch == null) break;
+      final items = (batch as List).cast<DiscoveredAudioFile>();
+      for (final item in items) {
+        ExtractedTrackData? track;
+        try {
+          track = await MetadataUtils.extractTrackMetadata(
+            filePath: item.path,
+            useSync: true,
+            knownFileSize: item.size,
+            knownModifiedAt: item.modifiedAt,
+            knownSavedHashes: savedCoverHashes,
+          );
+        } catch (e, st) {
+          debugPrint(
+            '[MetadataService] Worker isolate failed for ${item.path}: $e',
+          );
+          debugPrint('[MetadataService] Stack trace: $st');
+        }
+        config.sendPort.send(
+          _WorkerTrackResult(track: track, filePath: item.path),
         );
-      } catch (e, st) {
-        debugPrint('[MetadataService] Worker isolate failed for $filePath: $e');
-        debugPrint('[MetadataService] Stack trace: $st');
       }
-      config.sendPort.send(
-        _WorkerTrackResult(track: track, filePath: filePath),
-      );
+      config.sendPort.send(_WorkerBatchDone(workerIndex: config.workerIndex));
     }
   } catch (e, st) {
     debugPrint('[MetadataService] Worker isolate fatal error: $e\n$st');
   } finally {
+    workerReceivePort.close();
     config.sendPort.send(_WorkerDone(workerIndex: config.workerIndex));
   }
 }

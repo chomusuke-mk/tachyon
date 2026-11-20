@@ -91,37 +91,26 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     final playable = state.currentPlayable;
 
     if (playable != null) {
-      final liveMeta = playbackController.liveMetadata;
-      final icyStreamTitle = liveMeta?.icy?.streamTitle?.trim();
-      final metaTitle = liveMeta?.title?.trim();
-      final metaArtist = liveMeta?.trackArtist?.trim();
-
-      final effectiveTitle =
-          (playable.isStream && icyStreamTitle != null && icyStreamTitle.isNotEmpty)
-              ? icyStreamTitle
-              : (playable.isStream && metaTitle != null && metaTitle.isNotEmpty
-                  ? metaTitle
-                  : playable.title);
-
-      final artistNames =
-          (playable.isStream && metaArtist != null && metaArtist.isNotEmpty)
-              ? metaArtist
-              : playable.artistNames.join(', ');
-      final albumName = playable.albumTitle ?? '';
-      final artworkUri = playable.artworkUri ?? '';
+      final displayMeta = playbackController.currentDisplayMetadata;
+      final effectiveTitle = displayMeta?.title ?? playable.title;
+      final artistNames = displayMeta?.subtitle ?? playable.artistNames.join(', ');
+      final albumName = displayMeta?.album ?? playable.albumTitle ?? '';
+      final artworkUri = displayMeta?.artworkUri ?? playable.artworkUri ?? '';
       final signature =
           '${playable.filePath}|$effectiveTitle|$artistNames|$albumName|${playable.duration.inMilliseconds}|$artworkUri';
 
       if (signature != _lastEmittedMediaSignature) {
         _lastEmittedMediaSignature = signature;
-        final uri = resolveArtworkUri(playable.artworkUri);
+        final uri = resolveArtworkUri(
+          artworkUri.isNotEmpty ? artworkUri : null,
+        );
 
         mediaItem.add(
           as_lib.MediaItem(
             id: playable.filePath,
             title: effectiveTitle,
             artist: artistNames.isNotEmpty ? artistNames : null,
-            album: playable.albumTitle,
+            album: albumName.isNotEmpty ? albumName : null,
             duration: playable.isStream ? null : playable.duration,
             artUri: uri,
           ),

@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -20,17 +21,20 @@ import 'package:tachyon/shared/widgets/app_background.dart';
 /// 3. App accent theme radial gradient fallback.
 class AmbientBackdrop extends StatelessWidget {
   final String? artworkUri;
+  final Uint8List? artworkBytes;
 
   const AmbientBackdrop({
     super.key,
     this.artworkUri,
+    this.artworkBytes,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final bool hasArtwork =
-        artworkUri != null && artworkUri!.trim().isNotEmpty;
+    final bool hasBytes = artworkBytes != null && artworkBytes!.isNotEmpty;
+    final bool hasUri = artworkUri != null && artworkUri!.trim().isNotEmpty;
+    final bool hasArtwork = hasBytes || hasUri;
 
     final settings = Provider.of<SettingsController?>(context, listen: false);
 
@@ -74,6 +78,7 @@ class AmbientBackdrop extends StatelessWidget {
           scale: 1.15,
           child: AlbumArtImage(
             artworkUri: artworkUri,
+            artworkBytes: artworkBytes,
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,

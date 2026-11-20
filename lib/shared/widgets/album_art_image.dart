@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ import 'package:tachyon/core/playback/domain/radio_station.dart';
 class AlbumArtImage extends StatelessWidget {
   final AudioPlayable? playable;
   final String? artworkUri;
+  final Uint8List? artworkBytes;
   final ThumbnailQuality quality;
   final double? width;
   final double? height;
@@ -33,6 +35,7 @@ class AlbumArtImage extends StatelessWidget {
     super.key,
     this.playable,
     this.artworkUri,
+    this.artworkBytes,
     this.quality = ThumbnailQuality.low,
     this.width,
     this.height,
@@ -140,7 +143,25 @@ class AlbumArtImage extends StatelessWidget {
 
     final Widget content;
 
-    if (isRemote) {
+    if (artworkBytes != null && artworkBytes!.isNotEmpty) {
+      content = Image.memory(
+        artworkBytes!,
+        width: width,
+        height: height,
+        cacheWidth: targetCacheWidth,
+        cacheHeight: targetCacheHeight,
+        fit: fit,
+        filterQuality: FilterQuality.medium,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) {
+            return child;
+          }
+          return effectiveFallback;
+        },
+        errorBuilder: (context, error, stackTrace) => effectiveFallback,
+      );
+    } else if (isRemote) {
       content = CachedNetworkImage(
         imageUrl: uri,
         width: width,

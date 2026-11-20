@@ -80,6 +80,7 @@ Future<void> main() async {
   final playbackController = PlaybackController(
     store: libraryStore,
     settingsRepository: settingsRepository,
+    metadataService: metadataService,
   );
 
   // 4. Initialize Presentation Controllers (Block 1: UI)

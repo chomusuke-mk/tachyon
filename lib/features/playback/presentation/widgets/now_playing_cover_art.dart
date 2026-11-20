@@ -390,9 +390,13 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
           return const SizedBox.shrink();
         }
 
+        final displayMeta = playback.currentDisplayMetadata;
+        final artworkUri = displayMeta?.artworkUri ?? currentPlayable.artworkUri;
+        final artworkBytes = displayMeta?.artworkBytes;
+
         _ballistics.isPlaying = playback.isPlaying;
         final filePath = currentPlayable.filePath;
-        _resolveArtworkColor(currentPlayable.artworkUri, theme);
+        _resolveArtworkColor(artworkUri, theme);
         final waveColor = _resolvedColor ?? theme.colorScheme.primary;
 
         return GestureDetector(
@@ -418,6 +422,8 @@ class _NowPlayingCoverArtState extends State<NowPlayingCoverArt>
                   tag: 'now_playing_art_$filePath',
                   child: AlbumArtImage(
                     playable: currentPlayable,
+                    artworkUri: artworkUri,
+                    artworkBytes: artworkBytes,
                     quality: ThumbnailQuality.high,
                     width: size,
                     height: size,

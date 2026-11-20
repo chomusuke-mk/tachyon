@@ -148,35 +148,80 @@ abstract final class MetadataUtils {
     return fallback.existsSync() && fallback.lengthSync() > 0;
   }
 
+  /// Selects the highest-priority embedded picture according to [priorityMap].
+  static AudioPicture? pickBestCoverPicture(
+    List<AudioPicture> pictures, {
+    Map<PictureType, int> priorityMap = coverPriority,
+    bool fallbackToFirst = true,
+  }) {
+    if (pictures.isEmpty) return null;
+    AudioPicture? best;
+    int bestPriority = 99;
+    for (final pic in pictures) {
+      final p = priorityMap[pic.pictureType];
+      if (p != null && p < bestPriority) {
+        bestPriority = p;
+        best = pic;
+      }
+    }
+    return best ?? (fallbackToFirst ? pictures.first : null);
+  }
+
   /// Persists raw image bytes once into disk deduplicated by SHA-256 hash without extension.
   /// Flutter image codecs inspect binary magic numbers directly, avoiding extension dependencies.
   /// Returns the content hash of the persisted cover art image.
-  static Future<String?> saveCoverBytes(Uint8List rawBytes) async {
+  static Future<String?> saveCoverBytes(
+    Uint8List rawBytes, {
+    bool useSync = false,
+    Set<String>? knownSavedHashes,
+  }) async {
     _ensureInitialized();
     if (rawBytes.isEmpty) return null;
     final hash = CryptoUtils.computeBytesHash(rawBytes);
+    if (knownSavedHashes != null && knownSavedHashes.contains(hash)) {
+      return hash;
+    }
     final targetFile = File(getArtworkPath(hash));
     if (!targetFile.existsSync() || targetFile.lengthSync() == 0) {
-      await _safeAtomicWrite(targetFile, rawBytes);
+      if (useSync) {
+        _safeAtomicWriteSync(targetFile, rawBytes);
+      } else {
+        await _safeAtomicWrite(targetFile, rawBytes);
+      }
     }
+    knownSavedHashes?.add(hash);
     return hash;
   }
 
   static Future<ExtractedTrackData?> extractTrackMetadata({
     required String filePath,
     bool useSync = false,
+    int? knownFileSize,
+    int? knownModifiedAt,
+    Set<String>? knownSavedHashes,
   }) async {
     _ensureInitialized();
     final file = File(filePath);
-    if (!await file.exists()) return null;
-    // Get file properties
-    int size = 0;
-    int modifiedAt = 0;
-    try {
-      final stat = await file.stat();
-      size = stat.size;
-      modifiedAt = stat.modified.millisecondsSinceEpoch;
-    } catch (_) {}
+    int size = knownFileSize ?? 0;
+    int modifiedAt = knownModifiedAt ?? 0;
+
+    if (knownFileSize == null || knownModifiedAt == null) {
+      if (useSync) {
+        if (!file.existsSync()) return null;
+        try {
+          final stat = file.statSync();
+          size = stat.size;
+          modifiedAt = stat.modified.millisecondsSinceEpoch;
+        } catch (_) {}
+      } else {
+        if (!await file.exists()) return null;
+        try {
+          final stat = await file.stat();
+          size = stat.size;
+          modifiedAt = stat.modified.millisecondsSinceEpoch;
+        } catch (_) {}
+      }
+    }
 
     // Single-pass native Rust extraction (metadata, audio info, ReplayGain, waveform).
     // Chromaprint is explicitly disabled.
@@ -202,6 +247,9 @@ abstract final class MetadataUtils {
         );
       }
     } catch (e) {
+      if (knownFileSize != null && !file.existsSync()) {
+        return null;
+      }
       debugPrint('[MetadataService] analyzeAudio error for $filePath: $e');
     }
 
@@ -224,40 +272,48 @@ abstract final class MetadataUtils {
 
     final pictures = meta?.pictures ?? const <AudioPicture>[];
     if (pictures.isNotEmpty) {
-      AudioPicture? pickBest(
-        Map<PictureType, int> priorityMap, {
-        bool fallbackToFirst = false,
-      }) {
-        AudioPicture? best;
-        int bestPriority = 99;
-        for (final pic in pictures) {
-          final p = priorityMap[pic.pictureType];
-          if (p != null && p < bestPriority) {
-            bestPriority = p;
-            best = pic;
-          }
-        }
-        return best ?? (fallbackToFirst ? pictures.first : null);
-      }
-
-      final coverPic = pickBest(coverPriority, fallbackToFirst: true);
-      final albumPic = pickBest(albumPriority, fallbackToFirst: false);
-      final artistPic = pickBest(artistPriority, fallbackToFirst: false);
+      final coverPic = pickBestCoverPicture(
+        pictures,
+        priorityMap: coverPriority,
+        fallbackToFirst: true,
+      );
+      final albumPic = pickBestCoverPicture(
+        pictures,
+        priorityMap: albumPriority,
+        fallbackToFirst: false,
+      );
+      final artistPic = pickBestCoverPicture(
+        pictures,
+        priorityMap: artistPriority,
+        fallbackToFirst: false,
+      );
 
       if (coverPic != null && coverPic.bytes.isNotEmpty) {
-        coverUri = await saveCoverBytes(coverPic.bytes);
+        coverUri = await saveCoverBytes(
+          coverPic.bytes,
+          useSync: useSync,
+          knownSavedHashes: knownSavedHashes,
+        );
       }
       if (albumPic != null && albumPic.bytes.isNotEmpty) {
         albumArtworkUri = (albumPic == coverPic)
             ? coverUri
-            : await saveCoverBytes(albumPic.bytes);
+            : await saveCoverBytes(
+                albumPic.bytes,
+                useSync: useSync,
+                knownSavedHashes: knownSavedHashes,
+              );
       }
       if (artistPic != null && artistPic.bytes.isNotEmpty) {
         artistArtworkUri = (artistPic == coverPic)
             ? coverUri
             : ((artistPic == albumPic)
                 ? albumArtworkUri
-                : await saveCoverBytes(artistPic.bytes));
+                : await saveCoverBytes(
+                    artistPic.bytes,
+                    useSync: useSync,
+                    knownSavedHashes: knownSavedHashes,
+                  ));
       }
     }
 
@@ -274,6 +330,36 @@ abstract final class MetadataUtils {
       albumArtworkUri: albumArtworkUri,
       artistArtworkUri: artistArtworkUri,
     );
+  }
+
+  static void _safeAtomicWriteSync(File targetFile, Uint8List bytes) {
+    _ensureInitialized();
+    if (targetFile.existsSync() && targetFile.lengthSync() > 0) {
+      return;
+    }
+
+    final rand = math.Random().nextInt(1 << 30);
+    final fileName = p.basename(targetFile.path);
+    final tempFile = File(
+      p.join(tempDirectory!.path, '${fileName}_${pid}_$rand.tmp'),
+    );
+
+    try {
+      tempFile.writeAsBytesSync(bytes, flush: false);
+      tempFile.renameSync(targetFile.path);
+    } catch (_) {
+      try {
+        if (tempFile.existsSync()) {
+          tempFile.deleteSync();
+        }
+      } catch (_) {}
+      if (targetFile.existsSync() && targetFile.lengthSync() > 0) {
+        return;
+      }
+      try {
+        targetFile.writeAsBytesSync(bytes, flush: false);
+      } catch (_) {}
+    }
   }
 
   static Future<void> _safeAtomicWrite(File targetFile, Uint8List bytes) async {

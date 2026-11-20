@@ -84,10 +84,14 @@ class LinuxMprisBridge {
     final playable =
         playbackController.currentPlayable ?? playbackController.currentTrack;
     if (playable != null) {
-      final artistNames = playable.artistNames.join(', ');
-      final albumName = playable.albumTitle ?? '';
-      final artworkUri = playable.artworkUri ?? '';
-      return '${playable.id ?? playable.filePath}|${playable.title}|$artistNames|$albumName|${playable.duration.inMilliseconds}|$artworkUri';
+      final displayMeta = playbackController.currentDisplayMetadata;
+      final title = displayMeta?.title ?? playable.title;
+      final artistNames =
+          displayMeta?.subtitle ?? playable.artistNames.join(', ');
+      final albumName = displayMeta?.album ?? playable.albumTitle ?? '';
+      final artworkUri =
+          displayMeta?.artworkUri ?? playable.artworkUri ?? '';
+      return '${playable.id ?? playable.filePath}|$title|$artistNames|$albumName|${playable.duration.inMilliseconds}|$artworkUri';
     }
     final item = handler.mediaItem.value;
     if (item == null) return '';
@@ -98,20 +102,25 @@ class LinuxMprisBridge {
     final playable =
         playbackController.currentPlayable ?? playbackController.currentTrack;
     if (playable != null) {
+      final displayMeta = playbackController.currentDisplayMetadata;
       final objId = playable.id ?? playable.filePath.hashCode.abs();
-      final artistList = playable.artistNames
-          .where((n) => n.isNotEmpty)
-          .toList(growable: false);
-      final albumName = playable.albumTitle;
+      final title = displayMeta?.title ?? playable.title;
+      final subtitle = displayMeta?.subtitle ?? '';
+      final artistList = subtitle.isNotEmpty
+          ? [subtitle]
+          : playable.artistNames
+              .where((n) => n.isNotEmpty)
+              .toList(growable: false);
+      final albumName = displayMeta?.album ?? playable.albumTitle;
       final artUri = TachyonAudioHandler.resolveArtworkUri(
-        playable.artworkUri,
+        displayMeta?.artworkUri ?? playable.artworkUri,
       )?.toString();
 
       return DBusDict.stringVariant({
         'mpris:trackid': DBusObjectPath.unchecked(
           '/org/mpris/MediaPlayer2/Track/t_$objId',
         ),
-        'xesam:title': DBusString(playable.title),
+        'xesam:title': DBusString(title),
         if (playable.duration.inMicroseconds > 0)
           'mpris:length': DBusInt64(playable.duration.inMicroseconds),
         'xesam:artist': DBusArray.string(artistList),

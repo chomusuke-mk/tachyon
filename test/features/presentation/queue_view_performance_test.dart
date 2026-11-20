@@ -34,6 +34,15 @@ class MockPlaybackController extends ChangeNotifier implements PlaybackControlle
   Listenable get transportListenable => this;
 
   @override
+  Listenable get trackListenable => this;
+
+  @override
+  AudioPlayable resolvePlayable(AudioPlayable playable) => playable;
+
+  @override
+  ResolvedPlaybackMetadata? get currentDisplayMetadata => null;
+
+  @override
   List<AudioSource<AudioPlayable>> queue = List.generate(
     1500,
     (i) => Track(

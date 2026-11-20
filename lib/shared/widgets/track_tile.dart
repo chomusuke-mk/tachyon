@@ -179,7 +179,9 @@ class TrackTile extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                track.durationMs.toFormattedDuration(),
+                (track.isMetadataPending && track.durationMs <= 0)
+                    ? '--:--'
+                    : track.durationMs.toFormattedDuration(),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),

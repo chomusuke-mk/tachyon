@@ -32,6 +32,7 @@ class Track implements AudioPlayable {
   final Album? album;
   final List<Artist> artists;
   final List<Genre> genres;
+  final bool isMetadataPending;
 
   const Track({
     this.id,
@@ -54,6 +55,7 @@ class Track implements AudioPlayable {
     this.album,
     this.genres = const [],
     this.artists = const [],
+    this.isMetadataPending = false,
   });
 
   @override

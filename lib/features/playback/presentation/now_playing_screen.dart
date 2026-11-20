@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
@@ -485,6 +484,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               )
             : responsiveContent;
 
+        final displayMeta = playback.currentDisplayMetadata;
         final Widget scaffold = Scaffold(
           backgroundColor: colorScheme.surface,
           body: Stack(
@@ -492,7 +492,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
               // 1. Ambient Blurred Backdrop
               Positioned.fill(
                 child: AmbientBackdrop(
-                  artworkUri: currentPlayable.artworkUri,
+                  artworkUri:
+                      displayMeta?.artworkUri ?? currentPlayable.artworkUri,
+                  artworkBytes: displayMeta?.artworkBytes,
                 ),
               ),
 
@@ -868,6 +870,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       ),
     );
 
+    final displayMeta = playback.currentDisplayMetadata;
+    final displayTitle = displayMeta?.title ?? currentPlayable.title;
+    final displaySubtitle =
+        displayMeta?.subtitle ?? currentPlayable.artistNames.join(', ');
+    final clickableArtists = displayMeta?.clickableArtists ?? const [];
+    final liveBadge = displayMeta?.liveStreamBadge;
+
     final Widget playerTitle = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -876,42 +885,42 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            currentPlayable.title,
+            displayTitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 2),
-          if (currentPlayable.isStream)
-            ValueListenableBuilder<ma.AudioMetadata?>(
-              valueListenable: playback.liveMetadataListenable,
-              builder: (context, liveMeta, _) {
-                final icyTitle = liveMeta?.icy?.streamTitle?.trim();
-                final metaTitle = liveMeta?.title?.trim();
-                final liveLabel =
-                    (icyTitle != null && icyTitle.isNotEmpty)
-                        ? icyTitle
-                        : (metaTitle != null && metaTitle.isNotEmpty
-                            ? metaTitle
-                            : currentPlayable.artistNames.join(', '));
-                return Text(
-                  liveLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyLarge
-                      ?.copyWith(color: colorScheme.onSurfaceVariant),
-                );
-              },
-            )
-          else
+          if (!currentPlayable.isStream && clickableArtists.isNotEmpty)
             _ClickableArtistNames(
-              artists: currentTrack?.artists ?? const [],
-              fallbackName: currentPlayable.artistNames.join(', '),
+              artists: clickableArtists,
+              fallbackName: displaySubtitle,
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: colorScheme.onSurfaceVariant),
               colorScheme: colorScheme,
+            )
+          else
+            Text(
+              displaySubtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
             ),
+          if (currentPlayable.isStream &&
+              liveBadge != null &&
+              liveBadge.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              liveBadge,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+              ),
+            ),
+          ],
         ],
       ),
     );

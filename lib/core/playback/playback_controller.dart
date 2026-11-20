@@ -5,7 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/core/metadata/domain/scan_progress.dart';
+import 'package:tachyon/core/metadata/metadata_service.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
+import 'package:tachyon/core/playback/domain/resolved_playback_metadata.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
@@ -28,6 +32,7 @@ export 'package:miniaudio_player/miniaudio_player.dart'
 export 'package:tachyon/core/playback/domain/audio_playable.dart';
 export 'package:tachyon/core/playback/domain/crossfade_config.dart';
 export 'package:tachyon/core/playback/domain/loop_mode.dart';
+export 'package:tachyon/core/playback/domain/resolved_playback_metadata.dart';
 
 class _DomainNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
@@ -44,6 +49,7 @@ class PlaybackController extends ChangeNotifier {
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<ma.VisualizerData>? _visualizerSubscription;
   StreamSubscription<List<ma.AudioDevice>>? _devicesSubscription;
+  StreamSubscription<ScanProgress>? _scanProgressSubscription;
   PlaybackState _state = const PlaybackState.initial();
 
   ma.Equalizer _equalizer = ma.Equalizer.flat;
@@ -53,6 +59,8 @@ class PlaybackController extends ChangeNotifier {
   bool _isMinimized = false;
   bool _pauseOnDeviceChange = true;
   bool _wasPlayingBeforeStop = false;
+  bool _isLibraryScanActive = false;
+  Track? _lastCanonicalCurrentTrack;
   int _lastPositionEmitTimestamp = 0;
   int _lastEmittedPositionMs = -1;
 
@@ -108,6 +116,7 @@ class PlaybackController extends ChangeNotifier {
   PlaybackController({
     LibraryStore? store,
     required SettingsRepository settingsRepository,
+    MetadataService? metadataService,
     ma.MiniaudioPlayer<AudioPlayable>? engine,
     Stream<List<ma.AudioDevice>>? devicesStream,
   }) : _store = store,
@@ -115,6 +124,19 @@ class PlaybackController extends ChangeNotifier {
        _injectedDevicesStream = devicesStream,
        _ownsEngine = engine == null {
     _pauseOnDeviceChange = _settingsRepository.getPauseOnDeviceChange();
+
+    if (store != null) {
+      store.addListener(_onLibraryStoreUpdated);
+    }
+
+    if (metadataService != null) {
+      _isLibraryScanActive = metadataService.isScanning;
+      _scanProgressSubscription = metadataService.progressStream.listen((
+        progress,
+      ) {
+        setLibraryAnalysisActive(progress.isRunning);
+      });
+    }
 
     if (engine != null) {
       _player = engine;
@@ -209,7 +231,7 @@ class PlaybackController extends ChangeNotifier {
     _bufferNotifier.value = player.state.buffer;
     _audioInfoNotifier.value = player.state.audioInfo;
     _silenceSavedDurationNotifier.value = player.state.silenceSavedDuration;
-    _syncMetadataEnabledForPlayable(player.state.currentItem?.data);
+    _syncMetadataEnabled();
 
     _engineSubscriptions.addAll([
       player.stream.playbackState.listen((pbState) {
@@ -267,6 +289,18 @@ class PlaybackController extends ChangeNotifier {
       player.stream.duration.listen((dur) {
         if (_isDisposed) return;
         _state = _state.copyWith(duration: dur ?? Duration.zero);
+        final cur = currentPlayable;
+        if (_isLibraryScanActive &&
+            dur != null &&
+            dur > Duration.zero &&
+            cur is Track &&
+            (cur.isMetadataPending || cur.id == null) &&
+            cur.durationMs <= 0) {
+          _store?.updatePendingTrackFromLivePlayback(
+            filePath: cur.filePath,
+            duration: dur,
+          );
+        }
         _emitScoped([_trackNotifier]);
       }),
       player.stream.queue.listen((q) {
@@ -323,9 +357,23 @@ class PlaybackController extends ChangeNotifier {
       }),
       player.stream.metadata.listen((meta) {
         if (_isDisposed) return;
-        if (currentPlayable?.isStream == true) {
+        final playable = currentPlayable;
+        if (playable == null) return;
+        if (playable.isStream) {
           _liveMetadataNotifier.value = meta;
           _emitScoped([_trackNotifier]);
+        } else if (_isLibraryScanActive &&
+            playable is Track &&
+            (playable.isMetadataPending || playable.id == null)) {
+          _liveMetadataNotifier.value = meta;
+          _emitScoped([_trackNotifier]);
+          if (meta != null) {
+            _enrichPendingTrackFromLivePlayback(
+              playable.filePath,
+              metadata: meta,
+              audioInfo: _audioInfoNotifier.value,
+            );
+          }
         }
       }),
       player.stream.audioInfo.listen((info) {
@@ -336,6 +384,18 @@ class PlaybackController extends ChangeNotifier {
           audioSampleRate: info?.sampleRate,
           audioChannels: info?.channels,
         );
+        final playable = currentPlayable;
+        if (playable?.isStream == true) {
+          _emitScoped([_trackNotifier]);
+        } else if (_isLibraryScanActive &&
+            info != null &&
+            playable is Track &&
+            (playable.isMetadataPending || playable.id == null)) {
+          _enrichPendingTrackFromLivePlayback(
+            playable.filePath,
+            audioInfo: info,
+          );
+        }
       }),
       player.stream.silenceSavedDuration.listen((saved) {
         if (_isDisposed) return;
@@ -415,12 +475,113 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  void _syncMetadataEnabledForPlayable(AudioPlayable? playable) {
+  bool get isLibraryAnalysisActive => _isLibraryScanActive;
+
+  void setLibraryAnalysisActive(bool active) {
+    if (_isLibraryScanActive == active) return;
+    _isLibraryScanActive = active;
+    _syncMetadataEnabled();
+    if (!active &&
+        currentPlayable?.isStream != true &&
+        _liveMetadataNotifier.value != null) {
+      _liveMetadataNotifier.value = null;
+      _emitScoped([_trackNotifier]);
+    }
+  }
+
+  bool _shouldEnableMetadataFor(AudioPlayable? playable) {
+    if (playable?.isStream == true) return true;
+    return _isLibraryScanActive;
+  }
+
+  void _syncMetadataEnabled() {
     final p = _player;
     if (p == null || _isDisposed) return;
-    final wantMetadata = playable?.isStream == true;
+    final wantMetadata = _shouldEnableMetadataFor(currentPlayable);
     if (p.state.metadataEnabled != wantMetadata) {
       unawaited(p.action.setMetadataEnabled(wantMetadata).catchError((_) {}));
+    }
+  }
+
+  Future<void> _ensureMetadataEnabledFor(AudioPlayable? playable) async {
+    final p = player;
+    if (_isDisposed) return;
+    final wantMetadata = _shouldEnableMetadataFor(playable);
+    if (p.state.metadataEnabled != wantMetadata) {
+      try {
+        await p.action.setMetadataEnabled(wantMetadata);
+      } catch (_) {}
+    }
+  }
+
+  void _enrichPendingTrackFromLivePlayback(
+    String filePath, {
+    ma.AudioMetadata? metadata,
+    ma.AudioInfo? audioInfo,
+  }) {
+    final store = _store;
+    if (store == null || _isDisposed) return;
+    store.updatePendingTrackFromLivePlayback(
+      filePath: filePath,
+      metadata: metadata,
+      audioInfo: audioInfo,
+    );
+
+    if (metadata != null &&
+        metadata.pictures.isNotEmpty &&
+        MetadataUtils.thumbnailsDirectory != null &&
+        MetadataUtils.tempDirectory != null) {
+      final pic = MetadataUtils.pickBestCoverPicture(metadata.pictures);
+      if (pic != null && pic.bytes.isNotEmpty) {
+        unawaited(
+          MetadataUtils.saveCoverBytes(pic.bytes)
+              .then((hash) {
+                if (!_isDisposed && hash != null) {
+                  _store?.updatePendingTrackFromLivePlayback(
+                    filePath: filePath,
+                    artworkUri: hash,
+                  );
+                }
+              })
+              .catchError((Object _) {}),
+        );
+      }
+    }
+  }
+
+  void _onLibraryStoreUpdated() {
+    if (_isDisposed) return;
+    final store = _store;
+    if (store == null) return;
+
+    final cur = currentTrack;
+    final currentChanged = !identical(cur, _lastCanonicalCurrentTrack);
+    if (currentChanged) {
+      _lastCanonicalCurrentTrack = cur;
+      if (cur != null &&
+          !cur.isMetadataPending &&
+          cur.id != null &&
+          _liveMetadataNotifier.value != null) {
+        _liveMetadataNotifier.value = null;
+      }
+      _checkHistoryLogging(_state);
+      _syncMetadataEnabled();
+      _emitScoped([_trackNotifier, _queueNotifier]);
+      return;
+    }
+
+    if (queue.isNotEmpty) {
+      var queueUpgraded = false;
+      for (final item in queue) {
+        final raw = item.data;
+        if (raw is Track && !identical(_canonicalPlayable(raw), raw)) {
+          queueUpgraded = true;
+          break;
+        }
+      }
+      if (queueUpgraded) {
+        _emitScoped([_queueNotifier]);
+      }
     }
   }
 
@@ -430,12 +591,19 @@ class PlaybackController extends ChangeNotifier {
   ) {
     final oldState = _state;
     final engState = player.state;
-    final playableKey = playable?.filePath;
+    final resolved = playable != null ? _canonicalPlayable(playable) : null;
+    if (resolved is Track) {
+      _lastCanonicalCurrentTrack = resolved;
+    } else {
+      _lastCanonicalCurrentTrack = null;
+    }
+    final playableKey = resolved?.filePath;
     if (playableKey != _lastActivePlayableKey) {
       _lastActivePlayableKey = playableKey;
       _wasPlayingBeforeStop = engState.isPlaying;
       _liveMetadataNotifier.value = null;
-      _syncMetadataEnabledForPlayable(playable);
+      _audioInfoNotifier.value = null;
+      _syncMetadataEnabled();
     }
 
     _state = _state.copyWith(
@@ -536,15 +704,36 @@ class PlaybackController extends ChangeNotifier {
   Stream<ma.MiniaudioPlayerException> get errorsStream =>
       _errorsController.stream;
 
+  AudioPlayable resolvePlayable(AudioPlayable playable) =>
+      _canonicalPlayable(playable);
+
+  ResolvedPlaybackMetadata? get currentDisplayMetadata {
+    final playable = currentPlayable;
+    if (playable == null) return null;
+    return ResolvedPlaybackMetadata.resolve(
+      playable: playable,
+      liveMetadata: _liveMetadataNotifier.value,
+      liveAudioInfo: _audioInfoNotifier.value,
+    );
+  }
+
   PlaybackState get state => _state;
   ma.AudioSource<AudioPlayable>? get currentEntry =>
       _player != null ? _player!.state.currentItem : _state.currentEntry;
-  AudioPlayable? get currentPlayable =>
-      currentEntry?.data ?? _state.currentPlayable ?? currentTrack;
+  AudioPlayable? get currentPlayable {
+    final raw = currentEntry?.data ?? _state.currentPlayable ?? currentTrack;
+    if (raw == null) return null;
+    return _canonicalPlayable(raw);
+  }
+
   Track? get currentTrack {
-    final p = currentEntry?.data ?? _state.currentPlayable;
-    if (p is Track) return p;
-    return _state.currentTrack;
+    final raw =
+        currentEntry?.data ?? _state.currentPlayable ?? _state.currentTrack;
+    if (raw is Track) {
+      final canonical = _canonicalPlayable(raw);
+      return canonical is Track ? canonical : raw;
+    }
+    return null;
   }
 
   bool isCurrentTrack(Track? track) {
@@ -685,9 +874,16 @@ class PlaybackController extends ChangeNotifier {
     bool shuffle = false,
   }) async {
     if (tracks.isEmpty) return;
-    final items = [
-      for (final t in tracks) _canonicalPlayable(t).toAudioSource(),
+    final canonicalTracks = [
+      for (final t in tracks) _canonicalPlayable(t),
     ];
+    final items = [for (final t in canonicalTracks) t.toAudioSource()];
+    final int targetIdx = (startIndex != null &&
+            startIndex >= 0 &&
+            startIndex < canonicalTracks.length)
+        ? startIndex
+        : 0;
+    await _ensureMetadataEnabledFor(canonicalTracks[targetIdx]);
     await player.action.setQueue(items);
     if (play) {
       await player.action.play(position: startIndex, shuffled: shuffle);
@@ -789,6 +985,7 @@ class PlaybackController extends ChangeNotifier {
   Future<void> skipToQueueIndex(int index) async {
     if (index < 0 || index >= queue.length) return;
     try {
+      await _ensureMetadataEnabledFor(queue[index].data);
       await player.action.play(position: index);
     } catch (e) {
       debugPrint('[PlaybackController] Error in skipToQueueIndex: $e');
@@ -1112,21 +1309,22 @@ class PlaybackController extends ChangeNotifier {
   // History Logging & State Persistence Helpers
   // ---------------------------------------------------------------------------
   void _checkHistoryLogging(PlaybackState newState) {
-    final currentFilePath = newState.currentTrack?.filePath;
+    final track = currentTrack ?? newState.currentTrack;
+    final currentFilePath = track?.filePath;
     if (currentFilePath != _currentlyLoggedHistoryFilePath) {
       _currentlyLoggedHistoryFilePath = currentFilePath;
       _historyLoggedForCurrentTrack = false;
     }
 
-    if (!_historyLoggedForCurrentTrack && newState.currentTrack != null) {
+    if (!_historyLoggedForCurrentTrack && track != null) {
       final hasPlayedThreshold =
           newState.position.inSeconds > 15 ||
           (newState.duration.inMilliseconds > 0 && newState.progress >= 0.5);
 
       if (hasPlayedThreshold) {
         _historyLoggedForCurrentTrack = true;
-        final trackId = newState.currentTrack!.id;
-        if (trackId != null) {
+        final trackId = track.id;
+        if (trackId != null && trackId > 0 && !track.isMetadataPending) {
           _store
               ?.addTracksToPlaylistInStore(LibraryStore.historyPlaylistId, [
                 trackId,
@@ -1218,6 +1416,8 @@ class PlaybackController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _store?.removeListener(_onLibraryStoreUpdated);
+    _scanProgressSubscription?.cancel();
     for (final sub in _engineSubscriptions) {
       sub.cancel();
     }

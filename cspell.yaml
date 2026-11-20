@@ -257,6 +257,7 @@ words:
   - libxext
   - libxfixes
   - lida
+  - livestreams
   - LLDB
   - lldbinit
   - localappdata

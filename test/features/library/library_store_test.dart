@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/metadata/domain/discovered_audio_file.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
@@ -956,6 +958,93 @@ void main() {
       expect(store.radioStations.first.name, equals('Chillhop Radio'));
 
       await db.close();
+    });
+
+    test('stageDiscoveredFiles stages provisional tracks, enriches via live playback, and clears cleanly', () {
+      final store = LibraryStore.fromSnapshot(_createSampleSnapshot());
+      var notifications = 0;
+      store.addListener(() => notifications++);
+
+      const savedPath = '/music/beatles/come_together.mp3';
+      const newPath = '/music/new_folder/demo_track.flac';
+
+      // Existing persisted track must never be overwritten by staging
+      store.stageDiscoveredFiles([
+        const DiscoveredAudioFile(path: savedPath, size: 999999, modifiedAt: 999999),
+        const DiscoveredAudioFile(path: newPath, size: 4200000, modifiedAt: 555),
+      ]);
+
+      expect(notifications, equals(1));
+      expect(store.hasPendingDiscoveredTracks, isTrue);
+      expect(store.pendingDiscoveredCount, equals(1));
+      expect(store.getTrackByPath(savedPath)?.id, equals(1001));
+      expect(store.getTrackByPath(savedPath)?.isMetadataPending, isFalse);
+
+      final staged = store.getTrackByPath(newPath);
+      expect(staged, isNotNull);
+      expect(staged!.id, isNull);
+      expect(staged.isMetadataPending, isTrue);
+      expect(staged.title, equals('demo_track'));
+      expect(staged.codec, equals('FLAC'));
+      expect(store.getTracksInDirectory('/music/new_folder'), contains(staged));
+
+      // Pending tracks must not appear in getStoredTracks()
+      expect(store.getStoredTracks().any((t) => t.filePath == newPath), isFalse);
+
+      // Enrich provisional track via live playback metadata + info
+      final meta = ma.AudioMetadata(
+        title: 'Live Title',
+        trackArtist: 'Live Artist A, Live Artist B',
+        album: 'Live Album',
+        year: 2026,
+      );
+      const info = ma.AudioInfo(
+        duration: Duration(seconds: 215),
+        sampleRate: 48000,
+        channels: 2,
+        bitrate: 960000,
+        codec: 'FLAC',
+      );
+      final enriched = store.updatePendingTrackFromLivePlayback(
+        filePath: newPath,
+        metadata: meta,
+        audioInfo: info,
+      );
+
+      expect(notifications, equals(2));
+      expect(enriched, isNotNull);
+      expect(enriched!.title, equals('Live Title'));
+      expect(enriched.artistNames, equals(['Live Artist A', 'Live Artist B']));
+      expect(enriched.album?.name, equals('Live Album'));
+      expect(enriched.durationMs, equals(215000));
+      expect(enriched.sampleRate, equals(48000));
+      expect(enriched.isMetadataPending, isTrue);
+      expect(enriched.id, isNull);
+      expect(store.getTrackByPath(newPath), same(enriched));
+
+      // Identical re-update must not emit redundant notifications
+      store.updatePendingTrackFromLivePlayback(
+        filePath: newPath,
+        metadata: meta,
+        audioInfo: info,
+      );
+      expect(notifications, equals(2));
+
+      // Persisted DB tracks must never be altered by live playback updates
+      expect(
+        store.updatePendingTrackFromLivePlayback(
+          filePath: savedPath,
+          metadata: meta,
+        ),
+        isNull,
+      );
+      expect(store.getTrackByPath(savedPath)?.title, equals('Come Together'));
+
+      // Clearing pending tracks removes only provisional entries
+      store.clearPendingDiscoveredTracks();
+      expect(store.hasPendingDiscoveredTracks, isFalse);
+      expect(store.getTrackByPath(newPath), isNull);
+      expect(store.getTrackByPath(savedPath), isNotNull);
     });
   });
 }

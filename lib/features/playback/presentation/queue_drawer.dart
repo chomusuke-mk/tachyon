@@ -133,6 +133,7 @@ class _QueueViewState extends State<QueueView> {
       listenable: Listenable.merge([
         playback.queueListenable,
         playback.transportListenable,
+        playback.trackListenable,
       ]),
       builder: (context, _) {
         final queue = playback.queue;
@@ -259,8 +260,22 @@ class _QueueViewState extends State<QueueView> {
                               },
                               itemBuilder: (context, index) {
                                 final item = queue[index];
-                                final track = item.track;
+                                final rawTrack = item.track;
+                                final track = rawTrack != null
+                                    ? playback.resolvePlayable(rawTrack)
+                                    : null;
                                 final isCurrent = index == currentIndex;
+                                final displayMeta = isCurrent
+                                    ? playback.currentDisplayMetadata
+                                    : null;
+                                final rowTitle =
+                                    displayMeta?.title ?? track?.title ?? '';
+                                final rowSubtitle = displayMeta?.subtitle ??
+                                    (track?.artistNames.join(', ') ?? '');
+                                final rowArtworkUri = displayMeta?.artworkUri ??
+                                    track?.artworkUri;
+                                final rowArtworkBytes =
+                                    displayMeta?.artworkBytes;
 
                                 return Dismissible(
                                   key: ValueKey(
@@ -296,6 +311,8 @@ class _QueueViewState extends State<QueueView> {
                                               height: 42,
                                               child: AlbumArtImage(
                                                 playable: track,
+                                                artworkUri: rowArtworkUri,
+                                                artworkBytes: rowArtworkBytes,
                                                 width: 42,
                                                 height: 42,
                                                 quality: ThumbnailQuality.low,
@@ -325,7 +342,7 @@ class _QueueViewState extends State<QueueView> {
                                         ],
                                       ),
                                       title: Text(
-                                        track?.title ?? '',
+                                        rowTitle,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
@@ -338,7 +355,7 @@ class _QueueViewState extends State<QueueView> {
                                         ),
                                       ),
                                       subtitle: Text(
-                                        track?.artistNames.join(', ') ?? '',
+                                        rowSubtitle,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(

@@ -10,6 +10,44 @@ import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/core/store/library_store.dart';
+
+Uint8List _buildTestWavBytes({int sampleRate = 44100}) {
+  const numSamples = 44100 ~/ 4;
+  const dataSize = numSamples * 2;
+  final byteData = ByteData(44 + dataSize);
+  byteData.setUint8(0, 0x52); // R
+  byteData.setUint8(1, 0x49); // I
+  byteData.setUint8(2, 0x46); // F
+  byteData.setUint8(3, 0x46); // F
+  byteData.setUint32(4, 36 + dataSize, Endian.little);
+  byteData.setUint8(8, 0x57); // W
+  byteData.setUint8(9, 0x41); // A
+  byteData.setUint8(10, 0x56); // V
+  byteData.setUint8(11, 0x45); // E
+  byteData.setUint8(12, 0x66); // f
+  byteData.setUint8(13, 0x6D); // m
+  byteData.setUint8(14, 0x74); // t
+  byteData.setUint8(15, 0x20); // ' '
+  byteData.setUint32(16, 16, Endian.little);
+  byteData.setUint16(20, 1, Endian.little);
+  byteData.setUint16(22, 1, Endian.little);
+  byteData.setUint32(24, sampleRate, Endian.little);
+  byteData.setUint32(28, sampleRate * 2, Endian.little);
+  byteData.setUint16(32, 2, Endian.little);
+  byteData.setUint16(34, 16, Endian.little);
+  byteData.setUint8(36, 0x64); // d
+  byteData.setUint8(37, 0x61); // a
+  byteData.setUint8(38, 0x74); // t
+  byteData.setUint8(39, 0x61); // a
+  byteData.setUint32(40, dataSize, Endian.little);
+  for (int i = 0; i < numSamples; i++) {
+    final sample =
+        (math.sin(2 * math.pi * 440 * i / sampleRate) * 16000).round();
+    byteData.setInt16(44 + i * 2, sample, Endian.little);
+  }
+  return byteData.buffer.asUint8List();
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -199,6 +237,87 @@ void main() {
       expect(extracted.durationMs, closeTo(250, 20));
       expect(extracted.waveformData, isNotNull);
       expect(extracted.waveformData!.isNotEmpty, isTrue);
+    });
+
+    test('Discovered files are staged immediately in LibraryStore before extraction completes and upgraded after scan', () async {
+      await MiniaudioPlayer.ensureInitialized();
+
+      final wavBytes = _buildTestWavBytes();
+      for (int i = 1; i <= 4; i++) {
+        File(p.join(musicDir.path, 'instant_$i.wav')).writeAsBytesSync(wavBytes);
+      }
+
+      final store = LibraryStore(database);
+      final service = MetadataService(
+        database: database,
+        store: store,
+        customWorkerCount: 2,
+      );
+
+      int? stagedAtExtractingStart;
+      bool? stagedAllPending;
+      int? storedAtExtractingStart;
+
+      final events = await service.scanDirectories([musicDir.path]).map((p) {
+        if (p.stage == ScanStage.extracting && stagedAtExtractingStart == null) {
+          stagedAtExtractingStart = store.tracks.length;
+          stagedAllPending = store.tracks.every(
+            (t) => t.isMetadataPending && t.id == null,
+          );
+          storedAtExtractingStart = store.getStoredTracks().length;
+        }
+        return p;
+      }).toList();
+
+      expect(events.last.stage, equals(ScanStage.completed));
+      expect(stagedAtExtractingStart, equals(4));
+      expect(stagedAllPending, isTrue);
+      expect(storedAtExtractingStart, equals(0));
+
+      expect(store.hasPendingDiscoveredTracks, isFalse);
+      expect(store.tracks.length, equals(4));
+      expect(
+        store.tracks.every((t) => t.id != null && !t.isMetadataPending && t.waveform != null),
+        isTrue,
+      );
+
+      service.dispose();
+    });
+
+    test('Cancelling scan clears staged pending discovered tracks from LibraryStore', () async {
+      for (int i = 1; i <= 12; i++) {
+        File(p.join(musicDir.path, 'cancel_pending_$i.mp3'))
+            .writeAsStringSync('ID3 dummy track $i');
+      }
+
+      final store = LibraryStore(database);
+      final service = MetadataService(
+        database: database,
+        store: store,
+        customWorkerCount: 2,
+      );
+
+      final token = CancellationToken();
+      var sawStagedBeforeCancel = false;
+      final events = <ScanProgress>[];
+
+      await service
+          .scanDirectories([musicDir.path], cancellationToken: token)
+          .forEach((progress) {
+        events.add(progress);
+        if (progress.stage == ScanStage.extracting && !token.isCancelled) {
+          sawStagedBeforeCancel = store.hasPendingDiscoveredTracks &&
+              store.tracks.length == 12;
+          token.cancel();
+        }
+      });
+
+      expect(sawStagedBeforeCancel, isTrue);
+      expect(events.last.stage, equals(ScanStage.cancelled));
+      expect(store.hasPendingDiscoveredTracks, isFalse);
+      expect(store.tracks, isEmpty);
+
+      service.dispose();
     });
   });
 }

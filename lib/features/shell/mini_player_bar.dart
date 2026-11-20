@@ -4,7 +4,6 @@ import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/library/presentation/artist_detail_screen.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/shared/utils/artwork_color_resolver.dart';
@@ -157,7 +156,13 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
         final currentPlayable = playback.currentPlayable;
         if (currentPlayable == null) return const SizedBox.shrink();
 
-        final artworkUri = currentPlayable.artworkUri;
+        final displayMeta = playback.currentDisplayMetadata;
+        final artworkUri = displayMeta?.artworkUri ?? currentPlayable.artworkUri;
+        final artworkBytes = displayMeta?.artworkBytes;
+        final displayTitle = displayMeta?.title ?? currentPlayable.title;
+        final displaySubtitle =
+            displayMeta?.subtitle ?? currentPlayable.artistNames.join(', ');
+        final clickableArtists = displayMeta?.clickableArtists ?? const [];
         final isLiveStream = playback.isLiveStream;
         final trackDuration = playback.duration;
 
@@ -267,6 +272,8 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                   height: widget.isDesktop ? 48 : 42,
                                   child: AlbumArtImage(
                                     playable: currentPlayable,
+                                    artworkUri: artworkUri,
+                                    artworkBytes: artworkBytes,
                                     width: widget.isDesktop ? 48 : 42,
                                     height: widget.isDesktop ? 48 : 42,
                                     quality: ThumbnailQuality.low,
@@ -277,14 +284,14 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                             ),
                             const SizedBox(width: 12),
 
-                            // Title & Artist (with live ICY stream title when radio plays)
+                            // Title & Artist (with live ICY / scan-time metadata)
                             Expanded(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    currentPlayable.title,
+                                    displayTitle,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: theme.textTheme.titleSmall?.copyWith(
@@ -292,38 +299,9 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  if (currentPlayable.isStream)
-                                    ValueListenableBuilder<ma.AudioMetadata?>(
-                                      valueListenable:
-                                          playback.liveMetadataListenable,
-                                      builder: (context, liveMeta, _) {
-                                        final icy =
-                                            liveMeta?.icy?.streamTitle?.trim();
-                                        final metaTitle =
-                                            liveMeta?.title?.trim();
-                                        final liveLabel =
-                                            (icy != null && icy.isNotEmpty)
-                                            ? icy
-                                            : (metaTitle != null &&
-                                                      metaTitle.isNotEmpty
-                                                  ? metaTitle
-                                                  : currentPlayable.artistNames
-                                                        .join(', '));
-                                        return Text(
-                                          liveLabel,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(
-                                                color:
-                                                    colorScheme.onSurfaceVariant,
-                                              ),
-                                        );
-                                      },
-                                    )
-                                  else if (widget.isDesktop &&
-                                      currentPlayable is Track &&
-                                      currentPlayable.artists.isNotEmpty)
+                                  if (widget.isDesktop &&
+                                      !currentPlayable.isStream &&
+                                      clickableArtists.isNotEmpty)
                                     SingleChildScrollView(
                                       scrollDirection: Axis.horizontal,
                                       child: Row(
@@ -331,7 +309,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                         children: [
                                           for (
                                             int i = 0;
-                                            i < currentPlayable.artists.length;
+                                            i < clickableArtists.length;
                                             i++
                                           ) ...[
                                             if (i > 0)
@@ -344,9 +322,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                                     ),
                                               ),
                                             TextLink(
-                                              text: currentPlayable
-                                                  .artists[i]
-                                                  .name,
+                                              text: clickableArtists[i].name,
                                               style: theme.textTheme.bodySmall
                                                   ?.copyWith(
                                                     color: colorScheme
@@ -361,8 +337,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                                       builder: (_) =>
                                                           ArtistDetailScreen(
                                                             artist:
-                                                                currentPlayable
-                                                                    .artists[i],
+                                                                clickableArtists[i],
                                                           ),
                                                     ),
                                                   ),
@@ -373,7 +348,7 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
                                     )
                                   else
                                     Text(
-                                      currentPlayable.artistNames.join(', '),
+                                      displaySubtitle,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: theme.textTheme.bodySmall
