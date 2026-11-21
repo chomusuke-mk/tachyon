@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 import 'package:tachyon/shared/utils/cancellation_token.dart';
 
@@ -491,13 +491,12 @@ class LrclibClient {
     }
 
     // Check RFC 1123 HTTP-date
-    try {
-      final date = HttpDate.parse(headerValue);
+    final date = PersistentBinaryStorage.tryParseHttpDate(headerValue);
+    if (date != null) {
       final diff = date.difference(DateTime.now()).inSeconds;
       return diff > 0 ? diff : defaultSeconds;
-    } catch (_) {
-      return defaultSeconds;
     }
+    return defaultSeconds;
   }
 
   /// Serializes outgoing requests to satisfy the [_minPacing] (500ms) rule.

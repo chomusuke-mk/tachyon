@@ -1,18 +1,20 @@
 // ignore_for_file: prefer_initializing_formals
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/common.dart';
+import 'package:tachyon/core/database/sqlite_connector.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
 import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/domain/playlist.dart' show PlaylistType;
 
+export 'package:sqlite3/common.dart' show CommonDatabase;
 export 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
+
+typedef Database = CommonDatabase;
+typedef PreparedStatement = CommonPreparedStatement;
 
 abstract final class AppDatabaseSchema {
   static const List<String> createTables = [
@@ -50,17 +52,18 @@ abstract final class AppDatabaseSchema {
 }
 
 /// Concise, centralized SQLite persistence service using an asynchronous FIFO
-/// serialization queue and ephemeral [Isolate.run] workers on disk.
+/// serialization queue compatible with both native FFI and WebAssembly (WasmSqlite3).
 class AppDatabase {
   static const int likedSongsPlaylistId = 1;
   static const int historyPlaylistId = 2;
 
   String? _dbPath;
   Database? _inMemoryDb;
+  Database? _persistentDb;
   Future<void>? _queue;
 
   AppDatabase({String? dbPath}) : _dbPath = dbPath;
-  factory AppDatabase.inMemory() => AppDatabase.forTesting(sqlite3.openInMemory());
+  factory AppDatabase.inMemory() => AppDatabase.forTesting(openInMemoryDatabase());
   factory AppDatabase.forTesting(Database db) {
     final appDb = AppDatabase();
     _configurePragmas(db);
@@ -72,10 +75,14 @@ class AppDatabase {
   /// Exposes the in-memory [Database] handle for unit test assertions.
   Database get db => _inMemoryDb ?? (throw StateError('AppDatabase is not in-memory.'));
 
-  Future<String> _resolveDbPath() async {
-    if (_dbPath != null) return _dbPath!;
-    final dir = await getApplicationSupportDirectory();
-    return _dbPath = p.join(dir.path, 'music.db');
+  Future<Database> _ensurePersistentDb() async {
+    final existing = _persistentDb;
+    if (existing != null) return existing;
+    final opened = await openPersistentDatabase(_dbPath);
+    _configurePragmas(opened);
+    _executeSchema(opened);
+    _persistentDb = opened;
+    return opened;
   }
 
   Future<T> _enqueue<T>(FutureOr<T> Function() task) {
@@ -103,24 +110,15 @@ class AppDatabase {
   Future<T> _runTask<T>(T Function(Database db) action) => _enqueue<T>(() async {
         final mem = _inMemoryDb;
         if (mem != null) return action(mem);
-        final path = await _resolveDbPath();
-        return _executeInIsolate(path, action);
-      });
-
-  static Future<T> _executeInIsolate<T>(String dbPath, T Function(Database db) action) =>
-      Isolate.run<T>(() {
-        final db = sqlite3.open(dbPath, mode: OpenMode.readWriteCreate);
-        try {
-          _configurePragmas(db);
-          return action(db);
-        } finally {
-          db.close();
-        }
+        final persistent = await _ensurePersistentDb();
+        return action(persistent);
       });
 
   static void _configurePragmas(Database db) {
     db.execute('PRAGMA foreign_keys = ON;');
-    db.execute('PRAGMA journal_mode = WAL;');
+    try {
+      db.execute('PRAGMA journal_mode = WAL;');
+    } catch (_) {}
     db.execute('PRAGMA synchronous = NORMAL;');
     db.execute('PRAGMA cache_size = -500;');
     db.execute('PRAGMA mmap_size = 0;');
@@ -158,14 +156,29 @@ class AppDatabase {
 
   Future<void> init([String? dbPathOverride]) async {
     if (_inMemoryDb != null) return;
-    if (dbPathOverride != null) _dbPath = dbPathOverride;
+    if (dbPathOverride != null && dbPathOverride != _dbPath) {
+      _persistentDb?.close();
+      _persistentDb = null;
+      _dbPath = dbPathOverride;
+    }
     await _runTask(_executeSchema);
   }
 
-  Future<void> close() => _enqueue(() {
-        _inMemoryDb?.close();
-        _inMemoryDb = null;
-      });
+  Future<void> close() {
+    if (_queue == null) {
+      _inMemoryDb?.close();
+      _inMemoryDb = null;
+      _persistentDb?.close();
+      _persistentDb = null;
+      return Future.value();
+    }
+    return _enqueue(() {
+      _inMemoryDb?.close();
+      _inMemoryDb = null;
+      _persistentDb?.close();
+      _persistentDb = null;
+    });
+  }
 
   Future<CatalogSnapshot> getCatalogSnapshot() => _runTask(_getCatalogSnapshotSync);
 

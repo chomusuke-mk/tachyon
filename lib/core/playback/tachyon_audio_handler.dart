@@ -1,12 +1,13 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
+import 'package:path/path.dart' as p;
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 /// Bridges [PlaybackController] to [as_lib.BaseAudioHandler].
 /// This acts as the unified system media controls bridge for Android, iOS,
@@ -80,8 +81,19 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   static Uri? resolveArtworkUri(String? artworkUri) {
     if (artworkUri == null || artworkUri.trim().isEmpty) return null;
     final clean = artworkUri.trim();
-    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    if (clean.startsWith('http://') ||
+        clean.startsWith('https://') ||
+        clean.startsWith('data:') ||
+        clean.startsWith('blob:')) {
       return Uri.tryParse(clean);
+    }
+    if (kIsWeb) {
+      final hash = p.basename(clean);
+      final bytes = PersistentBinaryStorage.getCoverBytesSync(hash);
+      if (bytes != null && bytes.isNotEmpty) {
+        return Uri.dataFromBytes(bytes, mimeType: 'image/jpeg');
+      }
+      return null;
     }
     return Uri.file(clean);
   }
@@ -126,7 +138,8 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
             !listEquals(state.queue, _lastSyncedPlayables))) {
       _lastSyncedPlayables = state.queue;
       final bool shouldSyncQueue =
-          !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+          !kIsWeb &&
+          (PersistentBinaryStorage.isAndroid || PersistentBinaryStorage.isIOS);
       if (shouldSyncQueue) {
         final total = state.queue.length;
         final curr = state.currentIndex.clamp(0, total > 0 ? total - 1 : 0);

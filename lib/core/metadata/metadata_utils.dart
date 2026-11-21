@@ -1,9 +1,7 @@
-import 'dart:io';
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:path/path.dart' as p;
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/shared/utils/crypto_utils.dart';
 import 'package:tachyon/shared/utils/parse_utils.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
@@ -93,38 +91,31 @@ class ExtractedTrackData {
 }
 
 abstract final class MetadataUtils {
-  static Directory? tempDirectory;
-  static Directory? thumbnailsDirectory;
+  static StorageDirectory? get tempDirectory =>
+      PersistentBinaryStorage.tempDirectory;
+  static StorageDirectory? get thumbnailsDirectory =>
+      PersistentBinaryStorage.thumbnailsDirectory;
 
   static void init(String thumbnailsPath, String tempPath) {
-    tempDirectory = Directory(tempPath);
-    thumbnailsDirectory = Directory(thumbnailsPath);
-    if (!thumbnailsDirectory!.existsSync()) {
-      thumbnailsDirectory!.createSync(recursive: true);
-    }
-    if (!tempDirectory!.existsSync()) {
-      tempDirectory!.createSync(recursive: true);
-    }
+    PersistentBinaryStorage.init(thumbnailsPath, tempPath);
+  }
+
+  static Future<void> initAsync({
+    String? thumbnailsPath,
+    String? tempPath,
+  }) async {
+    await PersistentBinaryStorage.initAsync(
+      thumbnailsPath: thumbnailsPath,
+      tempPath: tempPath,
+    );
   }
 
   static void _ensureInitialized() {
-    if (tempDirectory == null || thumbnailsDirectory == null) {
-      throw Exception(
-        'MetadataUtils is not initialized. Call MetadataUtils.init() first.',
-      );
-    }
+    PersistentBinaryStorage.ensureInitialized();
   }
 
   static Future<void> clearTempDirectory() async {
-    _ensureInitialized();
-    try {
-      if (await tempDirectory!.exists()) {
-        await tempDirectory!.delete(recursive: true);
-      }
-      if (!await tempDirectory!.exists()) {
-        await tempDirectory!.create(recursive: true);
-      }
-    } catch (_) {}
+    await PersistentBinaryStorage.clearTempDirectory();
   }
 
   /// Returns the canonical file path for an artwork file with given [hash] without extension.
@@ -139,13 +130,14 @@ abstract final class MetadataUtils {
     return p.basename(artworkPath);
   }
 
-  /// Checks whether an artwork file exists in cache for [artworkUri].
+  /// Checks whether an artwork file exists in cache (disk or OPFS) for [artworkUri].
   static bool hasCachedArtwork(String artworkUri) {
     _ensureInitialized();
-    final f = File(artworkUri);
-    if (f.existsSync() && f.lengthSync() > 0) return true;
-    final fallback = File(getArtworkPath(p.basename(artworkUri)));
-    return fallback.existsSync() && fallback.lengthSync() > 0;
+    final cleanHash = p.basename(artworkUri);
+    return PersistentBinaryStorage.hasCachedArtwork(
+      artworkUri,
+      getArtworkPath(cleanHash),
+    );
   }
 
   /// Selects the highest-priority embedded picture according to [priorityMap].
@@ -167,8 +159,8 @@ abstract final class MetadataUtils {
     return best ?? (fallbackToFirst ? pictures.first : null);
   }
 
-  /// Persists raw image bytes once into disk deduplicated by SHA-256 hash without extension.
-  /// Flutter image codecs inspect binary magic numbers directly, avoiding extension dependencies.
+  /// Persists raw image bytes once into persistent storage (disk on Native,
+  /// OPFS on Web) deduplicated by SHA-256 hash without extension.
   /// Returns the content hash of the persisted cover art image.
   static Future<String?> saveCoverBytes(
     Uint8List rawBytes, {
@@ -181,18 +173,17 @@ abstract final class MetadataUtils {
     if (knownSavedHashes != null && knownSavedHashes.contains(hash)) {
       return hash;
     }
-    final targetFile = File(getArtworkPath(hash));
-    if (!targetFile.existsSync() || targetFile.lengthSync() == 0) {
-      if (useSync) {
-        _safeAtomicWriteSync(targetFile, rawBytes);
-      } else {
-        await _safeAtomicWrite(targetFile, rawBytes);
-      }
-    }
+    await PersistentBinaryStorage.saveCoverBytes(
+      hash,
+      getArtworkPath(hash),
+      rawBytes,
+    );
     knownSavedHashes?.add(hash);
     return hash;
   }
 
+  /// Performs non-blocking asynchronous single-pass audio extraction via
+  /// `MiniaudioPlayer.analyzeAudio` (runs on native Rust threads or Web Worker).
   static Future<ExtractedTrackData?> extractTrackMetadata({
     required String filePath,
     bool useSync = false,
@@ -201,53 +192,58 @@ abstract final class MetadataUtils {
     Set<String>? knownSavedHashes,
   }) async {
     _ensureInitialized();
-    final file = File(filePath);
+
+    final isRemoteUrl =
+        filePath.startsWith('http://') || filePath.startsWith('https://');
+    final isOpfsAudio = filePath.startsWith('opfs://');
+
     int size = knownFileSize ?? 0;
     int modifiedAt = knownModifiedAt ?? 0;
+    Object analysisSource = filePath;
 
-    if (knownFileSize == null || knownModifiedAt == null) {
-      if (useSync) {
-        if (!file.existsSync()) return null;
-        try {
-          final stat = file.statSync();
-          size = stat.size;
-          modifiedAt = stat.modified.millisecondsSinceEpoch;
-        } catch (_) {}
-      } else {
-        if (!await file.exists()) return null;
-        try {
-          final stat = await file.stat();
-          size = stat.size;
-          modifiedAt = stat.modified.millisecondsSinceEpoch;
-        } catch (_) {}
+    if (isRemoteUrl) {
+      if (modifiedAt <= 0) modifiedAt = 1;
+      final parsedUri = Uri.tryParse(filePath);
+      if (parsedUri == null || !parsedUri.hasScheme || parsedUri.host.isEmpty) {
+        return null;
       }
+      analysisSource = parsedUri;
+    } else if (isOpfsAudio) {
+      final bytes = await PersistentBinaryStorage.readAudioBytesAsync(filePath);
+      if (bytes == null || bytes.isEmpty) return null;
+      final stat = await PersistentBinaryStorage.statFile(filePath);
+      size = knownFileSize ?? stat?.size ?? bytes.length;
+      modifiedAt = knownModifiedAt ?? stat?.modifiedAt ?? 1;
+      analysisSource = bytes;
+    } else {
+      if (knownFileSize == null || knownModifiedAt == null) {
+        final stat = await PersistentBinaryStorage.statFile(filePath);
+        if (stat == null) return null;
+        size = stat.size;
+        modifiedAt = stat.modifiedAt;
+      }
+      analysisSource = filePath;
     }
 
-    // Single-pass native Rust extraction (metadata, audio info, ReplayGain, waveform).
-    // Chromaprint is explicitly disabled.
+    // Single-pass asynchronous extraction:
+    // - For local/OPFS files: extracts metadata, audio info, ReplayGain, and waveform.
+    // - For remote HTTP/HTTPS URLs: extracts header/tag metadata, embedded ReplayGain tags,
+    //   audio info, and embedded cover art via HTTP Range requests without downloading full PCM.
+    // Chromaprint is explicitly disabled everywhere.
     AudioAnalysisResult? analysis;
     try {
-      if (useSync) {
-        analysis = MiniaudioPlayer.analyzeAudioSync(
-          filePath,
-          metadata: true,
-          replayGain: true,
-          waveform: true,
-          chromaprint: false,
-          waveformPoints: 100,
-        );
-      } else {
-        analysis = await MiniaudioPlayer.analyzeAudio(
-          filePath,
-          metadata: true,
-          replayGain: true,
-          waveform: true,
-          chromaprint: false,
-          waveformPoints: 100,
-        );
-      }
+      analysis = await MiniaudioPlayer.analyzeAudio(
+        analysisSource,
+        metadata: true,
+        replayGain: !isRemoteUrl,
+        waveform: !isRemoteUrl,
+        chromaprint: false,
+        waveformPoints: 100,
+      );
     } catch (e) {
-      if (knownFileSize != null && !file.existsSync()) {
+      if (!isRemoteUrl &&
+          knownFileSize != null &&
+          !await PersistentBinaryStorage.fileExists(filePath)) {
         return null;
       }
       debugPrint('[MetadataService] analyzeAudio error for $filePath: $e');
@@ -255,6 +251,9 @@ abstract final class MetadataUtils {
 
     final AudioMetadata? meta = analysis?.metadata;
     final AudioInfo? info = analysis?.audioInfo;
+    if (size <= 0 && info?.fileSize != null && info!.fileSize! > 0) {
+      size = info.fileSize!;
+    }
 
     final double? trackGain =
         ParseUtils.parseDouble(meta?.replayGainTrackGain) ??
@@ -262,10 +261,11 @@ abstract final class MetadataUtils {
     final double? trackPeak =
         ParseUtils.parseDouble(meta?.replayGainTrackPeak) ??
         analysis?.replayGain?.peak;
-    final String? waveformData =
-        WaveformCodec.encode(analysis?.waveform?.points);
+    final String? waveformData = WaveformCodec.encode(
+      analysis?.waveform?.points,
+    );
 
-    // Extract and cache embedded cover art deduplicated by hash
+    // Extract and cache embedded cover art deduplicated by hash (async OPFS / disk)
     String? coverUri;
     String? albumArtworkUri;
     String? artistArtworkUri;
@@ -291,7 +291,6 @@ abstract final class MetadataUtils {
       if (coverPic != null && coverPic.bytes.isNotEmpty) {
         coverUri = await saveCoverBytes(
           coverPic.bytes,
-          useSync: useSync,
           knownSavedHashes: knownSavedHashes,
         );
       }
@@ -300,7 +299,6 @@ abstract final class MetadataUtils {
             ? coverUri
             : await saveCoverBytes(
                 albumPic.bytes,
-                useSync: useSync,
                 knownSavedHashes: knownSavedHashes,
               );
       }
@@ -308,12 +306,11 @@ abstract final class MetadataUtils {
         artistArtworkUri = (artistPic == coverPic)
             ? coverUri
             : ((artistPic == albumPic)
-                ? albumArtworkUri
-                : await saveCoverBytes(
-                    artistPic.bytes,
-                    useSync: useSync,
-                    knownSavedHashes: knownSavedHashes,
-                  ));
+                  ? albumArtworkUri
+                  : await saveCoverBytes(
+                      artistPic.bytes,
+                      knownSavedHashes: knownSavedHashes,
+                    ));
       }
     }
 
@@ -332,64 +329,47 @@ abstract final class MetadataUtils {
     );
   }
 
-  static void _safeAtomicWriteSync(File targetFile, Uint8List bytes) {
-    _ensureInitialized();
-    if (targetFile.existsSync() && targetFile.lengthSync() > 0) {
-      return;
-    }
+  static final RegExp _percentEncodedRunPattern = RegExp(
+    r'(?:%[0-9A-Fa-f]{2})+',
+  );
 
-    final rand = math.Random().nextInt(1 << 30);
-    final fileName = p.basename(targetFile.path);
-    final tempFile = File(
-      p.join(tempDirectory!.path, '${fileName}_${pid}_$rand.tmp'),
-    );
-
-    try {
-      tempFile.writeAsBytesSync(bytes, flush: false);
-      tempFile.renameSync(targetFile.path);
-    } catch (_) {
+  /// Safely decodes valid `%XX` UTF-8 sequences without throwing [ArgumentError]
+  /// when the input is already decoded or contains literal `%` characters.
+  static String safeDecodePercent(String input) {
+    if (!input.contains('%')) return input;
+    return input.replaceAllMapped(_percentEncodedRunPattern, (match) {
+      final segment = match.group(0)!;
       try {
-        if (tempFile.existsSync()) {
-          tempFile.deleteSync();
-        }
-      } catch (_) {}
-      if (targetFile.existsSync() && targetFile.lengthSync() > 0) {
-        return;
+        return Uri.decodeComponent(segment);
+      } catch (_) {
+        return segment;
       }
-      try {
-        targetFile.writeAsBytesSync(bytes, flush: false);
-      } catch (_) {}
-    }
+    });
   }
 
-  static Future<void> _safeAtomicWrite(File targetFile, Uint8List bytes) async {
-    _ensureInitialized();
-    if (targetFile.existsSync() && targetFile.lengthSync() > 0) {
-      return;
-    }
-
-    final rand = math.Random().nextInt(1 << 30);
-    final fileName = p.basename(targetFile.path);
-    final tempFile = File(
-      p.join(tempDirectory!.path, '${fileName}_${pid}_$rand.tmp'),
-    );
-
-    try {
-      await tempFile.writeAsBytes(bytes, flush: false);
-      await tempFile.rename(targetFile.path);
-    } catch (_) {
-      try {
-        if (await tempFile.exists()) {
-          await tempFile.delete();
+  /// Resolves a human-readable fallback title from a local path, OPFS URI, or HTTP URL.
+  static String fallbackTitleFromPathOrUrl(String pathOrUrl) {
+    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+      final uri = Uri.tryParse(pathOrUrl);
+      if (uri != null && uri.pathSegments.isNotEmpty) {
+        final lastSeg = safeDecodePercent(uri.pathSegments.last).trim();
+        if (lastSeg.isNotEmpty) {
+          final withoutExt = p.basenameWithoutExtension(lastSeg);
+          return withoutExt.isNotEmpty ? withoutExt : lastSeg;
         }
-      } catch (_) {}
-      if (await targetFile.exists() && await targetFile.length() > 0) {
-        return;
       }
-      try {
-        await targetFile.writeAsBytes(bytes, flush: false);
-      } catch (_) {}
+      return safeDecodePercent(pathOrUrl);
     }
+    if (pathOrUrl.startsWith('opfs://audio/')) {
+      final rawName = safeDecodePercent(
+        pathOrUrl.substring('opfs://audio/'.length),
+      );
+      final withoutExt = p.basenameWithoutExtension(rawName);
+      return withoutExt.isNotEmpty ? withoutExt : rawName;
+    }
+    final decoded = safeDecodePercent(pathOrUrl);
+    final base = p.basenameWithoutExtension(decoded);
+    return base.isNotEmpty ? base : p.basename(decoded);
   }
 
   static ExtractedTrackData _buildExtractedTrackData({
@@ -424,8 +404,8 @@ abstract final class MetadataUtils {
 
     final codec =
         (info != null && info.codec.isNotEmpty && info.codec != 'Unknown')
-            ? info.codec
-            : (extClean.isNotEmpty ? extClean : null);
+        ? info.codec
+        : (extClean.isNotEmpty ? extClean : null);
 
     final artists =
         meta?.trackArtist
@@ -438,8 +418,8 @@ abstract final class MetadataUtils {
     final resolvedArtists = artists.isNotEmpty
         ? artists
         : (trimmedAlbumArtist != null && trimmedAlbumArtist.isNotEmpty
-            ? [trimmedAlbumArtist]
-            : const <String>[]);
+              ? [trimmedAlbumArtist]
+              : const <String>[]);
 
     final genres =
         meta?.genre
@@ -453,15 +433,15 @@ abstract final class MetadataUtils {
       filePath: filePath,
       title: meta?.title?.trim().isNotEmpty == true
           ? meta!.title!.trim()
-          : p.basenameWithoutExtension(filePath),
+          : fallbackTitleFromPathOrUrl(filePath),
       albumName: meta?.album?.trim().isNotEmpty == true
           ? meta!.album!.trim()
           : null,
       artistNames: resolvedArtists,
       albumArtistName:
           trimmedAlbumArtist != null && trimmedAlbumArtist.isNotEmpty
-              ? trimmedAlbumArtist
-              : null,
+          ? trimmedAlbumArtist
+          : null,
       genreNames: genres,
       trackNumber: meta?.trackNumber,
       discNumber: meta?.discNumber ?? 1,
@@ -485,15 +465,11 @@ abstract final class MetadataUtils {
     );
   }
 
-  static List<File> listCachedCoverFiles() {
-    _ensureInitialized();
-    if (!thumbnailsDirectory!.existsSync()) {
-      return [];
-    }
-    final files = thumbnailsDirectory!.listSync(
-      recursive: true,
-      followLinks: false,
-    );
-    return files.whereType<File>().toList();
+  static List<StorageFileRef> listCachedCoverFiles() {
+    return PersistentBinaryStorage.listCachedCoverFiles();
+  }
+
+  static Future<void> purgeUnusedCovers(Set<String> validFileNames) async {
+    await PersistentBinaryStorage.purgeUnusedCovers(validFileNames);
   }
 }

@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/shared/utils/app_memory_coordinator.dart';
 
 import 'linux_mpris_bridge.dart';
@@ -88,7 +87,7 @@ class SystemMediaService with WidgetsBindingObserver {
     final service = SystemMediaService._(handler, playbackController);
 
     // 2. Initialize Linux MPRIS bridge if on Linux
-    if (!kIsWeb && Platform.isLinux) {
+    if (!kIsWeb && PersistentBinaryStorage.isLinux) {
       debugPrint(
         '[SystemMediaService] Platform is Linux. Starting LinuxMprisBridge...',
       );
@@ -104,7 +103,7 @@ class SystemMediaService with WidgetsBindingObserver {
     }
 
     // 3. Initialize Windows SMTC bridge if on Windows
-    if (!kIsWeb && Platform.isWindows) {
+    if (!kIsWeb && PersistentBinaryStorage.isWindows) {
       debugPrint(
         '[SystemMediaService] Platform is Windows. Starting WindowsSmtcBridge...',
       );

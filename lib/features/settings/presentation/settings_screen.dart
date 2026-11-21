@@ -1,12 +1,14 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/constants/languages.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/domain/crossfade_config.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/shared/utils/file_picker_service.dart';
 import 'package:tachyon/shared/utils/toast_utils.dart';
@@ -18,6 +20,33 @@ import 'widgets/language_picker_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  static bool _isRemoteUrl(String pathOrUrl) {
+    final lower = pathOrUrl.trim().toLowerCase();
+    return lower.startsWith('http://') || lower.startsWith('https://');
+  }
+
+  static String _displaySourceName(String pathOrUrl) {
+    final clean = pathOrUrl.trim();
+    if (_isRemoteUrl(clean)) {
+      final uri = Uri.tryParse(clean);
+      if (uri != null && uri.pathSegments.isNotEmpty) {
+        final last = uri.pathSegments.lastWhere(
+          (s) => s.isNotEmpty,
+          orElse: () => '',
+        );
+        if (last.isNotEmpty) return MetadataUtils.safeDecodePercent(last);
+      }
+      return MetadataUtils.safeDecodePercent(clean);
+    }
+    if (clean.startsWith('opfs://audio/')) {
+      return MetadataUtils.safeDecodePercent(
+        clean.substring('opfs://audio/'.length),
+      );
+    }
+    final base = p.basename(MetadataUtils.safeDecodePercent(clean));
+    return base.isNotEmpty ? base : clean;
+  }
 
   void _showAddFolderDialog(BuildContext context) async {
     final settings = context.read<SettingsController>();
@@ -38,6 +67,250 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _showAddFileDialog(BuildContext context) async {
+    final settings = context.read<SettingsController>();
+    final library = context.read<LibraryController>();
+    final strings = context.read<LocaleController>().localeStrings;
+    final textController = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(strings.sAddFileTitle),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton.tonalIcon(
+                    key: const Key('btn_pick_local_audio_files'),
+                    icon: const Icon(Icons.folder_open_rounded),
+                    label: Text(strings.sAddFileLocalOption),
+                    onPressed: () async {
+                      final picked = await FilePickerService.pickAudioFiles(
+                        dialogTitle: strings.sAddFileTitle,
+                        allowedExtensions:
+                            AppDefaults.supportedAudioExtensions.toList(),
+                      );
+                      if (picked.isEmpty) return;
+                      final count = await settings.addMusicFiles(picked);
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop();
+                      }
+                      if (count > 0) {
+                        library.scanDirectories();
+                      } else if (context.mounted) {
+                        ToastUtils.showError(strings.sFileErrorInvalid);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    key: const Key('input_music_file_or_url'),
+                    controller: textController,
+                    decoration: InputDecoration(
+                      labelText: strings.sAddFileUrlLabel,
+                      hintText: strings.sAddFileUrlHint,
+                      prefixIcon: const Icon(Icons.link_rounded),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    autofocus: true,
+                    onSubmitted: (value) async {
+                      final clean = value.trim();
+                      if (clean.isEmpty) return;
+                      final added = await settings.addMusicFile(clean);
+                      if (!added) {
+                        ToastUtils.showError(strings.sFileErrorInvalid);
+                        return;
+                      }
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop();
+                      }
+                      library.scanDirectories();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(strings.sCancel),
+            ),
+            FilledButton(
+              key: const Key('btn_confirm_add_music_file'),
+              onPressed: () async {
+                final clean = textController.text.trim();
+                if (clean.isEmpty) {
+                  ToastUtils.showError(strings.sFileErrorInvalid);
+                  return;
+                }
+                final added = await settings.addMusicFile(clean);
+                if (!added) {
+                  ToastUtils.showError(strings.sFileErrorInvalid);
+                  return;
+                }
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+                library.scanDirectories();
+              },
+              child: Text(strings.sAdd),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showManageMusicFilesModal(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => const _ManageMusicFilesDialog(),
+    );
+  }
+
+  Widget _buildFolderSourceTile({
+    required BuildContext context,
+    required String dir,
+    required SettingsController settings,
+    required AppStringKey strings,
+    required ColorScheme colorScheme,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(
+            alpha: 0.25,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.folder_rounded,
+            color: colorScheme.primary,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              dir,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              size: 20,
+            ),
+            tooltip: strings.sRemoveFolder,
+            onPressed: () {
+              settings.removeMusicDirectory(dir);
+              context.read<LibraryController>().scanDirectories();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFileSourceTile({
+    required BuildContext context,
+    required String fileOrUrl,
+    required SettingsController settings,
+    required AppStringKey strings,
+    required ColorScheme colorScheme,
+  }) {
+    final isUrl = _isRemoteUrl(fileOrUrl);
+    final displayName = _displaySourceName(fileOrUrl);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(
+            alpha: 0.25,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isUrl ? Icons.link_rounded : Icons.audiotrack_rounded,
+            color: isUrl ? colorScheme.tertiary : colorScheme.secondary,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
+                if (displayName != fileOrUrl)
+                  Text(
+                    fileOrUrl,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              size: 20,
+            ),
+            tooltip: strings.sRemoveFile,
+            onPressed: () {
+              settings.removeMusicFile(fileOrUrl);
+              context.read<LibraryController>().scanDirectories();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final localeController = context.watch<LocaleController>();
@@ -54,7 +327,7 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          // Section: Music Folders
+          // Section: Music Sources (Folders + Individual Files / Links)
           _buildSectionHeader(context, strings.sMusicFolders),
           Card(
             elevation: 0,
@@ -78,6 +351,30 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  if (settings.musicFiles.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.folder_outlined,
+                          size: 16,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '${strings.sMusicFoldersHeader} (${settings.musicDirectories.length})',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   if (settings.musicDirectories.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -89,60 +386,97 @@ class SettingsScreen extends StatelessWidget {
                         ),
                       ),
                     )
+                  else if (settings.musicDirectories.length > 4)
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: settings.musicDirectories.length,
+                        itemBuilder: (context, index) => _buildFolderSourceTile(
+                          context: context,
+                          dir: settings.musicDirectories[index],
+                          settings: settings,
+                          strings: strings,
+                          colorScheme: colorScheme,
+                        ),
+                      ),
+                    )
                   else
-                    ...settings.musicDirectories.map((dir) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
+                    ...settings.musicDirectories.map(
+                      (dir) => _buildFolderSourceTile(
+                        context: context,
+                        dir: dir,
+                        settings: settings,
+                        strings: strings,
+                        colorScheme: colorScheme,
+                      ),
+                    ),
+                  if (settings.musicFiles.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Divider(height: 1),
+                    ),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.library_music_outlined,
+                          size: 16,
+                          color: colorScheme.secondary,
                         ),
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest.withValues(
-                            alpha: 0.35,
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '${strings.sMusicFilesHeader} (${settings.musicFiles.length})',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: colorScheme.outlineVariant.withValues(
-                              alpha: 0.25,
+                        ),
+                        TextButton.icon(
+                          key: const Key('btn_view_all_music_files'),
+                          icon: const Icon(Icons.list_alt_rounded, size: 16),
+                          label: Text(
+                            strings.sViewAllFilesFormatted(
+                              settings.musicFiles.length,
                             ),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          onPressed: () => _showManageMusicFilesModal(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ...settings.musicFiles.take(3).map(
+                          (fileOrUrl) => _buildFileSourceTile(
+                            context: context,
+                            fileOrUrl: fileOrUrl,
+                            settings: settings,
+                            strings: strings,
+                            colorScheme: colorScheme,
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.folder_rounded,
-                              color: colorScheme.primary,
-                              size: 22,
+                    if (settings.musicFiles.length > 3)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          key: const Key('btn_more_music_files_modal'),
+                          icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                          label: Text(
+                            strings.sViewAllFilesFormatted(
+                              settings.musicFiles.length,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                dir,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline_rounded,
-                                size: 20,
-                              ),
-                              tooltip: strings.sRemoveFolder,
-                              onPressed: () {
-                                settings.removeMusicDirectory(dir);
-                                context
-                                    .read<LibraryController>()
-                                    .scanDirectories();
-                              },
-                            ),
-                          ],
+                          ),
+                          onPressed: () => _showManageMusicFilesModal(context),
                         ),
-                      );
-                    }),
+                      ),
+                  ],
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
@@ -150,11 +484,19 @@ class SettingsScreen extends StatelessWidget {
                     alignment: WrapAlignment.start,
                     children: [
                       FilledButton.tonalIcon(
+                        key: const Key('btn_add_music_folder'),
                         icon: const Icon(Icons.add_rounded),
                         label: Text(strings.sAddFolder),
                         onPressed: () => _showAddFolderDialog(context),
                       ),
+                      FilledButton.tonalIcon(
+                        key: const Key('btn_add_music_file'),
+                        icon: const Icon(Icons.note_add_outlined),
+                        label: Text(strings.sAddFile),
+                        onPressed: () => _showAddFileDialog(context),
+                      ),
                       FilledButton.icon(
+                        key: const Key('btn_rescan_library'),
                         icon: const Icon(Icons.sync_rounded),
                         label: Text(strings.sRescanLibrary),
                         onPressed: () {
@@ -473,17 +815,18 @@ class SettingsScreen extends StatelessWidget {
                                       ),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
-                                    child: Image.file(
-                                      File(settings.customBackgroundPath!),
-                                      width: 52,
-                                      height: 52,
-                                      cacheWidth: 104,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, _, _) => const Icon(
-                                        Icons.broken_image_rounded,
-                                        size: 32,
-                                      ),
-                                    ),
+                                    child:
+                                        PersistentBinaryStorage.buildLocalOrOpfsImage(
+                                          settings.customBackgroundPath!,
+                                          width: 52,
+                                          height: 52,
+                                          cacheWidth: 104,
+                                          fit: BoxFit.cover,
+                                          fallback: const Icon(
+                                            Icons.broken_image_rounded,
+                                            size: 32,
+                                          ),
+                                        ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -779,6 +1122,198 @@ class SettingsScreen extends StatelessWidget {
                   child: Icon(Icons.check_rounded, size: 20, color: checkColor),
                 )
               : null,
+        ),
+      ),
+    );
+  }
+}
+
+enum _MusicFilesFilter { all, local, links }
+
+class _ManageMusicFilesDialog extends StatefulWidget {
+  const _ManageMusicFilesDialog();
+
+  @override
+  State<_ManageMusicFilesDialog> createState() =>
+      _ManageMusicFilesDialogState();
+}
+
+class _ManageMusicFilesDialogState extends State<_ManageMusicFilesDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  _MusicFilesFilter _filter = _MusicFilesFilter.all;
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = context.watch<LocaleController>().localeStrings;
+    final settings = context.watch<SettingsController>();
+    final colorScheme = Theme.of(context).colorScheme;
+    final allFiles = settings.musicFiles;
+
+    final filtered = allFiles.where((item) {
+      final isUrl = SettingsScreen._isRemoteUrl(item);
+      if (_filter == _MusicFilesFilter.local && isUrl) return false;
+      if (_filter == _MusicFilesFilter.links && !isUrl) return false;
+      if (_query.isEmpty) return true;
+      final q = _query.toLowerCase();
+      return item.toLowerCase().contains(q) ||
+          SettingsScreen._displaySourceName(item).toLowerCase().contains(q);
+    }).toList();
+
+    return Dialog(
+      key: const Key('modal_manage_music_files'),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 540),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.library_music_rounded,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${strings.sManageFilesTitle} (${allFiles.length})',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('input_filter_music_files'),
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: strings.sSearchFilesHint,
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _query = '');
+                          },
+                        )
+                      : null,
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onChanged: (val) => setState(() => _query = val.trim()),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  ChoiceChip(
+                    key: const Key('chip_filter_all_files'),
+                    label: Text(strings.sFilterAll),
+                    selected: _filter == _MusicFilesFilter.all,
+                    onSelected: (_) =>
+                        setState(() => _filter = _MusicFilesFilter.all),
+                  ),
+                  ChoiceChip(
+                    key: const Key('chip_filter_local_files'),
+                    label: Text(strings.sFilterLocalFiles),
+                    selected: _filter == _MusicFilesFilter.local,
+                    onSelected: (_) =>
+                        setState(() => _filter = _MusicFilesFilter.local),
+                  ),
+                  ChoiceChip(
+                    key: const Key('chip_filter_link_files'),
+                    label: Text(strings.sFilterLinks),
+                    selected: _filter == _MusicFilesFilter.links,
+                    onSelected: (_) =>
+                        setState(() => _filter = _MusicFilesFilter.links),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: Text(
+                          strings.sNoFilesYet,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color: colorScheme.outline,
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final item = filtered[index];
+                          final isUrl = SettingsScreen._isRemoteUrl(item);
+                          final displayName =
+                              SettingsScreen._displaySourceName(item);
+                          return ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                            ),
+                            leading: Icon(
+                              isUrl
+                                  ? Icons.link_rounded
+                                  : Icons.audiotrack_rounded,
+                              color: isUrl
+                                  ? colorScheme.tertiary
+                                  : colorScheme.secondary,
+                            ),
+                            title: Text(
+                              displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: displayName != item
+                                ? Text(
+                                    item,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 11),
+                                  )
+                                : null,
+                            trailing: IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 20,
+                              ),
+                              tooltip: strings.sRemoveFile,
+                              onPressed: () {
+                                settings.removeMusicFile(item);
+                                context
+                                    .read<LibraryController>()
+                                    .scanDirectories();
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

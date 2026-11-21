@@ -7,6 +7,10 @@
       "type": "dart",
       "program": "lib/main.dart",
       "flutterMode": "debug",
+      "args": [
+        "--web-header=Cross-Origin-Opener-Policy=same-origin",
+        "--web-header=Cross-Origin-Embedder-Policy=require-corp"
+      ]
     },
     {
       "name": "tachyon profile",
@@ -14,6 +18,10 @@
       "type": "dart",
       "program": "lib/main.dart",
       "flutterMode": "profile",
+      "args": [
+        "--web-header=Cross-Origin-Opener-Policy=same-origin",
+        "--web-header=Cross-Origin-Embedder-Policy=require-corp"
+      ]
     },
     {
       "name": "tachyon release",
@@ -21,6 +29,10 @@
       "type": "dart",
       "program": "lib/main.dart",
       "flutterMode": "release",
-    },
+      "args": [
+        "--web-header=Cross-Origin-Opener-Policy=same-origin",
+        "--web-header=Cross-Origin-Embedder-Policy=require-corp"
+      ]
+    }
   ]
 }

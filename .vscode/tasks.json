@@ -10,7 +10,7 @@
         "clean"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/android",
+        "cwd": "${workspaceFolder}/android"
       },
       "group": "build",
       "problemMatcher": []
@@ -25,7 +25,7 @@
         "--release"
       ],
       "options": {
-        "cwd": "${workspaceFolder}",
+        "cwd": "${workspaceFolder}"
       },
       "presentation": {
         "reveal": "always",

@@ -1,8 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
-import 'package:path/path.dart' as p;
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_source.dart';
 import 'package:tachyon/core/lyrics/lrc_parser.dart';
@@ -10,6 +7,7 @@ import 'package:tachyon/core/lyrics/lrclib_client.dart';
 import 'package:tachyon/core/lyrics/lyrics_ovh_client.dart';
 import 'package:tachyon/core/lyrics/lyrics_rate_limiter.dart';
 import 'package:tachyon/core/lyrics/lyrics_translation_client.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/shared/utils/cancellation_token.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/library_store.dart';
@@ -784,22 +782,8 @@ class LyricsManager {
     );
   }
 
-  static Future<String?> _readLocalLrcFileRaw(String filePath) async {
-    try {
-      final dir = p.dirname(filePath);
-      final baseName = p.basenameWithoutExtension(filePath);
-      for (final ext in const ['.lrc', '.LRC']) {
-        final candidate = File(p.join(dir, '$baseName$ext'));
-        if (await candidate.exists()) {
-          return utf8.decode(
-            await candidate.readAsBytes(),
-            allowMalformed: true,
-          );
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
+  static Future<String?> _readLocalLrcFileRaw(String filePath) =>
+      PersistentBinaryStorage.readLocalLrcFile(filePath);
 
   void dispose() {
     cancelPending();

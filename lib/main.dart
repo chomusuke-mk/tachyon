@@ -33,12 +33,14 @@ import 'package:tachyon/shared/utils/permission_utils.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await MiniaudioPlayer.ensureInitialized(
-    rootIsolateToken: ServicesBinding.rootIsolateToken,
+    rootIsolateToken: kIsWeb ? null : ServicesBinding.rootIsolateToken,
   );
   PaintingBinding.instance.imageCache.maximumSize = 25;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 4 * 1024 * 1024;
   MiniaudioPlayer.config(
-    logLevel: kDebugMode ? MiniaudioLogLevel.info : MiniaudioLogLevel.error,
+    logLevel: (kDebugMode || kIsWeb)
+        ? MiniaudioLogLevel.verbose
+        : MiniaudioLogLevel.error,
   );
   try {
     SystemChannels.skia.invokeMethod<void>(
@@ -48,17 +50,26 @@ Future<void> main() async {
   } catch (_) {}
 
   final sharedPreferences = await SharedPreferences.getInstance();
-  final appSupportDir = await getApplicationSupportDirectory();
-  final cacheDirectory = await getApplicationCacheDirectory();
-  final dbPath = p.join(appSupportDir.path, 'music.db');
-  if (kDebugMode) {
-    debugPrint("CACHE PATH: ${cacheDirectory.path}");
-    debugPrint("DATA PATH: ${appSupportDir.path}");
+  final String dbPath;
+  if (kIsWeb) {
+    dbPath = '/database';
+    await MetadataUtils.initAsync(
+      thumbnailsPath: '/opfs/covers',
+      tempPath: '/opfs/temp',
+    );
+  } else {
+    final appSupportDir = await getApplicationSupportDirectory();
+    final cacheDirectory = await getApplicationCacheDirectory();
+    dbPath = p.join(appSupportDir.path, 'music.db');
+    if (kDebugMode) {
+      debugPrint("CACHE PATH: ${cacheDirectory.path}");
+      debugPrint("DATA PATH: ${appSupportDir.path}");
+    }
+    MetadataUtils.init(
+      p.join(appSupportDir.path, 'covers'),
+      p.join(cacheDirectory.path, 'covers'),
+    );
   }
-  MetadataUtils.init(
-    p.join(appSupportDir.path, 'covers'),
-    p.join(cacheDirectory.path, 'covers'),
-  );
 
   // 1. Initialize Block 3 (BD) and Block 2 (Store)
   final appDatabase = AppDatabase(dbPath: dbPath);

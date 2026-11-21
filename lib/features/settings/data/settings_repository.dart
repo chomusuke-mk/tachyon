@@ -18,6 +18,7 @@ class SettingsRepository {
   SettingsRepository(this._prefs);
 
   static const _keyMusicDirectories = 's_music_directories';
+  static const _keyMusicFiles = 's_music_files';
   static const _keyCrossfadeDuration = 's_crossfade_duration';
   static const _keyCrossfadeManualDuration = 's_crossfade_manual_duration';
   static const _keyCrossfadeCurve = 's_crossfade_curve';
@@ -91,6 +92,7 @@ class SettingsRepository {
   AppSettings getSettings() {
     return AppSettings(
       musicDirectories: _prefs.getStringList(_keyMusicDirectories) ?? [],
+      musicFiles: _prefs.getStringList(_keyMusicFiles) ?? [],
       crossfadeDuration: _prefs.getInt(_keyCrossfadeDuration) ?? 5,
       crossfadeManualDuration: _prefs.getInt(_keyCrossfadeManualDuration) ?? 1,
       crossfadeCurve: CrossfadeCurveExtension.fromString(
@@ -166,6 +168,7 @@ class SettingsRepository {
   Future<void> saveSettings(AppSettings settings) async {
     final futures = <Future<bool>>[
       _prefs.setStringList(_keyMusicDirectories, settings.musicDirectories),
+      _prefs.setStringList(_keyMusicFiles, settings.musicFiles),
       _prefs.setInt(_keyCrossfadeDuration, settings.crossfadeDuration),
       _prefs.setInt(
         _keyCrossfadeManualDuration,
@@ -354,10 +357,18 @@ class SettingsRepository {
   Future<void> setMusicDirectories(List<String> dirs) =>
       _prefs.setStringList(_keyMusicDirectories, dirs);
 
+  List<String> getMusicFiles() => _prefs.getStringList(_keyMusicFiles) ?? [];
+
+  Future<void> setMusicFiles(List<String> files) =>
+      _prefs.setStringList(_keyMusicFiles, files);
+
   /// Whether the music directories list has ever been persisted
   /// (even as an empty list after the user removed all folders).
   bool get hasMusicDirectoriesBeenSet =>
       _prefs.containsKey(_keyMusicDirectories);
+
+  /// Whether the individual music files/links list has ever been persisted.
+  bool get hasMusicFilesBeenSet => _prefs.containsKey(_keyMusicFiles);
 
   Future<void> setCrossfadeDuration(int durationSeconds) =>
       _prefs.setInt(_keyCrossfadeDuration, durationSeconds.clamp(0, 30));

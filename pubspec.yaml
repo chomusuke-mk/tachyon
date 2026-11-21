@@ -67,6 +67,8 @@ flutter_launcher_icons:
     generate: true
   macos:
     generate: true
+  web:
+    generate: true
   linux:
     generate: true
     image_path: "assets/icon/icon.webp"

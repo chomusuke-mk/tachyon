@@ -383,8 +383,45 @@ class AppStringKey {
   String get sMusicFolders => _localizedStrings['s_music_folders'] ?? '';
   String get sMusicFoldersDesc =>
       _localizedStrings['s_music_folders_desc'] ?? '';
+  String get sMusicFoldersHeader =>
+      _localizedStrings['s_music_folders_header'] ?? 'Carpetas';
+  String get sMusicFilesHeader =>
+      _localizedStrings['s_music_files_header'] ?? 'Archivos y enlaces';
   String get sAddFolder => _localizedStrings['s_add_folder'] ?? '';
   String get sAddFolderTitle => _localizedStrings['s_add_folder_title'] ?? '';
+  String get sAddFile => _localizedStrings['s_add_file'] ?? 'Añadir archivo';
+  String get sAddFileTitle =>
+      _localizedStrings['s_add_file_title'] ??
+      'Añadir archivo o enlace de música';
+  String get sAddFileLocalOption =>
+      _localizedStrings['s_add_file_local_option'] ??
+      'Seleccionar archivos locales';
+  String get sAddFileUrlLabel =>
+      _localizedStrings['s_add_file_url_label'] ??
+      'Enlace directo o ruta de audio (HTTP/HTTPS)';
+  String get sAddFileUrlHint =>
+      _localizedStrings['s_add_file_url_hint'] ??
+      'https://ejemplo.com/cancion.mp3';
+  String get sFileErrorInvalid =>
+      _localizedStrings['s_file_error_invalid'] ??
+      'El archivo o enlace no es válido o no existe';
+  String get sNoFilesYet =>
+      _localizedStrings['s_no_files_yet'] ??
+      'Aún no se han añadido archivos ni enlaces individuales.';
+  String get sRemoveFile =>
+      _localizedStrings['s_remove_file'] ?? 'Quitar archivo';
+  String get sViewAllFiles =>
+      _localizedStrings['s_view_all_files'] ?? 'Ver todos ({count})';
+  String get sManageFilesTitle =>
+      _localizedStrings['s_manage_files_title'] ??
+      'Archivos y enlaces de música';
+  String get sSearchFilesHint =>
+      _localizedStrings['s_search_files_hint'] ??
+      'Filtrar archivos o enlaces...';
+  String get sFilterAll => _localizedStrings['s_filter_all'] ?? 'Todos';
+  String get sFilterLocalFiles =>
+      _localizedStrings['s_filter_local_files'] ?? 'Locales';
+  String get sFilterLinks => _localizedStrings['s_filter_links'] ?? 'Enlaces';
   String get sFolderPathHint => _localizedStrings['s_folder_path_hint'] ?? '';
   String get sFolderPathLabel =>
       _localizedStrings['s_folder_path_label'] ?? '';
@@ -695,6 +732,8 @@ class AppStringKey {
       srViewMore.replaceAll('{count}', count.toString());
   String sScanningProgressFormatted(int progress) =>
       sScanningProgress.replaceAll('{progress}', progress.toString());
+  String sViewAllFilesFormatted(int count) =>
+      sViewAllFiles.replaceAll('{count}', count.toString());
   String upCurrentVersionFormatted(String version) =>
       upCurrentVersion.replaceAll('{version}', version);
   String upLatestVersionFormatted(String version) =>
@@ -831,8 +870,15 @@ class AppStringKey {
     'sr_recent_searches',
     'sr_clear_history',
     // s_
-    's_title', 's_music_folders', 's_music_folders_desc', 's_add_folder',
-    's_add_folder_title', 's_folder_path_hint', 's_folder_path_label',
+    's_title', 's_music_folders', 's_music_folders_desc',
+    's_music_folders_header', 's_music_files_header',
+    's_add_folder', 's_add_folder_title',
+    's_add_file', 's_add_file_title', 's_add_file_local_option',
+    's_add_file_url_label', 's_add_file_url_hint', 's_file_error_invalid',
+    's_no_files_yet', 's_remove_file', 's_view_all_files',
+    's_manage_files_title', 's_search_files_hint',
+    's_filter_all', 's_filter_local_files', 's_filter_links',
+    's_folder_path_hint', 's_folder_path_label',
     's_browse_folder', 's_folder_error_invalid', 's_no_folders_yet',
     's_browse_folders_desc', 's_cancel', 's_add', 's_clear',
     's_translation_target_lang', 's_translation_target_lang_desc',

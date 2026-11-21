@@ -1,14 +1,13 @@
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/domain/audio_playable.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 /// Unified artwork presentation widget that transparently resolves and renders
 /// artwork from a single local image file, remote image URL, or an [AudioPlayable].
@@ -121,26 +120,6 @@ class AlbumArtImage extends StatelessWidget {
       targetCacheHeight = null;
     }
 
-    Widget buildImage(File file) {
-      return Image.file(
-        file,
-        width: width,
-        height: height,
-        cacheWidth: targetCacheWidth,
-        cacheHeight: targetCacheHeight,
-        fit: fit,
-        filterQuality: FilterQuality.medium,
-        gaplessPlayback: true,
-        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          if (wasSynchronouslyLoaded || frame != null) {
-            return child;
-          }
-          return effectiveFallback;
-        },
-        errorBuilder: (context, error, stackTrace) => effectiveFallback,
-      );
-    }
-
     final Widget content;
 
     if (artworkBytes != null && artworkBytes!.isNotEmpty) {
@@ -177,14 +156,15 @@ class AlbumArtImage extends StatelessWidget {
         errorWidget: (context, url, error) => effectiveFallback,
       );
     } else if (uri != null && uri.isNotEmpty) {
-      final cleanPath = uri.startsWith('file://')
-          ? uri.replaceFirst('file://', '')
-          : uri;
-      File file = File(cleanPath);
-      if (!file.existsSync() && MetadataUtils.thumbnailsDirectory != null) {
-        file = File(p.join(MetadataUtils.thumbnailsDirectory!.path, p.basename(cleanPath)));
-      }
-      content = file.existsSync() ? buildImage(file) : effectiveFallback;
+      content = PersistentBinaryStorage.buildLocalOrOpfsImage(
+        uri,
+        width: width,
+        height: height,
+        cacheWidth: targetCacheWidth,
+        cacheHeight: targetCacheHeight,
+        fit: fit,
+        fallback: effectiveFallback,
+      );
     } else {
       content = effectiveFallback;
     }

@@ -45,6 +45,7 @@ class _ControllableMetadataService extends MetadataService {
   @override
   Stream<ScanProgress> scanDirectories(
     List<String> directories, {
+    List<String> files = const [],
     CancellationToken? cancellationToken,
   }) {
     return _controller.stream;

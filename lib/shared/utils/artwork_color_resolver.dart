@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
-import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 /// Service responsible for extracting and caching a harmonized background color
 /// from an audio track or album's artwork image.
@@ -121,12 +118,14 @@ abstract final class ArtworkColorResolver {
           maxHeight: 150,
         );
       } else {
-        File file = File(clean.startsWith('file://') ? clean.replaceFirst('file://', '') : clean);
-        if (!await file.exists() && MetadataUtils.thumbnailsDirectory != null) {
-          file = File(p.join(MetadataUtils.thumbnailsDirectory!.path, p.basename(clean)));
-        }
-        if (!await file.exists() || await file.length() <= 0) return null;
-        provider = ResizeImage.resizeIfNeeded(150, null, FileImage(file));
+        final localProvider =
+            await PersistentBinaryStorage.resolveLocalOrOpfsImageProvider(
+              clean,
+              maxWidth: 150,
+              maxHeight: 150,
+            );
+        if (localProvider == null) return null;
+        provider = localProvider;
       }
 
       final scheme = await ColorScheme.fromImageProvider(

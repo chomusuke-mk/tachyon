@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 /// Renders a persistent background wallpaper image with Gaussian blur
 /// and an adaptive surface tint overlay to ensure text legibility and contrast.
@@ -10,10 +10,10 @@ class AppBackground extends StatefulWidget {
   final double blurSigma;
   final double dimOpacity;
 
-  /// Checks whether [path] is non-empty and exists on disk.
+  /// Checks whether [path] is non-empty and exists on disk or OPFS.
   static bool fileExists(String? path) {
     if (path == null || path.isEmpty) return false;
-    return File(path).existsSync();
+    return PersistentBinaryStorage.fileExistsSync(path);
   }
 
   const AppBackground({
@@ -49,7 +49,7 @@ class _AppBackgroundState extends State<AppBackground> {
     if (path == null || path.isEmpty) {
       _exists = false;
     } else {
-      _exists = File(path).existsSync();
+      _exists = PersistentBinaryStorage.fileExistsSync(path);
     }
   }
 
@@ -59,7 +59,7 @@ class _AppBackgroundState extends State<AppBackground> {
       return const SizedBox.shrink();
     }
 
-    final file = File(widget.imagePath!);
+    final path = widget.imagePath!;
     final colorScheme = Theme.of(context).colorScheme;
 
     return RepaintBoundary(
@@ -75,20 +75,20 @@ class _AppBackgroundState extends State<AppBackground> {
               ),
               child: Transform.scale(
                 scale: 1.05,
-                child: Image.file(
-                  file,
+                child: PersistentBinaryStorage.buildLocalOrOpfsImage(
+                  path,
                   fit: BoxFit.cover,
                   cacheWidth: 640,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  fallback: const SizedBox.shrink(),
                 ),
               ),
             )
           else
-            Image.file(
-              file,
+            PersistentBinaryStorage.buildLocalOrOpfsImage(
+              path,
               fit: BoxFit.cover,
               cacheWidth: 1280,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              fallback: const SizedBox.shrink(),
             ),
           Container(
             color: colorScheme.surface.withValues(alpha: widget.dimOpacity),

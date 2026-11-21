@@ -1,12 +1,11 @@
 // ignore_for_file: prefer_initializing_formals
 import 'dart:async';
-import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 import 'package:tachyon/shared/utils/folder_utils.dart';
@@ -64,6 +63,7 @@ class SettingsController extends ChangeNotifier {
   SettingsRepository get repository => _repository;
 
   List<String> get musicDirectories => _settings.musicDirectories;
+  List<String> get musicFiles => _settings.musicFiles;
   int get crossfadeDuration => _settings.crossfadeDuration;
   int get crossfadeManualDuration => _settings.crossfadeManualDuration;
   CrossfadeCurve get crossfadeCurve => _settings.crossfadeCurve;
@@ -206,14 +206,13 @@ class SettingsController extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // Music Directories Management
+  // Music Sources Management (Directories & Individual Files / Links)
   // ---------------------------------------------------------------------------
   Future<bool> addMusicDirectory(String directoryPath) async {
     final cleanPath = directoryPath.trim();
     if (cleanPath.isEmpty) return false;
 
-    final dir = Directory(cleanPath);
-    if (!await dir.exists()) return false;
+    if (!await PersistentBinaryStorage.directoryExists(cleanPath)) return false;
 
     if (_settings.musicDirectories.contains(cleanPath)) return true;
 
@@ -233,13 +232,92 @@ class SettingsController extends ChangeNotifier {
     _emitScoped([_libraryNotifier]);
   }
 
-  /// Adds the platform's default music directory when [musicDirectories]
-  /// has never been set. Returns `true` if a directory was added.
+  /// Validates and registers a single local audio file, OPFS file, or HTTP(S) audio URL.
+  Future<bool> addMusicFile(String pathOrUrl) async {
+    final clean = pathOrUrl.trim();
+    if (clean.isEmpty) return false;
+
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      final uri = Uri.tryParse(clean);
+      if (uri == null || uri.host.isEmpty) return false;
+    } else if (!await PersistentBinaryStorage.fileExists(clean)) {
+      return false;
+    }
+
+    if (_settings.musicFiles.contains(clean)) return true;
+
+    final updated = List<String>.from(_settings.musicFiles)..add(clean);
+    _settings = _settings.copyWith(musicFiles: updated);
+    await _repository.setMusicFiles(updated);
+    _emitScoped([_libraryNotifier]);
+    return true;
+  }
+
+  /// Validates and registers multiple audio files or URLs in a single batch.
+  /// Returns the number of newly added or valid entries.
+  Future<int> addMusicFiles(List<String> pathsOrUrls) async {
+    if (pathsOrUrls.isEmpty) return 0;
+    final updated = List<String>.from(_settings.musicFiles);
+    int addedCount = 0;
+
+    for (final raw in pathsOrUrls) {
+      final clean = raw.trim();
+      if (clean.isEmpty) continue;
+      if (clean.startsWith('http://') || clean.startsWith('https://')) {
+        final uri = Uri.tryParse(clean);
+        if (uri == null || uri.host.isEmpty) continue;
+      } else if (!await PersistentBinaryStorage.fileExists(clean)) {
+        continue;
+      }
+      if (!updated.contains(clean)) {
+        updated.add(clean);
+      }
+      addedCount++;
+    }
+
+    if (addedCount > 0) {
+      _settings = _settings.copyWith(musicFiles: updated);
+      await _repository.setMusicFiles(updated);
+      _emitScoped([_libraryNotifier]);
+    }
+    return addedCount;
+  }
+
+  Future<void> removeMusicFile(String pathOrUrl) async {
+    final updated = List<String>.from(_settings.musicFiles)..remove(pathOrUrl);
+    _settings = _settings.copyWith(musicFiles: updated);
+    await _repository.setMusicFiles(updated);
+    if (pathOrUrl.startsWith('opfs://audio/')) {
+      await PersistentBinaryStorage.removeWebAudioFile(pathOrUrl);
+    }
+    _emitScoped([_libraryNotifier]);
+  }
+
+  Future<void> clearMusicFiles() async {
+    final oldFiles = List<String>.from(_settings.musicFiles);
+    _settings = _settings.copyWith(musicFiles: const []);
+    await _repository.setMusicFiles(const []);
+    for (final pathOrUrl in oldFiles) {
+      if (pathOrUrl.startsWith('opfs://audio/')) {
+        await PersistentBinaryStorage.removeWebAudioFile(pathOrUrl);
+      }
+    }
+    _emitScoped([_libraryNotifier]);
+  }
+
+  /// Adds the platform's default music directory (on Native) or default Web
+  /// sample audio catalog (on Web) when music sources have never been configured.
+  /// Returns `true` if any default source was added.
   Future<bool> ensureDefaultMusicDirectory() async {
+    if (kIsWeb) {
+      if (_repository.hasMusicFilesBeenSet) return false;
+      final added = await addMusicFiles(AppDefaults.defaultWebSampleAudioUrls);
+      return added > 0;
+    }
     if (_repository.hasMusicDirectoriesBeenSet) return false;
-    final musicDir = await FolderUtils.getMusicDirectory();
-    if (musicDir == null) return false;
-    return addMusicDirectory(musicDir.path);
+    final musicDirPath = await FolderUtils.getMusicDirectoryPath();
+    if (musicDirPath == null) return false;
+    return addMusicDirectory(musicDirPath);
   }
 
   // ---------------------------------------------------------------------------
@@ -665,23 +743,14 @@ class SettingsController extends ChangeNotifier {
     }
 
     try {
-      final sourceFile = File(sourceImagePath);
-      if (!await sourceFile.exists()) return false;
+      final targetPath = await PersistentBinaryStorage.copyCustomBackgroundFile(
+        sourceImagePath,
+      );
+      if (targetPath == null) return false;
 
-      final supportDir = await getApplicationSupportDirectory();
-      final bgDir = Directory('${supportDir.path}/backgrounds');
-      if (!await bgDir.exists()) {
-        await bgDir.create(recursive: true);
-      }
-
-      final rawExt = p.extension(sourceImagePath);
-      final ext = rawExt.isNotEmpty ? rawExt : '.jpg';
-      final targetPath = p.join(bgDir.path, 'custom_bg$ext');
-      final targetFile = await sourceFile.copy(targetPath);
-
-      _settings = _settings.copyWith(customBackgroundPath: targetFile.path);
+      _settings = _settings.copyWith(customBackgroundPath: targetPath);
       _emitScoped([_themeNotifier]);
-      await _repository.setCustomBackgroundPath(targetFile.path);
+      await _repository.setCustomBackgroundPath(targetPath);
       return true;
     } catch (_) {
       return false;

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -190,11 +189,6 @@ class LyricsOvhClient {
         statusCode: 504,
         error: 'Request timed out',
       );
-    } on SocketException catch (e) {
-      return LyricsOvhResponse.temporaryError(
-        statusCode: 0,
-        error: 'Network connection failed: ${e.message}',
-      );
     } on http.ClientException catch (e) {
       return LyricsOvhResponse.temporaryError(
         statusCode: 0,
@@ -203,7 +197,7 @@ class LyricsOvhClient {
     } catch (e) {
       return LyricsOvhResponse.temporaryError(
         statusCode: 0,
-        error: 'Unexpected error: $e',
+        error: 'Network connection failed: $e',
       );
     }
   }

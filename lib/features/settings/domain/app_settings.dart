@@ -16,8 +16,9 @@ import 'package:tachyon/core/playback/domain/loop_mode.dart';
 
 @immutable
 class AppSettings {
-  // Library Paths
+  // Library Paths & Individual Sources
   final List<String> musicDirectories;
+  final List<String> musicFiles;
 
   // Audio Playback
   final int crossfadeDuration; // 0 to 30 seconds (default 5)
@@ -86,6 +87,7 @@ class AppSettings {
 
   const AppSettings({
     this.musicDirectories = const [],
+    this.musicFiles = const [],
     this.crossfadeDuration = 5,
     this.crossfadeManualDuration = 1,
     this.crossfadeCurve = CrossfadeCurve.equalPower,
@@ -181,6 +183,7 @@ class AppSettings {
       other is AppSettings &&
           runtimeType == other.runtimeType &&
           listEquals(musicDirectories, other.musicDirectories) &&
+          listEquals(musicFiles, other.musicFiles) &&
           crossfadeDuration == other.crossfadeDuration &&
           crossfadeManualDuration == other.crossfadeManualDuration &&
           crossfadeCurve == other.crossfadeCurve &&
@@ -235,6 +238,7 @@ class AppSettings {
 
   AppSettings copyWith({
     List<String>? musicDirectories,
+    List<String>? musicFiles,
     int? crossfadeDuration,
     int? crossfadeManualDuration,
     CrossfadeCurve? crossfadeCurve,
@@ -290,6 +294,7 @@ class AppSettings {
   }) {
     return AppSettings(
       musicDirectories: musicDirectories ?? this.musicDirectories,
+      musicFiles: musicFiles ?? this.musicFiles,
       crossfadeDuration: crossfadeDuration ?? this.crossfadeDuration,
       crossfadeManualDuration:
           crossfadeManualDuration ?? this.crossfadeManualDuration,
@@ -352,6 +357,7 @@ class AppSettings {
   @override
   int get hashCode => Object.hashAll([
     Object.hashAll(musicDirectories),
+    Object.hashAll(musicFiles),
     crossfadeDuration,
     crossfadeManualDuration,
     crossfadeCurve,

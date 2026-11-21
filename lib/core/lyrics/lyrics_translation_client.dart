@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';
 import 'package:tachyon/shared/utils/parse_utils.dart';
 
 /// Exception thrown when a lyrics translation operation fails.
@@ -116,12 +114,7 @@ class LyricsTranslationClient {
        _ownsClient = httpClient == null;
 
   static http.Client _defaultClient({required Duration timeout}) {
-    try {
-      final io = HttpClient()..connectionTimeout = timeout;
-      return IOClient(io);
-    } catch (_) {
-      return http.Client();
-    }
+    return http.Client();
   }
 
   /// Chunks [lines] into batches where total character count joined by '\n'
@@ -419,15 +412,16 @@ class LyricsTranslationClient {
         'Translation request timed out',
         statusCode: 504,
       );
-    } on SocketException catch (e) {
-      throw LyricsTranslationException(
-        'Network connection failed: ${e.message}',
-        statusCode: 0,
-        cause: e,
-      );
     } on http.ClientException catch (e) {
       throw LyricsTranslationException(
         'HTTP client error: ${e.message}',
+        statusCode: 0,
+        cause: e,
+      );
+    } catch (e) {
+      if (e is LyricsTranslationException) rethrow;
+      throw LyricsTranslationException(
+        'Network connection failed: $e',
         statusCode: 0,
         cause: e,
       );

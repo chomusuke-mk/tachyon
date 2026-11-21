@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/utils/toast_utils.dart';
@@ -28,6 +29,9 @@ class FoldersScreen extends StatelessWidget {
     final playback = context.read<PlaybackController>();
     final musicDirs = context.select<SettingsController, List<String>>(
       (s) => s.musicDirectories,
+    );
+    final musicFiles = context.select<SettingsController, List<String>>(
+      (s) => s.musicFiles,
     );
     final settings = context.read<SettingsController>();
     final isAtRoot = library.isAtFolderRoot;
@@ -62,7 +66,16 @@ class FoldersScreen extends StatelessWidget {
         ],
       ),
       body: isAtRoot
-          ? _buildRootView(context, strings, library, settings, musicDirs)
+          ? _buildRootView(
+              context,
+              strings,
+              library,
+              settings,
+              playback,
+              currentTrack,
+              musicDirs,
+              musicFiles,
+            )
           : _buildFolderView(context, strings, library, playback, currentTrack),
     );
   }
@@ -72,9 +85,12 @@ class FoldersScreen extends StatelessWidget {
     AppStringKey strings,
     LibraryController library,
     SettingsController settings,
+    PlaybackController playback,
+    Track? currentTrack,
     List<String> musicDirs,
+    List<String> musicFiles,
   ) {
-    if (musicDirs.isEmpty) {
+    if (musicDirs.isEmpty && musicFiles.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -123,74 +139,198 @@ class FoldersScreen extends StatelessWidget {
       );
     }
 
-    if (library.isFolderGridView) {
-      return GridView.builder(
-        padding: const EdgeInsets.all(16.0),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 220,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.05,
-        ),
+    if (musicFiles.isEmpty) {
+      if (library.isFolderGridView) {
+        return GridView.builder(
+          padding: const EdgeInsets.all(16.0),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 220,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.05,
+          ),
+          itemCount: musicDirs.length,
+          itemBuilder: (context, index) {
+            final dirPath = musicDirs[index];
+            return Card(
+              elevation: 1,
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => library.navigateToFolder(dirPath),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.folder_special_rounded,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        p.basename(dirPath),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        dirPath,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      }
+
+      return ListView.builder(
         itemCount: musicDirs.length,
         itemBuilder: (context, index) {
           final dirPath = musicDirs[index];
-          return Card(
-            elevation: 1,
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () => library.navigateToFolder(dirPath),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.folder_special_rounded,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      p.basename(dirPath),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      dirPath,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          return ListTile(
+            leading: const Icon(Icons.folder_special_rounded),
+            title: Text(p.basename(dirPath)),
+            subtitle: Text(dirPath),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => library.navigateToFolder(dirPath),
           );
         },
       );
     }
 
-    return ListView.builder(
-      itemCount: musicDirs.length,
-      itemBuilder: (context, index) {
-        final dirPath = musicDirs[index];
-        return ListTile(
-          leading: const Icon(Icons.folder_special_rounded),
-          title: Text(p.basename(dirPath)),
-          subtitle: Text(dirPath),
-          trailing: const Icon(Icons.chevron_right_rounded),
-          onTap: () => library.navigateToFolder(dirPath),
+    // Resolve tracks for individual musicFiles so they can be explored and played directly
+    final tracksByPath = <String, Track>{
+      for (final t in library.tracks) t.filePath: t,
+    };
+    final individualTracks = <Track>[];
+    for (int i = 0; i < musicFiles.length; i++) {
+      final pathOrUrl = musicFiles[i];
+      final existing = tracksByPath[pathOrUrl];
+      if (existing != null) {
+        individualTracks.add(existing);
+      } else {
+        individualTracks.add(
+          Track(
+            id: -(i + 1),
+            filePath: pathOrUrl,
+            title: MetadataUtils.fallbackTitleFromPathOrUrl(pathOrUrl),
+            durationMs: 0,
+            fileSize: 0,
+            modifiedAt: 1,
+          ),
         );
-      },
+      }
+    }
+
+    return CustomScrollView(
+      slivers: [
+        if (musicDirs.isNotEmpty) ...[
+          if (library.isFolderGridView)
+            SliverPadding(
+              padding: const EdgeInsets.all(16.0),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 220,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.05,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final dirPath = musicDirs[index];
+                    return Card(
+                      elevation: 1,
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => library.navigateToFolder(dirPath),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.folder_special_rounded,
+                                size: 48,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                p.basename(dirPath),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                dirPath,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                      fontSize: 11,
+                                    ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  childCount: musicDirs.length,
+                ),
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final dirPath = musicDirs[index];
+                  return ListTile(
+                    leading: const Icon(Icons.folder_special_rounded),
+                    title: Text(p.basename(dirPath)),
+                    subtitle: Text(dirPath),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => library.navigateToFolder(dirPath),
+                  );
+                },
+                childCount: musicDirs.length,
+              ),
+            ),
+          const SliverToBoxAdapter(child: Divider(height: 1)),
+        ],
+        SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final track = individualTracks[index];
+              return TrackTile(
+                key: ValueKey(track.filePath),
+                track: track,
+                contextTracks: individualTracks,
+              );
+            },
+            childCount: individualTracks.length,
+          ),
+        ),
+      ],
     );
   }
 

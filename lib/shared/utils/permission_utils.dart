@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 /// Runtime permissions Tachyon needs before it can work properly.
 enum AppPermission { music }
@@ -13,7 +12,8 @@ enum AppPermission { music }
 class PermissionUtils {
   PermissionUtils._();
 
-  static bool get isRuntimeRequired => !kIsWeb && Platform.isAndroid;
+  static bool get isRuntimeRequired =>
+      !kIsWeb && PersistentBinaryStorage.isAndroid;
 
   static Future<Permission> _resolve(AppPermission permission) async {
     switch (permission) {

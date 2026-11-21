@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_service.dart';
+import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/album_sort_option.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
@@ -393,8 +393,7 @@ class LibraryController extends ChangeNotifier {
 
   Future<void> navigateToFolder(String folderPath) async {
     final normalized = p.normalize(folderPath);
-    final dir = Directory(normalized);
-    if (!dir.existsSync()) return;
+    if (!PersistentBinaryStorage.directoryExistsSync(normalized)) return;
 
     final existingIndex = _folderNavigationStack.indexOf(normalized);
     if (existingIndex != -1) {
@@ -429,7 +428,8 @@ class LibraryController extends ChangeNotifier {
           }
         } else {
           final parent = p.dirname(normalized);
-          if (parent != normalized && Directory(parent).existsSync()) {
+          if (parent != normalized &&
+              PersistentBinaryStorage.directoryExistsSync(parent)) {
             _folderNavigationStack.add(parent);
           }
           _folderNavigationStack.add(normalized);
@@ -487,8 +487,7 @@ class LibraryController extends ChangeNotifier {
       return;
     }
 
-    final dir = Directory(current);
-    if (!dir.existsSync()) {
+    if (!PersistentBinaryStorage.directoryExistsSync(current)) {
       _folderNavigationStack.removeLast();
       if (_folderNavigationStack.isEmpty) {
         _currentFolderSubdirectories = [];
@@ -523,24 +522,7 @@ class LibraryController extends ChangeNotifier {
     notifyListeners();
 
     // 2. Subdirectories listing
-    final subDirs = <String>[];
-    try {
-      final entities = dir.listSync(followLinks: false);
-      for (final entity in entities) {
-        if (entity is Directory) {
-          final base = p.basename(entity.path);
-          if (!base.startsWith('.')) {
-            subDirs.add(p.normalize(entity.path));
-          }
-        }
-      }
-      subDirs.sort(
-        (a, b) =>
-            p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()),
-      );
-    } catch (e) {
-      debugPrint('Error listing subdirectories in $current: $e');
-    }
+    final subDirs = PersistentBinaryStorage.listSubdirectoriesSync(current);
 
     // 3. Resolve tracks from in-memory _store in O(1)
     final tracks = List<Track>.from(_store.getTracksInDirectory(current));
@@ -561,17 +543,22 @@ class LibraryController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Scanning Operations
   // ---------------------------------------------------------------------------
-  /// Scans the user's configured music directories from [SettingsRepository].
-  /// When all directories have been removed, scans with an empty list to purge removed tracks.
+  /// Scans the user's configured music directories and individual music files/links
+  /// from [SettingsRepository].
+  /// When all sources have been removed, scans with empty lists to purge removed tracks.
   Future<void> scanDirectories() async {
     if (isScanning) return;
-    final directories = settingsRepository.getSettings().musicDirectories;
+    final currentSettings = settingsRepository.getSettings();
+    final directories = currentSettings.musicDirectories;
+    final files = currentSettings.musicFiles;
     _scanProgressNotifier.value = const ScanProgress(
       stage: ScanStage.gettingDatabase,
     );
     notifyListeners();
     if (metadataService != null) {
-      await metadataService!.scanDirectories(directories).drain<void>();
+      await metadataService!
+          .scanDirectories(directories, files: files)
+          .drain<void>();
     }
   }
 
