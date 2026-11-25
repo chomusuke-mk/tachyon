@@ -21,7 +21,6 @@ class AppLifecycleController extends ChangeNotifier
   final WindowControlBridge _windowBridge;
   final PlaybackController? _playbackController;
   final DesktopTrayService? _trayService;
-  final Duration _focusLossDebounce;
   final bool _startTrimmerOnActive;
   final Future<void> Function()? _onCloseRequested;
 
@@ -29,41 +28,41 @@ class AppLifecycleController extends ChangeNotifier
       ValueNotifier<AppLifecycleMode>(AppLifecycleMode.active);
 
   AppLifecycleListener? _lifecycleListener;
-  Timer? _focusDebounceTimer;
+  bool _lastWindowMinimized = false;
   bool _isDisposed = false;
 
   /// Creates an [AppLifecycleController].
   ///
   /// Wires native window updates from [windowBridge], throttles UI updates on
-  /// playback, controls tray visibility in background mode, and debounces
-  /// transient desktop focus-loss events. When [observeFlutterLifecycle] is
-  /// `true`, attaches to [WidgetsBinding] and [AppLifecycleListener].
+  /// playback, controls tray visibility in background mode, and responds to OS
+  /// lifecycle transitions. When [observeFlutterLifecycle] is `true`, attaches
+  /// an [AppLifecycleListener] to [WidgetsBinding].
   AppLifecycleController({
     required this._windowBridge,
     this._playbackController,
     this._trayService,
-    this._focusLossDebounce = const Duration(milliseconds: 150),
     this._startTrimmerOnActive = true,
     bool observeFlutterLifecycle = true,
     this._onCloseRequested,
   }) {
+    _lastWindowMinimized = _windowBridge.windowState.isMinimized;
     _windowBridge.onWindowStateChanged = _handleWindowStateChanged;
     _windowBridge.onBackgroundRequested = enterBackground;
     _windowBridge.onTrayAction = _handleTrayAction;
     _trayService?.attachLifecycleController(this);
     _log.d(
       'Initialized observeFlutterLifecycle=$observeFlutterLifecycle '
-      'focusLossDebounce=${_focusLossDebounce.inMilliseconds}ms '
-      'isDesktop=${_windowBridge.isDesktopPlatform}',
+      'isDesktop=${_windowBridge.isDesktopPlatform} '
+      'initialMinimized=$_lastWindowMinimized',
     );
 
     if (observeFlutterLifecycle) {
-      WidgetsBinding.instance.addObserver(this);
       _lifecycleListener = AppLifecycleListener(
         onHide: _handleFlutterHiddenOrPaused,
         onPause: _handleFlutterHiddenOrPaused,
         onShow: _handleFlutterShownOrResumed,
         onResume: _handleFlutterShownOrResumed,
+        onDetach: _handleFlutterDetached,
       );
     }
   }
@@ -93,7 +92,6 @@ class AppLifecycleController extends ChangeNotifier
   Future<void> enterActive() async {
     if (_isDisposed) return;
     _log.d('enterActive requested (currentMode=${mode.name})');
-    _cancelFocusDebounce();
     if (mode == AppLifecycleMode.background) {
       await restoreFromBackground();
       return;
@@ -113,7 +111,6 @@ class AppLifecycleController extends ChangeNotifier
       return;
     }
     _log.d('enterSuspended requested (currentMode=${mode.name})');
-    _cancelFocusDebounce();
     _applyMode(AppLifecycleMode.suspended);
   }
 
@@ -132,7 +129,6 @@ class AppLifecycleController extends ChangeNotifier
     _log.d(
       'enterBackground requested (currentMode=${mode.name}, isDesktop=${_windowBridge.isDesktopPlatform})',
     );
-    _cancelFocusDebounce();
     ToastUtils.dismissAll();
     _applyMode(AppLifecycleMode.background);
     if (_windowBridge.isDesktopPlatform) {
@@ -148,7 +144,6 @@ class AppLifecycleController extends ChangeNotifier
     _log.d(
       'restoreFromBackground requested (currentMode=${mode.name}, isDesktop=${_windowBridge.isDesktopPlatform})',
     );
-    _cancelFocusDebounce();
     if (_windowBridge.isDesktopPlatform) {
       await _trayService?.setVisible(false);
       await _windowBridge.restoreFromBackground();
@@ -187,7 +182,6 @@ class AppLifecycleController extends ChangeNotifier
   Future<void> closeApplication() async {
     if (_isDisposed) return;
     _log.i('closeApplication requested (currentMode=${mode.name})');
-    _cancelFocusDebounce();
     await _trayService?.setVisible(false);
     await _playbackController?.flushStatePersistence();
     if (_onCloseRequested != null) {
@@ -205,11 +199,7 @@ class AppLifecycleController extends ChangeNotifier
     );
     switch (state) {
       case AppLifecycleState.detached:
-        if (_playbackController?.isPlaying ?? false) {
-          unawaited(enterBackground());
-        } else {
-          enterSuspended();
-        }
+        _handleFlutterDetached();
         break;
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
@@ -220,6 +210,19 @@ class AppLifecycleController extends ChangeNotifier
         break;
       case AppLifecycleState.inactive:
         break;
+    }
+  }
+
+  void _handleFlutterDetached() {
+    if (_isDisposed) return;
+    final playing = _playbackController?.isPlaying ?? false;
+    _log.d(
+      '_handleFlutterDetached (currentMode=${mode.name}, isPlaying=$playing)',
+    );
+    if (playing) {
+      unawaited(enterBackground());
+    } else {
+      enterSuspended();
     }
   }
 
@@ -252,10 +255,12 @@ class AppLifecycleController extends ChangeNotifier
 
   void _handleWindowStateChanged(DesktopWindowState state) {
     if (_isDisposed) return;
+    final wasMinimized = _lastWindowMinimized;
+    _lastWindowMinimized = state.isMinimized;
     _log.d(
       'WindowState received: minimized=${state.isMinimized} focused=${state.isFocused} '
       'maximized=${state.isMaximized} hiddenToTray=${state.isHiddenToTray} '
-      '(currentMode=${mode.name})',
+      'wasMinimized=$wasMinimized (currentMode=${mode.name})',
     );
     if (mode == AppLifecycleMode.background || state.isHiddenToTray) {
       _log.d(
@@ -270,38 +275,19 @@ class AppLifecycleController extends ChangeNotifier
       return;
     }
 
-    if (!state.isFocused) {
-      if (_focusLossDebounce == Duration.zero) {
-        _log.d('Window unfocused (debounce=0ms) -> entering suspended mode immediately');
-        enterSuspended();
-      } else {
-        _log.d(
-          'Window unfocused -> scheduling ${_focusLossDebounce.inMilliseconds}ms debounce timer',
-        );
-        _focusDebounceTimer?.cancel();
-        _focusDebounceTimer = Timer(_focusLossDebounce, () {
-          if (_isDisposed || mode == AppLifecycleMode.background) {
-            _log.d(
-              'Focus-loss debounce fired but ignored (disposed=$_isDisposed, mode=${mode.name})',
-            );
-            return;
-          }
-          final latest = _windowBridge.windowState;
-          _log.d(
-            'Focus-loss debounce fired: latest.isFocused=${latest.isFocused} '
-            'latest.isMinimized=${latest.isMinimized} latest.isHiddenToTray=${latest.isHiddenToTray}',
-          );
-          if (!latest.isFocused && !latest.isHiddenToTray) {
-            enterSuspended();
-          }
-        });
-      }
+    if (mode == AppLifecycleMode.suspended &&
+        (state.isFocused || wasMinimized)) {
+      _log.d(
+        'Window restored (focused=${state.isFocused}, wasMinimized=$wasMinimized) -> entering active mode',
+      );
+      _applyMode(AppLifecycleMode.active);
       return;
     }
 
-    _log.d('Window focused -> cancelling focus debounce and entering active mode');
-    _cancelFocusDebounce();
-    _applyMode(AppLifecycleMode.active);
+    _log.d(
+      'Window state kept mode=${mode.name} '
+      '(minimized=false, focused=${state.isFocused})',
+    );
   }
 
   void _handleTrayAction(DesktopTrayAction action) {
@@ -346,23 +332,13 @@ class AppLifecycleController extends ChangeNotifier
     notifyListeners();
   }
 
-  void _cancelFocusDebounce() {
-    if (_focusDebounceTimer != null && _focusDebounceTimer!.isActive) {
-      _log.d('Cancelled pending focus-loss debounce timer');
-    }
-    _focusDebounceTimer?.cancel();
-    _focusDebounceTimer = null;
-  }
-
   @override
   void dispose() {
     _log.d('Disposed');
     _isDisposed = true;
-    _cancelFocusDebounce();
     AppMemoryCoordinator.cancelPendingTrims();
     _lifecycleListener?.dispose();
     _lifecycleListener = null;
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 }

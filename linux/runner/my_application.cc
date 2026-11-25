@@ -286,6 +286,7 @@ static void hook_minimize_buttons_forall_cb(GtkWidget* widget, gpointer data) {
         g_object_get_data(G_OBJECT(widget), "tachyon-min-hooked") == nullptr) {
       g_object_set_data(G_OBJECT(widget), "tachyon-min-hooked",
                         GINT_TO_POINTER(1));
+      native_log(kNativeLogDebug, "Hooked HeaderBar minimize button signal");
       g_signal_connect_object(widget, "clicked",
                               G_CALLBACK(on_minimize_button_clicked), self,
                               static_cast<GConnectFlags>(0));
@@ -626,7 +627,7 @@ static void my_application_activate(GApplication* application) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     self->header_bar = header_bar;
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "tachyon");
+    gtk_header_bar_set_title(header_bar, "Tachyon");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
 
     GtkWidget* bg_btn = gtk_button_new_from_icon_name("go-bottom-symbolic",
@@ -652,7 +653,7 @@ static void my_application_activate(GApplication* application) {
   } else {
     self->header_bar = nullptr;
     self->background_button = nullptr;
-    gtk_window_set_title(window, "tachyon");
+    gtk_window_set_title(window, "Tachyon");
   }
 
   g_signal_connect_object(window, "window-state-event",

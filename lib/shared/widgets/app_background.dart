@@ -101,6 +101,7 @@ class _AppBackgroundState extends State<AppBackground> {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          ColoredBox(color: colorScheme.surface),
           if (widget.blurSigma > 0.0)
             ImageFiltered(
               imageFilter: ImageFilter.blur(

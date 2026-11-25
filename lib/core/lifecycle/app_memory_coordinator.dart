@@ -76,13 +76,12 @@ class AppMemoryCoordinator {
       case AppLifecycleMode.suspended:
         MemoryOptimizer.stopPeriodicTrimmer();
         PaintingBinding.instance.imageCache.clear();
-        PaintingBinding.instance.imageCache.clearLiveImages();
         _setSkiaResourceCacheMaxBytes(0);
         MemoryOptimizer.trim(level: MemoryTrimLevel.moderate);
         _log.d(
           'applyPolicy(${prevMode.name}->${mode.name}): '
           'before imageCache(entries=$entriesBefore, bytes=$bytesBefore, live=$liveBefore) -> '
-          'cleared imageCache + clearLiveImages(), skia=0B, trim=moderate, delayedTrim=350ms',
+          'cleared imageCache (live images retained), skia=0B, trim=moderate, delayedTrim=350ms',
         );
         _scheduleDelayedTrim(
           const Duration(milliseconds: 350),

@@ -14,9 +14,10 @@ import 'package:tachyon/shared/widgets/desktop_shortcuts_handler.dart';
 
 /// Root Flutter widget of the Tachyon music player.
 ///
-/// Reacts to [AppLifecycleController.modeListenable] to pause tickers and
-/// heavy background visuals while [AppLifecycleMode.suspended], and completely
-/// unmounts the UI tree to [SizedBox.shrink] during [AppLifecycleMode.background].
+/// Reacts to [AppLifecycleController.modeListenable] to pause tickers during
+/// [AppLifecycleMode.suspended] without tearing down [MaterialApp] or
+/// [AppBackground], and completely unmounts the UI tree to [SizedBox.shrink]
+/// during [AppLifecycleMode.background].
 class App extends StatefulWidget {
   /// Global navigator key shared with overlay services such as toast notifications.
   static final GlobalKey<NavigatorState> navigatorKey =
@@ -36,9 +37,42 @@ class _AppState extends State<App> {
   static const _log = ScopedLogger('App');
 
   late bool _permissionsGranted = widget.permissionsGranted;
-  AppLifecycleMode? _lastLoggedMode;
+  ValueListenable<AppLifecycleMode>? _modeListenable;
+  bool _isBackground = false;
+  bool? _lastLoggedIsBackground;
   bool? _lastLoggedHasCustomBg;
   bool? _lastLoggedShowDesktopBar;
+  bool? _lastLoggedTickerActive;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final lifecycle = Provider.of<AppLifecycleController?>(
+      context,
+      listen: false,
+    );
+    final ValueListenable<AppLifecycleMode> nextListenable =
+        lifecycle?.modeListenable ??
+        const _FixedValueListenable<AppLifecycleMode>(AppLifecycleMode.active);
+    if (!identical(_modeListenable, nextListenable)) {
+      _modeListenable?.removeListener(_onLifecycleModeChanged);
+      _modeListenable = nextListenable;
+      _modeListenable!.addListener(_onLifecycleModeChanged);
+      _isBackground = _modeListenable!.value == AppLifecycleMode.background;
+    }
+  }
+
+  void _onLifecycleModeChanged() {
+    final nextIsBackground =
+        _modeListenable?.value == AppLifecycleMode.background;
+    if (nextIsBackground != _isBackground && mounted) {
+      _log.d(
+        'App.mode changed: isBackground=$_isBackground -> $nextIsBackground '
+        '(mode=${_modeListenable?.value.name})',
+      );
+      setState(() => _isBackground = nextIsBackground);
+    }
+  }
 
   @override
   void didUpdateWidget(covariant App oldWidget) {
@@ -50,6 +84,13 @@ class _AppState extends State<App> {
   }
 
   @override
+  void dispose() {
+    _modeListenable?.removeListener(_onLifecycleModeChanged);
+    _modeListenable = null;
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final settings = context.read<SettingsController>();
     final lifecycle = Provider.of<AppLifecycleController?>(
@@ -57,116 +98,120 @@ class _AppState extends State<App> {
       listen: false,
     );
     final ValueListenable<AppLifecycleMode> modeListenable =
-        lifecycle?.modeListenable ??
+        _modeListenable ??
         const _FixedValueListenable<AppLifecycleMode>(AppLifecycleMode.active);
 
-    return ValueListenableBuilder<AppLifecycleMode>(
-      valueListenable: modeListenable,
-      builder: (context, mode, _) {
-        if (mode == AppLifecycleMode.background) {
-          if (_lastLoggedMode != mode) {
-            _log.d(
-              'build mode=${mode.name} (prev=${_lastLoggedMode?.name ?? '<init>'}) -> unmounted to SizedBox.shrink',
-            );
-            _lastLoggedMode = mode;
-            _lastLoggedHasCustomBg = null;
-            _lastLoggedShowDesktopBar = null;
-          }
-          _log.vLazy(() => 'App.build background -> SizedBox.shrink()');
-          return const SizedBox.shrink();
+    if (_isBackground) {
+      if (_lastLoggedIsBackground != true) {
+        _log.d('build mode=background -> unmounted to SizedBox.shrink');
+        _lastLoggedIsBackground = true;
+        _lastLoggedHasCustomBg = null;
+        _lastLoggedShowDesktopBar = null;
+        _lastLoggedTickerActive = null;
+      }
+      _log.vLazy(() => 'App.build background -> SizedBox.shrink()');
+      return const SizedBox.shrink();
+    }
+    _lastLoggedIsBackground = false;
+
+    final showDesktopBar = lifecycle?.windowBridge.usesFlutterTitleBar ?? false;
+
+    return ListenableBuilder(
+      listenable: settings.themeListenable,
+      builder: (context, _) {
+        final hasCustomBg = AppBackground.fileExists(
+          settings.customBackgroundPath,
+        );
+        if (_lastLoggedHasCustomBg != hasCustomBg ||
+            _lastLoggedShowDesktopBar != showDesktopBar) {
+          _log.d(
+            'renderTree mode=${modeListenable.value.name} hasCustomBg=$hasCustomBg '
+            'appBackgroundMounted=$hasCustomBg showDesktopBar=$showDesktopBar '
+            'themeMode=${settings.themeMode.name} oled=${settings.isOledMode}',
+          );
+          _lastLoggedHasCustomBg = hasCustomBg;
+          _lastLoggedShowDesktopBar = showDesktopBar;
         }
+        _log.vLazy(
+          () =>
+              'App.build rebuild mode=${modeListenable.value.name} hasCustomBg=$hasCustomBg',
+        );
 
-        final isActive = mode == AppLifecycleMode.active;
-        final showDesktopBar =
-            lifecycle?.windowBridge.usesFlutterTitleBar ?? false;
-
-        return ListenableBuilder(
-          listenable: settings.themeListenable,
-          builder: (context, _) {
-            final hasCustomBg = AppBackground.fileExists(
-              settings.customBackgroundPath,
-            );
-            final mountAppBg = hasCustomBg && isActive;
-            if (_lastLoggedMode != mode ||
-                _lastLoggedHasCustomBg != hasCustomBg ||
-                _lastLoggedShowDesktopBar != showDesktopBar) {
-              _log.d(
-                'renderTree prevMode=${_lastLoggedMode?.name ?? '<init>'} -> mode=${mode.name} '
-                'isActive=$isActive tickerEnabled=$isActive hasCustomBg=$hasCustomBg '
-                'appBackgroundMounted=$mountAppBg showDesktopBar=$showDesktopBar '
-                'themeMode=${settings.themeMode.name} oled=${settings.isOledMode}',
+        final lightTheme = TachyonTheme.buildLightTheme(
+          seedColor: settings.accentColor,
+          hasCustomBackground: hasCustomBg,
+        );
+        final darkTheme = settings.isOledMode
+            ? TachyonTheme.buildOledTheme(
+                seedColor: settings.accentColor,
+                hasCustomBackground: hasCustomBg,
+              )
+            : TachyonTheme.buildDarkTheme(
+                seedColor: settings.accentColor,
+                hasCustomBackground: hasCustomBg,
               );
-              _lastLoggedMode = mode;
-              _lastLoggedHasCustomBg = hasCustomBg;
-              _lastLoggedShowDesktopBar = showDesktopBar;
-            }
-            _log.vLazy(
-              () =>
-                  'App.build rebuild mode=${mode.name} isActive=$isActive hasCustomBg=$hasCustomBg appBgMounted=$mountAppBg',
-            );
 
-            final lightTheme = TachyonTheme.buildLightTheme(
-              seedColor: settings.accentColor,
-              hasCustomBackground: hasCustomBg,
-            );
-            final darkTheme = settings.isOledMode
-                ? TachyonTheme.buildOledTheme(
-                    seedColor: settings.accentColor,
-                    hasCustomBackground: hasCustomBg,
-                  )
-                : TachyonTheme.buildDarkTheme(
-                    seedColor: settings.accentColor,
-                    hasCustomBackground: hasCustomBg,
-                  );
-
-            return MaterialApp(
+        return MaterialApp(
+          navigatorKey: App.navigatorKey,
+          title: 'Tachyon',
+          debugShowCheckedModeBanner: false,
+          themeMode: settings.themeMode,
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          builder: (context, child) {
+            final appContent = DesktopShortcutsHandler(
               navigatorKey: App.navigatorKey,
-              title: 'Tachyon',
-              debugShowCheckedModeBanner: false,
-              themeMode: settings.themeMode,
-              theme: lightTheme,
-              darkTheme: darkTheme,
-              builder: (context, child) {
-                return TickerMode(
-                  enabled: isActive,
-                  child: DesktopShortcutsHandler(
-                    navigatorKey: App.navigatorKey,
-                    child: Column(
+              child: Column(
+                children: [
+                  if (showDesktopBar) const DesktopWindowBar(),
+                  Expanded(
+                    child: Stack(
+                      fit: StackFit.expand,
                       children: [
-                        if (showDesktopBar) const DesktopWindowBar(),
-                        Expanded(
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              if (hasCustomBg && isActive)
-                                AppBackground(
-                                  imagePath: settings.customBackgroundPath,
-                                  blurSigma: settings.backgroundBlurSigma,
-                                  dimOpacity: settings.backgroundDimOpacity,
-                                ),
-                              child ?? const SizedBox.shrink(),
-                            ],
+                        if (hasCustomBg)
+                          AppBackground(
+                            imagePath: settings.customBackgroundPath,
+                            blurSigma: settings.backgroundBlurSigma,
+                            dimOpacity: settings.backgroundDimOpacity,
                           ),
-                        ),
+                        child ?? const SizedBox.shrink(),
                       ],
                     ),
                   ),
-                );
-              },
-              home: PermissionsGate(
-                initiallyGranted: _permissionsGranted,
-                onGranted: () {
-                  _log.d('PermissionsGate granted callback (mounted=$mounted)');
-                  if (mounted) {
-                    setState(() => _permissionsGranted = true);
-                  } else {
-                    _permissionsGranted = true;
-                  }
-                },
-                child: const TachyonShell(),
+                ],
               ),
             );
+
+            return ValueListenableBuilder<AppLifecycleMode>(
+              valueListenable: modeListenable,
+              child: appContent,
+              builder: (context, mode, staticChild) {
+                final isActive = mode == AppLifecycleMode.active;
+                if (_lastLoggedTickerActive != isActive) {
+                  _log.d(
+                    'TickerMode updated: enabled=$isActive (mode=${mode.name})',
+                  );
+                  _lastLoggedTickerActive = isActive;
+                }
+                return TickerMode(
+                  enabled: isActive,
+                  child: staticChild!,
+                );
+              },
+            );
           },
+          home: PermissionsGate(
+            initiallyGranted: _permissionsGranted,
+            onGranted: () {
+              _log.d('PermissionsGate granted callback (mounted=$mounted)');
+              if (mounted) {
+                setState(() => _permissionsGranted = true);
+              } else {
+                _permissionsGranted = true;
+              }
+            },
+            child: const TachyonShell(),
+          ),
         );
       },
     );

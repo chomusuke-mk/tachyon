@@ -27,6 +27,7 @@ import 'package:tachyon/features/search/presentation/controllers/tachyon_search_
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:tachyon/features/shell/presentation/screens/tachyon_shell.dart';
+import 'package:tachyon/shared/widgets/app_background.dart';
 
 class _TestLocaleRepo extends LocaleRepository {
   @override
@@ -106,64 +107,85 @@ void main() {
       playbackController.dispose();
     });
 
-    test('transitions Active -> Suspended on desktop minimize & focus loss with debounce cancellation', () async {
-      final bridge = WindowControlBridge(
-        attachChannelHandler: false,
-        isDesktopOverride: true,
-      );
-      final lifecycle = AppLifecycleController(
-        windowBridge: bridge,
-        playbackController: playbackController,
-        focusLossDebounce: const Duration(milliseconds: 60),
-        startTrimmerOnActive: false,
-        observeFlutterLifecycle: false,
-      );
-      addTearDown(() {
-        lifecycle.dispose();
-        bridge.dispose();
-      });
+    test(
+      'keeps Active on unfocused visible desktop window and transitions Active <-> Suspended on minimize/restore or OS hide',
+      () {
+        final bridge = WindowControlBridge(
+          attachChannelHandler: false,
+          isDesktopOverride: true,
+        );
+        final lifecycle = AppLifecycleController(
+          windowBridge: bridge,
+          playbackController: playbackController,
+          startTrimmerOnActive: false,
+          observeFlutterLifecycle: false,
+        );
+        addTearDown(() {
+          lifecycle.dispose();
+          bridge.dispose();
+        });
 
-      expect(lifecycle.mode, equals(AppLifecycleMode.active));
-      expect(lifecycle.isActive, isTrue);
-      expect(lifecycle.isUiThrottled, isFalse);
+        expect(lifecycle.mode, equals(AppLifecycleMode.active));
+        expect(lifecycle.isActive, isTrue);
+        expect(lifecycle.isUiThrottled, isFalse);
 
-      // Transient focus loss that recovers before debounce expires stays Active.
-      bridge.simulateWindowStateForTest(
-        const DesktopWindowState(isFocused: false, isMinimized: false),
-      );
-      expect(lifecycle.mode, equals(AppLifecycleMode.active));
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      bridge.simulateWindowStateForTest(
-        const DesktopWindowState(isFocused: true, isMinimized: false),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 70));
-      expect(lifecycle.mode, equals(AppLifecycleMode.active));
+        // Clicking outside / losing focus while still visible must keep Active mode.
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(isFocused: false, isMinimized: false),
+        );
+        expect(lifecycle.mode, equals(AppLifecycleMode.active));
+        expect(lifecycle.isActive, isTrue);
+        expect(lifecycle.isUiThrottled, isFalse);
+        expect(playbackController.lifecycleMode, equals(AppLifecycleMode.active));
 
-      // Sustained focus loss enters Suspended after debounce.
-      bridge.simulateWindowStateForTest(
-        const DesktopWindowState(isFocused: false, isMinimized: false),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 90));
-      expect(lifecycle.mode, equals(AppLifecycleMode.suspended));
-      expect(lifecycle.isSuspended, isTrue);
-      expect(lifecycle.isUiThrottled, isTrue);
-      expect(
-        playbackController.lifecycleMode,
-        equals(AppLifecycleMode.suspended),
-      );
+        // Desktop minimize enters Suspended immediately.
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(isFocused: false, isMinimized: true),
+        );
+        expect(lifecycle.mode, equals(AppLifecycleMode.suspended));
+        expect(lifecycle.isSuspended, isTrue);
+        expect(lifecycle.isUiThrottled, isTrue);
+        expect(
+          playbackController.lifecycleMode,
+          equals(AppLifecycleMode.suspended),
+        );
 
-      // Refocusing returns immediately to Active.
-      bridge.simulateWindowStateForTest(
-        const DesktopWindowState(isFocused: true, isMinimized: false),
-      );
-      expect(lifecycle.mode, equals(AppLifecycleMode.active));
+        // Unminimizing (even before focus returns) restores Active mode.
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(isFocused: false, isMinimized: false),
+        );
+        expect(lifecycle.mode, equals(AppLifecycleMode.active));
+        expect(playbackController.lifecycleMode, equals(AppLifecycleMode.active));
 
-      // Desktop minimize enters Suspended without waiting for debounce.
-      bridge.simulateWindowStateForTest(
-        const DesktopWindowState(isFocused: false, isMinimized: true),
-      );
-      expect(lifecycle.mode, equals(AppLifecycleMode.suspended));
-    });
+        // Minimizing again and restoring with focus also restores Active mode.
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(isFocused: false, isMinimized: true),
+        );
+        expect(lifecycle.mode, equals(AppLifecycleMode.suspended));
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(isFocused: true, isMinimized: false),
+        );
+        expect(lifecycle.mode, equals(AppLifecycleMode.active));
+
+        // OS hide enters Suspended, stays Suspended on stray unfocused state, and resumes on focus/resumed.
+        lifecycle.didChangeAppLifecycleState(AppLifecycleState.hidden);
+        expect(lifecycle.mode, equals(AppLifecycleMode.suspended));
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(isFocused: false, isMinimized: false),
+        );
+        expect(lifecycle.mode, equals(AppLifecycleMode.suspended));
+
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(isFocused: true, isMinimized: false),
+        );
+        expect(lifecycle.mode, equals(AppLifecycleMode.active));
+
+        lifecycle.didChangeAppLifecycleState(AppLifecycleState.paused);
+        expect(lifecycle.mode, equals(AppLifecycleMode.suspended));
+        lifecycle.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        expect(lifecycle.mode, equals(AppLifecycleMode.active));
+      },
+    );
 
     test('PlaybackController suppresses scoped UI notifiers in suspended mode and flushes dirty domains on active', () {
       int trackNotifications = 0;
@@ -498,6 +520,178 @@ void main() {
         expect(lifecycle.mode, equals(AppLifecycleMode.active));
         expect(find.byType(TachyonShell), findsOneWidget);
         expect(find.byType(PermissionsGate), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'App keeps AppBackground mounted and avoids rebuilding MaterialApp/TachyonShell on focus loss and suspended transitions',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        const pngBytes = <int>[
+          0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+          0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+          0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+          0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+          0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
+          0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+          0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+          0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+          0x42, 0x60, 0x82,
+        ];
+        final bgFile = File('${tempDir.path}/custom_bg.png')
+          ..writeAsBytesSync(pngBytes);
+        await settingsRepo.setCustomBackgroundPath(bgFile.path);
+        await settings.init();
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<LibraryStore>.value(value: store),
+              Provider<MetadataService>.value(value: metadataService),
+              Provider<SettingsRepository>.value(value: settingsRepo),
+              Provider<LocaleRepository>.value(value: localeRepo),
+              Provider<WindowControlBridge>.value(value: bridge),
+              ChangeNotifierProvider<AppLifecycleController>.value(
+                value: lifecycle,
+              ),
+              ChangeNotifierProvider<SettingsController>.value(value: settings),
+              ChangeNotifierProvider<LocaleController>.value(value: locale),
+              ChangeNotifierProvider<LibraryController>.value(value: library),
+              ChangeNotifierProvider<PlaylistsController>.value(
+                value: playlists,
+              ),
+              ChangeNotifierProvider<TachyonSearchController>.value(
+                value: search,
+              ),
+              ChangeNotifierProvider<PlaybackController>.value(value: playback),
+            ],
+            child: const App(permissionsGranted: true),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        expect(find.byType(MaterialApp), findsOneWidget);
+        expect(find.byType(TachyonShell), findsOneWidget);
+        expect(find.byType(AppBackground), findsOneWidget);
+
+        final initialMaterialAppElement = tester.element(
+          find.byType(MaterialApp),
+        );
+        final initialShellState = tester.state(find.byType(TachyonShell));
+        final initialBgState = tester.state(find.byType(AppBackground));
+
+        // Unfocused visible window stays Active cleanly.
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(
+            hasNativeHeaderBar: false,
+            hasSystemDecorations: true,
+            isFocused: false,
+            isMinimized: false,
+          ),
+        );
+        await tester.pump();
+        expect(lifecycle.mode, equals(AppLifecycleMode.active));
+        expect(
+          TickerMode.valuesOf(tester.element(find.byType(TachyonShell))).enabled,
+          isTrue,
+        );
+        expect(
+          identical(
+            tester.element(find.byType(MaterialApp)),
+            initialMaterialAppElement,
+          ),
+          isTrue,
+        );
+        expect(
+          identical(tester.state(find.byType(TachyonShell)), initialShellState),
+          isTrue,
+        );
+        expect(
+          identical(tester.state(find.byType(AppBackground)), initialBgState),
+          isTrue,
+        );
+
+        // Minimizing enters Suspended: disables TickerMode WITHOUT unmounting AppBackground or recreating MaterialApp.
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(
+            hasNativeHeaderBar: false,
+            hasSystemDecorations: true,
+            isFocused: false,
+            isMinimized: true,
+          ),
+        );
+        await tester.pump();
+        expect(lifecycle.mode, equals(AppLifecycleMode.suspended));
+        expect(find.byType(AppBackground), findsOneWidget);
+        expect(find.byType(TachyonShell), findsOneWidget);
+        expect(
+          TickerMode.valuesOf(tester.element(find.byType(TachyonShell))).enabled,
+          isFalse,
+        );
+        expect(
+          identical(
+            tester.element(find.byType(MaterialApp)),
+            initialMaterialAppElement,
+          ),
+          isTrue,
+        );
+        expect(
+          identical(tester.state(find.byType(TachyonShell)), initialShellState),
+          isTrue,
+        );
+        expect(
+          identical(tester.state(find.byType(AppBackground)), initialBgState),
+          isTrue,
+        );
+
+        // Unminimizing returns to Active with the exact same widget instances preserved.
+        bridge.simulateWindowStateForTest(
+          const DesktopWindowState(
+            hasNativeHeaderBar: false,
+            hasSystemDecorations: true,
+            isFocused: false,
+            isMinimized: false,
+          ),
+        );
+        await tester.pump();
+        expect(lifecycle.mode, equals(AppLifecycleMode.active));
+        expect(
+          TickerMode.valuesOf(tester.element(find.byType(TachyonShell))).enabled,
+          isTrue,
+        );
+        expect(
+          identical(
+            tester.element(find.byType(MaterialApp)),
+            initialMaterialAppElement,
+          ),
+          isTrue,
+        );
+        expect(
+          identical(tester.state(find.byType(AppBackground)), initialBgState),
+          isTrue,
+        );
+
+        // Entering Background unmounts MaterialApp, TachyonShell, and AppBackground.
+        await lifecycle.enterBackground();
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 2));
+        expect(lifecycle.mode, equals(AppLifecycleMode.background));
+        expect(find.byType(MaterialApp), findsNothing);
+        expect(find.byType(TachyonShell), findsNothing);
+        expect(find.byType(AppBackground), findsNothing);
+
+        // Restoring from Background remounts TachyonShell and AppBackground cleanly.
+        await lifecycle.restoreFromBackground();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(lifecycle.mode, equals(AppLifecycleMode.active));
+        expect(find.byType(MaterialApp), findsOneWidget);
+        expect(find.byType(TachyonShell), findsOneWidget);
+        expect(find.byType(AppBackground), findsOneWidget);
       },
     );
   });

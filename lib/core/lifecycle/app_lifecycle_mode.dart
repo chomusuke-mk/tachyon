@@ -5,12 +5,12 @@ enum AppLifecycleMode {
   /// Foreground mode with full UI rendering, animations, and caches enabled.
   active,
 
-  /// Suspended mode entered when minimized, unfocused on desktop, or switched
-  /// away from on mobile.
+  /// Suspended mode entered when minimized on desktop, or hidden/paused by the
+  /// host operating system (for example switched away from on mobile).
   ///
-  /// The widget tree stays mounted so navigation routes and scroll offsets are
-  /// preserved, while UI updates and animations pause, image caches are
-  /// cleared, and a moderate RAM trim runs.
+  /// The widget tree and visible window remain mounted so navigation routes and
+  /// scroll offsets are preserved, while UI animations/tickers pause, cached
+  /// off-screen images are discarded, and a moderate RAM trim runs.
   suspended,
 
   /// Background mode entered when sent to the desktop system tray or detached
