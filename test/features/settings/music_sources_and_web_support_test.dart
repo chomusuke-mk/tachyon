@@ -9,10 +9,12 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
+import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/library/presentation/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
@@ -20,6 +22,7 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/settings_controller.dart';
 import 'package:tachyon/features/settings/presentation/settings_screen.dart';
+import 'package:tachyon/shared/utils/cors_image_utils.dart';
 
 /// Generates a valid 16-bit mono 8000 Hz PCM WAV buffer in memory.
 Uint8List _createValidWavBytes({int durationMs = 150}) {
@@ -526,6 +529,187 @@ void main() {
           launchJson,
           contains('--web-header=Cross-Origin-Embedder-Policy=require-corp'),
         );
+      },
+    );
+
+    test(
+      'CorsImageUtils.resolveWebCorsImageUrl adapts third-party radio favicons for CORS/CORP on Web while preserving CORS-native origins',
+      () {
+        final proxiedHttps = CorsImageUtils.resolveWebCorsImageUrl(
+          'https://zip.wf/chfm.jpg',
+          width: 120,
+          height: 120,
+          forceProxyForTests: true,
+        );
+        expect(
+          proxiedHttps,
+          'https://wsrv.nl/?url=https%3A%2F%2Fzip.wf%2Fchfm.jpg&w=120&h=120&fit=cover',
+        );
+
+        final proxiedHttp = CorsImageUtils.resolveWebCorsImageUrl(
+          'http://radio.example.org/logo.png',
+          width: 96,
+          height: 96,
+          forceProxyForTests: true,
+        );
+        expect(
+          proxiedHttp,
+          'https://wsrv.nl/?url=http%3A%2F%2Fradio.example.org%2Flogo.png&w=96&h=96&fit=cover',
+        );
+
+        // Native CORS+CORP hosts and data/blob URIs are left untouched
+        expect(
+          CorsImageUtils.resolveWebCorsImageUrl(
+            'https://raw.githubusercontent.com/chomusuke-mk/miniaudio_player_assets/main/cover.jpg',
+            width: 120,
+            height: 120,
+            forceProxyForTests: true,
+          ),
+          'https://raw.githubusercontent.com/chomusuke-mk/miniaudio_player_assets/main/cover.jpg',
+        );
+        expect(
+          CorsImageUtils.resolveWebCorsImageUrl(
+            'data:image/jpeg;base64,/9j/4AAQ',
+            forceProxyForTests: true,
+          ),
+          'data:image/jpeg;base64,/9j/4AAQ',
+        );
+      },
+    );
+
+    test(
+      'LibraryController does not trigger global UI rebuilds when LibraryStore only updates History or Liked playlists during playback',
+      () async {
+        await db.upsertTracks([
+          const ExtractedTrackData(
+            filePath: '/music/song_a.mp3',
+            title: 'Song A',
+            durationMs: 180000,
+            fileSize: 1024,
+            modifiedAt: 100,
+          ),
+        ]);
+        await store.reloadFromDatabase();
+        expect(libraryController.tracks.length, 1);
+        final trackId = libraryController.tracks.first.id!;
+
+        int libraryRebuildCount = 0;
+        libraryController.addListener(() {
+          libraryRebuildCount++;
+        });
+
+        // Simulate 15-second playback history logging and liking a song
+        await store.addTracksToPlaylistInStore(
+          LibraryStore.historyPlaylistId,
+          [trackId],
+        );
+        await store.toggleLikeInStore(trackId);
+
+        // LibraryController must NOT emit redundant global rebuilds when catalog tracks/albums/artists did not change
+        expect(libraryRebuildCount, 0);
+      },
+    );
+
+    test(
+      'Track.toAudioSource passes OPFS paths directly without loading bytes into RAM and lib/ has zero OPFS RAM byte caches',
+      () {
+        const canonicalTrack = Track(
+          filePath: '/audio/sample.wav',
+          title: 'Sample',
+          durationMs: 1000,
+          fileSize: 512,
+          modifiedAt: 1,
+        );
+        final canonicalSource = canonicalTrack.toAudioSource();
+        expect(canonicalSource.isMemory, isFalse);
+        expect(canonicalSource.bytes, isNull);
+        expect(canonicalSource.uri, '/audio/sample.wav');
+
+        expect(
+          MetadataUtils.fallbackTitleFromPathOrUrl(
+            '/audio/Mi%20Canci%C3%B3n.flac',
+          ),
+          'Mi Canción',
+        );
+        expect(
+          MetadataUtils.fallbackTitleFromPathOrUrl('audio/track.mp3'),
+          'track',
+        );
+
+        const forbiddenPatterns = <String>[
+          '_coverBytesCache',
+          '_audioBytesCache',
+          '_backgroundBytesCache',
+          'getAudioBytesSync',
+          'readAudioBytesAsync',
+        ];
+        final libDir = io.Directory('lib');
+        for (final entity in libDir.listSync(recursive: true)) {
+          if (entity is io.File && entity.path.endsWith('.dart')) {
+            final content = entity.readAsStringSync();
+            for (final pattern in forbiddenPatterns) {
+              expect(
+                content.contains(pattern),
+                isFalse,
+                reason: '${entity.path} must not retain OPFS byte cache symbol $pattern',
+              );
+            }
+          }
+        }
+      },
+    );
+
+    test(
+      'Persisted remote tracks do not trigger re-analysis on subsequent scans even without waveform, and OPFS savePickedAudioFile reads real OPFS stat',
+      () async {
+        const remoteHls = 'https://cdn.example.com/live/28_track.m3u8';
+        const remoteFlac = 'https://cdn.example.com/audio/track_01.flac';
+
+        // Seed persisted remote tracks (one with no waveform, one with short waveform)
+        await db.upsertTracks([
+          const ExtractedTrackData(
+            filePath: remoteHls,
+            title: '28_track',
+            durationMs: 0,
+            fileSize: 0,
+            modifiedAt: 1,
+            waveformData: null,
+          ),
+          const ExtractedTrackData(
+            filePath: remoteFlac,
+            title: 'Track 01',
+            durationMs: 120000,
+            fileSize: 4096,
+            modifiedAt: 1,
+            waveformData: 'AAAA',
+          ),
+        ]);
+        await store.reloadFromDatabase();
+
+        final events = await metadataService
+            .scanDirectories(
+              const [],
+              files: const [remoteHls, remoteFlac],
+            )
+            .toList();
+
+        final completed = events.last;
+        expect(completed.stage, ScanStage.completed);
+        expect(completed.catalogModified, isFalse);
+        expect(completed.progressLabel, '0/0');
+
+        // Verify OPFS savePickedAudioFile reads real OPFS stat rather than DateTime.now()
+        final webStorageSrc = io.File(
+          'lib/core/storage/persistent_binary_storage_web.dart',
+        ).readAsStringSync();
+        final savePickedIdx = webStorageSrc.indexOf('savePickedAudioFile(');
+        expect(savePickedIdx, greaterThan(-1));
+        final savePickedSlice = webStorageSrc.substring(
+          savePickedIdx,
+          savePickedIdx + 500,
+        );
+        expect(savePickedSlice.contains('DateTime.now()'), isFalse);
+        expect(savePickedSlice.contains('_statOpfsFile('), isTrue);
       },
     );
   });

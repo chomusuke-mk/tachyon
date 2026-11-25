@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:tachyon/shared/utils/memory_optimizer.dart';
-import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 /// Coordinates app-wide memory, graphics cache eviction, and GC trimming.
 ///
@@ -18,7 +18,6 @@ class AppMemoryCoordinator {
       MemoryOptimizer.stopPeriodicTrimmer();
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
-      AlbumArtImage.clearExistenceCache();
       try {
         SystemChannels.skia.invokeMethod<void>(
           'Skia.setResourceCacheMaxBytes',
@@ -40,7 +39,7 @@ class AppMemoryCoordinator {
       try {
         SystemChannels.skia.invokeMethod<void>(
           'Skia.setResourceCacheMaxBytes',
-          4 * 1024 * 1024,
+          (kIsWeb ? 64 : 24) * 1024 * 1024,
         );
       } catch (_) {}
       MemoryOptimizer.trim(aggressive: false);

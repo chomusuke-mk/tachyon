@@ -227,7 +227,7 @@ class RadioBrowserService {
         );
 
         final response = await _client
-            .get(uri, headers: _headers)
+            .get(uri, headers: kIsWeb ? null : _headers)
             .timeout(const Duration(seconds: 8));
 
         if (response.statusCode >= 200 && response.statusCode < 300) {

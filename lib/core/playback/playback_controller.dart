@@ -247,6 +247,11 @@ class PlaybackController extends ChangeNotifier {
           _wasPlayingBeforeStop = false;
         }
         final oldState = _state;
+        if (oldState.isPlaying == engState.isPlaying &&
+            oldState.isBuffering == engState.isBuffering &&
+            oldState.isCompleted == isCompleted) {
+          return;
+        }
         _state = _state.copyWith(
           isPlaying: engState.isPlaying,
           isBuffering: engState.isBuffering,
@@ -260,20 +265,25 @@ class PlaybackController extends ChangeNotifier {
         if (playing) {
           _wasPlayingBeforeStop = true;
         }
+        final nextCompleted =
+            !playing &&
+            player.state.playbackState.isStopped &&
+            player.state.queue.isNotEmpty &&
+            _wasPlayingBeforeStop;
         final oldState = _state;
+        if (oldState.isPlaying == playing &&
+            oldState.isCompleted == nextCompleted) {
+          return;
+        }
         _state = _state.copyWith(
           isPlaying: playing,
-          isCompleted:
-              !playing &&
-              player.state.playbackState.isStopped &&
-              player.state.queue.isNotEmpty &&
-              _wasPlayingBeforeStop,
+          isCompleted: nextCompleted,
         );
         _checkStatePersistence(oldState, _state);
         _emitScoped([_transportNotifier]);
       }),
       player.stream.isBuffering.listen((buffering) {
-        if (_isDisposed) return;
+        if (_isDisposed || _state.isBuffering == buffering) return;
         _state = _state.copyWith(isBuffering: buffering);
         _emitScoped([_transportNotifier]);
       }),
@@ -283,12 +293,20 @@ class PlaybackController extends ChangeNotifier {
       }),
       player.stream.currentIndex.listen((idx) {
         if (_isDisposed) return;
-        _state = _state.copyWith(currentIndex: idx ?? 0);
+        final nextIdx = idx ?? 0;
+        if (_state.currentIndex == nextIdx &&
+            player.state.currentItem?.data?.filePath ==
+                _lastActivePlayableKey) {
+          return;
+        }
+        _state = _state.copyWith(currentIndex: nextIdx);
         _onTrackContextUpdated(player, player.state.currentItem?.data);
       }),
       player.stream.duration.listen((dur) {
         if (_isDisposed) return;
-        _state = _state.copyWith(duration: dur ?? Duration.zero);
+        final nextDur = dur ?? Duration.zero;
+        final durChanged = _state.duration != nextDur;
+        _state = _state.copyWith(duration: nextDur);
         final cur = currentPlayable;
         if (_isLibraryScanActive &&
             dur != null &&
@@ -301,7 +319,9 @@ class PlaybackController extends ChangeNotifier {
             duration: dur,
           );
         }
-        _emitScoped([_trackNotifier]);
+        if (durChanged) {
+          _emitScoped([_trackNotifier]);
+        }
       }),
       player.stream.queue.listen((q) {
         if (_isDisposed) return;
@@ -312,17 +332,17 @@ class PlaybackController extends ChangeNotifier {
         _emitScoped([_queueNotifier, _transportNotifier]);
       }),
       player.stream.isShuffled.listen((shuffled) {
-        if (_isDisposed) return;
+        if (_isDisposed || _state.isShuffled == shuffled) return;
         _state = _state.copyWith(isShuffled: shuffled);
         _emitScoped([_controlsNotifier]);
       }),
       player.stream.loopMode.listen((loop) {
-        if (_isDisposed) return;
+        if (_isDisposed || _state.loopMode == loop) return;
         _state = _state.copyWith(loopMode: loop);
         _emitScoped([_controlsNotifier, _transportNotifier]);
       }),
       player.stream.infiniteMixEnabled.listen((enabled) {
-        if (_isDisposed) return;
+        if (_isDisposed || _isInfiniteMixEnabled == enabled) return;
         _isInfiniteMixEnabled = enabled;
         _state = _state.copyWith(isInfiniteMixEnabled: enabled);
         _emitScoped([_controlsNotifier, _queueNotifier]);

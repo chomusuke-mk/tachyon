@@ -71,7 +71,7 @@ class ScanProgress {
     );
   }
 
-  /// Serializes this instance to a plain [Map] that can cross Isolate boundaries.
+  /// Serializes this instance to a plain [Map].
   Map<String, dynamic> toJson() => {
     'stage': stage.name,
     'progressLabel': progressLabel,
@@ -80,7 +80,7 @@ class ScanProgress {
     'catalogModified': catalogModified,
   };
 
-  /// Deserializes a [Map] received from a secondary Isolate back into a [ScanProgress].
+  /// Deserializes a plain [Map] back into a [ScanProgress].
   factory ScanProgress.fromJson(Map<String, dynamic> json) {
     final stageName = json['stage'] as String? ?? 'idle';
     final stage = ScanStage.values.firstWhere(

@@ -19,17 +19,6 @@ import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
 import 'mini_player_bar.dart';
 import 'scan_progress_overlay.dart';
 
-enum ShellDestination {
-  tracks,
-  albums,
-  artists,
-  playlists,
-  genres,
-  folders,
-  radios,
-  settings,
-}
-
 class _DestinationSpec {
   final int index;
   final IconData icon;
@@ -459,9 +448,11 @@ class _TachyonShellState extends State<TachyonShell> {
         body: Row(
           children: [
             // Left NavigationRail
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 80),
-              child: _buildDesktopRail(context, specs, strings),
+            RepaintBoundary(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 80),
+                child: _buildDesktopRail(context, specs, strings),
+              ),
             ),
             const VerticalDivider(width: 1, thickness: 1),
             // Main Content Area & Docked Desktop Mini Player
@@ -471,11 +462,11 @@ class _TachyonShellState extends State<TachyonShell> {
                   Expanded(
                     child: Stack(
                       children: [
-                        _screens[_currentIndex],
+                        RepaintBoundary(child: _screens[_currentIndex]),
                         const Positioned(
                           right: 16,
                           bottom: 16,
-                          child: ScanProgressOverlay(),
+                          child: RepaintBoundary(child: ScanProgressOverlay()),
                         ),
                       ],
                     ),
@@ -502,11 +493,11 @@ class _TachyonShellState extends State<TachyonShell> {
           Expanded(
             child: Stack(
               children: [
-                _screens[_currentIndex],
+                RepaintBoundary(child: _screens[_currentIndex]),
                 const Positioned(
                   right: 16,
                   bottom: 16,
-                  child: ScanProgressOverlay(),
+                  child: RepaintBoundary(child: ScanProgressOverlay()),
                 ),
               ],
             ),
@@ -519,7 +510,9 @@ class _TachyonShellState extends State<TachyonShell> {
           ),
         ],
       ),
-      bottomNavigationBar: _buildMobileBottomBar(context, specs),
+      bottomNavigationBar: RepaintBoundary(
+        child: _buildMobileBottomBar(context, specs),
+      ),
     );
   }
 }

@@ -39,11 +39,6 @@ class SettingsScreen extends StatelessWidget {
       }
       return MetadataUtils.safeDecodePercent(clean);
     }
-    if (clean.startsWith('opfs://audio/')) {
-      return MetadataUtils.safeDecodePercent(
-        clean.substring('opfs://audio/'.length),
-      );
-    }
     final base = p.basename(MetadataUtils.safeDecodePercent(clean));
     return base.isNotEmpty ? base : clean;
   }

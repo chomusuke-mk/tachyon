@@ -1,18 +1,6 @@
 import 'dart:async';
 import 'package:tachyon/shared/utils/cancellation_token.dart';
 
-/// Exception thrown when a throttled or in-flight lyrics request is cancelled
-/// before execution or while waiting in the pacing queue.
-class LyricsCancelledException implements Exception {
-  final String message;
-  const LyricsCancelledException([
-    this.message = 'Lyrics request was cancelled',
-  ]);
-
-  @override
-  String toString() => 'LyricsCancelledException: $message';
-}
-
 /// Monotonic generation tracker managing track transition tokens.
 ///
 /// Ensures rapid track changes (e.g. 1 -> 2 -> 3 -> 4 -> 5) immediately

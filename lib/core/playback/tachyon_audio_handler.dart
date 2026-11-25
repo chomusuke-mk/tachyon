@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
-import 'package:path/path.dart' as p;
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
@@ -88,11 +87,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
       return Uri.tryParse(clean);
     }
     if (kIsWeb) {
-      final hash = p.basename(clean);
-      final bytes = PersistentBinaryStorage.getCoverBytesSync(hash);
-      if (bytes != null && bytes.isNotEmpty) {
-        return Uri.dataFromBytes(bytes, mimeType: 'image/jpeg');
-      }
+      // OPFS cover bytes are read asynchronously on demand rather than cached in RAM.
       return null;
     }
     return Uri.file(clean);
@@ -117,16 +112,31 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
           artworkUri.isNotEmpty ? artworkUri : null,
         );
 
-        mediaItem.add(
-          as_lib.MediaItem(
-            id: playable.filePath,
-            title: effectiveTitle,
-            artist: artistNames.isNotEmpty ? artistNames : null,
-            album: albumName.isNotEmpty ? albumName : null,
-            duration: playable.isStream ? null : playable.duration,
-            artUri: uri,
-          ),
+        final item = as_lib.MediaItem(
+          id: playable.filePath,
+          title: effectiveTitle,
+          artist: artistNames.isNotEmpty ? artistNames : null,
+          album: albumName.isNotEmpty ? albumName : null,
+          duration: playable.isStream ? null : playable.duration,
+          artUri: uri,
         );
+        mediaItem.add(item);
+
+        if (kIsWeb && uri == null && artworkUri.isNotEmpty) {
+          final capturedSignature = signature;
+          unawaited(
+            PersistentBinaryStorage.resolveCoverDataUriAsync(artworkUri)
+                .then((dataUri) {
+                  if (_isDisposed ||
+                      dataUri == null ||
+                      _lastEmittedMediaSignature != capturedSignature) {
+                    return;
+                  }
+                  mediaItem.add(item.copyWith(artUri: dataUri));
+                })
+                .catchError((Object _) {}),
+          );
+        }
       }
     } else if (_lastEmittedMediaSignature != null) {
       _lastEmittedMediaSignature = null;

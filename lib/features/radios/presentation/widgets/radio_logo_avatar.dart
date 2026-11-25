@@ -1,8 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
+// ignore: depend_on_referenced_packages
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/shared/utils/cors_image_utils.dart';
 
 /// Reusable widget that renders a station's remote favicon/logo with animated
 /// playback overlay and graceful fallback to theme-colored vector icons.
@@ -49,15 +54,21 @@ class RadioLogoAvatar extends StatelessWidget {
 
     final Widget content;
     if (hasFavicon) {
+      final resolvedImageUrl = CorsImageUtils.resolveWebCorsImageUrl(
+        faviconUrl!,
+        width: cacheDimension,
+        height: cacheDimension,
+      );
       content = Stack(
         fit: StackFit.expand,
         children: [
           CachedNetworkImage(
-            imageUrl: faviconUrl!,
+            imageUrl: resolvedImageUrl,
             width: size,
             height: size,
             memCacheWidth: cacheDimension,
-            maxWidthDiskCache: cacheDimension * 2,
+            maxWidthDiskCache: kIsWeb ? null : cacheDimension * 2,
+            imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
             filterQuality: FilterQuality.medium,
             fit: BoxFit.cover,
             placeholder: (context, url) => fallbackIcon(),
@@ -80,18 +91,20 @@ class RadioLogoAvatar extends StatelessWidget {
       content = fallbackIcon();
     }
 
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: isCurrent
-            ? colorScheme.primaryContainer
-            : colorScheme.surfaceContainerHighest,
-        borderRadius: effectiveRadius,
-      ),
-      child: ClipRRect(
-        borderRadius: effectiveRadius,
-        child: content,
+    return RepaintBoundary(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: isCurrent
+              ? colorScheme.primaryContainer
+              : colorScheme.surfaceContainerHighest,
+          borderRadius: effectiveRadius,
+        ),
+        child: ClipRRect(
+          borderRadius: effectiveRadius,
+          child: content,
+        ),
       ),
     );
   }

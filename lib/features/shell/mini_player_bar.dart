@@ -78,45 +78,52 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
     bool isLiveStream,
     Duration trackDuration,
   ) {
+    final tabularStyle = style?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     if (isLiveStream) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: const BoxDecoration(
-              color: Colors.redAccent,
-              shape: BoxShape.circle,
+      return RepaintBoundary(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                color: Colors.redAccent,
+                shape: BoxShape.circle,
+              ),
             ),
-          ),
-          const SizedBox(width: 5),
-          ValueListenableBuilder<int>(
-            valueListenable: playback.positionSecondsListenable,
-            builder: (context, sec, _) {
-              return Text(
-                'LIVE ${Duration(seconds: sec).toFormattedString(padMinutes: true)}',
-                style: style?.copyWith(
-                  color: Colors.redAccent,
-                  fontWeight: FontWeight.bold,
-                ),
-              );
-            },
-          ),
-        ],
+            const SizedBox(width: 5),
+            ValueListenableBuilder<int>(
+              valueListenable: playback.positionSecondsListenable,
+              builder: (context, sec, _) {
+                return Text(
+                  'LIVE ${Duration(seconds: sec).toFormattedString(padMinutes: true)}',
+                  style: tabularStyle?.copyWith(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       );
     }
-    return ValueListenableBuilder<int>(
-      valueListenable: playback.positionSecondsListenable,
-      builder: (context, sec, _) {
-        final dur = playback.duration > Duration.zero
-            ? playback.duration
-            : trackDuration;
-        return Text(
-          '${Duration(seconds: sec).toFormattedString(padMinutes: true)} / ${dur.toFormattedString(padMinutes: true)}',
-          style: style,
-        );
-      },
+    return RepaintBoundary(
+      child: ValueListenableBuilder<int>(
+        valueListenable: playback.positionSecondsListenable,
+        builder: (context, sec, _) {
+          final dur = playback.duration > Duration.zero
+              ? playback.duration
+              : trackDuration;
+          return Text(
+            '${Duration(seconds: sec).toFormattedString(padMinutes: true)} / ${dur.toFormattedString(padMinutes: true)}',
+            style: tabularStyle,
+          );
+        },
+      ),
     );
   }
 
@@ -565,29 +572,67 @@ class _MiniProgressPainter extends CustomPainter {
     final totalMs = durationProvider().inMilliseconds;
     if (totalMs <= 0) return;
 
-    final buf = bufferListenable.value;
-    if (buf.end > Duration.zero) {
-      final bufStartX = ((buf.start.inMilliseconds / totalMs).clamp(0.0, 1.0)) *
-          size.width;
-      final bufEndX = ((buf.end.inMilliseconds / totalMs).clamp(0.0, 1.0)) *
-          size.width;
-      if (bufEndX > bufStartX) {
-        _paint.color = bufferedColor;
-        canvas.drawRect(
-          Rect.fromLTRB(bufStartX, 0, bufEndX, size.height),
-          _paint,
-        );
-      }
-    }
-
     final prog = (positionListenable.value.inMilliseconds / totalMs).clamp(
       0.0,
       1.0,
     );
-    if (prog > 0) {
+    final playheadX = size.width * prog;
+
+    final buf = bufferListenable.value;
+    final double clampedStart;
+    final double clampedBuffer;
+    if (buf.end > Duration.zero) {
+      clampedStart = (buf.start.inMilliseconds / totalMs).clamp(0.0, 1.0);
+      clampedBuffer = (buf.end.inMilliseconds / totalMs).clamp(
+        clampedStart,
+        1.0,
+      );
+    } else {
+      clampedStart = 0.0;
+      clampedBuffer = 0.0;
+    }
+
+    final startX = size.width * clampedStart;
+    final endX = size.width * clampedBuffer;
+
+    // 1. Preload buffer ahead of playhead ([aheadStartX .. endX])
+    final aheadStartX = startX.clamp(playheadX, size.width);
+    if (endX > aheadStartX) {
+      _paint.color = bufferedColor;
+      canvas.drawRect(
+        Rect.fromLTRB(aheadStartX, 0, endX, size.height),
+        _paint,
+      );
+    }
+
+    // 2. Evicted played history behind buffer start ([0 .. min(playheadX, startX)])
+    final evictedEndX = playheadX.clamp(0.0, startX);
+    if (evictedEndX > 0.0) {
+      _paint.color = activeColor.withValues(alpha: 0.35);
+      canvas.drawRect(
+        Rect.fromLTRB(0, 0, evictedEndX, size.height),
+        _paint,
+      );
+    }
+
+    // 3. Buffered played section behind playhead ([startX .. min(playheadX, endX)])
+    final backBufStartX = startX.clamp(0.0, playheadX);
+    final backBufEndX = endX.clamp(backBufStartX, playheadX);
+    if (backBufEndX > backBufStartX) {
       _paint.color = activeColor;
       canvas.drawRect(
-        Rect.fromLTWH(0, 0, size.width * prog, size.height),
+        Rect.fromLTRB(backBufStartX, 0, backBufEndX, size.height),
+        _paint,
+      );
+    }
+
+    // 4. Played region beyond buffered end
+    if (playheadX > endX) {
+      _paint.color = endX > 0.0
+          ? activeColor.withValues(alpha: 0.35)
+          : activeColor;
+      canvas.drawRect(
+        Rect.fromLTRB(endX, 0, playheadX, size.height),
         _paint,
       );
     }

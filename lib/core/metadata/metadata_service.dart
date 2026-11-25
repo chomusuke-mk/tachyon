@@ -334,7 +334,6 @@ class MetadataService {
             try {
               track = await MetadataUtils.extractTrackMetadata(
                 filePath: item.path,
-                useSync: false,
                 knownFileSize: item.size,
                 knownModifiedAt: item.modifiedAt,
                 knownSavedHashes: savedCoverHashes,

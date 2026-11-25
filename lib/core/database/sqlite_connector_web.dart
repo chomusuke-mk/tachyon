@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:sqlite3/wasm.dart';
 
 WasmSqlite3? _wasmSqlite;
+IndexedDbFileSystem? _indexedDbFs;
 bool _vfsRegistered = false;
 
 Future<WasmSqlite3> _ensureWasmSqlite() async {
@@ -11,6 +12,7 @@ Future<WasmSqlite3> _ensureWasmSqlite() async {
     try {
       final fs = await IndexedDbFileSystem.open(dbName: 'tachyon_music_db');
       sqlite.registerVirtualFileSystem(fs, makeDefault: true);
+      _indexedDbFs = fs;
     } catch (e) {
       debugPrint(
         '[SqliteConnectorWeb] IndexedDbFileSystem fallback to InMemoryFileSystem: $e',
@@ -21,6 +23,10 @@ Future<WasmSqlite3> _ensureWasmSqlite() async {
   }
   _wasmSqlite = sqlite;
   return sqlite;
+}
+
+Future<void> flushPersistentDatabase() async {
+  await _indexedDbFs?.flush();
 }
 
 CommonDatabase openInMemoryDatabase() {

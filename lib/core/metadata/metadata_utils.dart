@@ -164,7 +164,6 @@ abstract final class MetadataUtils {
   /// Returns the content hash of the persisted cover art image.
   static Future<String?> saveCoverBytes(
     Uint8List rawBytes, {
-    bool useSync = false,
     Set<String>? knownSavedHashes,
   }) async {
     _ensureInitialized();
@@ -186,7 +185,6 @@ abstract final class MetadataUtils {
   /// `MiniaudioPlayer.analyzeAudio` (runs on native Rust threads or Web Worker).
   static Future<ExtractedTrackData?> extractTrackMetadata({
     required String filePath,
-    bool useSync = false,
     int? knownFileSize,
     int? knownModifiedAt,
     Set<String>? knownSavedHashes,
@@ -195,7 +193,6 @@ abstract final class MetadataUtils {
 
     final isRemoteUrl =
         filePath.startsWith('http://') || filePath.startsWith('https://');
-    final isOpfsAudio = filePath.startsWith('opfs://');
 
     int size = knownFileSize ?? 0;
     int modifiedAt = knownModifiedAt ?? 0;
@@ -208,13 +205,6 @@ abstract final class MetadataUtils {
         return null;
       }
       analysisSource = parsedUri;
-    } else if (isOpfsAudio) {
-      final bytes = await PersistentBinaryStorage.readAudioBytesAsync(filePath);
-      if (bytes == null || bytes.isEmpty) return null;
-      final stat = await PersistentBinaryStorage.statFile(filePath);
-      size = knownFileSize ?? stat?.size ?? bytes.length;
-      modifiedAt = knownModifiedAt ?? stat?.modifiedAt ?? 1;
-      analysisSource = bytes;
     } else {
       if (knownFileSize == null || knownModifiedAt == null) {
         final stat = await PersistentBinaryStorage.statFile(filePath);
@@ -225,20 +215,18 @@ abstract final class MetadataUtils {
       analysisSource = filePath;
     }
 
-    // Single-pass asynchronous extraction:
-    // - For local/OPFS files: extracts metadata, audio info, ReplayGain, and waveform.
-    // - For remote HTTP/HTTPS URLs: extracts header/tag metadata, embedded ReplayGain tags,
-    //   audio info, and embedded cover art via HTTP Range requests without downloading full PCM.
+    // Single-pass asynchronous extraction across all sources (local, OPFS, and remote URLs):
+    // extracts metadata, audio info, ReplayGain, and 150-point waveform.
     // Chromaprint is explicitly disabled everywhere.
     AudioAnalysisResult? analysis;
     try {
       analysis = await MiniaudioPlayer.analyzeAudio(
         analysisSource,
         metadata: true,
-        replayGain: !isRemoteUrl,
-        waveform: !isRemoteUrl,
+        replayGain: true,
+        waveform: true,
         chromaprint: false,
-        waveformPoints: 100,
+        waveformPoints: 150,
       );
     } catch (e) {
       if (!isRemoteUrl &&
@@ -347,10 +335,11 @@ abstract final class MetadataUtils {
     });
   }
 
-  /// Resolves a human-readable fallback title from a local path, OPFS URI, or HTTP URL.
+  /// Resolves a human-readable fallback title from a local path, OPFS path, or HTTP URL.
   static String fallbackTitleFromPathOrUrl(String pathOrUrl) {
-    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-      final uri = Uri.tryParse(pathOrUrl);
+    final trimmed = pathOrUrl.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      final uri = Uri.tryParse(trimmed);
       if (uri != null && uri.pathSegments.isNotEmpty) {
         final lastSeg = safeDecodePercent(uri.pathSegments.last).trim();
         if (lastSeg.isNotEmpty) {
@@ -358,16 +347,9 @@ abstract final class MetadataUtils {
           return withoutExt.isNotEmpty ? withoutExt : lastSeg;
         }
       }
-      return safeDecodePercent(pathOrUrl);
+      return safeDecodePercent(trimmed);
     }
-    if (pathOrUrl.startsWith('opfs://audio/')) {
-      final rawName = safeDecodePercent(
-        pathOrUrl.substring('opfs://audio/'.length),
-      );
-      final withoutExt = p.basenameWithoutExtension(rawName);
-      return withoutExt.isNotEmpty ? withoutExt : rawName;
-    }
-    final decoded = safeDecodePercent(pathOrUrl);
+    final decoded = safeDecodePercent(trimmed);
     final base = p.basenameWithoutExtension(decoded);
     return base.isNotEmpty ? base : p.basename(decoded);
   }

@@ -2,7 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:sqlite3/common.dart';
 import 'package:tachyon/core/database/sqlite_connector.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
@@ -107,18 +107,27 @@ class AppDatabase {
     return completer.future;
   }
 
-  Future<T> _runTask<T>(T Function(Database db) action) => _enqueue<T>(() async {
+  Future<T> _runTask<T>(
+    T Function(Database db) action, {
+    bool flush = false,
+  }) => _enqueue<T>(() async {
         final mem = _inMemoryDb;
         if (mem != null) return action(mem);
         final persistent = await _ensurePersistentDb();
-        return action(persistent);
+        final result = action(persistent);
+        if (flush) {
+          await flushPersistentDatabase();
+        }
+        return result;
       });
 
   static void _configurePragmas(Database db) {
     db.execute('PRAGMA foreign_keys = ON;');
-    try {
-      db.execute('PRAGMA journal_mode = WAL;');
-    } catch (_) {}
+    if (!kIsWeb) {
+      try {
+        db.execute('PRAGMA journal_mode = WAL;');
+      } catch (_) {}
+    }
     db.execute('PRAGMA synchronous = NORMAL;');
     db.execute('PRAGMA cache_size = -500;');
     db.execute('PRAGMA mmap_size = 0;');
@@ -128,18 +137,6 @@ class AppDatabase {
     for (final sql in AppDatabaseSchema.createTables) {
       db.execute(sql);
     }
-    try {
-      db.execute('ALTER TABLE radio_stations ADD COLUMN station_uuid TEXT;');
-    } catch (_) {}
-    try {
-      db.execute('ALTER TABLE tracks ADD COLUMN artwork_uri TEXT;');
-    } catch (_) {}
-    try {
-      db.execute('ALTER TABLE albums ADD COLUMN artwork_uri TEXT;');
-    } catch (_) {}
-    try {
-      db.execute('ALTER TABLE artists ADD COLUMN artwork_uri TEXT;');
-    } catch (_) {}
     for (final sql in AppDatabaseSchema.indexes) {
       db.execute(sql);
     }
@@ -161,7 +158,7 @@ class AppDatabase {
       _persistentDb = null;
       _dbPath = dbPathOverride;
     }
-    await _runTask(_executeSchema);
+    await _runTask(_executeSchema, flush: true);
   }
 
   Future<void> close() {
@@ -254,20 +251,8 @@ class AppDatabase {
     }
   }
 
-  /// Atomically applies track upserts and stale track deletions.
-  Future<void> applyScanMutations({
-    List<ExtractedTrackData> toUpsert = const [],
-    List<int> trackIdsToDelete = const [],
-  }) {
-    if (toUpsert.isEmpty && trackIdsToDelete.isEmpty) return Future.value();
-    return _runTask((db) {
-      if (toUpsert.isNotEmpty) _upsertTracksSync(db, toUpsert);
-      if (trackIdsToDelete.isNotEmpty) _deleteTracksAndPurgeOrphansSync(db, trackIdsToDelete);
-    });
-  }
-
   Future<void> upsertTracks(List<ExtractedTrackData> tracks) =>
-      tracks.isEmpty ? Future.value() : _runTask((db) => _upsertTracksSync(db, tracks));
+      tracks.isEmpty ? Future.value() : _runTask((db) => _upsertTracksSync(db, tracks), flush: true);
 
   static void _upsertTracksSync(Database db, List<ExtractedTrackData> tracks) {
     if (tracks.isEmpty) return;
@@ -419,7 +404,7 @@ class AppDatabase {
   }
 
   Future<void> deleteTracksAndPurgeOrphans(List<int> trackIds) =>
-      _runTask((db) => _deleteTracksAndPurgeOrphansSync(db, trackIds));
+      _runTask((db) => _deleteTracksAndPurgeOrphansSync(db, trackIds), flush: true);
 
   static void _deleteTracksAndPurgeOrphansSync(Database db, List<int> trackIds) {
     db.execute('BEGIN TRANSACTION;');
@@ -443,7 +428,7 @@ class AppDatabase {
     }
   }
 
-  Future<void> clearAllData() => _runTask(_clearAllDataSync);
+  Future<void> clearAllData() => _runTask(_clearAllDataSync, flush: true);
 
   static void _clearAllDataSync(Database db) {
     db.execute('BEGIN TRANSACTION;');
@@ -473,7 +458,7 @@ class AppDatabase {
           debugPrint('[AppDatabase] Ignored error in createPlaylist: $e');
           return -1;
         }
-      });
+      }, flush: true);
 
   Future<void> deletePlaylist(int playlistId) => _runTask((db) {
         try {
@@ -481,7 +466,7 @@ class AppDatabase {
         } catch (e) {
           debugPrint('[AppDatabase] Ignored error in deletePlaylist: $e');
         }
-      });
+      }, flush: true);
 
   Future<void> renamePlaylist(int playlistId, String name) => _runTask((db) {
         try {
@@ -489,10 +474,10 @@ class AppDatabase {
         } catch (e) {
           debugPrint('[AppDatabase] Ignored error in renamePlaylist: $e');
         }
-      });
+      }, flush: true);
 
   Future<void> addTrackToPlaylist(int playlistId, int trackId) =>
-      _runTask((db) => _addTrackToPlaylistSync(db, playlistId, trackId));
+      _runTask((db) => _addTrackToPlaylistSync(db, playlistId, trackId), flush: true);
 
   static void _addTrackToPlaylistSync(Database db, int playlistId, int trackId) {
     try {
@@ -510,7 +495,7 @@ class AppDatabase {
   }
 
   Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) =>
-      trackIds.isEmpty ? Future.value() : _runTask((db) => _addTracksToPlaylistSync(db, playlistId, trackIds));
+      trackIds.isEmpty ? Future.value() : _runTask((db) => _addTracksToPlaylistSync(db, playlistId, trackIds), flush: true);
 
   static void _addTracksToPlaylistSync(Database db, int playlistId, List<int> trackIds) {
     try {
@@ -530,7 +515,7 @@ class AppDatabase {
   }
 
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) =>
-      _runTask((db) => _removeTrackFromPlaylistSync(db, playlistId, trackId));
+      _runTask((db) => _removeTrackFromPlaylistSync(db, playlistId, trackId), flush: true);
 
   static void _removeTrackFromPlaylistSync(Database db, int playlistId, int trackId) {
     try {
@@ -557,7 +542,7 @@ class AppDatabase {
   }
 
   Future<void> reorderPlaylistEntries(int playlistId, int fromIndex, int toIndex) =>
-      _runTask((db) => _reorderPlaylistEntriesSync(db, playlistId, fromIndex, toIndex));
+      _runTask((db) => _reorderPlaylistEntriesSync(db, playlistId, fromIndex, toIndex), flush: true);
 
   static void _reorderPlaylistEntriesSync(Database db, int playlistId, int fromIndex, int toIndex) {
     try {
@@ -599,7 +584,7 @@ class AppDatabase {
         } catch (e) {
           debugPrint('[AppDatabase] Ignored error in toggleLikeTrack: $e');
         }
-      });
+      }, flush: true);
 
   Future<void> clearHistory() => _runTask((db) {
         try {
@@ -607,7 +592,7 @@ class AppDatabase {
         } catch (e) {
           debugPrint('[AppDatabase] Ignored error in clearHistory: $e');
         }
-      });
+      }, flush: true);
 
   Future<List<Map<String, dynamic>>> getLyricsForTrack(int trackId) => _runTask((db) {
         final rows = db.select('SELECT id, track_id, source, state, raw_lrc, is_synced, lang, updated_at FROM lyrics WHERE track_id = ?;', [trackId]);
@@ -634,9 +619,12 @@ class AppDatabase {
         final lyricsId = res.first['id'] as int;
         db.execute('DELETE FROM lyrics_translations WHERE lyrics_id = ?;', [lyricsId]);
         return lyricsId;
-      });
+      }, flush: true);
 
-  Future<void> deleteLyrics(int lyricsId) => _runTask((db) => db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]));
+  Future<void> deleteLyrics(int lyricsId) => _runTask(
+        (db) => db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]),
+        flush: true,
+      );
 
   Future<List<String>?> getLyricsTranslation({required int lyricsId, required String lang}) => _runTask((db) {
         final rows = db.select('SELECT translated_lines FROM lyrics_translations WHERE lyrics_id = ? AND lang = ? LIMIT 1;', [lyricsId, lang]);
@@ -659,7 +647,7 @@ class AppDatabase {
           'ON CONFLICT(lyrics_id, lang) DO UPDATE SET translated_lines = excluded.translated_lines, updated_at = excluded.updated_at;',
           [lyricsId, lang, jsonEncode(translatedLines), DateTime.now().millisecondsSinceEpoch],
         );
-      });
+      }, flush: true);
 
   Future<List<RadioStation>> getRadioStations() => _runTask((db) {
         final rows = db.select(
@@ -728,13 +716,13 @@ class AppDatabase {
         );
         final id = res.first['id'] as int;
         return station.copyWith(id: id);
-      });
+      }, flush: true);
 
   Future<void> deleteRadioStation(int id) => _runTask((db) {
         db.execute('DELETE FROM radio_stations WHERE id = ?;', [id]);
-      });
+      }, flush: true);
 
   Future<void> setRadioStationFavorite(int id, bool isFavorite) => _runTask((db) {
         db.execute('UPDATE radio_stations SET is_favorite = ? WHERE id = ?;', [isFavorite ? 1 : 0, id]);
-      });
+      }, flush: true);
 }

@@ -23,9 +23,6 @@ class FoldersScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrack = context.select<PlaybackController, Track?>(
-      (c) => c.currentTrack,
-    );
     final playback = context.read<PlaybackController>();
     final musicDirs = context.select<SettingsController, List<String>>(
       (s) => s.musicDirectories,
@@ -72,11 +69,11 @@ class FoldersScreen extends StatelessWidget {
               library,
               settings,
               playback,
-              currentTrack,
+              null,
               musicDirs,
               musicFiles,
             )
-          : _buildFolderView(context, strings, library, playback, currentTrack),
+          : _buildFolderView(context, strings, library, playback, null),
     );
   }
 

@@ -17,9 +17,6 @@ abstract final class PersistentBinaryStorage {
   static io.Directory? thumbnailsDirectory;
 
   static final Set<String> _knownCoverHashes = <String>{};
-  static final Map<String, Uint8List> _audioBytesCache = <String, Uint8List>{};
-  static final Map<String, Uint8List> _backgroundBytesCache =
-      <String, Uint8List>{};
 
   static int get processorCount => math.max(1, io.Platform.numberOfProcessors);
 
@@ -28,6 +25,9 @@ abstract final class PersistentBinaryStorage {
   static bool get isAndroid => io.Platform.isAndroid;
   static bool get isIOS => io.Platform.isIOS;
   static bool get isMacOS => io.Platform.isMacOS;
+
+  /// Always `false` on native platforms (`dart:io` resolves local paths directly).
+  static bool isManagedWebAudioPath(String pathOrUrl) => false;
 
   static void init(String thumbnailsPath, String tempPath) {
     tempDirectory = io.Directory(tempPath);
@@ -99,24 +99,6 @@ abstract final class PersistentBinaryStorage {
     return false;
   }
 
-  static Uint8List? getCachedCoverBytesSync(String hashOrUri) => null;
-
-  static Future<Uint8List?> readCoverBytesAsync(
-    String hashOrUri,
-    String resolvedArtworkPath,
-  ) async {
-    ensureInitialized();
-    final f = io.File(hashOrUri);
-    if (await f.exists()) {
-      return f.readAsBytes();
-    }
-    final fallback = io.File(resolvedArtworkPath);
-    if (await fallback.exists()) {
-      return fallback.readAsBytes();
-    }
-    return null;
-  }
-
   static Future<void> saveCoverBytes(
     String hash,
     String targetFilePath,
@@ -156,7 +138,7 @@ abstract final class PersistentBinaryStorage {
     }
   }
 
-  static Uint8List? getCoverBytesSync(String hashOrPath) => null;
+  static Future<Uri?> resolveCoverDataUriAsync(String artworkUri) async => null;
 
   static List<io.File> listCachedCoverFiles() {
     ensureInitialized();
@@ -187,7 +169,7 @@ abstract final class PersistentBinaryStorage {
   }
 
   // ---------------------------------------------------------------------------
-  // Picked Web/Local Audio & Background Files
+  // Picked Audio & Background Files
   // ---------------------------------------------------------------------------
 
   static Future<String?> savePickedAudioFile(
@@ -195,81 +177,36 @@ abstract final class PersistentBinaryStorage {
     Uint8List bytes,
   ) async {
     final safeName = fileName.replaceAll(RegExp(r'[^\w.\-]'), '_');
-    if (tempDirectory != null) {
-      final audioDir = io.Directory(p.join(tempDirectory!.parent.path, 'audio'));
-      if (!await audioDir.exists()) {
-        await audioDir.create(recursive: true);
-      }
-      final target = io.File(p.join(audioDir.path, safeName));
-      await target.writeAsBytes(bytes, flush: false);
-      return target.path;
+    final baseDir = tempDirectory?.parent ?? io.Directory.systemTemp;
+    final audioDir = io.Directory(p.join(baseDir.path, 'audio'));
+    if (!await audioDir.exists()) {
+      await audioDir.create(recursive: true);
     }
-    final uri = 'opfs://audio/$safeName';
-    _audioBytesCache[uri] = bytes;
-    return uri;
+    final target = io.File(p.join(audioDir.path, safeName));
+    await target.writeAsBytes(bytes, flush: false);
+    return target.path;
   }
 
-  static Uint8List? getAudioBytesSync(String uriOrPath) =>
-      _audioBytesCache[uriOrPath];
-
-  static Future<Uint8List?> readAudioBytesAsync(String uriOrPath) async {
-    final cached = _audioBytesCache[uriOrPath];
-    if (cached != null) return cached;
-    if (!uriOrPath.startsWith('opfs://') &&
-        !uriOrPath.startsWith('http://') &&
-        !uriOrPath.startsWith('https://')) {
-      final f = io.File(uriOrPath);
-      if (await f.exists()) {
-        return f.readAsBytes();
-      }
-    }
-    return null;
-  }
-
-  static Future<void> removeWebAudioFile(String uriOrPath) async {
-    _audioBytesCache.remove(uriOrPath);
-  }
+  static Future<void> removeWebAudioFile(String uriOrPath) async {}
 
   static Future<String?> saveCustomBackgroundBytes(
     String fileName,
     Uint8List bytes,
   ) async {
     final safeName = fileName.replaceAll(RegExp(r'[^\w.\-]'), '_');
-    if (thumbnailsDirectory != null) {
-      final bgDir = io.Directory(
-        p.join(thumbnailsDirectory!.parent.path, 'backgrounds'),
-      );
-      if (!await bgDir.exists()) {
-        await bgDir.create(recursive: true);
-      }
-      final target = io.File(p.join(bgDir.path, safeName));
-      await target.writeAsBytes(bytes, flush: false);
-      return target.path;
+    final baseDir = thumbnailsDirectory?.parent ?? io.Directory.systemTemp;
+    final bgDir = io.Directory(p.join(baseDir.path, 'backgrounds'));
+    if (!await bgDir.exists()) {
+      await bgDir.create(recursive: true);
     }
-    final uri = 'opfs://backgrounds/$safeName';
-    _backgroundBytesCache[uri] = bytes;
-    return uri;
-  }
-
-  static Uint8List? getBackgroundBytesSync(String pathOrUri) =>
-      _backgroundBytesCache[pathOrUri];
-
-  static Future<Uint8List?> readBackgroundBytesAsync(String pathOrUri) async {
-    final cached = _backgroundBytesCache[pathOrUri];
-    if (cached != null) return cached;
-    final f = io.File(pathOrUri);
-    if (await f.exists()) {
-      return f.readAsBytes();
-    }
-    return null;
+    final target = io.File(p.join(bgDir.path, safeName));
+    await target.writeAsBytes(bytes, flush: false);
+    return target.path;
   }
 
   static Future<String?> copyCustomBackgroundFile(
     String sourceImagePath,
   ) async {
-    if (_backgroundBytesCache.containsKey(sourceImagePath)) {
-      return sourceImagePath;
-    }
     final sourceFile = io.File(sourceImagePath);
     if (!await sourceFile.exists()) return null;
 
@@ -302,10 +239,6 @@ abstract final class PersistentBinaryStorage {
 
   static bool fileExistsSync(String path) {
     if (path.isEmpty) return false;
-    if (_audioBytesCache.containsKey(path) ||
-        _backgroundBytesCache.containsKey(path)) {
-      return true;
-    }
     if (path.startsWith('http://') || path.startsWith('https://')) {
       return true;
     }
@@ -314,40 +247,13 @@ abstract final class PersistentBinaryStorage {
 
   static Future<bool> fileExists(String path) async {
     if (path.isEmpty) return false;
-    if (_audioBytesCache.containsKey(path) ||
-        _backgroundBytesCache.containsKey(path)) {
-      return true;
-    }
     if (path.startsWith('http://') || path.startsWith('https://')) {
       return true;
     }
     return io.File(path).exists();
   }
 
-  static ({int size, int modifiedAt})? statFileSync(String path) {
-    final memBytes = _audioBytesCache[path];
-    if (memBytes != null) {
-      return (size: memBytes.length, modifiedAt: 1);
-    }
-    try {
-      final f = io.File(path);
-      if (!f.existsSync()) return null;
-      final stat = f.statSync();
-      if (stat.size <= 0) return null;
-      return (
-        size: stat.size,
-        modifiedAt: stat.modified.millisecondsSinceEpoch,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
   static Future<({int size, int modifiedAt})?> statFile(String path) async {
-    final memBytes = _audioBytesCache[path];
-    if (memBytes != null) {
-      return (size: memBytes.length, modifiedAt: 1);
-    }
     try {
       final f = io.File(path);
       if (!await f.exists()) return null;
@@ -442,8 +348,7 @@ abstract final class PersistentBinaryStorage {
 
   static Future<String?> readLocalLrcFile(String audioFilePath) async {
     if (audioFilePath.startsWith('http://') ||
-        audioFilePath.startsWith('https://') ||
-        audioFilePath.startsWith('opfs://')) {
+        audioFilePath.startsWith('https://')) {
       return null;
     }
     try {
@@ -474,10 +379,6 @@ abstract final class PersistentBinaryStorage {
     final cleanPath = pathOrUri.startsWith('file://')
         ? pathOrUri.replaceFirst('file://', '')
         : pathOrUri;
-    final memBg = _backgroundBytesCache[cleanPath];
-    if (memBg != null && memBg.isNotEmpty) {
-      return ResizeImage.resizeIfNeeded(maxWidth, maxHeight, MemoryImage(memBg));
-    }
     io.File file = io.File(cleanPath);
     if (!await file.exists() && thumbnailsDirectory != null) {
       file = io.File(p.join(thumbnailsDirectory!.path, p.basename(cleanPath)));
@@ -498,21 +399,6 @@ abstract final class PersistentBinaryStorage {
     final cleanPath = pathOrUri.startsWith('file://')
         ? pathOrUri.replaceFirst('file://', '')
         : pathOrUri;
-    final memBg = _backgroundBytesCache[cleanPath];
-    if (memBg != null && memBg.isNotEmpty) {
-      return Image.memory(
-        memBg,
-        width: width,
-        height: height,
-        cacheWidth: cacheWidth,
-        cacheHeight: cacheHeight,
-        fit: fit,
-        filterQuality: FilterQuality.medium,
-        gaplessPlayback: true,
-        errorBuilder: (_, _, _) => fallback,
-      );
-    }
-
     io.File file = io.File(cleanPath);
     if (!file.existsSync() && thumbnailsDirectory != null) {
       file = io.File(p.join(thumbnailsDirectory!.path, p.basename(cleanPath)));

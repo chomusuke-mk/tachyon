@@ -2,12 +2,17 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
+// ignore: depend_on_referenced_packages
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/domain/audio_playable.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
+import 'package:tachyon/shared/utils/cors_image_utils.dart';
 
 /// Unified artwork presentation widget that transparently resolves and renders
 /// artwork from a single local image file, remote image URL, or an [AudioPlayable].
@@ -27,8 +32,6 @@ class AlbumArtImage extends StatelessWidget {
   final BoxFit fit;
   final BorderRadius? borderRadius;
   final Widget? fallback;
-
-  static void clearExistenceCache() {}
 
   const AlbumArtImage({
     super.key,
@@ -141,15 +144,26 @@ class AlbumArtImage extends StatelessWidget {
         errorBuilder: (context, error, stackTrace) => effectiveFallback,
       );
     } else if (isRemote) {
+      final resolvedUrl = CorsImageUtils.resolveWebCorsImageUrl(
+        uri,
+        width: targetCacheWidth,
+        height: targetCacheHeight,
+      );
       content = CachedNetworkImage(
-        imageUrl: uri,
+        imageUrl: resolvedUrl,
         width: width,
         height: height,
         memCacheWidth: targetCacheWidth,
         memCacheHeight: targetCacheHeight,
-        maxWidthDiskCache: targetCacheWidth != null
-            ? math.max(targetCacheWidth, AppDefaults.mediumQualityResolution)
-            : null,
+        maxWidthDiskCache: kIsWeb
+            ? null
+            : (targetCacheWidth != null
+                  ? math.max(
+                      targetCacheWidth,
+                      AppDefaults.mediumQualityResolution,
+                    )
+                  : null),
+        imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
         fit: fit,
         filterQuality: FilterQuality.medium,
         placeholder: (context, url) => effectiveFallback,
@@ -169,9 +183,9 @@ class AlbumArtImage extends StatelessWidget {
       content = effectiveFallback;
     }
 
-    if (borderRadius != null) {
-      return ClipRRect(borderRadius: borderRadius!, child: content);
-    }
-    return content;
+    final Widget clipped = borderRadius != null
+        ? ClipRRect(borderRadius: borderRadius!, child: content)
+        : content;
+    return RepaintBoundary(child: clipped);
   }
 }

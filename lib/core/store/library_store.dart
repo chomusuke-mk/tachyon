@@ -183,6 +183,7 @@ class LibraryStore extends ChangeNotifier {
   void updateEphemeralTrack(Track updated) {
     if (updated.id != null && updated.id! < 0) {
       _ephemeralTracksById[updated.id!] = updated;
+      _tracksView = null;
       notifyListeners();
     }
   }
@@ -1202,7 +1203,7 @@ class LibraryStore extends ChangeNotifier {
       _radioStations.add(saved);
     }
     _sortRadioStations();
-    _invalidateViews();
+    _radioStationsView = null;
     notifyListeners();
     return saved;
   }
@@ -1212,7 +1213,7 @@ class LibraryStore extends ChangeNotifier {
     if (db == null) return;
     await db.deleteRadioStation(id);
     _radioStations.removeWhere((s) => s.id == id);
-    _invalidateViews();
+    _radioStationsView = null;
     notifyListeners();
   }
 
@@ -1226,7 +1227,7 @@ class LibraryStore extends ChangeNotifier {
     await db.setRadioStationFavorite(id, newFav);
     _radioStations[idx] = current.copyWith(isFavorite: newFav);
     _sortRadioStations();
-    _invalidateViews();
+    _radioStationsView = null;
     notifyListeners();
   }
 

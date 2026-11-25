@@ -81,9 +81,6 @@ class _RadiosScreenState extends State<RadiosScreen>
     final theme = Theme.of(context);
     final strings = context.watch<LocaleController>().localeStrings;
     final store = context.watch<LibraryStore>();
-    context.select<PlaybackController, (String?, bool)>(
-      (c) => (c.currentPlayable?.filePath, c.isPlaying),
-    );
     final playback = context.read<PlaybackController>();
     final radioCtrl = context.watch<RadioController>();
 
@@ -455,9 +452,6 @@ class _RadiosScreenState extends State<RadiosScreen>
       itemCount: stations.length,
       itemBuilder: (context, index) {
         final station = stations[index];
-        final isCurrent =
-            playback.currentPlayable?.filePath == station.streamUrl;
-        final isPlaying = isCurrent && playback.isPlaying;
         final isSaved = radioCtrl.isStationSaved(station);
 
         final subtitleParts = <String>[];
@@ -474,131 +468,150 @@ class _RadiosScreenState extends State<RadiosScreen>
             ? subtitleParts.join(' • ')
             : 'Online Radio';
 
-        return ListTile(
-          leading: RadioLogoAvatar(
-            faviconUrl: station.faviconUrl,
-            size: 46.0,
-            isCurrent: isCurrent,
-            isPlaying: isPlaying,
-          ),
-          title: Text(
-            station.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
-              color: isCurrent ? colorScheme.primary : colorScheme.onSurface,
-            ),
-          ),
-          subtitle: Text(
-            subtitleText,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isSavedTab) ...[
-                IconButton(
-                  icon: Icon(
-                    station.isFavorite
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    color: station.isFavorite
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant,
-                  ),
-                  tooltip: station.isFavorite ? 'Favorite' : 'Add to favorites',
-                  onPressed: station.id != null
-                      ? () => store.toggleRadioStationFavoriteInStore(station.id!)
-                      : null,
+        return RepaintBoundary(
+          child: Builder(
+            builder: (context) {
+              final (isCurrent, isPlaying) = context
+                  .select<PlaybackController, (bool, bool)>((c) {
+                    final cur =
+                        c.currentPlayable?.filePath == station.streamUrl;
+                    return (cur, cur && c.isPlaying);
+                  });
+
+              return ListTile(
+                leading: RadioLogoAvatar(
+                  faviconUrl: station.faviconUrl,
+                  size: 46.0,
+                  isCurrent: isCurrent,
+                  isPlaying: isPlaying,
                 ),
-                PopupMenuButton<String>(
-                  icon: Icon(
-                    Icons.more_vert_rounded,
+                title: Text(
+                  station.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
+                    color: isCurrent
+                        ? colorScheme.primary
+                        : colorScheme.onSurface,
+                  ),
+                ),
+                subtitle: Text(
+                  subtitleText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
-                  onSelected: (action) {
-                    if (action == 'edit') {
-                      _showAddEditStationDialog(
-                        context,
-                        station,
-                        strings,
-                        store,
-                      );
-                    } else if (action == 'delete' && station.id != null) {
-                      _confirmDelete(context, station, strings, store);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.edit_outlined, size: 20),
-                          const SizedBox(width: 12),
-                          Text(strings.rdEditStation),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.delete_outline_rounded,
-                            size: 20,
-                            color: colorScheme.error,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            strings.rdDeleteStation,
-                            style: TextStyle(color: colorScheme.error),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ),
-              ] else ...[
-                IconButton(
-                  icon: Icon(
-                    isSaved
-                        ? Icons.bookmark_added_rounded
-                        : Icons.bookmark_add_outlined,
-                    color: isSaved
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant,
-                  ),
-                  tooltip: isSaved
-                      ? strings.rdAlreadyInLibrary
-                      : strings.rdSaveToLibrary,
-                  onPressed: isSaved
-                      ? null
-                      : () async {
-                          await radioCtrl.saveToLibrary(station);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  '${station.name}: ${strings.rdSavedToLibrary}',
-                                ),
-                                duration: const Duration(seconds: 2),
-                              ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isSavedTab) ...[
+                      IconButton(
+                        icon: Icon(
+                          station.isFavorite
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          color: station.isFavorite
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                        tooltip: station.isFavorite
+                            ? 'Favorite'
+                            : 'Add to favorites',
+                        onPressed: station.id != null
+                            ? () => store.toggleRadioStationFavoriteInStore(
+                                station.id!,
+                              )
+                            : null,
+                      ),
+                      PopupMenuButton<String>(
+                        icon: Icon(
+                          Icons.more_vert_rounded,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        onSelected: (action) {
+                          if (action == 'edit') {
+                            _showAddEditStationDialog(
+                              context,
+                              station,
+                              strings,
+                              store,
                             );
+                          } else if (action == 'delete' && station.id != null) {
+                            _confirmDelete(context, station, strings, store);
                           }
                         },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.edit_outlined, size: 20),
+                                const SizedBox(width: 12),
+                                Text(strings.rdEditStation),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 20,
+                                  color: colorScheme.error,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  strings.rdDeleteStation,
+                                  style: TextStyle(color: colorScheme.error),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      IconButton(
+                        icon: Icon(
+                          isSaved
+                              ? Icons.bookmark_added_rounded
+                              : Icons.bookmark_add_outlined,
+                          color: isSaved
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                        tooltip: isSaved
+                            ? strings.rdAlreadyInLibrary
+                            : strings.rdSaveToLibrary,
+                        onPressed: isSaved
+                            ? null
+                            : () async {
+                                await radioCtrl.saveToLibrary(station);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        '${station.name}: ${strings.rdSavedToLibrary}',
+                                      ),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              },
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ],
+                onTap: () {
+                  // Treat stations like tracks in a queue: loads all stations starting at index
+                  playback.playTrack(station, contextTracks: stations);
+                },
+              );
+            },
           ),
-          onTap: () {
-            // Treat stations like tracks in a queue: loads all stations starting at index
-            playback.playTrack(station, contextTracks: stations);
-          },
         );
       },
     );
@@ -626,132 +639,151 @@ class _RadiosScreenState extends State<RadiosScreen>
       itemCount: stations.length,
       itemBuilder: (context, index) {
         final station = stations[index];
-        final isCurrent =
-            playback.currentPlayable?.filePath == station.streamUrl;
-        final isPlaying = isCurrent && playback.isPlaying;
         final isSaved = radioCtrl.isStationSaved(station);
 
-        return Card(
-          elevation: isCurrent ? 3 : 0,
-          color: isCurrent
-              ? colorScheme.primaryContainer.withValues(alpha: 0.35)
-              : colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12.0),
-            side: isCurrent
-                ? BorderSide(color: colorScheme.primary, width: 1.5)
-                : BorderSide.none,
-          ),
-          child: InkWell(
-            onTap: () {
-              playback.playTrack(station, contextTracks: stations);
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Station Cover / Logo
-                  Expanded(
-                    child: Center(
-                      child: AspectRatio(
-                        aspectRatio: 1.0,
-                        child: RadioLogoAvatar(
-                          faviconUrl: station.faviconUrl,
-                          size: 130.0,
-                          isCurrent: isCurrent,
-                          isPlaying: isPlaying,
-                          borderRadius: BorderRadius.circular(10.0),
-                        ),
+        return RepaintBoundary(
+          child: Builder(
+            builder: (context) {
+              final (isCurrent, isPlaying) = context
+                  .select<PlaybackController, (bool, bool)>((c) {
+                    final cur =
+                        c.currentPlayable?.filePath == station.streamUrl;
+                    return (cur, cur && c.isPlaying);
+                  });
+
+              return Card(
+                elevation: isCurrent ? 3 : 0,
+                color: isCurrent
+                    ? colorScheme.primaryContainer.withValues(alpha: 0.35)
+                    : colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.4,
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                  side: isCurrent
+                      ? BorderSide(color: colorScheme.primary, width: 1.5)
+                      : BorderSide.none,
+                ),
+                child: InkWell(
+                  onTap: () {
+                    playback.playTrack(station, contextTracks: stations);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(10.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Station Cover / Logo
+                        Expanded(
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: 1.0,
+                              child: RadioLogoAvatar(
+                                faviconUrl: station.faviconUrl,
+                                size: 130.0,
+                                isCurrent: isCurrent,
+                                isPlaying: isPlaying,
+                                borderRadius: BorderRadius.circular(10.0),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
 
-                  // Station Title
-                  Text(
-                    station.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
-                      fontSize: 13.5,
-                      color: isCurrent
-                          ? colorScheme.primary
-                          : colorScheme.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-
-                  // Metadata subtitle & action row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          station.genre?.isNotEmpty == true
-                              ? station.genre!
-                              : (station.country?.isNotEmpty == true
-                                  ? station.country!
-                                  : 'Radio'),
+                        // Station Title
+                        Text(
+                          station.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontSize: 11,
+                          style: TextStyle(
+                            fontWeight: isCurrent
+                                ? FontWeight.bold
+                                : FontWeight.w600,
+                            fontSize: 13.5,
+                            color: isCurrent
+                                ? colorScheme.primary
+                                : colorScheme.onSurface,
                           ),
                         ),
-                      ),
-                      if (isSavedTab) ...[
-                        InkResponse(
-                          onTap: station.id != null
-                              ? () => store.toggleRadioStationFavoriteInStore(
-                                    station.id!,
-                                  )
-                              : null,
-                          child: Icon(
-                            station.isFavorite
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                            size: 18,
-                            color: station.isFavorite
-                                ? colorScheme.primary
-                                : colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ] else ...[
-                        InkResponse(
-                          onTap: isSaved
-                              ? null
-                              : () async {
-                                  await radioCtrl.saveToLibrary(station);
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          '${station.name}: ${strings.rdSavedToLibrary}',
-                                        ),
-                                        duration: const Duration(seconds: 2),
-                                      ),
-                                    );
-                                  }
-                                },
-                          child: Icon(
-                            isSaved
-                                ? Icons.bookmark_added_rounded
-                                : Icons.bookmark_add_outlined,
-                            size: 18,
-                            color: isSaved
-                                ? colorScheme.primary
-                                : colorScheme.onSurfaceVariant,
-                          ),
+                        const SizedBox(height: 2),
+
+                        // Metadata subtitle & action row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                station.genre?.isNotEmpty == true
+                                    ? station.genre!
+                                    : (station.country?.isNotEmpty == true
+                                          ? station.country!
+                                          : 'Radio'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            if (isSavedTab) ...[
+                              InkResponse(
+                                onTap: station.id != null
+                                    ? () =>
+                                          store.toggleRadioStationFavoriteInStore(
+                                            station.id!,
+                                          )
+                                    : null,
+                                child: Icon(
+                                  station.isFavorite
+                                      ? Icons.favorite_rounded
+                                      : Icons.favorite_border_rounded,
+                                  size: 18,
+                                  color: station.isFavorite
+                                      ? colorScheme.primary
+                                      : colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ] else ...[
+                              InkResponse(
+                                onTap: isSaved
+                                    ? null
+                                    : () async {
+                                        await radioCtrl.saveToLibrary(station);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                '${station.name}: ${strings.rdSavedToLibrary}',
+                                              ),
+                                              duration: const Duration(
+                                                seconds: 2,
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                child: Icon(
+                                  isSaved
+                                      ? Icons.bookmark_added_rounded
+                                      : Icons.bookmark_add_outlined,
+                                  size: 18,
+                                  color: isSaved
+                                      ? colorScheme.primary
+                                      : colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
-                    ],
+                    ),
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         );
       },

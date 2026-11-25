@@ -61,9 +61,6 @@ class _TracksScreenState extends State<TracksScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleController>().localeStrings;
     final library = context.watch<LibraryController>();
-    final currentTrack = context.select<PlaybackController, Track?>(
-      (c) => c.currentTrack,
-    );
     final playback = context.read<PlaybackController>();
     final isDesktop = TachyonBreakpoints.isDesktop(context);
 
@@ -331,132 +328,142 @@ class _TracksScreenState extends State<TracksScreen> {
               itemCount: tracks.length,
               itemBuilder: (context, index) {
                 final track = tracks[index];
-                final isPlaying =
-                    currentTrack == track || playback.isCurrentTrack(track);
                 final isSelected =
                     track.id != null && _selectedTrackIds.contains(track.id!);
 
-                return Material(
-                  type: MaterialType.transparency,
-                  borderRadius: BorderRadius.circular(12.0),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12.0),
-                    onTap: () {
-                      if (_isSelectionMode && track.id != null) {
-                        _toggleTrackSelection(track.id!);
-                      } else {
-                        playback.playTrack(track, contextTracks: tracks);
-                      }
-                    },
-                    onLongPress: () {
-                      if (!_isSelectionMode && track.id != null) {
-                        _toggleSelectionMode();
-                        _toggleTrackSelection(track.id!);
-                      }
-                    },
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Stack(
-                            fit: StackFit.expand,
+                return RepaintBoundary(
+                  child: Builder(
+                    builder: (context) {
+                      final isPlaying = context
+                          .select<PlaybackController, bool>(
+                            (c) => c.isCurrentTrack(track),
+                          );
+                      return Material(
+                        type: MaterialType.transparency,
+                        borderRadius: BorderRadius.circular(12.0),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12.0),
+                          onTap: () {
+                            if (_isSelectionMode && track.id != null) {
+                              _toggleTrackSelection(track.id!);
+                            } else {
+                              playback.playTrack(track, contextTracks: tracks);
+                            }
+                          },
+                          onLongPress: () {
+                            if (!_isSelectionMode && track.id != null) {
+                              _toggleSelectionMode();
+                              _toggleTrackSelection(track.id!);
+                            }
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12.0),
-                                child: AspectRatio(
-                                  aspectRatio: 1.0,
-                                  child: AlbumArtImage(
-                                    artworkUri: track.artworkUri,
-                                    quality: ThumbnailQuality.medium,
-                                    fit: BoxFit.cover,
-                                  ),
+                              Expanded(
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      child: AspectRatio(
+                                        aspectRatio: 1.0,
+                                        child: AlbumArtImage(
+                                          artworkUri: track.artworkUri,
+                                          quality: ThumbnailQuality.medium,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isPlaying)
+                                      Positioned(
+                                        top: 8,
+                                        right: 8,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4.0),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primaryContainer,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.graphic_eq_rounded,
+                                            size: 16,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onPrimaryContainer,
+                                          ),
+                                        ),
+                                      ),
+                                    if (_isSelectionMode)
+                                      Positioned(
+                                        top: 8,
+                                        left: 8,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                : Theme.of(context)
+                                                      .colorScheme
+                                                      .surface
+                                                      .withValues(alpha: 0.8),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            isSelected
+                                                ? Icons.check_circle_rounded
+                                                : Icons
+                                                      .radio_button_unchecked_rounded,
+                                            size: 24,
+                                            color: isSelected
+                                                ? Theme.of(context)
+                                                      .colorScheme
+                                                      .onPrimary
+                                                : Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
-                              if (isPlaying)
-                                Positioned(
-                                  top: 8,
-                                  right: 8,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4.0),
-                                    decoration: BoxDecoration(
+                              const SizedBox(height: 8),
+                              Text(
+                                track.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: isPlaying
+                                      ? Theme.of(context).colorScheme.primary
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                track.artists.isNotEmpty
+                                    ? track.artists
+                                          .map((a) => a.name)
+                                          .join(', ')
+                                    : strings.trUnknownArtist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
                                       color: Theme.of(context)
                                           .colorScheme
-                                          .primaryContainer,
-                                      shape: BoxShape.circle,
+                                          .onSurfaceVariant,
                                     ),
-                                    child: Icon(
-                                      Icons.graphic_eq_rounded,
-                                      size: 16,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onPrimaryContainer,
-                                    ),
-                                  ),
-                                ),
-                              if (_isSelectionMode)
-                                Positioned(
-                                  top: 8,
-                                  left: 8,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                          : Theme.of(context)
-                                                .colorScheme
-                                                .surface
-                                                .withValues(alpha: 0.8),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      isSelected
-                                          ? Icons.check_circle_rounded
-                                          : Icons
-                                                .radio_button_unchecked_rounded,
-                                      size: 24,
-                                      color: isSelected
-                                          ? Theme.of(context)
-                                                .colorScheme
-                                                .onPrimary
-                                          : Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
+                              ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          track.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: isPlaying
-                                ? Theme.of(context).colorScheme.primary
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          track.artists.isNotEmpty
-                              ? track.artists.map((a) => a.name).join(', ')
-                              : strings.trUnknownArtist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 );
               },
@@ -470,15 +477,12 @@ class _TracksScreenState extends State<TracksScreen> {
               itemCount: tracks.length,
               itemBuilder: (context, index) {
                 final track = tracks[index];
-                final isPlaying =
-                    currentTrack == track || playback.isCurrentTrack(track);
                 final isSelected =
                     track.id != null && _selectedTrackIds.contains(track.id!);
 
                 return TrackTile(
                   key: ValueKey(track.filePath),
                   track: track,
-                  isPlaying: isPlaying,
                   isSelected: isSelected,
                   isSelectionMode: _isSelectionMode,
                   showLikeButton: true,

@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart'
+    show DiagnosticsProperty, SynchronousFuture, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 // ignore: depend_on_referenced_packages
@@ -20,20 +23,21 @@ class StorageFileRef {
   const StorageFileRef(this.path);
 }
 
-/// Web implementation of persistent binary storage backed by the browser's
-/// **Origin Private File System (OPFS)** (`navigator.storage.getDirectory()`)
-/// with a write-through in-memory cache for zero-latency UI rendering.
+/// Web implementation of persistent binary storage backed directly by the
+/// browser's **Origin Private File System (OPFS)** (`navigator.storage.getDirectory()`).
+///
+/// Only lightweight filename/stat indices are retained in RAM; audio files are
+/// streamed/analyzed directly by `miniaudio_player` from OPFS in O(1) RAM, and
+/// images are read and decoded asynchronously on demand into Flutter's
+/// `PaintingBinding.instance.imageCache`.
 abstract final class PersistentBinaryStorage {
   static StorageDirectory? tempDirectory;
   static StorageDirectory? thumbnailsDirectory;
 
-  static final Map<String, Uint8List> _coverBytesCache = <String, Uint8List>{};
   static final Set<String> _knownCoverHashes = <String>{};
-  static final Map<String, Uint8List> _audioBytesCache = <String, Uint8List>{};
+  static final Set<String> _knownBackgroundFiles = <String>{};
   static final Map<String, ({int size, int modifiedAt})> _audioMetaCache =
       <String, ({int size, int modifiedAt})>{};
-  static final Map<String, Uint8List> _backgroundBytesCache =
-      <String, Uint8List>{};
 
   static web.FileSystemDirectoryHandle? _coversDirHandle;
   static web.FileSystemDirectoryHandle? _audioDirHandle;
@@ -55,6 +59,21 @@ abstract final class PersistentBinaryStorage {
   static bool get isIOS => false;
   static bool get isMacOS => false;
 
+  static ({String dir, String fileName})? _parseOpfsPath(String pathOrUri) {
+    final clean = pathOrUri.trim().replaceFirst(RegExp(r'^/+'), '');
+    if (clean.isEmpty) return null;
+    final slashIdx = clean.indexOf('/');
+    if (slashIdx <= 0 || slashIdx == clean.length - 1) return null;
+    final dir = clean.substring(0, slashIdx);
+    final fileName = clean.substring(slashIdx + 1);
+    if (fileName.isEmpty) return null;
+    return (dir: dir, fileName: fileName);
+  }
+
+  /// Whether [pathOrUrl] points to a browser-picked audio file stored inside OPFS `audio/`.
+  static bool isManagedWebAudioPath(String pathOrUrl) =>
+      _parseOpfsPath(pathOrUrl)?.dir == 'audio';
+
   static void init(String thumbnailsPath, String tempPath) {
     tempDirectory = StorageDirectory(tempPath);
     thumbnailsDirectory = StorageDirectory(thumbnailsPath);
@@ -71,8 +90,8 @@ abstract final class PersistentBinaryStorage {
     if (tempPath != null) {
       tempDirectory = StorageDirectory(tempPath);
     }
-    tempDirectory ??= const StorageDirectory('/opfs/temp');
-    thumbnailsDirectory ??= const StorageDirectory('/opfs/covers');
+    tempDirectory ??= const StorageDirectory('/temp');
+    thumbnailsDirectory ??= const StorageDirectory('/covers');
     await (_opfsInitFuture ??= _initOpfsHandles());
   }
 
@@ -99,40 +118,36 @@ abstract final class PersistentBinaryStorage {
           )
           .toDart;
 
-      await _hydrateFromOpfsDirectory(
+      await _indexOpfsDirectory(
         _coversDirHandle!,
-        onFile: (name, bytes, lastModified) {
-          _knownCoverHashes.add(name);
-          _coverBytesCache[name] = bytes;
+        onFile: (fileHandle) async {
+          _knownCoverHashes.add(fileHandle.name);
         },
       );
-      await _hydrateFromOpfsDirectory(
+      await _indexOpfsDirectory(
         _audioDirHandle!,
-        onFile: (name, bytes, lastModified) {
-          final uri = 'opfs://audio/$name';
-          _audioBytesCache[uri] = bytes;
-          _audioMetaCache[uri] = (
-            size: bytes.length,
-            modifiedAt: lastModified > 0 ? lastModified : 1,
-          );
+        onFile: (fileHandle) async {
+          final file = await fileHandle.getFile().toDart;
+          final stat = _statFromWebFile(file);
+          if (stat != null) {
+            _audioMetaCache['/audio/${file.name}'] = stat;
+          }
         },
       );
-      await _hydrateFromOpfsDirectory(
+      await _indexOpfsDirectory(
         _backgroundsDirHandle!,
-        onFile: (name, bytes, lastModified) {
-          final uri = 'opfs://backgrounds/$name';
-          _backgroundBytesCache[uri] = bytes;
+        onFile: (fileHandle) async {
+          _knownBackgroundFiles.add(fileHandle.name);
         },
       );
     } catch (e) {
-      debugPrint('[PersistentBinaryStorage] OPFS init note (fallback RAM): $e');
+      debugPrint('[PersistentBinaryStorage] OPFS init error: $e');
     }
   }
 
-  static Future<void> _hydrateFromOpfsDirectory(
+  static Future<void> _indexOpfsDirectory(
     web.FileSystemDirectoryHandle dirHandle, {
-    required void Function(String name, Uint8List bytes, int lastModified)
-    onFile,
+    required Future<void> Function(web.FileSystemFileHandle fileHandle) onFile,
   }) async {
     try {
       final jsDir = dirHandle as JSObject;
@@ -145,13 +160,7 @@ abstract final class PersistentBinaryStorage {
         if (done) break;
         final handle = nextResult['value'] as web.FileSystemHandle?;
         if (handle == null || handle.kind != 'file') continue;
-        final fileHandle = handle as web.FileSystemFileHandle;
-        final file = await fileHandle.getFile().toDart;
-        final arrayBuf = await file.arrayBuffer().toDart;
-        final bytes = arrayBuf.toDart.asUint8List();
-        if (bytes.isNotEmpty) {
-          onFile(file.name, bytes, file.lastModified);
-        }
+        await onFile(handle as web.FileSystemFileHandle);
       }
     } catch (_) {}
   }
@@ -192,6 +201,45 @@ abstract final class PersistentBinaryStorage {
     }
   }
 
+  static Future<bool> _opfsFileExists(
+    web.FileSystemDirectoryHandle? dirHandle,
+    String fileName,
+  ) async {
+    if (dirHandle == null) return false;
+    try {
+      await dirHandle
+          .getFileHandle(fileName, web.FileSystemGetFileOptions(create: false))
+          .toDart;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static ({int size, int modifiedAt})? _statFromWebFile(web.File file) {
+    if (file.size <= 0) return null;
+    return (
+      size: file.size,
+      modifiedAt: file.lastModified > 0 ? file.lastModified : 1,
+    );
+  }
+
+  static Future<({int size, int modifiedAt})?> _statOpfsFile(
+    web.FileSystemDirectoryHandle? dirHandle,
+    String fileName,
+  ) async {
+    if (dirHandle == null) return null;
+    try {
+      final fileHandle = await dirHandle
+          .getFileHandle(fileName, web.FileSystemGetFileOptions(create: false))
+          .toDart;
+      final file = await fileHandle.getFile().toDart;
+      return _statFromWebFile(file);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> _deleteOpfsFile(
     web.FileSystemDirectoryHandle? dirHandle,
     String fileName,
@@ -203,8 +251,8 @@ abstract final class PersistentBinaryStorage {
   }
 
   static void ensureInitialized() {
-    tempDirectory ??= const StorageDirectory('/opfs/temp');
-    thumbnailsDirectory ??= const StorageDirectory('/opfs/covers');
+    tempDirectory ??= const StorageDirectory('/temp');
+    thumbnailsDirectory ??= const StorageDirectory('/covers');
   }
 
   static Future<void> clearTempDirectory() async {
@@ -214,30 +262,7 @@ abstract final class PersistentBinaryStorage {
   static bool hasCachedArtwork(String artworkUri, String resolvedArtworkPath) {
     ensureInitialized();
     final hash = p.basename(artworkUri);
-    return _knownCoverHashes.contains(hash) ||
-        _coverBytesCache.containsKey(hash);
-  }
-
-  static Uint8List? getCachedCoverBytesSync(String hashOrUri) {
-    final hash = p.basename(hashOrUri);
-    return _coverBytesCache[hash];
-  }
-
-  static Future<Uint8List?> readCoverBytesAsync(
-    String hashOrUri,
-    String resolvedArtworkPath,
-  ) async {
-    ensureInitialized();
-    final hash = p.basename(hashOrUri);
-    final cached = _coverBytesCache[hash];
-    if (cached != null) return cached;
-    await (_opfsInitFuture ??= _initOpfsHandles());
-    final loaded = await _readOpfsFile(_coversDirHandle, hash);
-    if (loaded != null && loaded.isNotEmpty) {
-      _coverBytesCache[hash] = loaded;
-      _knownCoverHashes.add(hash);
-    }
-    return loaded;
+    return _knownCoverHashes.contains(hash);
   }
 
   static Future<void> saveCoverBytes(
@@ -247,17 +272,21 @@ abstract final class PersistentBinaryStorage {
   ) async {
     ensureInitialized();
     final cleanHash = p.basename(hash);
-    _coverBytesCache[cleanHash] = bytes;
     if (_knownCoverHashes.contains(cleanHash)) {
       return;
     }
-    _knownCoverHashes.add(cleanHash);
     await (_opfsInitFuture ??= _initOpfsHandles());
     await _writeOpfsFile(_coversDirHandle, cleanHash, bytes);
+    _knownCoverHashes.add(cleanHash);
   }
 
-  static Uint8List? getCoverBytesSync(String hashOrPath) =>
-      _coverBytesCache[p.basename(hashOrPath)];
+  static Future<Uri?> resolveCoverDataUriAsync(String artworkUri) async {
+    final hash = p.basename(artworkUri.trim());
+    if (hash.isEmpty) return null;
+    final bytes = await _readOpfsImageBytes('covers', hash);
+    if (bytes == null || bytes.isEmpty) return null;
+    return Uri.dataFromBytes(bytes, mimeType: 'image/jpeg');
+  }
 
   static List<StorageFileRef> listCachedCoverFiles() {
     ensureInitialized();
@@ -275,13 +304,16 @@ abstract final class PersistentBinaryStorage {
     ];
     for (final hash in toRemove) {
       _knownCoverHashes.remove(hash);
-      _coverBytesCache.remove(hash);
+      PaintingBinding.instance.imageCache.evict(
+        _OpfsImageProvider(directoryKind: 'covers', fileName: hash),
+        includeLive: true,
+      );
       await _deleteOpfsFile(_coversDirHandle, hash);
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Picked Web/Local Audio & Background Files (OPFS)
+  // Picked Web Audio & Background Files (Direct OPFS)
   // ---------------------------------------------------------------------------
 
   static Future<String?> savePickedAudioFile(
@@ -289,43 +321,21 @@ abstract final class PersistentBinaryStorage {
     Uint8List bytes,
   ) async {
     final safeName = fileName.replaceAll(RegExp(r'[^\w.\-]'), '_');
-    final uri = 'opfs://audio/$safeName';
-    final now = DateTime.now().millisecondsSinceEpoch;
-    _audioBytesCache[uri] = bytes;
-    _audioMetaCache[uri] = (size: bytes.length, modifiedAt: now);
+    final canonicalPath = '/audio/$safeName';
     await (_opfsInitFuture ??= _initOpfsHandles());
     await _writeOpfsFile(_audioDirHandle, safeName, bytes);
-    return uri;
-  }
-
-  static Uint8List? getAudioBytesSync(String uriOrPath) =>
-      _audioBytesCache[uriOrPath];
-
-  static Future<Uint8List?> readAudioBytesAsync(String uriOrPath) async {
-    final cached = _audioBytesCache[uriOrPath];
-    if (cached != null) return cached;
-    if (uriOrPath.startsWith('opfs://audio/')) {
-      final safeName = uriOrPath.substring('opfs://audio/'.length);
-      await (_opfsInitFuture ??= _initOpfsHandles());
-      final loaded = await _readOpfsFile(_audioDirHandle, safeName);
-      if (loaded != null) {
-        _audioBytesCache[uriOrPath] = loaded;
-        _audioMetaCache.putIfAbsent(
-          uriOrPath,
-          () => (size: loaded.length, modifiedAt: 1),
-        );
-      }
-      return loaded;
-    }
-    return null;
+    final stat = await _statOpfsFile(_audioDirHandle, safeName);
+    _audioMetaCache[canonicalPath] =
+        stat ?? (size: bytes.length, modifiedAt: 1);
+    return canonicalPath;
   }
 
   static Future<void> removeWebAudioFile(String uriOrPath) async {
-    _audioBytesCache.remove(uriOrPath);
-    _audioMetaCache.remove(uriOrPath);
-    if (uriOrPath.startsWith('opfs://audio/')) {
-      final safeName = uriOrPath.substring('opfs://audio/'.length);
-      await _deleteOpfsFile(_audioDirHandle, safeName);
+    final parsed = _parseOpfsPath(uriOrPath);
+    if (parsed?.dir == 'audio') {
+      _audioMetaCache.remove('/audio/${parsed!.fileName}');
+      await (_opfsInitFuture ??= _initOpfsHandles());
+      await _deleteOpfsFile(_audioDirHandle, parsed.fileName);
     }
   }
 
@@ -334,29 +344,15 @@ abstract final class PersistentBinaryStorage {
     Uint8List bytes,
   ) async {
     final safeName = fileName.replaceAll(RegExp(r'[^\w.\-]'), '_');
-    final uri = 'opfs://backgrounds/$safeName';
-    _backgroundBytesCache[uri] = bytes;
+    final canonicalPath = '/backgrounds/$safeName';
     await (_opfsInitFuture ??= _initOpfsHandles());
     await _writeOpfsFile(_backgroundsDirHandle, safeName, bytes);
-    return uri;
-  }
-
-  static Uint8List? getBackgroundBytesSync(String pathOrUri) =>
-      _backgroundBytesCache[pathOrUri];
-
-  static Future<Uint8List?> readBackgroundBytesAsync(String pathOrUri) async {
-    final cached = _backgroundBytesCache[pathOrUri];
-    if (cached != null) return cached;
-    if (pathOrUri.startsWith('opfs://backgrounds/')) {
-      final safeName = pathOrUri.substring('opfs://backgrounds/'.length);
-      await (_opfsInitFuture ??= _initOpfsHandles());
-      final loaded = await _readOpfsFile(_backgroundsDirHandle, safeName);
-      if (loaded != null) {
-        _backgroundBytesCache[pathOrUri] = loaded;
-      }
-      return loaded;
-    }
-    return null;
+    _knownBackgroundFiles.add(safeName);
+    PaintingBinding.instance.imageCache.evict(
+      _OpfsImageProvider(directoryKind: 'backgrounds', fileName: safeName),
+      includeLive: true,
+    );
+    return canonicalPath;
   }
 
   static Future<String?> copyCustomBackgroundFile(
@@ -378,42 +374,73 @@ abstract final class PersistentBinaryStorage {
   static bool fileExistsSync(String path) {
     if (path.isEmpty) return false;
     if (path.startsWith('http://') || path.startsWith('https://')) return true;
-    return _audioBytesCache.containsKey(path) ||
-        _audioMetaCache.containsKey(path) ||
-        _backgroundBytesCache.containsKey(path);
+    final parsed = _parseOpfsPath(path);
+    if (parsed != null) {
+      return switch (parsed.dir) {
+        'audio' => _audioMetaCache.containsKey('/audio/${parsed.fileName}'),
+        'backgrounds' => _knownBackgroundFiles.contains(parsed.fileName),
+        'covers' => _knownCoverHashes.contains(parsed.fileName),
+        _ => false,
+      };
+    }
+    return _knownCoverHashes.contains(p.basename(path));
   }
 
   static Future<bool> fileExists(String path) async {
     if (path.isEmpty) return false;
     if (path.startsWith('http://') || path.startsWith('https://')) return true;
     if (fileExistsSync(path)) return true;
-    if (path.startsWith('opfs://audio/')) {
-      final bytes = await readAudioBytesAsync(path);
-      return bytes != null && bytes.isNotEmpty;
+    await (_opfsInitFuture ??= _initOpfsHandles());
+    final parsed = _parseOpfsPath(path);
+    if (parsed != null) {
+      switch (parsed.dir) {
+        case 'audio':
+          final st = await _statOpfsFile(_audioDirHandle, parsed.fileName);
+          if (st != null) {
+            _audioMetaCache['/audio/${parsed.fileName}'] = st;
+            return true;
+          }
+          return false;
+        case 'backgrounds':
+          final exists = await _opfsFileExists(
+            _backgroundsDirHandle,
+            parsed.fileName,
+          );
+          if (exists) {
+            _knownBackgroundFiles.add(parsed.fileName);
+          }
+          return exists;
+        case 'covers':
+          final exists = await _opfsFileExists(
+            _coversDirHandle,
+            parsed.fileName,
+          );
+          if (exists) {
+            _knownCoverHashes.add(parsed.fileName);
+          }
+          return exists;
+      }
     }
-    if (path.startsWith('opfs://backgrounds/')) {
-      final bytes = await readBackgroundBytesAsync(path);
-      return bytes != null && bytes.isNotEmpty;
+    final hash = p.basename(path);
+    if (hash.isNotEmpty && await _opfsFileExists(_coversDirHandle, hash)) {
+      _knownCoverHashes.add(hash);
+      return true;
     }
     return false;
   }
 
-  static ({int size, int modifiedAt})? statFileSync(String path) {
-    final meta = _audioMetaCache[path];
-    if (meta != null) return meta;
-    final bytes = _audioBytesCache[path];
-    if (bytes != null) return (size: bytes.length, modifiedAt: 1);
-    return null;
-  }
-
   static Future<({int size, int modifiedAt})?> statFile(String path) async {
-    final syncStat = statFileSync(path);
-    if (syncStat != null) return syncStat;
-    if (path.startsWith('opfs://audio/')) {
-      final bytes = await readAudioBytesAsync(path);
-      if (bytes != null && bytes.isNotEmpty) {
-        return _audioMetaCache[path] ?? (size: bytes.length, modifiedAt: 1);
+    final parsed = _parseOpfsPath(path);
+    if (parsed?.dir == 'audio') {
+      final key = '/audio/${parsed!.fileName}';
+      final cached = _audioMetaCache[key];
+      if (cached != null) return cached;
+      await (_opfsInitFuture ??= _initOpfsHandles());
+      final st = await _statOpfsFile(_audioDirHandle, parsed.fileName);
+      if (st != null) {
+        _audioMetaCache[key] = st;
       }
+      return st;
     }
     return null;
   }
@@ -430,34 +457,44 @@ abstract final class PersistentBinaryStorage {
   static Future<String?> readLocalLrcFile(String audioFilePath) async => null;
 
   // ---------------------------------------------------------------------------
-  // Image Provider & Widget Builders (OPFS + RAM Cache)
+  // On-Demand OPFS Image Provider & Widget Builder
   // ---------------------------------------------------------------------------
+
+  static ({String dir, String fileName}) _resolveImageTarget(String pathOrUri) {
+    final parsed = _parseOpfsPath(pathOrUri);
+    if (parsed != null && parsed.dir == 'backgrounds') {
+      return (dir: 'backgrounds', fileName: parsed.fileName);
+    }
+    return (dir: 'covers', fileName: p.basename(pathOrUri));
+  }
+
+  static Future<Uint8List?> _readOpfsImageBytes(
+    String directoryKind,
+    String fileName,
+  ) async {
+    if (fileName.isEmpty) return null;
+    await (_opfsInitFuture ??= _initOpfsHandles());
+    final handle = directoryKind == 'backgrounds'
+        ? _backgroundsDirHandle
+        : _coversDirHandle;
+    return _readOpfsFile(handle, fileName);
+  }
 
   static Future<ImageProvider?> resolveLocalOrOpfsImageProvider(
     String pathOrUri, {
     int? maxWidth,
     int? maxHeight,
   }) async {
-    if (pathOrUri.startsWith('opfs://backgrounds/')) {
-      final bgBytes = await readBackgroundBytesAsync(pathOrUri);
-      if (bgBytes != null && bgBytes.isNotEmpty) {
-        return ResizeImage.resizeIfNeeded(
-          maxWidth,
-          maxHeight,
-          MemoryImage(bgBytes),
-        );
-      }
-      return null;
-    }
-    final hash = p.basename(pathOrUri);
-    final bytes = await readCoverBytesAsync(
-      hash,
-      thumbnailsDirectory != null
-          ? p.join(thumbnailsDirectory!.path, hash)
-          : hash,
+    final target = _resolveImageTarget(pathOrUri);
+    if (target.fileName.isEmpty) return null;
+    return ResizeImage.resizeIfNeeded(
+      maxWidth,
+      maxHeight,
+      _OpfsImageProvider(
+        directoryKind: target.dir,
+        fileName: target.fileName,
+      ),
     );
-    if (bytes == null || bytes.isEmpty) return null;
-    return ResizeImage.resizeIfNeeded(maxWidth, maxHeight, MemoryImage(bytes));
   }
 
   static Widget buildLocalOrOpfsImage(
@@ -469,104 +506,102 @@ abstract final class PersistentBinaryStorage {
     BoxFit fit = BoxFit.cover,
     required Widget fallback,
   }) {
-    final syncBytes = pathOrUri.startsWith('opfs://backgrounds/')
-        ? _backgroundBytesCache[pathOrUri]
-        : _coverBytesCache[p.basename(pathOrUri)];
-    if (syncBytes != null && syncBytes.isNotEmpty) {
-      return Image.memory(
-        syncBytes,
-        width: width,
-        height: height,
-        cacheWidth: cacheWidth,
-        cacheHeight: cacheHeight,
-        fit: fit,
-        filterQuality: FilterQuality.medium,
-        gaplessPlayback: true,
-        errorBuilder: (_, _, _) => fallback,
-      );
-    }
+    final target = _resolveImageTarget(pathOrUri);
+    if (target.fileName.isEmpty) return fallback;
 
-    return _OpfsAsyncImage(
-      pathOrUri: pathOrUri,
+    final provider = ResizeImage.resizeIfNeeded(
+      cacheWidth,
+      cacheHeight,
+      _OpfsImageProvider(
+        directoryKind: target.dir,
+        fileName: target.fileName,
+      ),
+    );
+    return Image(
+      image: provider,
       width: width,
       height: height,
-      cacheWidth: cacheWidth,
-      cacheHeight: cacheHeight,
       fit: fit,
-      fallback: fallback,
+      filterQuality: FilterQuality.medium,
+      gaplessPlayback: true,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded || frame != null) {
+          return child;
+        }
+        return fallback;
+      },
+      errorBuilder: (_, _, _) => fallback,
     );
   }
 
   static DateTime? tryParseHttpDate(String value) => DateTime.tryParse(value);
 }
 
-class _OpfsAsyncImage extends StatefulWidget {
-  final String pathOrUri;
-  final double? width;
-  final double? height;
-  final int? cacheWidth;
-  final int? cacheHeight;
-  final BoxFit fit;
-  final Widget fallback;
+@immutable
+class _OpfsImageProvider extends ImageProvider<_OpfsImageProvider> {
+  final String directoryKind;
+  final String fileName;
 
-  const _OpfsAsyncImage({
-    required this.pathOrUri,
-    this.width,
-    this.height,
-    this.cacheWidth,
-    this.cacheHeight,
-    required this.fit,
-    required this.fallback,
+  const _OpfsImageProvider({
+    required this.directoryKind,
+    required this.fileName,
   });
 
   @override
-  State<_OpfsAsyncImage> createState() => _OpfsAsyncImageState();
-}
-
-class _OpfsAsyncImageState extends State<_OpfsAsyncImage> {
-  Uint8List? _bytes;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
+  Future<_OpfsImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_OpfsImageProvider>(this);
   }
 
   @override
-  void didUpdateWidget(covariant _OpfsAsyncImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.pathOrUri != widget.pathOrUri) {
-      _bytes = null;
-      _load();
-    }
-  }
-
-  Future<void> _load() async {
-    final uri = widget.pathOrUri;
-    final bytes = uri.startsWith('opfs://backgrounds/')
-        ? await PersistentBinaryStorage.readBackgroundBytesAsync(uri)
-        : await PersistentBinaryStorage.readCoverBytesAsync(uri, uri);
-    if (mounted && widget.pathOrUri == uri && bytes != null) {
-      setState(() {
-        _bytes = bytes;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final b = _bytes;
-    if (b == null || b.isEmpty) return widget.fallback;
-    return Image.memory(
-      b,
-      width: widget.width,
-      height: widget.height,
-      cacheWidth: widget.cacheWidth,
-      cacheHeight: widget.cacheHeight,
-      fit: widget.fit,
-      filterQuality: FilterQuality.medium,
-      gaplessPlayback: true,
-      errorBuilder: (_, _, _) => widget.fallback,
+  ImageStreamCompleter loadImage(
+    _OpfsImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return MultiFrameImageStreamCompleter(
+      codec: _loadAsync(key, decode),
+      scale: 1.0,
+      debugLabel: 'OpfsImage(${key.directoryKind}/${key.fileName})',
+      informationCollector: () => <DiagnosticsNode>[
+        DiagnosticsProperty<ImageProvider>('Image provider', this),
+        DiagnosticsProperty<_OpfsImageProvider>('Image key', key),
+      ],
     );
   }
+
+  Future<ui.Codec> _loadAsync(
+    _OpfsImageProvider key,
+    ImageDecoderCallback decode,
+  ) async {
+    assert(key == this);
+    try {
+      final bytes = await PersistentBinaryStorage._readOpfsImageBytes(
+        key.directoryKind,
+        key.fileName,
+      );
+      if (bytes == null || bytes.isEmpty) {
+        PaintingBinding.instance.imageCache.evict(key);
+        throw StateError(
+          'Cannot load OPFS image "${key.directoryKind}/${key.fileName}": empty or missing.',
+        );
+      }
+      return await decode(await ui.ImmutableBuffer.fromUint8List(bytes));
+    } catch (_) {
+      PaintingBinding.instance.imageCache.evict(key);
+      rethrow;
+    }
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (other.runtimeType != runtimeType) return false;
+    return other is _OpfsImageProvider &&
+        other.directoryKind == directoryKind &&
+        other.fileName == fileName;
+  }
+
+  @override
+  int get hashCode => Object.hash(directoryKind, fileName);
+
+  @override
+  String toString() => 'OpfsImage("$directoryKind/$fileName")';
 }

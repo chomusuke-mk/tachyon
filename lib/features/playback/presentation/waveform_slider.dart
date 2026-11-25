@@ -424,76 +424,146 @@ class _WaveformSliderPainter extends CustomPainter {
   final Color bufferedColor;
   final List<double>? waveform;
 
-  static const int _barCount = 55;
-  static const double _barWidth = 3.5;
-  static const double _barRadius = 2.0;
+  static const int _defaultPointCount = 120;
 
-  // Precomputed bar fractions [0.0 ... 1.0]
-  static final List<double> _barFractions = List<double>.generate(
-    _barCount,
-    (i) => i / (_barCount - 1),
-    growable: false,
-  );
+  // Smooth sinusoidal fallback waveform when track waveform points are not yet available
+  static final List<double> _defaultSinusoidalWaveform =
+      List<double>.unmodifiable(
+        List<double>.generate(_defaultPointCount, (i) {
+          final t = i / (_defaultPointCount - 1);
+          final envelope = math.sin(math.pi * t);
+          final wave =
+              0.52 +
+              0.36 * math.sin(2 * math.pi * t * 3.5) +
+              0.12 * math.sin(2 * math.pi * t * 7.0);
+          return (wave * (0.35 + 0.65 * envelope)).clamp(0.08, 0.98);
+        }),
+      );
 
-  // Geometry cache keyed by Size and waveform to eliminate RRect allocations during playback
+  // Geometry cache keyed by Size and waveform to eliminate Path allocations during playback
   static Size? _cachedSize;
   static List<double>? _cachedWaveform;
-  static List<RRect>? _cachedBars;
+  static Path? _cachedFullPath;
 
   @visibleForTesting
   static void clearGeometryCache() {
     _cachedSize = null;
     _cachedWaveform = null;
-    _cachedBars = null;
+    _cachedFullPath = null;
   }
 
-  static List<RRect> _getBars(Size size, List<double>? waveform) {
-    if (_cachedSize == size &&
-        identical(_cachedWaveform, waveform) &&
-        _cachedBars != null) {
-      return _cachedBars!;
-    }
-    final centerY = size.height / 2;
-    final spacing = (size.width - (_barCount * _barWidth)) / (_barCount - 1);
-    final heightFactor = size.height * 0.75;
-    final hasWaveform = waveform != null && waveform.isNotEmpty;
+  static Path _getFullPath(Size size, List<double>? waveform) {
+    final effectivePoints = (waveform != null && waveform.isNotEmpty)
+        ? waveform
+        : _defaultSinusoidalWaveform;
 
-    final bars = List<RRect>.generate(_barCount, (i) {
-      final x = i * (_barWidth + spacing);
-      final double amp;
-      if (hasWaveform) {
-        final t = i / (_barCount - 1);
-        final wIndex = (t * (waveform.length - 1)).round();
-        amp = 0.2 + (waveform[wIndex].clamp(0.0, 1.0) * 0.8);
-      } else {
-        amp = 0.35;
+    if (_cachedSize == size &&
+        identical(_cachedWaveform, effectivePoints) &&
+        _cachedFullPath != null) {
+      return _cachedFullPath!;
+    }
+
+    final centerY = size.height / 2;
+    final halfHeight = (size.height / 2) * 0.88;
+    final minAmp = halfHeight < 1.5 ? halfHeight : 1.5;
+    double calcAmp(double pt) =>
+        (pt.clamp(0.05, 1.0) * halfHeight).clamp(minAmp, halfHeight);
+    final n = effectivePoints.length;
+
+    final path = Path();
+    if (n == 1) {
+      final amp = calcAmp(effectivePoints[0]);
+      path.addRect(Rect.fromLTWH(0, centerY - amp, size.width, amp * 2));
+    } else {
+      final dx = size.width / (n - 1);
+
+      // Top boundary (smooth continuous quadratic Bezier contour)
+      path.moveTo(0, centerY);
+      for (int i = 0; i < n; i++) {
+        final x = i * dx;
+        final amp = calcAmp(effectivePoints[i]);
+        final y = centerY - amp;
+        if (i == 0) {
+          path.lineTo(x, y);
+        } else {
+          final prevX = (i - 1) * dx;
+          final prevAmp = calcAmp(effectivePoints[i - 1]);
+          final prevY = centerY - prevAmp;
+          final midX = (prevX + x) / 2;
+          final midY = (prevY + y) / 2;
+          path.quadraticBezierTo(prevX, prevY, midX, midY);
+        }
       }
-      final halfHeight = math.max(3.0, (amp * heightFactor) / 2);
-      return RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(x + _barWidth / 2, centerY),
-          width: _barWidth,
-          height: halfHeight * 2,
-        ),
-        const Radius.circular(_barRadius),
-      );
-    }, growable: false);
+      final lastAmp = calcAmp(effectivePoints[n - 1]);
+      path.lineTo(size.width, centerY - lastAmp);
+      path.lineTo(size.width, centerY);
+
+      // Bottom boundary (in reverse from n - 1 down to 0)
+      for (int i = n - 1; i >= 0; i--) {
+        final x = i * dx;
+        final amp = calcAmp(effectivePoints[i]);
+        final y = centerY + amp;
+        if (i == n - 1) {
+          path.lineTo(x, y);
+        } else {
+          final nextX = (i + 1) * dx;
+          final nextAmp = calcAmp(effectivePoints[i + 1]);
+          final nextY = centerY + nextAmp;
+          final midX = (nextX + x) / 2;
+          final midY = (nextY + y) / 2;
+          path.quadraticBezierTo(nextX, nextY, midX, midY);
+        }
+      }
+      final firstAmp = calcAmp(effectivePoints[0]);
+      path.lineTo(0, centerY + firstAmp);
+      path.close();
+    }
 
     _cachedSize = size;
-    _cachedWaveform = waveform;
-    _cachedBars = bars;
-    return bars;
+    _cachedWaveform = effectivePoints;
+    _cachedFullPath = path;
+    return path;
   }
 
-  // Reusable Path objects to avoid per-frame allocations
-  static final Path _playedPath = Path();
-  static final Path _bufferedPath = Path();
-  static final Path _inactivePath = Path();
-
   // Reusable Paint instances
-  static final Paint _activePaint = Paint()..isAntiAlias = true;
-  static final Paint _bufferedPaint = Paint()..isAntiAlias = true;
-  static final Paint _inactivePaint = Paint()..isAntiAlias = true;
+  static final Paint _activePaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.fill;
+  static final Paint _activeSheenPaint = Paint()
+    ..isAntiAlias = true
+    ..color = const Color(0x28FFFFFF)
+    ..style = PaintingStyle.fill;
+  static final Paint _activeStrokePaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.1;
+  static final Paint _evictedPaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.fill;
+  static final Paint _evictedStrokePaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.0;
+  static final Paint _bufferedPaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.fill;
+  static final Paint _bufferedStrokePaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.0;
+  static final Paint _inactivePaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.fill;
+  static final Paint _inactiveStrokePaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.0;
+  static final Paint _baselinePaint = Paint()
+    ..isAntiAlias = true
+    ..strokeWidth = 0.8;
+  static final Paint _playheadLinePaint = Paint()
+    ..isAntiAlias = true
+    ..strokeWidth = 2.0;
   static final Paint _thumbPaint = Paint()..isAntiAlias = true;
   static final Paint _ringPaint = Paint()
     ..isAntiAlias = true
@@ -515,7 +585,8 @@ class _WaveformSliderPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final bars = _getBars(size, waveform);
+    if (size.width <= 0 || size.height <= 0) return;
+    final fullPath = _getFullPath(size, waveform);
     final centerY = size.height / 2;
 
     final isDragging = dragNotifier.isDragging;
@@ -527,71 +598,124 @@ class _WaveformSliderPainter extends CustomPainter {
     final progress = (currentMs / effectiveTotalMs).clamp(0.0, 1.0);
 
     final buf = bufferListenable?.value;
-    final double bufStartFraction;
-    final double bufEndFraction;
+    final double clampedStart;
+    final double clampedBuffer;
     if (buf != null && buf.end > Duration.zero) {
-      bufStartFraction = (buf.start.inMilliseconds / effectiveTotalMs).clamp(
+      clampedStart = (buf.start.inMilliseconds / effectiveTotalMs).clamp(
         0.0,
         1.0,
       );
-      bufEndFraction = (buf.end.inMilliseconds / effectiveTotalMs).clamp(
-        0.0,
+      clampedBuffer = (buf.end.inMilliseconds / effectiveTotalMs).clamp(
+        clampedStart,
         1.0,
       );
     } else if (buf?.isBuffering ?? isBufferingFallback) {
-      bufStartFraction = progress;
-      bufEndFraction = (progress + 0.15).clamp(0.0, 1.0);
+      clampedStart = progress;
+      clampedBuffer = (progress + 0.15).clamp(progress, 1.0);
+    } else if (bufferListenable == null) {
+      clampedStart = 0.0;
+      clampedBuffer = 1.0;
     } else {
-      bufStartFraction = progress;
-      bufEndFraction = 1.0;
+      clampedStart = 0.0;
+      clampedBuffer = 0.0;
     }
+
+    final startX = size.width * clampedStart;
+    final endX = size.width * clampedBuffer;
+    final playheadX = (size.width * progress).clamp(0.0, size.width);
 
     _activePaint.color = activeColor;
+    _activeStrokePaint.color = activeColor;
+    _evictedPaint.color = activeColor.withValues(alpha: 0.30);
+    _evictedStrokePaint.color = activeColor.withValues(alpha: 0.55);
     _bufferedPaint.color = bufferedColor;
+    _bufferedStrokePaint.color = bufferedColor.withValues(alpha: 0.85);
     _inactivePaint.color = inactiveColor;
+    _inactiveStrokePaint.color = inactiveColor.withValues(alpha: 0.8);
+    _baselinePaint.color = activeColor.withValues(alpha: 0.18);
+    _playheadLinePaint.color = activeColor;
     _thumbPaint.color = activeColor;
 
-    _playedPath.reset();
-    _bufferedPath.reset();
-    _inactivePath.reset();
+    // Layer 1: Background unplayed continuous waveform track
+    canvas.drawPath(fullPath, _inactivePaint);
+    canvas.drawPath(fullPath, _inactiveStrokePaint);
 
-    int playedCount = 0;
-    int bufferedCount = 0;
-    int inactiveCount = 0;
-
-    // Batch 55 bars into played, buffered (real Buffer range), and inactive Paths
-    for (int i = 0; i < _barCount; i++) {
-      final fraction = _barFractions[i];
-      if (fraction <= progress) {
-        _playedPath.addRRect(bars[i]);
-        playedCount++;
-      } else if (fraction >= bufStartFraction && fraction <= bufEndFraction) {
-        _bufferedPath.addRRect(bars[i]);
-        bufferedCount++;
-      } else {
-        _inactivePath.addRRect(bars[i]);
-        inactiveCount++;
-      }
+    // Layer 2: Universal preload buffer halo ahead of playhead ([aheadStartX .. endX])
+    final aheadStartX = startX.clamp(playheadX, size.width);
+    if (endX > aheadStartX) {
+      canvas.save();
+      canvas.clipRect(
+        Rect.fromLTWH(aheadStartX, 0, endX - aheadStartX, size.height),
+      );
+      canvas.drawPath(fullPath, _bufferedPaint);
+      canvas.drawPath(fullPath, _bufferedStrokePaint);
+      canvas.restore();
     }
 
-    if (playedCount > 0) {
-      canvas.drawPath(_playedPath, _activePaint);
-    }
-    if (bufferedCount > 0) {
-      canvas.drawPath(_bufferedPath, _bufferedPaint);
-    }
-    if (inactiveCount > 0) {
-      canvas.drawPath(_inactivePath, _inactivePaint);
+    // Layer 3a: Unbuffered / evicted played history behind buffer start ([0 .. min(playheadX, startX)])
+    final evictedEndX = playheadX.clamp(0.0, startX);
+    if (evictedEndX > 0.0) {
+      canvas.save();
+      canvas.clipRect(Rect.fromLTWH(0, 0, evictedEndX, size.height));
+      canvas.drawPath(fullPath, _evictedPaint);
+      canvas.drawPath(fullPath, _evictedStrokePaint);
+      canvas.restore();
     }
 
-    // Playhead thumb circle
-    final thumbX = progress * size.width;
-    final thumbRadius = isDragging ? 6.5 : 5.0;
+    // Layer 3b: Buffered played section behind playhead ([startX .. min(playheadX, endX)])
+    final backBufStartX = startX.clamp(0.0, playheadX);
+    final backBufEndX = endX.clamp(backBufStartX, playheadX);
+    if (backBufEndX > backBufStartX) {
+      canvas.save();
+      canvas.clipRect(
+        Rect.fromLTWH(
+          backBufStartX,
+          0,
+          backBufEndX - backBufStartX,
+          size.height,
+        ),
+      );
+      canvas.drawPath(fullPath, _activePaint);
+      canvas.drawPath(fullPath, _activeSheenPaint);
+      canvas.drawPath(fullPath, _activeStrokePaint);
+      canvas.restore();
+    }
 
-    canvas.drawCircle(Offset(thumbX, centerY), thumbRadius, _thumbPaint);
+    // Layer 3c: Played region beyond buffered end (if seek/position raced ahead of buffer)
+    if (playheadX > endX) {
+      canvas.save();
+      canvas.clipRect(
+        Rect.fromLTWH(endX, 0, playheadX - endX, size.height),
+      );
+      canvas.drawPath(
+        fullPath,
+        endX > 0.0 ? _evictedPaint : _activePaint,
+      );
+      canvas.restore();
+    }
+
+    // Layer 4: Center baseline
+    canvas.drawLine(
+      Offset(0, centerY),
+      Offset(size.width, centerY),
+      _baselinePaint,
+    );
+
+    // Layer 5: Playhead scrubber indicator line & cap
+    canvas.drawLine(
+      Offset(playheadX, 0),
+      Offset(playheadX, size.height),
+      _playheadLinePaint,
+    );
+    final thumbRadius = isDragging ? 5.5 : 4.0;
+    canvas.drawCircle(Offset(playheadX, centerY), thumbRadius, _thumbPaint);
     if (isDragging) {
       _ringPaint.color = activeColor.withValues(alpha: 0.25);
-      canvas.drawCircle(Offset(thumbX, centerY), thumbRadius * 2.2, _ringPaint);
+      canvas.drawCircle(
+        Offset(playheadX, centerY),
+        thumbRadius * 2.2,
+        _ringPaint,
+      );
     }
   }
 

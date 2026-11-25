@@ -65,6 +65,12 @@ class LibraryController extends ChangeNotifier {
 
   void _onStoreChanged() {
     if (_isDisposed) return;
+    if (identical(_store.tracks, _lastStoreTracksRef) &&
+        identical(_store.albums, _lastStoreAlbumsRef) &&
+        identical(_store.artists, _lastStoreArtistsRef) &&
+        identical(_store.genres, _lastStoreGenresRef)) {
+      return;
+    }
     _syncFromStore();
     notifyListeners();
   }
@@ -74,6 +80,10 @@ class LibraryController extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   bool _isDisposed = false;
   Future<void>? _inFlightLoad;
+  List<Track>? _lastStoreTracksRef;
+  List<Album>? _lastStoreAlbumsRef;
+  List<Artist>? _lastStoreArtistsRef;
+  List<Genre>? _lastStoreGenresRef;
   List<Track> _tracks = const [];
   List<Album> _albums = const [];
   List<Artist> _artists = const [];
@@ -207,28 +217,32 @@ class LibraryController extends ChangeNotifier {
   }
 
   void _syncFromStore() {
+    _lastStoreTracksRef = _store.tracks;
+    _lastStoreAlbumsRef = _store.albums;
+    _lastStoreArtistsRef = _store.artists;
+    _lastStoreGenresRef = _store.genres;
     _tracks = List<Track>.unmodifiable(
       _store.sortTracks(
-        _store.tracks,
+        _lastStoreTracksRef!,
         _sortOption,
         ascending: _sortAscending,
       ),
     );
     _albums = List<Album>.unmodifiable(
       _store.sortAlbums(
-        _store.albums,
+        _lastStoreAlbumsRef!,
         _albumSortOption,
         ascending: _albumSortAscending,
       ),
     );
     _artists = List<Artist>.unmodifiable(
       _store.sortArtists(
-        _store.artists,
+        _lastStoreArtistsRef!,
         _artistSortOption,
         ascending: _artistSortAscending,
       ),
     );
-    _genres = _store.genres;
+    _genres = _lastStoreGenresRef!;
 
     if (_selectedAlbum != null && _selectedAlbum!.id != null) {
       _selectedAlbum = _store.getAlbumById(_selectedAlbum!.id!);

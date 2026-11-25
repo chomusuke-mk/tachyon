@@ -15,3 +15,5 @@ Future<CommonDatabase> openPersistentDatabase(String? dbPath) async {
   }
   return sqlite3.open(resolvedPath, mode: OpenMode.readWriteCreate);
 }
+
+Future<void> flushPersistentDatabase() async {}

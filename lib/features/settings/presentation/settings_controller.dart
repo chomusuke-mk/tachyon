@@ -287,7 +287,7 @@ class SettingsController extends ChangeNotifier {
     final updated = List<String>.from(_settings.musicFiles)..remove(pathOrUrl);
     _settings = _settings.copyWith(musicFiles: updated);
     await _repository.setMusicFiles(updated);
-    if (pathOrUrl.startsWith('opfs://audio/')) {
+    if (PersistentBinaryStorage.isManagedWebAudioPath(pathOrUrl)) {
       await PersistentBinaryStorage.removeWebAudioFile(pathOrUrl);
     }
     _emitScoped([_libraryNotifier]);
@@ -298,7 +298,7 @@ class SettingsController extends ChangeNotifier {
     _settings = _settings.copyWith(musicFiles: const []);
     await _repository.setMusicFiles(const []);
     for (final pathOrUrl in oldFiles) {
-      if (pathOrUrl.startsWith('opfs://audio/')) {
+      if (PersistentBinaryStorage.isManagedWebAudioPath(pathOrUrl)) {
         await PersistentBinaryStorage.removeWebAudioFile(pathOrUrl);
       }
     }

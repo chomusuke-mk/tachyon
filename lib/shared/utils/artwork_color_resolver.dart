@@ -1,6 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
+// ignore: depend_on_referenced_packages
+import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart'
+    show ImageRenderMethodForWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
+import 'package:tachyon/shared/utils/cors_image_utils.dart';
 
 /// Service responsible for extracting and caching a harmonized background color
 /// from an audio track or album's artwork image.
@@ -42,24 +47,6 @@ abstract final class ArtworkColorResolver {
     final cacheKey =
         '$clean:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
     return _cache[cacheKey] ?? getApplicationColor(theme: theme);
-  }
-
-  /// Synchronously returns cached color for [artworkUri] and [theme] if available.
-  /// If [artworkUri] is null or empty, returns the application surface color.
-  static Color? getCachedColor({
-    String? artworkUri,
-    required ThemeData theme,
-  }) {
-    if (artworkUri == null || artworkUri.trim().isEmpty) {
-      return getApplicationColor(theme: theme);
-    }
-    final clean = artworkUri.trim();
-    final isDark = theme.brightness == Brightness.dark;
-    final isOled =
-        isDark && theme.colorScheme.surface == const Color(0xFF000000);
-    final cacheKey =
-        '$clean:${theme.brightness.name}:${isOled ? 'oled' : 'std'}';
-    return _cache[cacheKey];
   }
 
   /// Computes a surface color harmonized with the extracted artwork color scheme,
@@ -113,9 +100,14 @@ abstract final class ArtworkColorResolver {
       final ImageProvider provider;
       if (clean.startsWith('http://') || clean.startsWith('https://')) {
         provider = CachedNetworkImageProvider(
-          clean,
-          maxWidth: 150,
-          maxHeight: 150,
+          CorsImageUtils.resolveWebCorsImageUrl(
+            clean,
+            width: 150,
+            height: 150,
+          ),
+          maxWidth: kIsWeb ? null : 150,
+          maxHeight: kIsWeb ? null : 150,
+          imageRenderMethodForWeb: ImageRenderMethodForWeb.HttpGet,
         );
       } else {
         final localProvider =

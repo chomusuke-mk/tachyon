@@ -1,6 +1,5 @@
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:tachyon/core/playback/domain/audio_playable.dart';
-import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/genre.dart';
@@ -93,17 +92,6 @@ class Track implements AudioPlayable {
 
   @override
   ma.AudioSource<AudioPlayable> toAudioSource() {
-    if (filePath.startsWith('opfs://')) {
-      final bytes = PersistentBinaryStorage.getAudioBytesSync(filePath);
-      if (bytes != null && bytes.isNotEmpty) {
-        return ma.AudioSource<AudioPlayable>(
-          bytes,
-          data: this,
-          replayGainDb: replayGainTrackGain,
-          replayPeak: replayGainTrackPeak,
-        );
-      }
-    }
     if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
       final uri = Uri.tryParse(filePath);
       if (uri != null) {

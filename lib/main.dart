@@ -35,8 +35,9 @@ Future<void> main() async {
   await MiniaudioPlayer.ensureInitialized(
     rootIsolateToken: kIsWeb ? null : ServicesBinding.rootIsolateToken,
   );
-  PaintingBinding.instance.imageCache.maximumSize = 25;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 4 * 1024 * 1024;
+  PaintingBinding.instance.imageCache.maximumSize = kIsWeb ? 200 : 120;
+  PaintingBinding.instance.imageCache.maximumSizeBytes =
+      (kIsWeb ? 32 : 16) * 1024 * 1024;
   MiniaudioPlayer.config(
     logLevel: (kDebugMode || kIsWeb)
         ? MiniaudioLogLevel.verbose
@@ -45,7 +46,7 @@ Future<void> main() async {
   try {
     SystemChannels.skia.invokeMethod<void>(
       'Skia.setResourceCacheMaxBytes',
-      4 * 1024 * 1024,
+      (kIsWeb ? 64 : 24) * 1024 * 1024,
     );
   } catch (_) {}
 
@@ -54,8 +55,8 @@ Future<void> main() async {
   if (kIsWeb) {
     dbPath = '/database';
     await MetadataUtils.initAsync(
-      thumbnailsPath: '/opfs/covers',
-      tempPath: '/opfs/temp',
+      thumbnailsPath: '/covers',
+      tempPath: '/temp',
     );
   } else {
     final appSupportDir = await getApplicationSupportDirectory();
