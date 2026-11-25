@@ -49,6 +49,7 @@ class DesktopTrayService {
         onAction: _handleAction,
         processId: pid,
       );
+      unawaited(_linuxTray!.preloadIcon());
     }
     _syncBackgroundHeaderButtonTooltip();
   }

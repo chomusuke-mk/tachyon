@@ -1,9 +1,12 @@
 import 'package:dbus/dbus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tachyon/core/lifecycle/linux_status_notifier_tray.dart';
 import 'package:tachyon/core/lifecycle/window_control_bridge.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('LinuxStatusNotifierTray D-Bus Objects Unit Tests', () {
     late List<DesktopTrayAction> dispatchedActions;
     late LinuxStatusNotifierTray tray;
@@ -56,6 +59,89 @@ void main() {
       expect(tooltip!.length, equals(4));
       expect(tooltip[2].asString(), equals('Stargazer'));
       expect(tooltip[3].asString(), equals('Rainbow'));
+      expect(props['IconThemePath']?.asString(), equals(''));
+      expect(props['IconName']?.asString(), equals('audio-x-generic'));
+      expect(props['IconPixmap']?.asArray(), isEmpty);
+    });
+
+    test('StatusNotifierObject prefers IconPixmap and clears IconName when pixmaps are present', () async {
+      final customTray = LinuxStatusNotifierTray(
+        onAction: dispatchedActions.add,
+        processId: 4243,
+        initialPixmaps: [
+          TrayPixmapData(
+            width: 24,
+            height: 24,
+            argbBytes: Uint8List(24 * 24 * 4),
+          ),
+          TrayPixmapData(
+            width: 48,
+            height: 48,
+            argbBytes: Uint8List(48 * 48 * 4),
+          ),
+        ],
+      );
+      addTearDown(customTray.dispose);
+      final customSni = TachyonStatusNotifierObject(customTray);
+
+      final response = await customSni.getAllProperties(
+        'org.kde.StatusNotifierItem',
+      );
+      final props = (response as DBusGetAllPropertiesResponse)
+          .values[0]
+          .asStringVariantDict();
+
+      expect(props['IconName']?.asString(), equals(''));
+      expect(props['IconThemePath']?.asString(), equals(''));
+
+      final pixmaps = props['IconPixmap']?.asArray().toList();
+      expect(pixmaps, hasLength(2));
+      expect(pixmaps![0].asStruct()[0].asInt32(), equals(24));
+      expect(pixmaps[0].asStruct()[1].asInt32(), equals(24));
+      expect(
+        pixmaps[0].asStruct()[2].asByteArray().length,
+        equals(24 * 24 * 4),
+      );
+      expect(pixmaps[1].asStruct()[0].asInt32(), equals(48));
+      expect(pixmaps[1].asStruct()[1].asInt32(), equals(48));
+      expect(
+        pixmaps[1].asStruct()[2].asByteArray().length,
+        equals(48 * 48 * 4),
+      );
+    });
+
+    test('preloadIcon decodes bundled icon_small.webp into rounded 24x24 and 48x48 ARGB32 pixmaps', () async {
+      await tray.preloadIcon();
+
+      expect(tray.iconPixmaps, hasLength(2));
+      expect(tray.iconPixmaps[0].width, equals(24));
+      expect(tray.iconPixmaps[0].height, equals(24));
+      expect(tray.iconPixmaps[1].width, equals(48));
+      expect(tray.iconPixmaps[1].height, equals(48));
+
+      for (final pixmap in tray.iconPixmaps) {
+        final bytes = pixmap.argbBytes;
+        expect(bytes.length, equals(pixmap.width * pixmap.height * 4));
+        // Rounded mask leaves corner (0, 0) transparent.
+        expect(bytes[0], equals(0));
+        // Center pixel is opaque with visible Tachyon color payload.
+        final centerIdx =
+            ((pixmap.height ~/ 2) * pixmap.width + (pixmap.width ~/ 2)) * 4;
+        expect(bytes[centerIdx], equals(255));
+        expect(
+          bytes[centerIdx + 1] + bytes[centerIdx + 2] + bytes[centerIdx + 3],
+          greaterThan(0),
+        );
+      }
+
+      final response = await sniObject.getAllProperties(
+        'org.kde.StatusNotifierItem',
+      );
+      final props = (response as DBusGetAllPropertiesResponse)
+          .values[0]
+          .asStringVariantDict();
+      expect(props['IconName']?.asString(), equals(''));
+      expect(props['IconPixmap']?.asArray().toList(), hasLength(2));
     });
 
     test('StatusNotifierObject handles Activate and SecondaryActivate clicks', () async {

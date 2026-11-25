@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:dbus/dbus.dart';
@@ -130,6 +131,7 @@ class TrayPixmapData {
 /// panels without requiring external `libayatana-appindicator3` native C libraries.
 class LinuxStatusNotifierTray {
   static const _log = ScopedLogger('LinuxTray');
+  static const List<int> _trayIconSizes = <int>[24, 48];
 
   /// Callback invoked when the user activates the tray icon or picks a menu item.
   final NativeTrayActionCallback onAction;
@@ -144,12 +146,20 @@ class LinuxStatusNotifierTray {
   String? _busName;
   bool _visible = false;
   bool _disposed = false;
-  TrayPixmapData? _cachedPixmap;
+  List<TrayPixmapData> _cachedPixmaps;
+  Future<void>? _iconLoadFuture;
   TrayPresentationState _state = const TrayPresentationState();
   int _menuRevision = 1;
 
   /// Creates a [LinuxStatusNotifierTray] dispatching user interactions to [onAction].
-  LinuxStatusNotifierTray({required this.onAction, this.processId = 0});
+  ///
+  /// Optional [initialPixmaps] can be supplied to pre-populate the exported
+  /// `IconPixmap` entries cleanly in tests.
+  LinuxStatusNotifierTray({
+    required this.onAction,
+    this.processId = 0,
+    List<TrayPixmapData>? initialPixmaps,
+  }) : _cachedPixmaps = List<TrayPixmapData>.from(initialPixmaps ?? const []);
 
   /// Latest presentation snapshot exposed by the tray objects.
   TrayPresentationState get state => _state;
@@ -158,7 +168,27 @@ class LinuxStatusNotifierTray {
   int get menuRevision => _menuRevision;
 
   /// Pre-decoded ARGB32 pixmap bytes, if loaded from bundle assets.
-  TrayPixmapData? get iconPixmap => _cachedPixmap;
+  TrayPixmapData? get iconPixmap =>
+      _cachedPixmaps.isNotEmpty ? _cachedPixmaps.last : null;
+
+  /// All pre-decoded ARGB32 icon pixmap sizes exported over `IconPixmap`.
+  List<TrayPixmapData> get iconPixmaps =>
+      List<TrayPixmapData>.unmodifiable(_cachedPixmaps);
+
+  /// Preloads and decodes the bundled application icon into ARGB32 tray pixmaps.
+  ///
+  /// Concurrent calls coalesce onto the same in-flight decode task so background
+  /// entry already has ready-to-export icon bytes.
+  Future<void> preloadIcon() {
+    if (_disposed || _cachedPixmaps.isNotEmpty) {
+      return Future<void>.value();
+    }
+    return _iconLoadFuture ??= _loadTrayPixmaps().whenComplete(() {
+      if (_cachedPixmaps.isEmpty) {
+        _iconLoadFuture = null;
+      }
+    });
+  }
 
   /// Whether the tray icon is currently registered and visible.
   bool get isVisible => _visible;
@@ -217,7 +247,7 @@ class LinuxStatusNotifierTray {
 
   Future<void> _show() async {
     try {
-      _cachedPixmap ??= await _loadTrayPixmap();
+      await preloadIcon();
       final client = DBusClient.session();
       _client = client;
 
@@ -245,7 +275,11 @@ class LinuxStatusNotifierTray {
       }
 
       await _registerWithWatcher();
-      _log.d('StatusNotifierItem visible on bus=$_busName');
+      final iconName = _cachedPixmaps.isNotEmpty ? '' : 'audio-x-generic';
+      _log.d(
+        'StatusNotifierItem visible on bus=$_busName '
+        'pixmaps=${_cachedPixmaps.length} iconName="$iconName"',
+      );
 
       _watcherSub = DBusSignalStream(
         client,
@@ -327,42 +361,111 @@ class LinuxStatusNotifierTray {
     }
   }
 
-  Future<TrayPixmapData?> _loadTrayPixmap() async {
-    ui.Codec? codec;
-    ui.Image? image;
+  Future<void> _loadTrayPixmaps() async {
     try {
       final data = await rootBundle.load('assets/icon/icon_small.webp');
-      codec = await ui.instantiateImageCodec(
-        data.buffer.asUint8List(),
-        targetWidth: 48,
-        targetHeight: 48,
+      final rawBytes = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
       );
-      final frame = await codec.getNextFrame();
-      image = frame.image;
-      final rgbaBytes = await image.toByteData(
-        format: ui.ImageByteFormat.rawRgba,
-      );
-      if (rgbaBytes == null) return null;
+      final loaded = <TrayPixmapData>[];
 
-      final rgba = rgbaBytes.buffer.asUint8List();
-      final argb = Uint8List(rgba.length);
-      for (int i = 0; i + 3 < rgba.length; i += 4) {
-        argb[i] = rgba[i + 3]; // A
-        argb[i + 1] = rgba[i]; // R
-        argb[i + 2] = rgba[i + 1]; // G
-        argb[i + 3] = rgba[i + 2]; // B
+      for (final size in _trayIconSizes) {
+        ui.Codec? codec;
+        ui.Image? image;
+        try {
+          codec = await ui.instantiateImageCodec(
+            rawBytes,
+            targetWidth: size,
+            targetHeight: size,
+          );
+          final frame = await codec.getNextFrame();
+          image = frame.image;
+          final straightRgba = await image.toByteData(
+            format: ui.ImageByteFormat.rawStraightRgba,
+          );
+          if (straightRgba == null) continue;
+
+          final argbBytes = _rgbaToRoundedArgb32(
+            straightRgba.buffer.asUint8List(
+              straightRgba.offsetInBytes,
+              straightRgba.lengthInBytes,
+            ),
+            image.width,
+            image.height,
+          );
+          loaded.add(
+            TrayPixmapData(
+              width: image.width,
+              height: image.height,
+              argbBytes: argbBytes,
+            ),
+          );
+        } finally {
+          image?.dispose();
+          codec?.dispose();
+        }
       }
-      return TrayPixmapData(
-        width: image.width,
-        height: image.height,
-        argbBytes: argb,
-      );
-    } catch (_) {
-      return null;
-    } finally {
-      image?.dispose();
-      codec?.dispose();
+
+      if (loaded.isNotEmpty) {
+        _cachedPixmaps = loaded;
+        final summary = loaded
+            .map((p) => '${p.width}x${p.height}(${p.argbBytes.length}B)')
+            .join(', ');
+        _log.d('Decoded tray icon pixmaps: $summary');
+      } else {
+        _log.w(
+          'No tray icon pixmaps decoded from assets/icon/icon_small.webp',
+        );
+      }
+    } catch (e, st) {
+      _log.w('Failed to load tray icon pixmaps', error: e, stackTrace: st);
     }
+  }
+
+  static Uint8List _rgbaToRoundedArgb32(
+    Uint8List rgba,
+    int width,
+    int height,
+  ) {
+    final argb = Uint8List(rgba.length);
+    final halfW = width * 0.5;
+    final halfH = height * 0.5;
+    final radius = width * 0.22;
+    final innerW = math.max(halfW - radius, 0.0);
+    final innerH = math.max(halfH - radius, 0.0);
+
+    for (int y = 0; y < height; y++) {
+      final py = y + 0.5 - halfH;
+      final dy = py.abs() - innerH;
+      final qy = math.max(dy, 0.0);
+      for (int x = 0; x < width; x++) {
+        final offset = (y * width + x) * 4;
+        if (offset + 3 >= rgba.length) break;
+
+        final px = x + 0.5 - halfW;
+        final dx = px.abs() - innerW;
+        final qx = math.max(dx, 0.0);
+        final sdf =
+            math.sqrt(qx * qx + qy * qy) +
+            math.min(math.max(dx, dy), 0.0) -
+            radius;
+        final coverage = (0.5 - sdf).clamp(0.0, 1.0);
+        final outAlpha = (rgba[offset + 3] * coverage).round().clamp(0, 255);
+
+        argb[offset] = outAlpha;
+        if (outAlpha == 0) {
+          argb[offset + 1] = 0;
+          argb[offset + 2] = 0;
+          argb[offset + 3] = 0;
+        } else {
+          argb[offset + 1] = rgba[offset];
+          argb[offset + 2] = rgba[offset + 1];
+          argb[offset + 3] = rgba[offset + 2];
+        }
+      }
+    }
+    return argb;
   }
 
   /// Releases D-Bus connections and marks the tray disposed.
@@ -398,16 +501,17 @@ class TachyonStatusNotifierObject extends DBusObject {
   }
 
   DBusValue _buildIconPixmapValue() {
-    final pixmap = tray.iconPixmap;
-    if (pixmap == null) {
+    final pixmaps = tray.iconPixmaps;
+    if (pixmaps.isEmpty) {
       return DBusArray(DBusSignature('(iiay)'));
     }
     return DBusArray(DBusSignature('(iiay)'), [
-      DBusStruct([
-        DBusInt32(pixmap.width),
-        DBusInt32(pixmap.height),
-        DBusArray.byte(pixmap.argbBytes),
-      ]),
+      for (final pixmap in pixmaps)
+        DBusStruct([
+          DBusInt32(pixmap.width),
+          DBusInt32(pixmap.height),
+          DBusArray.byte(pixmap.argbBytes),
+        ]),
     ]);
   }
 
@@ -530,6 +634,11 @@ class TachyonStatusNotifierObject extends DBusObject {
             access: DBusPropertyAccess.read,
           ),
           DBusIntrospectProperty(
+            'IconThemePath',
+            DBusSignature.string,
+            access: DBusPropertyAccess.read,
+          ),
+          DBusIntrospectProperty(
             'OverlayIconName',
             DBusSignature.string,
             access: DBusPropertyAccess.read,
@@ -597,14 +706,19 @@ class TachyonStatusNotifierObject extends DBusObject {
   }
 
   Map<String, DBusValue> _allPropertiesMap() {
+    final hasPixmaps = tray.iconPixmaps.isNotEmpty;
     return <String, DBusValue>{
       'Category': const DBusString('ApplicationStatus'),
       'Id': const DBusString('dev.chomusuke.tachyon'),
       'Title': const DBusString('Tachyon'),
       'Status': const DBusString('Active'),
       'WindowId': const DBusUint32(0),
-      'IconName': const DBusString('tachyon'),
+      // Keep IconName empty whenever inline ARGB32 IconPixmap data is ready so
+      // panels (e.g. Ubuntu AppIndicators on GNOME) do not ignore IconPixmap in
+      // favor of an uninstalled themed icon name and fall back to "...".
+      'IconName': DBusString(hasPixmaps ? '' : 'audio-x-generic'),
       'IconPixmap': _buildIconPixmapValue(),
+      'IconThemePath': const DBusString(''),
       'OverlayIconName': const DBusString(''),
       'OverlayIconPixmap': DBusArray(DBusSignature('(iiay)')),
       'AttentionIconName': const DBusString(''),
