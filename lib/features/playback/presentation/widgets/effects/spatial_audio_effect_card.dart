@@ -1,8 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 
 /// Stereo & Spatial Audio Processing Card.
 ///
@@ -11,6 +11,7 @@ import 'package:tachyon/features/settings/presentation/settings_controller.dart'
 /// - Spatializer width expansion (0.0x Mono to 2.0x Ultra-wide).
 /// - Bauer stereophonic-to-binaural crossfeed filter (bs2b) for headphone listening.
 class SpatialAudioEffectCard extends StatelessWidget {
+  /// Creates a [SpatialAudioEffectCard].
   const SpatialAudioEffectCard({super.key});
 
   @override

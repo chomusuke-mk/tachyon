@@ -11,10 +11,10 @@ import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/features/radios/data/radio_browser_service.dart';
-import 'package:tachyon/features/radios/presentation/radio_controller.dart';
-import 'package:tachyon/features/radios/presentation/radios_screen.dart';
+import 'package:tachyon/features/radios/presentation/controllers/radio_controller.dart';
+import 'package:tachyon/features/radios/presentation/screens/radios_screen.dart';
 import 'package:tachyon/features/radios/presentation/widgets/radio_filter_picker_dialog.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 

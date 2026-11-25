@@ -2,11 +2,12 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 
 /// Playback Tuning Card (Speed, Pitch, Volume Boost).
 class PlaybackTuningCard extends StatelessWidget {
+  /// Creates a [PlaybackTuningCard].
   const PlaybackTuningCard({super.key});
 
   @override
@@ -251,6 +252,7 @@ class PlaybackTuningCard extends StatelessWidget {
 
 /// Crossfade Durations Card (Auto duration & Manual skip duration).
 class CrossfadeDurationsCard extends StatelessWidget {
+  /// Creates a [CrossfadeDurationsCard].
   const CrossfadeDurationsCard({super.key});
 
   @override

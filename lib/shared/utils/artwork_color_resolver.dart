@@ -15,7 +15,7 @@ abstract final class ArtworkColorResolver {
   /// Read-only snapshot of cached extracted colors.
   static Map<String, Color> get cache => _cache;
 
-  @visibleForTesting
+  /// Clears all cached extracted artwork colors from memory.
   static void clearCache() => _cache.clear();
 
   /// Returns the application's default container color for surfaces like the miniplayer

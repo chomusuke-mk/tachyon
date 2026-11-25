@@ -1,3 +1,4 @@
+/// Map of ISO 639-1 language codes to their native endonyms.
 const Map<String, String> languagesEndonyms = {
   'aa': 'Afaan Qafar',
   'ab': 'аҧсуа бызшәа',

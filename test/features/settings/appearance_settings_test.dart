@@ -6,13 +6,13 @@ import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/store/library_store.dart';
-import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/library/presentation/controllers/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
-import 'package:tachyon/features/settings/presentation/settings_screen.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/screens/settings_screen.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/shared/widgets/app_background.dart';
 

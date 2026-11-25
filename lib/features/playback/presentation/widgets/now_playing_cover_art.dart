@@ -9,11 +9,11 @@ import 'package:provider/provider.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/visualizers/now_playing_visualizer_mode.dart';
 import 'package:tachyon/features/playback/presentation/widgets/visualizers/now_playing_visualizer_renderer.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:tachyon/shared/utils/artwork_color_resolver.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
@@ -72,6 +72,7 @@ class _VisualizerBallistics extends ChangeNotifier {
 /// Self-contained, beat-reactive artwork and multi-mode visualizer component
 /// for the Now Playing view.
 class NowPlayingCoverArt extends StatefulWidget {
+  /// Creates a [NowPlayingCoverArt].
   const NowPlayingCoverArt({super.key});
 
   @override

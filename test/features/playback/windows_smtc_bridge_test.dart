@@ -10,7 +10,7 @@ import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
-import 'package:tachyon/core/playback/windows_smtc_bridge.dart';
+import 'package:tachyon/core/playback/bridges/windows_smtc_bridge.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 

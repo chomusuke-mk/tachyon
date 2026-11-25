@@ -2,17 +2,25 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/languages.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 
 /// Reusable searchable language selection dialog.
 ///
 /// Used for both App UI Language and Lyrics Translation Target Language.
 class LanguagePickerDialog extends StatefulWidget {
+  /// Title displayed at the top of the dialog.
   final String title;
+
+  /// Currently selected language code or `'defaultOption'`.
   final String currentSelectedValue;
+
+  /// Localized strings used for search hints, labels, and actions.
   final AppStringKey strings;
+
+  /// Callback invoked with the chosen language code or `'defaultOption'`.
   final ValueChanged<String> onSelected;
 
+  /// Creates a [LanguagePickerDialog].
   const LanguagePickerDialog({
     super.key,
     required this.title,
@@ -21,7 +29,11 @@ class LanguagePickerDialog extends StatefulWidget {
     required this.onSelected,
   });
 
-  /// Static helper to display the dialog.
+  /// Displays a [LanguagePickerDialog] modal for selecting a language.
+  ///
+  /// Uses [title], [currentSelectedValue], and [strings] to configure the
+  /// dialog, and invokes [onSelected] before dismissing the dialog when an
+  /// option is tapped.
   static Future<void> show(
     BuildContext context, {
     required String title,

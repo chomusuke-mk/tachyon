@@ -6,11 +6,11 @@ import 'package:jsonc/jsonc.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/audio_effects_sheet.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/features/playback/presentation/widgets/audio_effects_sheet.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 
 class _MockLocaleRepo extends LocaleRepository {
   final Map<String, String> strings;

@@ -1,8 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/effects/studio_knob.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 
 /// Algorithmic Studio Reverb Card (Freeverb model).
 ///
@@ -15,6 +15,7 @@ import 'package:tachyon/features/settings/presentation/settings_controller.dart'
 ///   * Wet Level (0.00x - 2.00x)
 ///   * Dry Level (0.00x - 2.00x)
 class ReverbEffectCard extends StatelessWidget {
+  /// Creates a [ReverbEffectCard].
   const ReverbEffectCard({super.key});
 
   static const _validPresets = [

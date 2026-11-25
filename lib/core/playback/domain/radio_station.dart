@@ -5,18 +5,41 @@ import 'audio_playable.dart';
 class RadioStation implements AudioPlayable {
   @override
   final int? id;
+
+  /// External directory UUID (such as Radio Browser station UUID), if any.
   final String? stationUuid;
+
+  /// Display name of the radio station.
   final String name;
+
+  /// Direct audio stream URL.
   final String streamUrl;
+
+  /// Station website URL, if provided.
   final String? homepageUrl;
+
+  /// Station logo or favicon image URL, if provided.
   final String? faviconUrl;
+
+  /// Primary broadcast genre or tag label, if provided.
   final String? genre;
+
+  /// Broadcast country name or code, if provided.
   final String? country;
+
+  /// Advertised stream bitrate in kbps, if known.
   final int? bitrateKbps;
-  final String? codec; // 'mp3', 'aac', 'hls'
+
+  /// Stream audio codec identifier (e.g., `'mp3'`, `'aac'`, `'hls'`).
+  final String? codec;
+
+  /// Whether the station is marked as a user favorite.
   final bool isFavorite;
+
+  /// Timestamp when this station record was created.
   final DateTime createdAt;
 
+  /// Creates an immutable [RadioStation] entity.
   const RadioStation({
     this.id,
     this.stationUuid,
@@ -68,6 +91,7 @@ class RadioStation implements AudioPlayable {
     );
   }
 
+  /// Returns a copy of this station with the specified fields updated.
   RadioStation copyWith({
     int? id,
     String? stationUuid,

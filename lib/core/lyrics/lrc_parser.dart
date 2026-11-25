@@ -6,24 +6,25 @@ import 'package:tachyon/core/lyrics/domain/lyric_line.dart';
 /// Immutable container holding the parsed LRC document, metadata, and fast lookup trees.
 @immutable
 class ParsedLrc {
-  /// Header metadata tags: e.g. {'ti': 'Title', 'ar': 'Artist', 'al': 'Album', 'by': 'Author'}
+  /// Header metadata tags, such as `{'ti': 'Title', 'ar': 'Artist', 'al': 'Album', 'by': 'Author'}`.
   final Map<String, String> metadata;
 
-  /// Header offset specified in the file in milliseconds (from [offset:+/-ms])
+  /// Header offset specified in the file in milliseconds (from `[offset:+/-ms]`).
   final int offsetMs;
 
-  /// Ordered list of all lyric lines (sorted chronologically if synced)
+  /// Ordered list of all lyric lines (sorted chronologically if synced).
   final List<LyricLine> lines;
 
-  /// Self-balancing binary search tree indexed by line Duration for O(log n) lookup
+  /// Self-balancing binary search tree indexed by line [Duration] for O(log n) lookup.
   final SplayTreeMap<Duration, LyricLine> timeline;
 
-  /// Self-balancing binary search tree mapping timestampMs to line index in [lines]
+  /// Self-balancing binary search tree mapping millisecond timestamps to indices in [lines].
   final SplayTreeMap<int, int> indexMap;
 
-  /// Whether the file contains timestamped lines
+  /// Whether the file contains timestamped lines.
   final bool isSynced;
 
+  /// Creates a [ParsedLrc] document from parsed metadata, lines, and lookup trees.
   const ParsedLrc({
     required this.metadata,
     required this.offsetMs,
@@ -33,7 +34,7 @@ class ParsedLrc {
     required this.isSynced,
   });
 
-  /// Factory for an empty lyric document
+  /// Creates an empty [ParsedLrc] document with no lines.
   factory ParsedLrc.empty() => ParsedLrc(
     metadata: const {},
     offsetMs: 0,
@@ -43,16 +44,25 @@ class ParsedLrc {
     isSynced: false,
   );
 
-  // Metadata accessors
+  /// Track title parsed from the `ti` header tag, if present.
   String? get title => metadata['ti'];
+
+  /// Artist name parsed from the `ar` header tag, if present.
   String? get artist => metadata['ar'];
+
+  /// Album title parsed from the `al` header tag, if present.
   String? get album => metadata['al'];
-  String? get author => metadata['by'];
-  String? get editor => metadata['re'];
+
+  /// LRC version parsed from the `ve` header tag, if present.
   String? get version => metadata['ve'];
+
+  /// Track length parsed from the `length` header tag, if present.
   String? get length => metadata['length'];
 
+  /// Whether this document contains no lyric lines.
   bool get isEmpty => lines.isEmpty;
+
+  /// Whether this document contains at least one lyric line.
   bool get isNotEmpty => lines.isNotEmpty;
 
   /// Resolves the active line index for the given playback position in O(log n) time.
@@ -68,18 +78,6 @@ class ParsedLrc {
     final activeTimestamp = indexMap.lastKeyBefore(posMs + 1);
     if (activeTimestamp == null) return 0;
     return indexMap[activeTimestamp] ?? 0;
-  }
-
-  /// Resolves the active [LyricLine] for the given playback position in O(log n) time.
-  LyricLine? lineAt(Duration position) {
-    if (lines.isEmpty) return null;
-    if (!isSynced || timeline.isEmpty) return lines.first;
-
-    final key = timeline.lastKeyBefore(
-      position + const Duration(microseconds: 1),
-    );
-    if (key == null) return lines.first;
-    return timeline[key];
   }
 }
 
@@ -209,11 +207,5 @@ abstract final class LrcParser {
       indexMap: indexMap,
       isSynced: hasAnyTimestamp,
     );
-  }
-
-  /// Determines whether the string contains valid LRC timestamp tags.
-  static bool isValidLrc(String? rawContent) {
-    if (rawContent == null || rawContent.trim().isEmpty) return false;
-    return _timestampRegex.hasMatch(rawContent);
   }
 }

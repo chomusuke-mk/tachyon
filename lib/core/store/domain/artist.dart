@@ -1,12 +1,15 @@
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 
+/// An artist in the local music library catalog.
 class Artist {
   /// The artist's unique identifier.
   final int? id;
 
   /// The name of the artist.
   final String name;
+
+  /// Cached artwork file path or URI representing the artist, if available.
   final String? artworkUri;
 
   /// The list of albums associated with this artist.
@@ -21,6 +24,7 @@ class Artist {
   /// Returns the number of tracks associated with this artist.
   int get trackCount => tracks.length;
 
+  /// Creates an [Artist] catalog entity.
   const Artist({
     this.id,
     required this.name,

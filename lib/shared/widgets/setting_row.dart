@@ -1,13 +1,38 @@
 import 'package:material_ui/material_ui.dart';
 
-enum ControllerType { switchCtrl, dropdown, slider, text, complex }
+/// Control layout category that determines responsive row sizing in [SettingRow].
+enum ControllerType {
+  /// Compact toggle switch control requiring minimal horizontal space.
+  switchCtrl,
 
+  /// Fixed-width dropdown selector control.
+  dropdown,
+
+  /// Continuous slider control rendered at a fixed width on wide layouts.
+  slider,
+
+  /// Text or input field control requiring extra horizontal width.
+  text,
+
+  /// Multi-line or composite control that always stacks below the label.
+  complex,
+}
+
+/// Responsive settings row pairing a title and description with a control widget.
 class SettingRow extends StatelessWidget {
+  /// Primary label identifying the setting.
   final String title;
+
+  /// Optional secondary helper text displayed below [title].
   final String? description;
+
+  /// Control layout category governing width reservation and vertical stacking.
   final ControllerType type;
+
+  /// Interactive control widget rendered beside or below the text section.
   final Widget child;
 
+  /// Creates a [SettingRow].
   const SettingRow({
     super.key,
     required this.title,

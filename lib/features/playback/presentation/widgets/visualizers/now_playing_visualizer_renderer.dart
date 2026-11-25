@@ -6,6 +6,7 @@ import 'package:tachyon/features/playback/presentation/widgets/wave_visualizer.d
 
 /// Extensible contract for rendering different Now Playing visualizer modes.
 abstract class NowPlayingVisualizerRenderer {
+  /// Creates a [NowPlayingVisualizerRenderer].
   const NowPlayingVisualizerRenderer();
 
   /// Builds the visual content within the given dimensions.
@@ -38,6 +39,7 @@ abstract class NowPlayingVisualizerRenderer {
 
 /// Mode 1: Off — Pure album art without visualizer waves or bass pulsation.
 class OffVisualizerRenderer extends NowPlayingVisualizerRenderer {
+  /// Creates an [OffVisualizerRenderer].
   const OffVisualizerRenderer();
 
   @override
@@ -83,8 +85,10 @@ class OffVisualizerRenderer extends NowPlayingVisualizerRenderer {
 /// Mode 2: Wave — Album art with continuous reactive wave docked underneath
 /// and beat-isolated bass pulsation (+8% max bounce).
 class WaveVisualizerRenderer extends NowPlayingVisualizerRenderer {
+  /// Height in logical pixels of the wave canvas docked below the artwork.
   static const double visualizerHeight = 56.0;
 
+  /// Creates a [WaveVisualizerRenderer].
   const WaveVisualizerRenderer();
 
   @override
@@ -158,6 +162,7 @@ class WaveVisualizerRenderer extends NowPlayingVisualizerRenderer {
 /// Mode 3: Bars — Studio 10-band spectrum analyzer visualizer from miniaudio_player,
 /// replacing the cover art completely.
 class BarsVisualizerRenderer extends NowPlayingVisualizerRenderer {
+  /// Creates a [BarsVisualizerRenderer].
   const BarsVisualizerRenderer();
 
   @override
@@ -213,6 +218,7 @@ class BarsVisualizerRenderer extends NowPlayingVisualizerRenderer {
 /// Mode 4: Circle — Reactive circular audio visualizer with pulsing neon ring
 /// and 3D undulating particle wave lattice ribbons (inspired by the iconic NCS visualizer style).
 class ReactiveCircleVisualizerRenderer extends NowPlayingVisualizerRenderer {
+  /// Creates a [ReactiveCircleVisualizerRenderer].
   const ReactiveCircleVisualizerRenderer();
 
   @override
@@ -283,6 +289,7 @@ class NowPlayingVisualizerFactory {
     NowPlayingVisualizerMode.circle: const ReactiveCircleVisualizerRenderer(),
   };
 
+  /// Returns the [NowPlayingVisualizerRenderer] registered for [mode].
   static NowPlayingVisualizerRenderer getRenderer(NowPlayingVisualizerMode mode) {
     return _renderers[mode] ?? const WaveVisualizerRenderer();
   }

@@ -1,77 +1,43 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:material_ui/material_ui.dart';
-import 'package:flutter/services.dart';
+import 'package:tachyon/core/lifecycle/app_lifecycle_controller.dart';
+import 'package:tachyon/core/playback/bridges/linux_mpris_bridge.dart';
+import 'package:tachyon/core/playback/bridges/windows_smtc_bridge.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
-import 'package:tachyon/shared/utils/app_memory_coordinator.dart';
 
-import 'linux_mpris_bridge.dart';
-import 'tachyon_audio_handler.dart';
-import 'windows_smtc_bridge.dart';
-
-/// Central coordinator for system media transport controls, notification services,
-/// and Minimized Mode across Android, iOS, Linux (GTK headerbar & window state),
-/// macOS, and Windows.
-class SystemMediaService with WidgetsBindingObserver {
-  static const MethodChannel windowStateChannel = MethodChannel(
-    'dev.chomusuke.tachyon/window_state',
-  );
-
-  static final ValueNotifier<bool> _isMinimizedNotifier = ValueNotifier<bool>(
-    false,
-  );
-
-  /// Reactive listenable indicating whether the application is currently in
-  /// Minimized Mode (backgrounded on mobile, minimized on desktop, or minimized
-  /// via the Linux window headerbar minimize button).
-  static ValueListenable<bool> get isMinimizedListenable =>
-      _isMinimizedNotifier;
-
-  /// Whether the application is currently in Minimized Mode.
-  static bool get isMinimized => _isMinimizedNotifier.value;
-
+/// Central coordinator for platform system media transport controls and
+/// playback notification bridges (Android MediaSession, iOS MPNowPlaying,
+/// Linux MPRIS2, and Windows SMTC).
+class SystemMediaService {
   final TachyonAudioHandler _handler;
-  final PlaybackController? _playbackController;
   LinuxMprisBridge? _linuxBridge;
   WindowsSmtcBridge? _windowsBridge;
-  AppLifecycleListener? _lifecycleListener;
 
-  SystemMediaService._(this._handler, [this._playbackController]) {
-    WidgetsBinding.instance.addObserver(this);
-    _lifecycleListener = AppLifecycleListener(
-      onHide: () => setMinimizedMode(true),
-      onPause: () => setMinimizedMode(true),
-      onShow: () => setMinimizedMode(false),
-      onResume: () => setMinimizedMode(false),
-    );
-    _setupLinuxWindowStateChannel();
-  }
+  SystemMediaService._(this._handler);
 
+  /// Active `audio_service` handler bridged to [PlaybackController].
   TachyonAudioHandler get handler => _handler;
 
-  void _setupLinuxWindowStateChannel() {
-    windowStateChannel.setMethodCallHandler((call) async {
-      if (call.method == 'onMinimizedChanged') {
-        final minimized = call.arguments == true;
-        setMinimizedMode(minimized);
-      }
-      return null;
-    });
-  }
-
-  /// Initializes the multiplatform system media services.
+  /// Initializes platform media notification services and binds them to
+  /// [playbackController] and optional [lifecycleController].
   static Future<SystemMediaService> initialize({
     required PlaybackController playbackController,
+    AppLifecycleController? lifecycleController,
   }) async {
     debugPrint('[SystemMediaService] Initializing system media service...');
 
-    // 1. Initialize AudioService handler
     late final TachyonAudioHandler handler;
     await AudioService.init(
       builder: () {
         handler = TachyonAudioHandler(
           playbackController: playbackController,
+          onTaskRemovedWhilePlaying: lifecycleController == null
+              ? null
+              : () => lifecycleController.handleTaskRemoved(isPlaying: true),
         );
         return handler;
       },
@@ -84,9 +50,8 @@ class SystemMediaService with WidgetsBindingObserver {
       ),
     );
 
-    final service = SystemMediaService._(handler, playbackController);
+    final service = SystemMediaService._(handler);
 
-    // 2. Initialize Linux MPRIS bridge if on Linux
     if (!kIsWeb && PersistentBinaryStorage.isLinux) {
       debugPrint(
         '[SystemMediaService] Platform is Linux. Starting LinuxMprisBridge...',
@@ -94,6 +59,9 @@ class SystemMediaService with WidgetsBindingObserver {
       final linuxBridge = LinuxMprisBridge(
         handler: handler,
         playbackController: playbackController,
+        onRaiseRequested: lifecycleController == null
+            ? null
+            : () => unawaited(lifecycleController.restoreFromBackground()),
       );
       await linuxBridge.initialize();
       service._linuxBridge = linuxBridge;
@@ -102,7 +70,6 @@ class SystemMediaService with WidgetsBindingObserver {
       );
     }
 
-    // 3. Initialize Windows SMTC bridge if on Windows
     if (!kIsWeb && PersistentBinaryStorage.isWindows) {
       debugPrint(
         '[SystemMediaService] Platform is Windows. Starting WindowsSmtcBridge...',
@@ -125,49 +92,8 @@ class SystemMediaService with WidgetsBindingObserver {
     return service;
   }
 
-  /// Enters or exits Minimized Mode, coordinating UI cache eviction,
-  /// ticker suspension, position throttling, and native memory trimming.
-  void setMinimizedMode(bool minimized) {
-    if (_isMinimizedNotifier.value == minimized) {
-      return;
-    }
-    _isMinimizedNotifier.value = minimized;
-    _playbackController?.setMinimized(minimized);
-    AppMemoryCoordinator.applyMinimizedMemoryPolicy(minimized);
-  }
-
-  /// Static helper to update Minimized Mode state directly (e.g. from lifecycle
-  /// listeners or tests when a full [SystemMediaService] instance is not active).
-  static void updateMinimizedState(
-    bool minimized, {
-    PlaybackController? playbackController,
-  }) {
-    if (_isMinimizedNotifier.value == minimized) return;
-    _isMinimizedNotifier.value = minimized;
-    playbackController?.setMinimized(minimized);
-    AppMemoryCoordinator.applyMinimizedMemoryPolicy(minimized);
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached) {
-      setMinimizedMode(true);
-      return;
-    }
-
-    if (state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.paused) {
-      setMinimizedMode(true);
-    } else if (state == AppLifecycleState.resumed) {
-      setMinimizedMode(false);
-    }
-  }
-
+  /// Disposes native OS media bridges and detaches [handler].
   void dispose() {
-    windowStateChannel.setMethodCallHandler(null);
-    _lifecycleListener?.dispose();
-    _lifecycleListener = null;
-    WidgetsBinding.instance.removeObserver(this);
     _linuxBridge?.dispose();
     _windowsBridge?.dispose();
     _handler.dispose();

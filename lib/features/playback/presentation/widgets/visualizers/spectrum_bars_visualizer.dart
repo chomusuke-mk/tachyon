@@ -5,13 +5,27 @@ import 'package:material_ui/material_ui.dart';
 /// vertical gradient bars across the full width of the artwork, floating
 /// transparently with peak caps and zero dB/Hz clutter.
 class SpectrumBarsPainter extends CustomPainter {
+  /// Fallback per-band spectrum magnitudes (`0.0` to `1.0`) when [magnitudesProvider] is `null`.
   final List<double> magnitudes;
+
+  /// Optional callback providing live spectrum magnitudes without widget rebuilds.
   final List<double> Function()? magnitudesProvider;
+
+  /// Whether playback is active when [isActiveProvider] is `null`.
   final bool isActive;
+
+  /// Optional callback returning whether playback is currently active.
   final bool Function()? isActiveProvider;
+
+  /// Corner radius hint retained for parity with artwork-aligned visualizers.
   final double cornerRadius;
+
+  /// Optional base color used to generate the vertical bar gradient.
+  ///
+  /// Falls back to [defaultSpectrumGradient] when `null`.
   final Color? accentColor;
 
+  /// Default multi-stop vertical gradient applied when [accentColor] is `null`.
   static const LinearGradient defaultSpectrumGradient = LinearGradient(
     colors: [
       Color(0xFF06B6D4), // Cyan
@@ -32,6 +46,7 @@ class SpectrumBarsPainter extends CustomPainter {
   Color? _cachedAccentColor;
   Shader? _cachedShader;
 
+  /// Creates a [SpectrumBarsPainter].
   SpectrumBarsPainter({
     super.repaint,
     required this.magnitudes,

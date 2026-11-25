@@ -21,18 +21,40 @@ import 'package:tachyon/shared/utils/cors_image_utils.dart';
 /// (or [quality]) to ensure minimal memory consumption without needing multiple
 /// quality tiers on disk.
 class AlbumArtImage extends StatelessWidget {
+  /// Optional playable item whose [AudioPlayable.artworkUri] is used when [artworkUri] is omitted.
   final AudioPlayable? playable;
+
+  /// Local file path, OPFS key, or remote HTTP(S) URL for the artwork image.
   final String? artworkUri;
+
+  /// Optional raw encoded image bytes rendered directly from memory when non-empty.
   final Uint8List? artworkBytes;
+
+  /// Target resolution tier used to derive default memory decode bounds.
   final ThumbnailQuality quality;
+
+  /// Optional layout width of the rendered artwork in logical pixels.
   final double? width;
+
+  /// Optional layout height of the rendered artwork in logical pixels.
   final double? height;
+
+  /// Optional explicit decode width bound in physical pixels.
   final int? cacheWidth;
+
+  /// Optional explicit decode height bound in physical pixels.
   final int? cacheHeight;
+
+  /// How the artwork image is inscribed into its layout box.
   final BoxFit fit;
+
+  /// Optional corner radius applied via a [ClipRRect] around the image.
   final BorderRadius? borderRadius;
+
+  /// Optional placeholder widget shown while loading or when no artwork resolves.
   final Widget? fallback;
 
+  /// Creates an [AlbumArtImage].
   const AlbumArtImage({
     super.key,
     this.playable,

@@ -4,29 +4,62 @@ export 'package:tachyon/shared/utils/cancellation_token.dart'
 
 /// Stage states of the library scan lifecycle.
 enum ScanStage {
+  /// No scan is currently active.
   idle,
+
+  /// Acquiring and preparing the database connection.
   gettingDatabase,
+
+  /// Loading existing track records for incremental comparison.
   gettingTracks,
+
+  /// Enumerating audio files across target directories and sources.
   discovering,
+
+  /// Comparing discovered files against stored timestamps to detect changes.
   comparing,
+
+  /// Extracting tags, audio properties, artwork, and waveforms.
   extracting,
+
+  /// Writing extracted track records into the database.
   inserting,
+
+  /// Removing deleted tracks and orphaned artists, albums, and genres.
   cleaningOrphans,
+
+  /// Purging unused cover art files from thumbnail storage.
   cleaningThumbnails,
+
+  /// Library scan finished successfully.
   completed,
+
+  /// Library scan terminated with an error.
   failed,
+
+  /// Library scan was cancelled before completion.
   cancelled,
 }
 
 /// Immutable state snapshot emitted during library scanning.
 @immutable
 class ScanProgress {
+  /// Current stage of the scan lifecycle.
   final ScanStage stage;
+
+  /// Optional human-readable progress counter label (for example `'12/100'`).
   final String? progressLabel;
+
+  /// Optional normalized progress fraction between `0.0` and `1.0`.
   final double? progressValue;
+
+  /// Error description when [stage] is [ScanStage.failed], if available.
   final String? errorMessage;
+
+  /// Whether the scan added, updated, or removed any catalog records.
   final bool catalogModified;
 
+  /// Creates a [ScanProgress] snapshot for [stage] and optional progress details.
   const ScanProgress({
     this.stage = ScanStage.idle,
     this.progressLabel,
@@ -35,17 +68,23 @@ class ScanProgress {
     this.catalogModified = true,
   });
 
+  /// Whether the scan is currently active and has not finished.
   bool get isRunning =>
       stage != ScanStage.idle &&
       stage != ScanStage.completed &&
       stage != ScanStage.failed &&
       stage != ScanStage.cancelled;
 
+  /// Whether the scan has reached a terminal state ([ScanStage.completed], [ScanStage.failed], or [ScanStage.cancelled]).
   bool get isDone =>
       stage == ScanStage.completed ||
       stage == ScanStage.failed ||
       stage == ScanStage.cancelled;
 
+  /// Returns a copy of this [ScanProgress] with the specified fields updated.
+  ///
+  /// Setting [clearProgressLabel], [clearProgressValue], or [clearErrorMessage]
+  /// to `true` explicitly resets the corresponding field to `null`.
   ScanProgress copyWith({
     ScanStage? stage,
     String? progressLabel,

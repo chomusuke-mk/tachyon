@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
+import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
@@ -13,7 +14,11 @@ import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 /// Linux (MPRIS), and Windows (SMTC).
 class TachyonAudioHandler extends as_lib.BaseAudioHandler
     with as_lib.SeekHandler, as_lib.QueueHandler {
+  /// Controller providing playback state, metadata, and transport actions.
   final PlaybackController playbackController;
+
+  /// Optional callback invoked when the mobile task is removed while playing.
+  Future<void> Function()? onTaskRemovedWhilePlaying;
 
   bool _isDisposed = false;
   String? _lastEmittedMediaSignature;
@@ -27,11 +32,13 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   as_lib.AudioServiceRepeatMode? _lastRepeatMode;
   as_lib.AudioServiceShuffleMode? _lastShuffleMode;
 
+  /// Creates a [TachyonAudioHandler] wired to [playbackController].
   TachyonAudioHandler({
     required this.playbackController,
+    this.onTaskRemovedWhilePlaying,
   }) {
     playbackController.addListener(_syncFromPlaybackController);
-    playbackController.positionListenable.addListener(_onPositionChanged);
+    playbackController.systemPositionListenable.addListener(_onPositionChanged);
     playbackController.liveMetadataListenable.addListener(
       _syncFromPlaybackController,
     );
@@ -39,7 +46,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   }
 
   void _onPositionChanged() {
-    _onPositionUpdate(playbackController.position);
+    _onPositionUpdate(playbackController.systemPositionListenable.value);
   }
 
   Duration _resolveBufferedPosition(Duration pos) {
@@ -73,10 +80,17 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     if (_isDisposed) return;
     _syncFromPlaybackState(
       playbackController.state,
-      position: playbackController.position,
+      position: playbackController.lifecycleMode == AppLifecycleMode.active
+          ? playbackController.position
+          : playbackController.systemPositionListenable.value,
     );
   }
 
+  /// Converts [artworkUri] into a [Uri] suitable for system media controls.
+  ///
+  /// Preserves HTTP(S), `data:`, and `blob:` URIs, converts local file paths to
+  /// `file://` URIs on native platforms, and returns `null` on web for OPFS
+  /// paths that require asynchronous resolution.
   static Uri? resolveArtworkUri(String? artworkUri) {
     if (artworkUri == null || artworkUri.trim().isEmpty) return null;
     final clean = artworkUri.trim();
@@ -307,6 +321,8 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   Future<void> onTaskRemoved() async {
     if (!playbackState.value.playing) {
       await stop();
+    } else if (onTaskRemovedWhilePlaying != null) {
+      await onTaskRemovedWhilePlaying!.call();
     }
   }
 
@@ -315,12 +331,15 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
     await stop();
   }
 
+  /// Detaches controller listeners and prevents further state emission.
   void dispose() {
     _isDisposed = true;
     playbackController.liveMetadataListenable.removeListener(
       _syncFromPlaybackController,
     );
-    playbackController.positionListenable.removeListener(_onPositionChanged);
+    playbackController.systemPositionListenable.removeListener(
+      _onPositionChanged,
+    );
     playbackController.removeListener(_syncFromPlaybackController);
   }
 }

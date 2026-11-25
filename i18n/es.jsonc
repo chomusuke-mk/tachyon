@@ -462,6 +462,15 @@
   "common_view_as_list": "Vista de lista",
   "common_back": "Atrás",
   "common_minimize": "Minimizar",
+  // --- win_: Controles de Ventana y Bandeja del Sistema --------------------
+  "win_send_to_background": "Enviar a segundo plano",
+  "win_minimize": "Minimizar",
+  "win_maximize": "Maximizar",
+  "win_restore": "Restaurar",
+  "win_close": "Cerrar",
+  "tray_show_app": "Mostrar Tachyon",
+  "tray_shuffle": "Aleatorio",
+  "tray_quit": "Cerrar",
   // --- scan_: Superposición de Progreso de Escaneo -------------------------
   "scan_stage_idle": "Inactivo",
   "scan_stage_getting_database": "Obteniendo base de datos...",

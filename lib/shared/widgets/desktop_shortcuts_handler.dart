@@ -2,16 +2,20 @@ import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/library/presentation/controllers/library_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 
 /// Intercepts PC/Desktop shortcuts (ESC key, browser back key, Alt+Left,
 /// mouse back button, and numeric seek 0-9) to navigate back, minimize active players,
 /// or seek through the active track.
 class DesktopShortcutsHandler extends StatefulWidget {
+  /// Optional navigator key used to pop routes on back shortcuts.
   final GlobalKey<NavigatorState>? navigatorKey;
+
+  /// Subtree wrapped by the desktop shortcut listener.
   final Widget child;
 
+  /// Creates a [DesktopShortcutsHandler].
   const DesktopShortcutsHandler({
     super.key,
     this.navigatorKey,

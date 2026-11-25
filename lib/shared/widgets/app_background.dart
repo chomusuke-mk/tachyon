@@ -6,8 +6,13 @@ import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 /// Renders a persistent background wallpaper image with Gaussian blur
 /// and an adaptive surface tint overlay to ensure text legibility and contrast.
 class AppBackground extends StatefulWidget {
+  /// File system or OPFS path to the user-configured background image.
   final String? imagePath;
+
+  /// Gaussian blur standard deviation applied to the background image.
   final double blurSigma;
+
+  /// Opacity of the surface color overlay rendered above the background image.
   final double dimOpacity;
 
   /// Checks whether [path] is non-empty and exists on disk or OPFS.
@@ -16,6 +21,7 @@ class AppBackground extends StatefulWidget {
     return PersistentBinaryStorage.fileExistsSync(path);
   }
 
+  /// Creates an [AppBackground].
   const AppBackground({
     super.key,
     required this.imagePath,

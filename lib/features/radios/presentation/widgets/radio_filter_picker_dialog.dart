@@ -3,12 +3,22 @@ import 'package:material_ui/material_ui.dart';
 /// Searchable modal dialog for picking a radio genre/tag or country filter
 /// without causing UI lag across large collections of items.
 class RadioFilterPickerDialog extends StatefulWidget {
+  /// Title displayed in the dialog header and search field hint.
   final String title;
+
+  /// Currently active filter value, or `'All'` when unfiltered.
   final String currentSelectedValue;
+
+  /// Localized label for the `'All'` reset option.
   final String allLabel;
+
+  /// Available filter values shown in the list.
   final List<String> items;
+
+  /// Callback invoked with the chosen filter value.
   final ValueChanged<String> onSelected;
 
+  /// Creates a [RadioFilterPickerDialog].
   const RadioFilterPickerDialog({
     super.key,
     required this.title,
@@ -18,6 +28,7 @@ class RadioFilterPickerDialog extends StatefulWidget {
     required this.onSelected,
   });
 
+  /// Opens [RadioFilterPickerDialog] as a modal dialog and closes on selection.
   static Future<void> show(
     BuildContext context, {
     required String title,

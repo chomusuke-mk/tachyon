@@ -5,6 +5,7 @@ class CancellationToken {
   bool _isCancelled = false;
   final List<VoidCallback> _listeners = [];
 
+  /// Whether cancellation has been requested via [cancel].
   bool get isCancelled => _isCancelled;
 
   /// Marks this token as cancelled and notifies all registered listeners.

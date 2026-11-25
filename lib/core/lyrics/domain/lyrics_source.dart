@@ -6,9 +6,16 @@
 /// 3. [lrclib]: Remote primary API (`lrclib.net`).
 /// 4. [lyricsOvh]: Remote secondary fallback API (`lyrics.ovh`).
 enum LyricsSource {
+  /// Lyrics embedded inside audio file metadata tags (`USLT`, `LYRICS`).
   embedded('embedded'),
+
+  /// Lyrics read from a sidecar `.lrc` file alongside the audio file.
   file('file'),
+
+  /// Lyrics fetched from the primary `lrclib.net` remote API.
   lrclib('lrclib'),
+
+  /// Lyrics fetched from the secondary `lyrics.ovh` fallback API.
   lyricsOvh('lyrics_ovh');
 
   const LyricsSource(this.dbValue);

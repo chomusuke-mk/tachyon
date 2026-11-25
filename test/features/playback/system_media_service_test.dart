@@ -5,12 +5,14 @@ import 'package:dbus/dbus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tachyon/core/lifecycle/app_lifecycle_controller.dart';
+import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
+import 'package:tachyon/core/lifecycle/window_control_bridge.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/core/playback/linux_mpris_bridge.dart';
-import 'package:tachyon/core/playback/system_media_service.dart';
+import 'package:tachyon/core/playback/bridges/linux_mpris_bridge.dart';
 import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
@@ -104,6 +106,12 @@ class FakePlaybackController extends PlaybackController {
   Future<void> setShuffle(bool shuffle) async {
     lastShuffle = shuffle;
     emitPlaybackState(_fakeState.copyWith(isShuffled: shuffle));
+  }
+
+  @override
+  void setLifecycleMode(AppLifecycleMode mode) {
+    super.setLifecycleMode(mode);
+    onSetMinimized?.call(mode != AppLifecycleMode.active);
   }
 
   @override
@@ -298,23 +306,37 @@ void main() {
       expect(playerMap['Metadata'], isNotNull);
     });
 
-    test('Minimized Mode updates isMinimizedListenable and notifies playback controller', () async {
+    test('AppLifecycleController suspended mode updates modeListenable and notifies playback controller', () async {
       bool? lastMinimizedSentToController;
       controller.onSetMinimized = (minimized) {
         lastMinimizedSentToController = minimized;
       };
 
-      expect(SystemMediaService.isMinimized, isFalse);
+      final bridge = WindowControlBridge(
+        attachChannelHandler: false,
+        isDesktopOverride: false,
+      );
+      final lifecycle = AppLifecycleController(
+        windowBridge: bridge,
+        playbackController: controller,
+        startTrimmerOnActive: false,
+        observeFlutterLifecycle: false,
+      );
 
-      SystemMediaService.updateMinimizedState(true, playbackController: controller);
-      expect(SystemMediaService.isMinimized, isTrue);
-      expect(SystemMediaService.isMinimizedListenable.value, isTrue);
+      expect(lifecycle.mode, equals(AppLifecycleMode.active));
+
+      lifecycle.enterSuspended();
+      expect(lifecycle.mode, equals(AppLifecycleMode.suspended));
+      expect(lifecycle.modeListenable.value, equals(AppLifecycleMode.suspended));
       expect(lastMinimizedSentToController, isTrue);
 
-      SystemMediaService.updateMinimizedState(false, playbackController: controller);
-      expect(SystemMediaService.isMinimized, isFalse);
-      expect(SystemMediaService.isMinimizedListenable.value, isFalse);
+      await lifecycle.enterActive();
+      expect(lifecycle.mode, equals(AppLifecycleMode.active));
+      expect(lifecycle.modeListenable.value, equals(AppLifecycleMode.active));
       expect(lastMinimizedSentToController, isFalse);
+
+      lifecycle.dispose();
+      bridge.dispose();
     });
   });
 }

@@ -7,8 +7,18 @@ import 'package:tachyon/shared/utils/parse_utils.dart';
 import 'package:tachyon/shared/utils/waveform_codec.dart';
 
 /// Quality levels for thumbnail images and cover art (used for RAM decoding bounds).
-enum ThumbnailQuality { low, medium, high }
+enum ThumbnailQuality {
+  /// Low-resolution thumbnail suitable for compact list items.
+  low,
 
+  /// Medium-resolution thumbnail suitable for grid cards and standard tiles.
+  medium,
+
+  /// High-resolution artwork suitable for full-screen or detail views.
+  high,
+}
+
+/// Priority ranking of embedded [PictureType] values when selecting track cover art.
 const Map<PictureType, int> coverPriority = {
   PictureType.coverFront: 0,
   PictureType.coverBack: 1,
@@ -20,6 +30,7 @@ const Map<PictureType, int> coverPriority = {
   PictureType.lyricist: 7,
 };
 
+/// Priority ranking of embedded [PictureType] values when selecting artist artwork.
 const Map<PictureType, int> artistPriority = {
   PictureType.leadArtist: 0,
   PictureType.artist: 1,
@@ -29,6 +40,7 @@ const Map<PictureType, int> artistPriority = {
   PictureType.composer: 5,
 };
 
+/// Priority ranking of embedded [PictureType] values when selecting album artwork.
 const Map<PictureType, int> albumPriority = {
   PictureType.coverFront: 0,
   PictureType.coverBack: 1,
@@ -38,31 +50,78 @@ const Map<PictureType, int> albumPriority = {
   PictureType.brightFish: 5,
 };
 
+/// Extracted audio metadata, technical properties, and cached artwork URIs for a track.
 class ExtractedTrackData {
+  /// Source file path, OPFS path, or HTTP URL of the audio track.
   final String filePath;
+
+  /// Resolved track title (falling back to filename or URL segment).
   final String title;
+
+  /// List of individual track artist names.
   final List<String> artistNames;
+
+  /// Album artist name, if specified in tags.
   final String? albumArtistName;
+
+  /// Album title, if specified in tags.
   final String? albumName;
+
+  /// Track index within the disc or album, if available.
   final int? trackNumber;
+
+  /// Disc index within a multi-disc release (defaults to `1`).
   final int? discNumber;
+
+  /// Release year, if specified in tags.
   final int? year;
+
+  /// Total track duration in milliseconds.
   final int durationMs;
+
+  /// Audio bitrate in bits per second, if available.
   final int? bitrate;
+
+  /// Audio sample rate in Hz, if available.
   final int? sampleRate;
+
+  /// Number of audio channels, if available.
   final int? channels;
+
+  /// Audio codec name or uppercase file extension fallback.
   final String? codec;
+
+  /// File size in bytes.
   final int fileSize;
+
+  /// File modification timestamp used for incremental scan diffing.
   final int modifiedAt;
+
+  /// Track ReplayGain adjustment in dB, if available.
   final double? replayGainTrackGain;
+
+  /// Track ReplayGain peak amplitude ratio, if available.
   final double? replayGainTrackPeak;
+
+  /// Encoded waveform amplitude string generated from audio samples, if available.
   final String? waveformData;
+
+  /// List of genre names parsed from metadata tags.
   final List<String> genreNames;
+
+  /// Embedded lyrics text extracted from audio tags, if present.
   final String? embeddedLyrics;
+
+  /// Content hash URI of the cached track cover image, if present.
   final String? artworkUri;
+
+  /// Content hash URI of the cached album cover image, if present.
   final String? albumArtworkUri;
+
+  /// Content hash URI of the cached artist image, if present.
   final String? artistArtworkUri;
 
+  /// Creates an [ExtractedTrackData] instance with extracted track metadata and properties.
   const ExtractedTrackData({
     required this.filePath,
     required this.title,
@@ -90,16 +149,22 @@ class ExtractedTrackData {
   });
 }
 
+/// Static utilities for audio metadata extraction and artwork cache management.
 abstract final class MetadataUtils {
+  /// Temporary working directory managed by [PersistentBinaryStorage], if initialized.
   static StorageDirectory? get tempDirectory =>
       PersistentBinaryStorage.tempDirectory;
+
+  /// Cached cover art directory managed by [PersistentBinaryStorage], if initialized.
   static StorageDirectory? get thumbnailsDirectory =>
       PersistentBinaryStorage.thumbnailsDirectory;
 
+  /// Initializes storage directories synchronously at [thumbnailsPath] and [tempPath].
   static void init(String thumbnailsPath, String tempPath) {
     PersistentBinaryStorage.init(thumbnailsPath, tempPath);
   }
 
+  /// Initializes storage directories asynchronously using optional [thumbnailsPath] and [tempPath].
   static Future<void> initAsync({
     String? thumbnailsPath,
     String? tempPath,
@@ -114,6 +179,7 @@ abstract final class MetadataUtils {
     PersistentBinaryStorage.ensureInitialized();
   }
 
+  /// Clears all temporary files from the configured temporary directory.
   static Future<void> clearTempDirectory() async {
     await PersistentBinaryStorage.clearTempDirectory();
   }
@@ -447,10 +513,12 @@ abstract final class MetadataUtils {
     );
   }
 
+  /// Returns references to all cover image files currently stored in the thumbnail cache.
   static List<StorageFileRef> listCachedCoverFiles() {
     return PersistentBinaryStorage.listCachedCoverFiles();
   }
 
+  /// Deletes cached cover files whose filenames are not in [validFileNames].
   static Future<void> purgeUnusedCovers(Set<String> validFileNames) async {
     await PersistentBinaryStorage.purgeUnusedCovers(validFileNames);
   }

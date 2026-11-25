@@ -10,14 +10,14 @@ import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
-import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/library/presentation/controllers/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/features/playlists/presentation/playlist_detail_screen.dart';
-import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/features/playlists/presentation/screens/playlist_detail_screen.dart';
+import 'package:tachyon/features/playlists/presentation/controllers/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:tachyon/shared/widgets/track_tile.dart';
 
 class _TestLocaleRepository extends LocaleRepository {

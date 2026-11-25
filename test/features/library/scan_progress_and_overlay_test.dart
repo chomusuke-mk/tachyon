@@ -11,11 +11,11 @@ import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
-import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/library/presentation/controllers/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/features/shell/scan_progress_overlay.dart';
+import 'package:tachyon/features/shell/presentation/widgets/scan_progress_overlay.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 
 class _TestLocaleRepository extends LocaleRepository {

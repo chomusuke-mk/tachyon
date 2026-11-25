@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 
+/// Compact responsive application logo rendered in mobile app bars when space permits.
 class AppIcon extends StatelessWidget {
+  /// Creates an [AppIcon].
   const AppIcon({super.key});
 
   static const double _iconSize = 34.0;
@@ -13,7 +15,7 @@ class AppIcon extends StatelessWidget {
       fit: FlexFit.loose,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Si no entra el icono completo con su margen, se oculta por completo
+          // Hide the logo cleanly if the available constraints cannot fit both icon and spacing.
           if (constraints.maxWidth < _minRequiredWidth ||
               constraints.maxHeight < _iconSize) {
             return const SizedBox.shrink();

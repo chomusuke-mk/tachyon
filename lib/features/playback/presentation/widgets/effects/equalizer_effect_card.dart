@@ -1,9 +1,9 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/effects/eq_curve_painter.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 
 /// Interactive 10-Band Graphic & Parametric Equalizer Card.
 ///
@@ -15,6 +15,7 @@ import 'package:tachyon/features/settings/presentation/settings_controller.dart'
 /// - Presets dropdown positioned directly below the preamp with a dedicated Reset-to-Flat button.
 /// - Frequency projections and gain readouts below the graph.
 class EqualizerEffectCard extends StatelessWidget {
+  /// Creates an [EqualizerEffectCard].
   const EqualizerEffectCard({super.key});
 
   static const _validPresets = [

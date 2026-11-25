@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
@@ -9,13 +9,27 @@ import 'package:tachyon/shared/widgets/album_art_image.dart';
 /// Card widget displaying an artist in grid/card views with an animated
 /// hover play button showing the localized "Play all tracks" tooltip.
 class ArtistCard extends StatefulWidget {
+  /// Artist metadata and tracks represented by this card.
   final Artist artist;
+
+  /// Callback invoked when the card is tapped.
   final VoidCallback? onTap;
+
+  /// Optional callback invoked when the hover play button is pressed.
+  ///
+  /// Defaults to playing all tracks in [artist] via [PlaybackController] when omitted.
   final VoidCallback? onPlay;
+
+  /// Radius of the circular artist avatar in logical pixels.
   final double radius;
+
+  /// Optional fixed width constraining the card.
   final double? width;
+
+  /// Whether the album and track count subtitle is displayed below the name.
   final bool showSubtitle;
 
+  /// Creates an [ArtistCard].
   const ArtistCard({
     super.key,
     required this.artist,
@@ -161,10 +175,18 @@ class _ArtistCardState extends State<ArtistCard> {
 /// List tile widget displaying an artist in list views with an animated
 /// hover play button showing the localized "Play all tracks" tooltip.
 class ArtistListTile extends StatefulWidget {
+  /// Artist metadata and tracks represented by this tile.
   final Artist artist;
+
+  /// Callback invoked when the tile is tapped.
   final VoidCallback? onTap;
+
+  /// Optional callback invoked when the hover play button is pressed.
+  ///
+  /// Defaults to playing all tracks in [artist] via [PlaybackController] when omitted.
   final VoidCallback? onPlay;
 
+  /// Creates an [ArtistListTile].
   const ArtistListTile({
     super.key,
     required this.artist,

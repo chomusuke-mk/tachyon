@@ -4,9 +4,16 @@ import 'package:material_ui/material_ui.dart';
 /// smoothly rounded crest summits (no sharp triangle spikes) directly beneath
 /// the flat dock of a rounded album art container.
 class WaveVisualizerPainter extends CustomPainter {
+  /// Fallback frequency band magnitudes (`0.0` to `1.0`) used when [bandsProvider] is `null`.
   final List<double> bands;
+
+  /// Optional callback providing live frequency band magnitudes without widget rebuilds.
   final List<double> Function()? bandsProvider;
+
+  /// Solid fill color used to paint the wave silhouette.
   final Color color;
+
+  /// Corner radius of the docked cover art used to inset the wave endpoints.
   final double cornerRadius;
 
   final Path _fillPath = Path();
@@ -14,6 +21,7 @@ class WaveVisualizerPainter extends CustomPainter {
     ..style = PaintingStyle.fill
     ..isAntiAlias = true;
 
+  /// Creates a [WaveVisualizerPainter].
   WaveVisualizerPainter({
     super.repaint,
     required this.bands,

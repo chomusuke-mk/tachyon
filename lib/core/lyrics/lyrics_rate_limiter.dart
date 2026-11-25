@@ -9,7 +9,10 @@ class LyricsGenerationTracker {
   int _activeToken = 0;
   CancellationToken? _activeCancellationToken;
 
+  /// Monotonically increasing identifier of the current generation.
   int get activeToken => _activeToken;
+
+  /// Cancellation token associated with the current generation, if any.
   CancellationToken? get activeCancellationToken => _activeCancellationToken;
 
   /// Advances generation counter, cancels previous token, and returns fresh token.
@@ -42,6 +45,7 @@ class LyricsGenerationTracker {
 ///   Tracks [cooldownExpiry]. Prompts immediate fallback to secondary API and schedules
 ///   deferred upgrade when cooldown expires if track is still active.
 class LyricsCooldownManager {
+  /// Clock function returning the current [DateTime] for cooldown calculations.
   final DateTime Function() nowProvider;
 
   DateTime? _cooldownExpiry;
@@ -51,33 +55,24 @@ class LyricsCooldownManager {
 
   // Deferred retry state
   Timer? _deferredRetryTimer;
-  String? _deferredTrackFilePath;
-  int? _deferredGenerationToken;
   Future<void> Function()? _deferredCallback;
-
-  String? get deferredTrackFilePath => _deferredTrackFilePath;
-  int? get deferredGenerationToken => _deferredGenerationToken;
 
   final StreamController<int?> _thresholdStreamController =
       StreamController<int?>.broadcast();
 
+  /// Creates a [LyricsCooldownManager] with an optional custom clock for testing.
   LyricsCooldownManager({DateTime Function()? nowProvider})
     : nowProvider = nowProvider ?? DateTime.now;
 
+  /// Current clock timestamp supplied by [nowProvider].
   DateTime get now => nowProvider();
 
+  /// Timestamp when the current extended cooldown expires, if active.
   DateTime? get cooldownExpiry => _cooldownExpiry;
 
   /// Whether an extended cooldown (>10s) is currently active.
   bool get isCooldownActive =>
       _cooldownExpiry != null && _cooldownExpiry!.isAfter(now);
-
-  /// Seconds remaining until the extended cooldown expires (0 if inactive).
-  int get remainingCooldownSeconds {
-    if (!isCooldownActive || _cooldownExpiry == null) return 0;
-    final diff = _cooldownExpiry!.difference(now).inSeconds;
-    return diff > 0 ? diff : 0;
-  }
 
   /// Whether the short-term threshold countdown (<= 10s) is active.
   bool get isThresholdWaiting => _isThresholdWaiting;
@@ -94,12 +89,6 @@ class LyricsCooldownManager {
     if (_cooldownExpiry == null || candidate.isAfter(_cooldownExpiry!)) {
       _cooldownExpiry = candidate;
     }
-  }
-
-  /// Clears active cooldown and cancels any deferred retry.
-  void clearCooldown() {
-    _cooldownExpiry = null;
-    cancelDeferredRetry();
   }
 
   /// Starts a live threshold countdown for `retryAfterSeconds` <= 10.
@@ -156,7 +145,6 @@ class LyricsCooldownManager {
     required int token,
     required Future<void> Function() onRetry,
   }) {
-    final effectivePath = trackFilePath;
     cancelDeferredRetry();
     if (_cooldownExpiry == null) return;
 
@@ -166,8 +154,6 @@ class LyricsCooldownManager {
       return;
     }
 
-    _deferredTrackFilePath = effectivePath;
-    _deferredGenerationToken = token;
     _deferredCallback = onRetry;
 
     _deferredRetryTimer = Timer(Duration(milliseconds: remainingMs), () async {
@@ -179,20 +165,15 @@ class LyricsCooldownManager {
     });
   }
 
-  /// Whether a deferred upgrade timer is currently active.
-  bool get isDeferredRetryScheduled =>
-      _deferredRetryTimer != null && _deferredRetryTimer!.isActive;
-
   /// Cancels any scheduled deferred retry.
   void cancelDeferredRetry() {
     _deferredRetryTimer?.cancel();
     _deferredRetryTimer = null;
-    _deferredTrackFilePath = null;
-    _deferredGenerationToken = null;
     _deferredCallback = null;
   }
 
   /// Updates active track for deferred retry if user skips songs during active cooldown.
+  ///
   /// Defensively ensures that a running timer is scheduled if not already active.
   void updateDeferredTrack({
     required String trackFilePath,
@@ -200,12 +181,8 @@ class LyricsCooldownManager {
     required Future<void> Function() onRetry,
   }) {
     if (!isCooldownActive) return;
-    final effectivePath = trackFilePath;
-    _deferredTrackFilePath = effectivePath;
-    _deferredGenerationToken = token;
     _deferredCallback = onRetry;
 
-    // If timer is not running or completed, schedule a new timer for the remaining duration
     if (_deferredRetryTimer == null || !_deferredRetryTimer!.isActive) {
       final remainingMs = _cooldownExpiry!.difference(now).inMilliseconds;
       if (remainingMs <= 0) {
@@ -222,17 +199,6 @@ class LyricsCooldownManager {
           },
         );
       }
-    }
-  }
-
-  /// Manually expires active cooldown immediately and triggers deferred callback (test helper).
-  Future<void> expireCooldownAndTriggerUpgrade() async {
-    if (_cooldownExpiry == null) return;
-    _cooldownExpiry = now.subtract(const Duration(seconds: 1));
-    final cb = _deferredCallback;
-    cancelDeferredRetry();
-    if (cb != null) {
-      await cb();
     }
   }
 

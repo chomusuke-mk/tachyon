@@ -1,65 +1,60 @@
+/// Default configuration values and bounds for playback, artwork, and sample assets.
 class AppDefaults {
+  /// Maximum normalized master playback volume.
   static const double volumeMax = 1.0;
+
+  /// Minimum normalized master playback volume.
   static const double volumeMin = 0.0;
+
+  /// Default normalized master playback volume.
   static const double volumeDefault = 1.0;
 
+  /// Maximum volume boost multiplier.
   static const double volumeBoostMax = 2.0;
+
+  /// Minimum volume boost multiplier (no amplification).
   static const double volumeBoostMin = 1.0;
+
+  /// Default volume boost multiplier.
   static const double volumeBoostDefault = 1.0;
 
+  /// Minimum automatic crossfade duration in seconds.
   static const int crossfadeMinDuration = 0;
+
+  /// Maximum automatic crossfade duration in seconds.
   static const int crossfadeMaxDuration = 20;
+
+  /// Default automatic crossfade duration in seconds.
   static const int crossfadeDefaultDuration = 5;
 
+  /// Minimum manual crossfade duration in seconds.
   static const int crossfadeManualMinDuration = 0;
+
+  /// Maximum manual crossfade duration in seconds.
   static const int crossfadeManualMaxDuration = 5;
+
+  /// Default manual crossfade duration in seconds.
   static const int crossfadeManualDefaultDuration = 1;
 
+  /// Minimum playback speed multiplier.
   static const double playbackRateMin = 0.5;
+
+  /// Maximum playback speed multiplier.
   static const double playbackRateMax = 1.5;
+
+  /// Default playback speed multiplier.
   static const double playbackRateDefault = 1.0;
 
+  /// Minimum playback pitch multiplier.
   static const double playbackPitchMin = 0.5;
+
+  /// Maximum playback pitch multiplier.
   static const double playbackPitchMax = 1.5;
+
+  /// Default playback pitch multiplier.
   static const double playbackPitchDefault = 1.0;
 
-  // METADATA EXTRACTOR SUPPORT
-  /*
-  '.mp3',
-  '.flac',
-  '.mp4',
-  '.m4a',
-  '.ape',
-  '.ogg',
-  '.opus',
-  '.wav',
-  '.aif',
-  '.aiff',
-  '.aifc',
-  '.mov',
-  '.webm',
-  '.mkv',
-   */
-  // PLAYER SUPPORT
-  /*
-  'mp3',
-  'wav',
-  'flac',
-  'ogg',
-  'opus',
-  'aif',
-  'aiff',
-  'aifc',
-  'w64',
-  'rf64',
-  'bwf',
-  'rifx',
-  'mp2',
-  'mp1',
-  'oga',
-  'aac',
-  'm4a',
-  */
+  /// Supported lowercase audio file extensions (without leading dots) for discovery.
   static const Set<String> supportedAudioExtensions = {
     'mp3',
     'wav',
@@ -89,6 +84,7 @@ class AppDefaults {
     'm3u8',
   };
 
+  /// Base URL for the remote sample audio asset repository used on Web.
   static const String webSampleAssetsBaseUrl =
       'https://raw.githubusercontent.com/chomusuke-mk/miniaudio_player_assets/main';
 
@@ -125,7 +121,12 @@ class AppDefaults {
     '$webSampleAssetsBaseUrl/29_%E9%A7%86%E3%81%91%E6%8A%9C%E3%81%91%E3%81%A6%E3%80%81%E3%81%93%E3%81%AE%E7%A9%BA%E3%82%92.dsf',
   ];
 
+  /// Target pixel dimension for low-resolution artwork thumbnails.
   static const int lowQualityResolution = 150;
+
+  /// Target pixel dimension for medium-resolution artwork thumbnails.
   static const int mediumQualityResolution = 500;
+
+  /// Target pixel dimension for high-resolution artwork thumbnails.
   static const int highQualityResolution = 1200;
 }

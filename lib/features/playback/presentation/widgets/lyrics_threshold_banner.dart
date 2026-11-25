@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import 'package:tachyon/core/lyrics/lyrics_manager.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 
 /// Non-invasive HTTP 429 rate limit countdown banner for lrclib.net.
 ///
@@ -10,9 +10,13 @@ import 'package:tachyon/features/locales/presentation/locale_controller.dart';
 /// and remaining seconds are <= 10s. Automatically animates out when the countdown
 /// expires or when the retry succeeds. Includes a manual dismiss button for non-invasive UX.
 class LyricsThresholdBanner extends StatefulWidget {
+  /// Optional callback invoked when the user manually dismisses the banner.
   final VoidCallback? onDismiss;
+
+  /// Optional outer margin around the banner container.
   final EdgeInsetsGeometry? margin;
 
+  /// Creates a [LyricsThresholdBanner].
   const LyricsThresholdBanner({
     super.key,
     this.onDismiss,

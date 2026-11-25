@@ -10,6 +10,7 @@ class RadioBrowserService {
   final http.Client _client;
   final List<String> _mirrors;
 
+  /// Default Radio Browser API mirror base URLs tried sequentially on failure.
   static const List<String> defaultMirrors = [
     'https://de1.api.radio-browser.info',
     'https://nl1.api.radio-browser.info',
@@ -21,6 +22,7 @@ class RadioBrowserService {
     'Accept': 'application/json',
   };
 
+  /// Creates a [RadioBrowserService] using optional [client] and [mirrors].
   RadioBrowserService({
     http.Client? client,
     List<String>? mirrors,
@@ -127,9 +129,10 @@ class RadioBrowserService {
   }
 
   /// Validates a list of saved radio stations against Radio Browser platform data.
+  ///
   /// If stream URLs, favicons, or metadata have changed on the platform, returns
-  /// the updated [RadioStation] instances preserving local [id], [isFavorite],
-  /// and [createdAt].
+  /// the updated [RadioStation] instances preserving local `id`, `isFavorite`,
+  /// and `createdAt`.
   Future<List<RadioStation>> validateAndRefreshStations(
     List<RadioStation> savedStations,
   ) async {

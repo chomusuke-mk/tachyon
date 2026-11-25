@@ -1,9 +1,9 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/store/domain/track.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/features/playlists/presentation/controllers/playlists_controller.dart';
 import 'package:tachyon/shared/utils/duration_formatter.dart';
 
 import 'album_art_image.dart';
@@ -11,25 +11,65 @@ import 'track_action_helper.dart';
 
 export 'track_action_helper.dart';
 
+/// List tile displaying a [Track] with artwork, duration, like toggle, and context actions.
 class TrackTile extends StatelessWidget {
+  /// Track metadata displayed by this tile.
   final Track track;
+
+  /// Optional override indicating whether [track] is currently playing.
+  ///
+  /// Derived from [PlaybackController.isCurrentTrack] when `null`.
   final bool? isPlaying;
+
+  /// Whether the selection checkbox is checked when [isSelectionMode] is `true`.
   final bool isSelected;
+
+  /// Whether the leading artwork is replaced by a multi-select [Checkbox].
   final bool isSelectionMode;
+
+  /// Optional override indicating whether [track] is marked as liked.
+  ///
+  /// Resolved from [PlaylistsController.isTrackLiked] when `null` and
+  /// [showLikeButton] is `true`.
   final bool? isLiked;
+
+  /// Whether the favorite toggle button is shown in the trailing row.
   final bool showLikeButton;
+
+  /// Whether the overflow [TrackPopupMenuButton] is shown in the trailing row.
   final bool showActions;
+
+  /// Whether the delete action is enabled in the trailing action menu.
   final bool enableDelete;
+
+  /// Optional subset of [TrackAction] entries permitted in the overflow menu.
   final Set<TrackAction>? allowedActions;
+
+  /// Optional list of tracks forming the playback queue context when tapped or played.
   final List<Track>? contextTracks;
+
+  /// Optional tap callback overriding the default playback action.
   final VoidCallback? onTap;
+
+  /// Optional callback invoked when the tile is long-pressed.
   final VoidCallback? onLongPress;
+
+  /// Callback invoked when the selection checkbox value changes in [isSelectionMode].
   final ValueChanged<bool?>? onSelectChanged;
+
+  /// Optional callback overriding the default favorite toggle behavior.
   final VoidCallback? onToggleLike;
+
+  /// Optional callback overriding default [TrackAction] handling from the overflow menu.
   final void Function(TrackAction action)? onActionSelected;
+
+  /// Optional extra widgets inserted into the trailing row after the overflow menu.
   final List<Widget>? additionalActions;
+
+  /// Optional single widget appended at the end of the trailing row.
   final Widget? additionalTrailing;
 
+  /// Creates a [TrackTile].
   const TrackTile({
     super.key,
     required this.track,

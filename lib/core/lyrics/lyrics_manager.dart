@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/lyrics/clients/lrclib_client.dart';
+import 'package:tachyon/core/lyrics/clients/lyrics_ovh_client.dart';
+import 'package:tachyon/core/lyrics/clients/lyrics_translation_client.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_source.dart';
 import 'package:tachyon/core/lyrics/lrc_parser.dart';
-import 'package:tachyon/core/lyrics/lrclib_client.dart';
-import 'package:tachyon/core/lyrics/lyrics_ovh_client.dart';
 import 'package:tachyon/core/lyrics/lyrics_rate_limiter.dart';
-import 'package:tachyon/core/lyrics/lyrics_translation_client.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/shared/utils/cancellation_token.dart';
 import 'package:tachyon/core/store/domain/track.dart';
@@ -14,19 +14,29 @@ import 'package:tachyon/core/store/library_store.dart';
 
 /// Result of an on-demand lyrics resolution request.
 class LyricsResult {
+  /// Parsed lyrics document resulting from the request.
   final ParsedLrc lrc;
+
+  /// Unparsed raw LRC or plain-text lyrics string, if available.
   final String? rawLrc;
+
+  /// Origin source that supplied these lyrics, or `null` when unavailable.
   final LyricsSource? source;
+
+  /// Database row ID in the `lyrics` table for caching translations, if persisted.
   final int? lyricsId;
 
   /// True when `lrclib.net` returned HTTP 429 with `Retry-After <= 10s` and
   /// a live countdown + automatic retry is currently scheduled.
   final bool isThresholdWaiting;
+
+  /// Delay in seconds before an automatic rate-limit retry runs, if waiting.
   final int? retryAfterSeconds;
 
   /// True if the request was superseded/aborted by a newer request.
   final bool isCancelled;
 
+  /// Creates a [LyricsResult] wrapping [lrc] and optional resolution metadata.
   const LyricsResult({
     required this.lrc,
     this.rawLrc,
@@ -37,14 +47,22 @@ class LyricsResult {
     this.isCancelled = false,
   });
 
+  /// Shared empty [LyricsResult] representing a lookup with no lyrics found.
   static final LyricsResult empty = LyricsResult(lrc: ParsedLrc.empty());
+
+  /// Shared cancelled [LyricsResult] returned when a request is superseded or aborted.
   static final LyricsResult cancelled = LyricsResult(
     lrc: ParsedLrc.empty(),
     isCancelled: true,
   );
 
+  /// Whether the resolved [lrc] document contains no lines.
   bool get isEmpty => lrc.isEmpty;
+
+  /// Whether the resolved [lrc] document contains at least one line.
   bool get isNotEmpty => lrc.isNotEmpty;
+
+  /// Whether the resolved [lrc] document contains synchronized timestamps.
   bool get isSynced => lrc.isSynced;
 }
 
@@ -71,12 +89,19 @@ class _PersistedLyricsRow {
 /// position synchronization. Resolves track metadata in $O(1)$ from
 /// [LibraryStore] and persists/queries cached lyrics in [AppDatabase].
 class LyricsManager {
+  /// SQLite persistence service used to cache lyrics and translations.
   final AppDatabase database;
+
+  /// In-memory catalog store used for O(1) track metadata lookups.
   final LibraryStore store;
   final LrclibClient _lrclibClient;
   final LyricsOvhClient _ovhClient;
   final LyricsTranslationClient _translationClient;
+
+  /// Rate-limit and cooldown coordinator for `lrclib.net` requests.
   final LyricsCooldownManager cooldownManager;
+
+  /// Delay applied to rapid consecutive [getLyrics] calls before querying.
   final Duration debounceDuration;
 
   final LyricsGenerationTracker _generationTracker = LyricsGenerationTracker();
@@ -85,6 +110,7 @@ class LyricsManager {
   Timer? _debounceTimer;
   Completer<LyricsResult>? _pendingDebounceCompleter;
 
+  /// Creates a [LyricsManager] backed by [database] and optional collaborators.
   LyricsManager({
     required this.database,
     LibraryStore? store,
@@ -99,9 +125,14 @@ class LyricsManager {
        _translationClient = translationClient ?? LyricsTranslationClient(),
        cooldownManager = cooldownManager ?? LyricsCooldownManager();
 
+  /// Whether a short-term `lrclib.net` rate-limit countdown is currently active.
   bool get isThresholdWaiting => cooldownManager.isThresholdWaiting;
+
+  /// Remaining seconds in the active rate-limit countdown, if waiting.
   int? get thresholdCountdownSeconds =>
       cooldownManager.thresholdCountdownSeconds;
+
+  /// Broadcast stream emitting rate-limit countdown updates in seconds (or `null` when cleared).
   Stream<int?> get thresholdStream => cooldownManager.thresholdStream;
 
   /// Cancels any pending debounce timer, in-flight network requests, and
@@ -785,6 +816,7 @@ class LyricsManager {
   static Future<String?> _readLocalLrcFileRaw(String filePath) =>
       PersistentBinaryStorage.readLocalLrcFile(filePath);
 
+  /// Cancels pending operations and disposes internal cooldown timers and streams.
   void dispose() {
     cancelPending();
     cooldownManager.dispose();

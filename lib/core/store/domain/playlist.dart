@@ -1,13 +1,23 @@
 import 'package:tachyon/core/store/domain/track.dart';
 
+/// Category of a [Playlist] distinguishing user playlists from system lists.
 enum PlaylistType {
+  /// Standard user-created playlist.
   user(0),
+
+  /// Built-in Liked Songs collection.
   liked(1),
+
+  /// Built-in playback History collection.
   history(2);
 
+  /// Integer storage code representing this playlist type.
   final int value;
+
+  /// Associates an integer storage [value] with a [PlaylistType].
   const PlaylistType(this.value);
 
+  /// Parses an integer [val] into a [PlaylistType], defaulting to [PlaylistType.user].
   static PlaylistType fromValue(int? val) {
     return PlaylistType.values.firstWhere(
       (e) => e.value == val,
@@ -16,6 +26,7 @@ enum PlaylistType {
   }
 }
 
+/// Ordered track entry belonging to a [Playlist].
 class PlaylistEntry {
   /// The entry's unique identifier.
   final int? id;
@@ -26,9 +37,13 @@ class PlaylistEntry {
   /// The timestamp when the track was added to the playlist.
   final int addedAt;
 
+  /// Owning [Playlist] containing this entry, if linked.
   final Playlist? playlist;
+
+  /// Referenced [Track] at this position, if resolved.
   final Track? track;
 
+  /// Creates a [PlaylistEntry] record.
   const PlaylistEntry({
     this.id,
     required this.position,
@@ -50,14 +65,27 @@ class PlaylistEntry {
   int get hashCode => Object.hash(id, position, track);
 }
 
+/// A user-created or system-managed playlist of tracks.
 class Playlist {
+  /// Unique database identifier for this playlist, if persisted.
   final int? id;
+
+  /// Display name of the playlist.
   final String name;
+
+  /// Creation timestamp in milliseconds since epoch.
   final int createdAt;
+
+  /// Kind of playlist ([PlaylistType.user], [PlaylistType.liked], or [PlaylistType.history]).
   final PlaylistType type;
+
+  /// Ordered entries belonging to this playlist.
   final List<PlaylistEntry> entries;
 
+  /// Number of entries in [entries].
   int get trackCount => entries.length;
+
+  /// Whether this playlist is a system-managed playlist rather than user-created.
   bool get isSpecial => type != PlaylistType.user;
 
   /// Ordered list of non-null tracks contained in this playlist.
@@ -85,6 +113,7 @@ class Playlist {
     return null;
   }
 
+  /// Creates a [Playlist] entity.
   const Playlist({
     this.id,
     required this.name,

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tachyon/shared/utils/file_picker_service.dart';
+import 'package:tachyon/core/platform/file_picker_service.dart';
 
 void main() {
   group('FilePickerService', () {

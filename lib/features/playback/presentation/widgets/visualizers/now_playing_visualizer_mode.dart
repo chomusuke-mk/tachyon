@@ -15,8 +15,13 @@ enum NowPlayingVisualizerMode {
   /// (inspired by the iconic NCS / NoCopyrightSounds visualizer style).
   circle;
 
+  /// Stable persistence key matching this mode's enum [name].
   String get key => name;
 
+  /// Resolves a [NowPlayingVisualizerMode] from its persisted string [value].
+  ///
+  /// Defaults to [NowPlayingVisualizerMode.wave] when [value] is `null` or
+  /// does not match any known mode.
   static NowPlayingVisualizerMode fromString(String? value) {
     if (value == null || value.isEmpty) return NowPlayingVisualizerMode.wave;
     for (final mode in NowPlayingVisualizerMode.values) {
@@ -25,6 +30,7 @@ enum NowPlayingVisualizerMode {
     return NowPlayingVisualizerMode.wave;
   }
 
+  /// Next visualizer mode in the cycling sequence.
   NowPlayingVisualizerMode get next {
     final nextIndex = (index + 1) % NowPlayingVisualizerMode.values.length;
     return NowPlayingVisualizerMode.values[nextIndex];

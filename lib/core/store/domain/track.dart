@@ -4,6 +4,7 @@ import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/genre.dart';
 
+/// Local or provisional audio track entity implementing [AudioPlayable].
 class Track implements AudioPlayable {
   @override
   final int? id;
@@ -11,29 +12,61 @@ class Track implements AudioPlayable {
   final String filePath;
   @override
   final String title;
+
+  /// Track number within its disc, if tagged.
   final int? trackNumber;
+
+  /// Disc number within a multi-disc release, if tagged.
   final int? discNumber;
+
+  /// Release year, if tagged.
   final int? year;
+
+  /// Total duration in milliseconds.
   final int durationMs;
+
+  /// Encoded audio bitrate in bits per second, if known.
   final int? bitrate;
+
+  /// Audio sample rate in Hz, if known.
   final int? sampleRate;
+
+  /// Number of audio channels, if known.
   final int? channels;
+
+  /// Audio codec or format label, if known.
   final String? codec;
+
+  /// Audio file size in bytes.
   final int fileSize;
+
+  /// Last modification timestamp in milliseconds since epoch.
   final int modifiedAt;
+
   @override
   final double? replayGainTrackGain;
   @override
   final double? replayGainTrackPeak;
+
+  /// Normalized precomputed waveform samples in `[0.0, 1.0]`, if extracted.
   final List<double>? waveform;
+
   @override
   final String? artworkUri;
 
+  /// Associated [Album] record, if linked.
   final Album? album;
+
+  /// Contributing [Artist] records linked to this track.
   final List<Artist> artists;
+
+  /// Associated [Genre] records linked to this track.
   final List<Genre> genres;
+
+  /// Whether this track is a provisional discovery entry awaiting full tag extraction.
   final bool isMetadataPending;
 
+  /// Creates an immutable [Track] entity.
   const Track({
     this.id,
     required this.filePath,
@@ -60,6 +93,8 @@ class Track implements AudioPlayable {
 
   @override
   Duration get duration => Duration(milliseconds: durationMs);
+
+  /// File modification timestamp derived from [modifiedAt].
   DateTime get modifiedDateTime =>
       DateTime.fromMillisecondsSinceEpoch(modifiedAt);
 

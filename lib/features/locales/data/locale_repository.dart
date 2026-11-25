@@ -74,6 +74,11 @@ class LocaleRepository {
     return jsonDecode(cleaned);
   }
 
+  /// Loads and parses the localized string catalog for [localeCode].
+  ///
+  /// Reads `i18n/<localeCode>.jsonc` from the asset bundle, strips JSONC
+  /// comments and trailing commas, trims values, and omits empty entries.
+  /// Returns an empty map if the asset cannot be loaded or parsed.
   Future<Map<String, String>> getLocaleStrings(String localeCode) async {
     final assetPath = 'i18n/$localeCode.jsonc';
     try {

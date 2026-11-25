@@ -25,10 +25,15 @@ Future<WasmSqlite3> _ensureWasmSqlite() async {
   return sqlite;
 }
 
+/// Flushes pending persistent IndexedDB filesystem writes on Web.
 Future<void> flushPersistentDatabase() async {
   await _indexedDbFs?.flush();
 }
 
+/// Opens a new in-memory SQLite database via WebAssembly on Web.
+///
+/// Throws a [StateError] if [openPersistentDatabase] has not initialized
+/// `WasmSqlite3` yet.
 CommonDatabase openInMemoryDatabase() {
   final sqlite = _wasmSqlite;
   if (sqlite == null) {
@@ -39,6 +44,11 @@ CommonDatabase openInMemoryDatabase() {
   return sqlite.openInMemory();
 }
 
+/// Opens or creates a persistent SQLite database at [dbPath] on Web.
+///
+/// Initializes `WasmSqlite3` and registers IndexedDB storage (falling back
+/// to an in-memory virtual filesystem) before opening [dbPath], defaulting
+/// to `/database` when omitted or empty.
 Future<CommonDatabase> openPersistentDatabase(String? dbPath) async {
   final sqlite = await _ensureWasmSqlite();
   final target = (dbPath != null && dbPath.isNotEmpty) ? dbPath : '/database';

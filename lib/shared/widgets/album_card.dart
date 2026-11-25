@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/store/domain/album.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
@@ -9,12 +9,24 @@ import 'package:tachyon/shared/widgets/album_art_image.dart';
 /// Card widget displaying an album in grid/card views with an animated
 /// hover play button showing the localized "Play album" tooltip.
 class AlbumCard extends StatefulWidget {
+  /// Album metadata and tracks represented by this card.
   final Album album;
+
+  /// Callback invoked when the card is tapped.
   final VoidCallback? onTap;
+
+  /// Optional callback invoked when the hover play button is pressed.
+  ///
+  /// Defaults to playing all tracks in [album] via [PlaybackController] when omitted.
   final VoidCallback? onPlay;
+
+  /// Optional fixed width of the card and square cover artwork.
   final double? width;
+
+  /// Optional custom subtitle replacing the default artist and track count lines.
   final String? subtitle;
 
+  /// Creates an [AlbumCard].
   const AlbumCard({
     super.key,
     required this.album,
@@ -165,10 +177,18 @@ class _AlbumCardState extends State<AlbumCard> {
 /// List tile widget displaying an album in list views with an animated
 /// hover play button showing the localized "Play album" tooltip.
 class AlbumListTile extends StatefulWidget {
+  /// Album metadata and tracks represented by this tile.
   final Album album;
+
+  /// Callback invoked when the tile is tapped.
   final VoidCallback? onTap;
+
+  /// Optional callback invoked when the hover play button is pressed.
+  ///
+  /// Defaults to playing all tracks in [album] via [PlaybackController] when omitted.
   final VoidCallback? onPlay;
 
+  /// Creates an [AlbumListTile].
   const AlbumListTile({
     super.key,
     required this.album,

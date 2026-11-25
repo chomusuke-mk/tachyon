@@ -7,28 +7,48 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+/// Platform directory type used by [PersistentBinaryStorage].
 typedef StorageDirectory = io.Directory;
+
+/// Platform file reference type used by [PersistentBinaryStorage].
 typedef StorageFileRef = io.File;
 
 /// Native (`dart:io`) implementation of persistent binary storage for cover art,
 /// temporary files, audio file discovery, and local image rendering.
 abstract final class PersistentBinaryStorage {
+  /// Temporary working directory used for atomic writes and transient files.
   static io.Directory? tempDirectory;
+
+  /// Directory where cached cover art thumbnails are stored.
   static io.Directory? thumbnailsDirectory;
 
   static final Set<String> _knownCoverHashes = <String>{};
 
+  /// The number of available processor cores, clamped to at least 1.
   static int get processorCount => math.max(1, io.Platform.numberOfProcessors);
 
+  /// Whether the current platform is Linux.
   static bool get isLinux => io.Platform.isLinux;
+
+  /// Whether the current platform is Windows.
   static bool get isWindows => io.Platform.isWindows;
+
+  /// Whether the current platform is Android.
   static bool get isAndroid => io.Platform.isAndroid;
+
+  /// Whether the current platform is iOS.
   static bool get isIOS => io.Platform.isIOS;
+
+  /// Whether the current platform is macOS.
   static bool get isMacOS => io.Platform.isMacOS;
 
   /// Always `false` on native platforms (`dart:io` resolves local paths directly).
   static bool isManagedWebAudioPath(String pathOrUrl) => false;
 
+  /// Initializes [thumbnailsDirectory] and [tempDirectory] synchronously.
+  ///
+  /// Creates [thumbnailsPath] and [tempPath] directories if they do not exist
+  /// and clears the in-memory cached cover index.
   static void init(String thumbnailsPath, String tempPath) {
     tempDirectory = io.Directory(tempPath);
     thumbnailsDirectory = io.Directory(thumbnailsPath);
@@ -41,6 +61,11 @@ abstract final class PersistentBinaryStorage {
     _knownCoverHashes.clear();
   }
 
+  /// Asynchronously initializes storage paths and indexes cached cover art.
+  ///
+  /// When both [thumbnailsPath] and [tempPath] are provided, initializes them
+  /// first via [init], then scans [thumbnailsDirectory] to populate known
+  /// cover hashes.
   static Future<void> initAsync({
     String? thumbnailsPath,
     String? tempPath,
@@ -63,6 +88,9 @@ abstract final class PersistentBinaryStorage {
     }
   }
 
+  /// Verifies that [tempDirectory] and [thumbnailsDirectory] are initialized.
+  ///
+  /// Throws an [Exception] if storage has not been initialized yet.
   static void ensureInitialized() {
     if (tempDirectory == null || thumbnailsDirectory == null) {
       throw Exception(
@@ -71,6 +99,7 @@ abstract final class PersistentBinaryStorage {
     }
   }
 
+  /// Deletes and recreates [tempDirectory] to discard temporary files.
   static Future<void> clearTempDirectory() async {
     ensureInitialized();
     try {
@@ -83,6 +112,7 @@ abstract final class PersistentBinaryStorage {
     } catch (_) {}
   }
 
+  /// Returns whether cached artwork exists at [artworkUri] or [resolvedArtworkPath].
   static bool hasCachedArtwork(String artworkUri, String resolvedArtworkPath) {
     ensureInitialized();
     final hash = p.basename(artworkUri);
@@ -99,6 +129,9 @@ abstract final class PersistentBinaryStorage {
     return false;
   }
 
+  /// Saves cover art [bytes] for [hash] atomically to [targetFilePath].
+  ///
+  /// Skips writing if [targetFilePath] already exists and is non-empty.
   static Future<void> saveCoverBytes(
     String hash,
     String targetFilePath,
@@ -138,8 +171,10 @@ abstract final class PersistentBinaryStorage {
     }
   }
 
+  /// Returns `null` on native platforms where [artworkUri] is read directly from disk.
   static Future<Uri?> resolveCoverDataUriAsync(String artworkUri) async => null;
 
+  /// Lists all cached cover files inside [thumbnailsDirectory].
   static List<io.File> listCachedCoverFiles() {
     ensureInitialized();
     if (!thumbnailsDirectory!.existsSync()) {
@@ -152,6 +187,7 @@ abstract final class PersistentBinaryStorage {
     return files.whereType<io.File>().toList();
   }
 
+  /// Deletes cached cover files whose names are not in [validFileNames].
   static Future<void> purgeUnusedCovers(Set<String> validFileNames) async {
     final dir = thumbnailsDirectory;
     if (dir == null || !await dir.exists()) return;
@@ -172,6 +208,7 @@ abstract final class PersistentBinaryStorage {
   // Picked Audio & Background Files
   // ---------------------------------------------------------------------------
 
+  /// Saves picked audio [bytes] under a sanitized [fileName] and returns its path.
   static Future<String?> savePickedAudioFile(
     String fileName,
     Uint8List bytes,
@@ -187,8 +224,10 @@ abstract final class PersistentBinaryStorage {
     return target.path;
   }
 
+  /// No-op on native platforms where [uriOrPath] is not managed in browser OPFS.
   static Future<void> removeWebAudioFile(String uriOrPath) async {}
 
+  /// Saves custom background [bytes] under a sanitized [fileName] and returns its path.
   static Future<String?> saveCustomBackgroundBytes(
     String fileName,
     Uint8List bytes,
@@ -204,6 +243,10 @@ abstract final class PersistentBinaryStorage {
     return target.path;
   }
 
+  /// Copies [sourceImagePath] into the application support backgrounds directory.
+  ///
+  /// Returns the destination file path, or `null` if [sourceImagePath] does
+  /// not exist.
   static Future<String?> copyCustomBackgroundFile(
     String sourceImagePath,
   ) async {
@@ -227,16 +270,19 @@ abstract final class PersistentBinaryStorage {
   // Filesystem Inspection & Discovery
   // ---------------------------------------------------------------------------
 
+  /// Synchronously returns whether a directory exists at [path].
   static bool directoryExistsSync(String path) {
     if (path.isEmpty) return false;
     return io.Directory(path).existsSync();
   }
 
+  /// Asynchronously returns whether a directory exists at [path].
   static Future<bool> directoryExists(String path) async {
     if (path.isEmpty) return false;
     return io.Directory(path).exists();
   }
 
+  /// Synchronously returns whether a file exists at [path] or is an HTTP(S) URL.
   static bool fileExistsSync(String path) {
     if (path.isEmpty) return false;
     if (path.startsWith('http://') || path.startsWith('https://')) {
@@ -245,6 +291,7 @@ abstract final class PersistentBinaryStorage {
     return io.File(path).existsSync();
   }
 
+  /// Asynchronously returns whether a file exists at [path] or is an HTTP(S) URL.
   static Future<bool> fileExists(String path) async {
     if (path.isEmpty) return false;
     if (path.startsWith('http://') || path.startsWith('https://')) {
@@ -253,6 +300,7 @@ abstract final class PersistentBinaryStorage {
     return io.File(path).exists();
   }
 
+  /// Returns the byte size and modification timestamp (in ms) for [path], or `null`.
   static Future<({int size, int modifiedAt})?> statFile(String path) async {
     try {
       final f = io.File(path);
@@ -268,6 +316,7 @@ abstract final class PersistentBinaryStorage {
     }
   }
 
+  /// Lists visible direct subdirectories of [dirPath], sorted by name.
   static List<String> listSubdirectoriesSync(String dirPath) {
     final subDirs = <String>[];
     try {
@@ -290,6 +339,10 @@ abstract final class PersistentBinaryStorage {
     return subDirs;
   }
 
+  /// Streams discovered audio files under [directories] matching [supportedExtensions].
+  ///
+  /// Ignores hidden and empty files, and stops early when [isCancelled]
+  /// returns `true`.
   static Stream<({String path, int size, int modifiedAt})>
   discoverAudioFilesStream(
     List<String> directories,
@@ -346,6 +399,7 @@ abstract final class PersistentBinaryStorage {
     }
   }
 
+  /// Reads an adjacent `.lrc` or `.txt` lyrics file for [audioFilePath], or `null` if none exists.
   static Future<String?> readLocalLrcFile(String audioFilePath) async {
     if (audioFilePath.startsWith('http://') ||
         audioFilePath.startsWith('https://')) {
@@ -371,6 +425,10 @@ abstract final class PersistentBinaryStorage {
   // Image Provider & Widget Builders
   // ---------------------------------------------------------------------------
 
+  /// Resolves an [ImageProvider] for a local image file at [pathOrUri].
+  ///
+  /// Optionally resizes the decoded image to [maxWidth] and [maxHeight], or
+  /// returns `null` if no non-empty image file is found.
   static Future<ImageProvider?> resolveLocalOrOpfsImageProvider(
     String pathOrUri, {
     int? maxWidth,
@@ -387,6 +445,10 @@ abstract final class PersistentBinaryStorage {
     return ResizeImage.resizeIfNeeded(maxWidth, maxHeight, FileImage(file));
   }
 
+  /// Builds an image widget for [pathOrUri], or returns [fallback] if missing.
+  ///
+  /// Applies optional layout dimensions ([width], [height]), decode hints
+  /// ([cacheWidth], [cacheHeight]), and box [fit].
   static Widget buildLocalOrOpfsImage(
     String pathOrUri, {
     double? width,
@@ -424,6 +486,7 @@ abstract final class PersistentBinaryStorage {
     );
   }
 
+  /// Parses [value] as an HTTP date or ISO-8601 timestamp, returning `null` if invalid.
   static DateTime? tryParseHttpDate(String value) {
     try {
       return io.HttpDate.parse(value);

@@ -8,8 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/audio_effects_sheet.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/features/playback/presentation/widgets/audio_effects_sheet.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/now_playing_cover_art.dart';
 import 'package:tachyon/features/playback/presentation/widgets/visualizers/now_playing_visualizer_mode.dart';
@@ -18,7 +18,7 @@ import 'package:tachyon/features/playback/presentation/widgets/visualizers/react
 import 'package:tachyon/features/playback/presentation/widgets/visualizers/spectrum_bars_visualizer.dart';
 import 'package:tachyon/features/playback/presentation/widgets/wave_visualizer.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 class _MockLocaleRepo extends LocaleRepository {

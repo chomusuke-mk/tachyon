@@ -1,8 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:tachyon/shared/utils/duration_formatter.dart';
 
 /// Audio Enhancements Card.
@@ -13,6 +13,7 @@ import 'package:tachyon/shared/utils/duration_formatter.dart';
 /// - True-Peak Brickwall Limiter to avoid inter-sample distortion and digital clipping.
 /// - Downmix to Mono Audio for single-earphone listening or accessibility.
 class AudioEnhancementsCard extends StatelessWidget {
+  /// Creates an [AudioEnhancementsCard].
   const AudioEnhancementsCard({super.key});
 
   @override

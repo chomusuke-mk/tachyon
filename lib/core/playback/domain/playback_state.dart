@@ -19,38 +19,109 @@ export 'package:tachyon/core/playback/domain/audio_playable.dart';
 export 'crossfade_config.dart';
 export 'loop_mode.dart';
 
-enum PlaybackStatus { idle, loading, playing, paused, completed }
+/// High-level transport lifecycle status derived from [PlaybackState].
+enum PlaybackStatus {
+  /// No active playback or playback was stopped at zero position.
+  idle,
 
+  /// Engine is currently loading or buffering audio data.
+  loading,
+
+  /// Audio is actively playing.
+  playing,
+
+  /// Playback is paused mid-track.
+  paused,
+
+  /// Playback reached the end of the active track or queue.
+  completed,
+}
+
+/// Immutable snapshot of audio playback, queue, and DSP configuration state.
 @immutable
 class PlaybackState {
+  /// Zero-based index of the active item in [queue].
   final int currentIndex;
+
+  /// Current list of audio sources in the playback queue.
   final List<ma.AudioSource<AudioPlayable>> queue;
+
+  /// Whether audio is currently playing.
   final bool isPlaying;
+
+  /// Whether the engine is currently buffering stream or track data.
   final bool isBuffering;
+
+  /// Whether playback completed naturally at the end of the queue.
   final bool isCompleted;
+
+  /// Current playback position within the active item.
   final Duration position;
+
+  /// Total duration of the active item, or [Duration.zero] if unknown.
   final Duration duration;
+
+  /// Playback speed multiplier.
   final double rate;
+
+  /// Pitch multiplier independent of playback speed.
   final double pitch;
+
+  /// Master output volume multiplier.
   final double volume;
+
+  /// Whether queue shuffle order is enabled.
   final bool isShuffled;
+
+  /// Active queue repeat mode.
   final LoopMode loopMode;
+
+  /// Automatic crossfade transition duration between tracks.
   final Duration crossfadeDuration;
+
+  /// Whether silence skipping is enabled.
   final bool skipSilence;
+
+  /// Active silence skipping mode.
   final ma.SilenceSkipMode silenceSkipMode;
+
+  /// Whether ReplayGain loudness normalization is enabled.
   final bool volumeNormalization;
+
+  /// Active ReplayGain loudness normalization mode.
   final ma.ReplayGainMode replayGainMode;
+
+  /// Whether infinite library mix auto-append is enabled.
   final bool isInfiniteMixEnabled;
+
+  /// Detected audio bitrate in bits per second, if available.
   final double? audioBitrate;
+
+  /// Detected audio sample rate in Hz, if available.
   final int? audioSampleRate;
+
+  /// Number of audio channels in the active stream, if available.
   final int? audioChannels;
+
+  /// Digital preamp gain offset in decibels.
   final double preampDb;
+
+  /// Stereo channel balance in `[-1.0, 1.0]`.
   final double balance;
+
+  /// Whether stereo-to-mono downmixing is enabled.
   final bool mono;
+
+  /// Active Bauer stereo-to-binaural crossfeed preset.
   final ma.Crossfeed crossfeed;
+
+  /// Stereo field spatializer width factor.
   final double spatializerWidth;
+
+  /// Whether the true-peak output limiter is enabled.
   final bool limiterEnabled;
 
+  /// Creates an immutable [PlaybackState] snapshot.
   const PlaybackState({
     this.currentIndex = 0,
     this.queue = const [],
@@ -81,34 +152,45 @@ class PlaybackState {
     this.limiterEnabled = true,
   });
 
+  /// Creates the default initial [PlaybackState] before playback starts.
   const PlaybackState.initial() : this();
 
+  /// Active queue entry at [currentIndex], or `null` when out of bounds.
   ma.AudioSource<AudioPlayable>? get currentEntry =>
       (currentIndex >= 0 && currentIndex < queue.length) ? queue[currentIndex] : null;
 
+  /// Active [AudioPlayable] from [currentEntry], or `null` if unavailable.
   AudioPlayable? get currentPlayable => currentEntry?.data;
 
+  /// Active library [Track], or `null` if idle or playing a non-track source.
   Track? get currentTrack =>
       currentPlayable is Track ? currentPlayable as Track : null;
 
+  /// Whether the active item is a continuous live stream.
   bool get isLiveStream =>
       currentPlayable?.isStream ?? (currentEntry?.data?.isStream ?? false);
 
+  /// Whether skipping forward to a next item is possible.
   bool get hasNext =>
       loopMode == LoopMode.all ||
       loopMode == LoopMode.one ||
       currentIndex < queue.length - 1 ||
       (isInfiniteMixEnabled && queue.isNotEmpty);
+
+  /// Whether navigating to a previous item or restarting the track is possible.
   bool get hasPrevious =>
       loopMode == LoopMode.all || currentIndex > 0 || position.inSeconds > 3;
 
+  /// Normalized playback progress in `[0.0, 1.0]`.
   double get progress => duration.inMilliseconds > 0
       ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
       : 0.0;
 
+  /// Remaining duration before the end of the active track.
   Duration get remaining =>
       duration > position ? duration - position : Duration.zero;
 
+  /// High-level [PlaybackStatus] derived from the current transport flags.
   PlaybackStatus get status {
     if (isBuffering) return PlaybackStatus.loading;
     if (isCompleted) return PlaybackStatus.completed;
@@ -117,8 +199,11 @@ class PlaybackState {
     return PlaybackStatus.idle;
   }
 
+  /// Crossfade configuration derived from [crossfadeDuration].
   CrossfadeConfig get crossfadeConfig =>
       CrossfadeConfig(duration: crossfadeDuration);
+
+  /// Returns a copy of this state with the given fields replaced.
   PlaybackState copyWith({
     int? currentIndex,
     List<ma.AudioSource<AudioPlayable>>? queue,

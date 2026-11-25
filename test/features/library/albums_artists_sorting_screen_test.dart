@@ -8,11 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/library_store.dart';
-import 'package:tachyon/features/library/presentation/albums_screen.dart';
-import 'package:tachyon/features/library/presentation/artists_screen.dart';
-import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/library/presentation/screens/albums_screen.dart';
+import 'package:tachyon/features/library/presentation/screens/artists_screen.dart';
+import 'package:tachyon/features/library/presentation/controllers/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 
 class _FileSystemLocaleRepository extends LocaleRepository {

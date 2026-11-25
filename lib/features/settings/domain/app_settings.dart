@@ -14,77 +14,204 @@ import 'package:tachyon/core/lyrics/domain/lyrics_display_mode.dart';
 import 'package:tachyon/core/playback/domain/crossfade_config.dart';
 import 'package:tachyon/core/playback/domain/loop_mode.dart';
 
+/// Immutable snapshot of user-configurable application, library, audio, and
+/// appearance settings.
 @immutable
 class AppSettings {
-  // Library Paths & Individual Sources
+  /// Configured local directory paths scanned for audio tracks.
   final List<String> musicDirectories;
+
+  /// Configured individual local audio file paths and remote stream URLs.
   final List<String> musicFiles;
 
-  // Audio Playback
-  final int crossfadeDuration; // 0 to 30 seconds (default 5)
-  final int crossfadeManualDuration; // 0 to 5 seconds (default 1)
-  final CrossfadeCurve crossfadeCurve; // 'equal_power' or 'linear'
-  final double volume; // 0.0 to 1.0 (default 1.0)
-  final double playbackRate; // 0.5 to 1.5 (default 1.0)
-  final double playbackPitch; // 0.5 to 1.5 (default 1.0)
-  final LoopMode loopMode; // LoopMode.off (default)
-  final bool shuffle; // default false
-  final bool skipSilence; // default false
-  final SilenceSkipMode silenceSkipMode; // default SilenceSkipMode.all
-  final bool volumeNormalization; // default true
-  final double preampDb; // -12.0 to +12.0 dB (default 0.0)
-  final double balance; // -1.0 to +1.0 (default 0.0)
-  final bool mono; // default false
-  final Crossfeed crossfeed; // Crossfeed.off (default)
-  final double spatializerWidth; // 0.0 to 2.0 (default 1.0)
-  final bool limiterEnabled; // default true
-  final double volumeBoost; // 1.0 to 2.0 (default 1.0)
-  final bool exclusiveAudio; // Windows WASAPI exclusive (default false)
-  final bool pauseOnDeviceChange; // default true
+  /// Automatic track-to-track crossfade duration in seconds.
+  ///
+  /// Defaults to `5` (valid persisted range `0` to `30`).
+  final int crossfadeDuration;
+
+  /// Manual track-skip crossfade duration in seconds.
+  ///
+  /// Defaults to `1` (valid persisted range `0` to `5`).
+  final int crossfadeManualDuration;
+
+  /// Gain interpolation curve applied during crossfade transitions.
+  ///
+  /// Defaults to [CrossfadeCurve.equalPower].
+  final CrossfadeCurve crossfadeCurve;
+
+  /// Playback output volume factor in the range `0.0` to `1.0`.
+  ///
+  /// Defaults to `1.0`.
+  final double volume;
+
+  /// Playback speed multiplier in the range `0.5` to `1.5`.
+  ///
+  /// Defaults to `1.0`.
+  final double playbackRate;
+
+  /// Playback pitch multiplier in the range `0.5` to `1.5`.
+  ///
+  /// Defaults to `1.0`.
+  final double playbackPitch;
+
+  /// Active queue repeat mode.
+  ///
+  /// Defaults to [LoopMode.off].
+  final LoopMode loopMode;
+
+  /// Whether queue playback shuffling is enabled.
+  final bool shuffle;
+
+  /// Whether automatic silence skipping is enabled during playback.
+  final bool skipSilence;
+
+  /// Silence detection strategy applied when [skipSilence] is enabled.
+  ///
+  /// Defaults to [SilenceSkipMode.all].
+  final SilenceSkipMode silenceSkipMode;
+
+  /// Whether ReplayGain loudness normalization is enabled.
+  final bool volumeNormalization;
+
+  /// Pre-amplifier gain offset in decibels (`-12.0` to `+12.0` dB).
+  ///
+  /// Defaults to `0.0`.
+  final double preampDb;
+
+  /// Stereo left-to-right pan balance (`-1.0` full left to `1.0` full right).
+  ///
+  /// Defaults to `0.0`.
+  final double balance;
+
+  /// Whether stereo audio output is downmixed to mono.
+  final bool mono;
+
+  /// Headphone crossfeed configuration blending left and right channels.
+  ///
+  /// Defaults to [Crossfeed.off].
+  final Crossfeed crossfeed;
+
+  /// Stereo spatializer width factor (`0.0` to `2.0`).
+  ///
+  /// Defaults to `1.0`.
+  final double spatializerWidth;
+
+  /// Whether the output peak limiter is enabled to prevent clipping.
+  final bool limiterEnabled;
+
+  /// Additional volume boost multiplier (`1.0` to `2.0`).
+  ///
+  /// Defaults to `1.0`.
+  final double volumeBoost;
+
+  /// Whether Windows WASAPI exclusive audio output mode is enabled.
+  final bool exclusiveAudio;
+
+  /// Whether playback pauses automatically when the audio output device changes.
+  final bool pauseOnDeviceChange;
+
+  /// Identifier of the selected audio output device, or `null` for default.
   final String? audioOutputDeviceId;
 
-  // Appearance & Localization
-  final ThemeMode themeMode; // ThemeMode.dark (default)
-  final int accentColorValue; // default 0xFF7C4DFF (TachyonColors.electricVioletSeed)
-  final bool isOledMode; // default false
-  final String? customBackgroundPath; // default null
-  final double backgroundBlurSigma; // default 20.0
-  final double backgroundDimOpacity; // default 0.65
-  final String appLanguage; // 'defaultOption', 'en', 'es'
-  final String lyricsTranslationTargetLang; // 'defaultOption', 'es', 'en', etc.
-  final String lyricsTranslationSourceLang; // 'auto', 'en', 'es', etc.
+  /// Active application brightness theme mode.
+  ///
+  /// Defaults to [ThemeMode.dark] in [AppSettings.new].
+  final ThemeMode themeMode;
 
-  // Library Sorting
+  /// ARGB integer value of the selected accent seed color.
+  ///
+  /// Defaults to `0xFF7C4DFF`.
+  final int accentColorValue;
+
+  /// Whether pure-black OLED surfaces are used in dark theme.
+  final bool isOledMode;
+
+  /// Path or storage key of the custom background image, or `null` if unset.
+  final String? customBackgroundPath;
+
+  /// Gaussian blur sigma applied to the custom background image.
+  ///
+  /// Defaults to `20.0`.
+  final double backgroundBlurSigma;
+
+  /// Darkening overlay opacity applied over the custom background image.
+  ///
+  /// Defaults to `0.65`.
+  final double backgroundDimOpacity;
+
+  /// Selected UI language code (`'defaultOption'`, `'en'`, `'es'`, etc.).
+  final String appLanguage;
+
+  /// Target language code for lyrics translation (`'defaultOption'`, `'en'`, `'es'`, etc.).
+  final String lyricsTranslationTargetLang;
+
+  /// Source language code for lyrics translation (`'auto'`, `'en'`, `'es'`, etc.).
+  final String lyricsTranslationSourceLang;
+
+  /// Active sort criterion for the tracks library view.
   final TrackSortOption trackSortOption;
+
+  /// Whether tracks are sorted in ascending order.
   final bool trackSortAscending;
+
+  /// Active sort criterion for the albums library view.
   final AlbumSortOption albumSortOption;
+
+  /// Whether albums are sorted in ascending order.
   final bool albumSortAscending;
+
+  /// Active sort criterion for the artists library view.
   final ArtistSortOption artistSortOption;
+
+  /// Whether artists are sorted in ascending order.
   final bool artistSortAscending;
 
-  // Playback & Lyrics View Persistence
+  /// Display mode controlling original and translated lyrics rendering.
   final LyricsDisplayMode lyricsDisplayMode;
+
+  /// Whether the lyrics panel is visible on the now-playing view.
   final bool playbackShowLyrics;
+
+  /// Whether the playback queue panel is visible on the now-playing view.
   final bool playbackShowQueue;
 
-  // Restorable Playback State
+  /// File path or URL of the last played track, or `null` if none was recorded.
   final String? lastPlayedFilePath;
+
+  /// Last recorded playback position in milliseconds.
   final int lastPlayedPositionMs;
 
-  // Equalizer
+  /// Whether the 10-band graphic equalizer is enabled.
   final bool equalizerEnabled;
-  final String equalizerPreset;
-  final List<double> equalizerGains; // 10 bands (-24.0 to +24.0 dB)
 
-  // Reverb
+  /// Identifier of the active equalizer preset (for example `'flat'` or `'custom'`).
+  final String equalizerPreset;
+
+  /// Gain values in decibels (`-24.0` to `+24.0` dB) for each of the 10 equalizer bands.
+  final List<double> equalizerGains;
+
+  /// Whether the audio reverb effect is enabled.
   final bool reverbEnabled;
+
+  /// Identifier of the active reverb preset (for example `'off'`, `'studio'`, or `'custom'`).
   final String reverbPreset;
+
+  /// Reverb virtual room size parameter (`0.0` to `1.0`).
   final double reverbRoomSize;
+
+  /// Reverb high-frequency damping factor (`0.0` to `1.0`).
   final double reverbDamping;
+
+  /// Reverb stereo width factor (`0.0` to `1.0`).
   final double reverbWidth;
+
+  /// Reverb wet signal mix level (`0.0` to `2.0`).
   final double reverbWet;
+
+  /// Reverb dry signal mix level (`0.0` to `2.0`).
   final double reverbDry;
 
+  /// Creates an immutable [AppSettings] instance.
   const AppSettings({
     this.musicDirectories = const [],
     this.musicFiles = const [],
@@ -152,8 +279,13 @@ class AppSettings {
     this.reverbDry = 1.0,
   });
 
+  /// Accent seed [Color] derived from [accentColorValue].
   Color get accentColor => Color(accentColorValue);
 
+  /// Effective [SilenceSkipConfig] built from [skipSilence] and [silenceSkipMode].
+  ///
+  /// Falls back to [SilenceSkipMode.all] when [skipSilence] is `true` and
+  /// [silenceSkipMode] is [SilenceSkipMode.disabled].
   SilenceSkipConfig get silenceSkipConfig => skipSilence
       ? SilenceSkipConfig(
           enabled: true,
@@ -163,9 +295,14 @@ class AppSettings {
         )
       : const SilenceSkipConfig.off();
 
+  /// Effective [ReplayGainMode] derived from [volumeNormalization].
   ReplayGainMode get replayGainMode =>
       volumeNormalization ? ReplayGainMode.track : ReplayGainMode.disabled;
 
+  /// Effective [Reverb] configuration built from [reverbEnabled], [reverbPreset],
+  /// and the individual reverb parameters.
+  ///
+  /// Returns [Reverb.off] when reverb is disabled or [reverbPreset] is `'off'`.
   Reverb get reverbConfig => (reverbEnabled && reverbPreset != 'off')
       ? Reverb(
           enabled: true,
@@ -236,6 +373,10 @@ class AppSettings {
           reverbWet == other.reverbWet &&
           reverbDry == other.reverbDry;
 
+  /// Returns a copy of this [AppSettings] with the specified fields updated.
+  ///
+  /// Pass [clearCustomBackground] as `true` to reset [customBackgroundPath] to
+  /// `null`.
   AppSettings copyWith({
     List<String>? musicDirectories,
     List<String>? musicFiles,

@@ -4,18 +4,40 @@ import 'package:material_ui/material_ui.dart';
 /// A generic text link widget that handles hover states, cursor, optional underline,
 /// and properly manages hover cleanup across asynchronous callbacks (e.g., navigation).
 class TextLink extends StatefulWidget {
+  /// Label text rendered inside the interactive link.
   final String text;
+
+  /// Optional synchronous or asynchronous callback invoked when tapped.
   final FutureOr<void> Function()? onTap;
+
+  /// Base text style whose color and decoration update on hover.
   final TextStyle? style;
+
+  /// Text and underline color applied while hovered.
   final Color? hoverColor;
+
+  /// Text color applied when not hovered.
   final Color? defaultColor;
+
+  /// Whether an underline decoration appears beneath [text] while hovered.
   final bool underlineOnHover;
+
+  /// Ink ripple corner radius around the padded link area.
   final BorderRadius? borderRadius;
+
+  /// Internal padding surrounding [text] inside the ink well.
   final EdgeInsetsGeometry? padding;
+
+  /// Maximum number of lines permitted for [text].
   final int? maxLines;
+
+  /// How visual overflow of [text] is handled.
   final TextOverflow? overflow;
+
+  /// Whether the underlying [InkWell] can receive keyboard focus.
   final bool canRequestFocus;
 
+  /// Creates a [TextLink].
   const TextLink({
     super.key,
     required this.text,

@@ -1,5 +1,6 @@
 import 'package:tachyon/core/store/domain/track.dart';
 
+/// A musical genre in the local library catalog.
 class Genre {
   /// The genre's unique identifier. This is typically assigned by the database or API.
   final int? id;
@@ -24,6 +25,7 @@ class Genre {
     return null;
   }
 
+  /// Creates a [Genre] catalog entity.
   const Genre({
     this.id,
     required this.name,

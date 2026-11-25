@@ -8,18 +8,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
-import 'package:tachyon/features/library/presentation/library_controller.dart';
+import 'package:tachyon/features/library/presentation/controllers/library_controller.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/lyrics/lyrics_manager.dart';
-import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
+import 'package:tachyon/features/playback/presentation/screens/now_playing_screen.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/now_playing_cover_art.dart';
-import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/features/playlists/presentation/controllers/playlists_controller.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
-import 'package:tachyon/features/shell/tachyon_shell.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
+import 'package:tachyon/features/shell/presentation/screens/tachyon_shell.dart';
 import 'package:tachyon/shared/widgets/desktop_shortcuts_handler.dart';
 
 class _TestLocaleRepo extends LocaleRepository {

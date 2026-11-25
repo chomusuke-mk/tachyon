@@ -1,0 +1,162 @@
+import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
+import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
+import 'package:tachyon/shared/widgets/track_tile.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/store/domain/album.dart';
+import 'package:tachyon/features/library/presentation/controllers/library_controller.dart';
+import 'package:tachyon/features/playback/presentation/screens/now_playing_screen.dart';
+import 'package:tachyon/features/shell/presentation/widgets/mini_player_bar.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/shared/utils/duration_formatter.dart';
+
+/// Detail screen displaying an [Album]'s artwork, metadata, playback actions, and track list.
+class AlbumDetailScreen extends StatelessWidget {
+  /// Album displayed by this screen.
+  final Album album;
+
+  /// Creates an [AlbumDetailScreen] for [album].
+  const AlbumDetailScreen({super.key, required this.album});
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = context.watch<LocaleController>().localeStrings;
+    final library = context.watch<LibraryController?>();
+    final playback = context.read<PlaybackController>();
+
+    final currentAlbum = (album.id != null && library != null
+            ? library.store.getAlbumById(album.id!)
+            : null) ??
+        album;
+    final albumTracks = currentAlbum.tracks;
+
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: Text(album.name),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: AmbientBackdrop(artworkUri: album.artworkUri),
+          ),
+          CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16.0),
+                        child: SizedBox(
+                          width: 200,
+                          height: 200,
+                          child: AlbumArtImage(
+                            artworkUri: album.artworkUri,
+                            quality: ThumbnailQuality.medium,
+                            width: 200,
+                            height: 200,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        album.name,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        album.artist?.name ?? strings.trUnknownArtist,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${album.year ?? ''} • ${strings.alTracksCountFormatted(albumTracks.length)} • ${albumTracks.formattedTotalDuration}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          FilledButton.icon(
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: Text(strings.alPlayAll),
+                            onPressed: albumTracks.isNotEmpty
+                                ? () => playback.playAll(
+                                    albumTracks,
+                                    startIndex: 0,
+                                  )
+                                : null,
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.shuffle_rounded),
+                            label: Text(strings.alShuffleAll),
+                            onPressed: albumTracks.isNotEmpty
+                                ? () => playback.playAll(
+                                    albumTracks,
+                                    shuffle: true,
+                                  )
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SliverList.builder(
+                itemCount: albumTracks.length,
+                itemBuilder: (context, index) {
+                  final track = albumTracks[index];
+                  return TrackTile(
+                    key: ValueKey(track.filePath),
+                    track: track,
+                    contextTracks: albumTracks,
+                    allowedActions: const {
+                      TrackAction.play,
+                      TrackAction.playNext,
+                      TrackAction.addToQueue,
+                      TrackAction.addToPlaylist,
+                      TrackAction.viewArtist,
+                      TrackAction.fileInfo,
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+      bottomNavigationBar: RepaintBoundary(
+        child: MiniPlayerBar(
+          isDesktop: isDesktop,
+          onTap: () => NowPlayingScreen.open(context),
+        ),
+      ),
+    );
+  }
+}

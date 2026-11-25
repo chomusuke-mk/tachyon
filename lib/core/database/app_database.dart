@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:sqlite3/common.dart';
+import 'package:tachyon/core/database/app_database_schema.dart';
 import 'package:tachyon/core/database/sqlite_connector.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
 import 'package:tachyon/core/playback/domain/radio_station.dart';
@@ -11,50 +12,22 @@ import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
 import 'package:tachyon/core/store/domain/playlist.dart' show PlaylistType;
 
 export 'package:sqlite3/common.dart' show CommonDatabase;
+export 'package:tachyon/core/database/app_database_schema.dart';
 export 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
 
+/// Database connection handle backed by `sqlite3`'s [CommonDatabase].
 typedef Database = CommonDatabase;
+
+/// Reusable prepared SQL statement backed by `sqlite3`'s [CommonPreparedStatement].
 typedef PreparedStatement = CommonPreparedStatement;
-
-abstract final class AppDatabaseSchema {
-  static const List<String> createTables = [
-    'CREATE TABLE IF NOT EXISTS artists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE, artwork_uri TEXT);',
-    'CREATE TABLE IF NOT EXISTS albums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE, year INTEGER, artist_id INTEGER REFERENCES artists(id) ON DELETE SET NULL, artwork_uri TEXT, UNIQUE(name COLLATE NOCASE, artist_id));',
-    'CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT UNIQUE NOT NULL, title TEXT NOT NULL, track_number INTEGER, disc_number INTEGER DEFAULT 1, year INTEGER, duration_ms INTEGER NOT NULL, bitrate INTEGER, sample_rate INTEGER, channels INTEGER, codec TEXT, file_size INTEGER NOT NULL, modified_at INTEGER NOT NULL, replay_gain_track_gain REAL, replay_gain_track_peak REAL, waveform_data TEXT, album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL, artwork_uri TEXT);',
-    'CREATE TABLE IF NOT EXISTS genres (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE);',
-    'CREATE TABLE IF NOT EXISTS track_genres (track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, genre_id INTEGER NOT NULL REFERENCES genres(id) ON DELETE CASCADE, PRIMARY KEY(track_id, genre_id));',
-    'CREATE TABLE IF NOT EXISTS track_artists (track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE, PRIMARY KEY(track_id, artist_id));',
-    'CREATE TABLE IF NOT EXISTS playlists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created_at INTEGER NOT NULL, type INTEGER DEFAULT 0);',
-    'CREATE TABLE IF NOT EXISTS playlist_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, position INTEGER NOT NULL, added_at INTEGER NOT NULL, playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE, track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE);',
-    'CREATE TABLE IF NOT EXISTS lyrics (id INTEGER PRIMARY KEY AUTOINCREMENT, track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, source TEXT NOT NULL, state TEXT NOT NULL DEFAULT \'FOUND\', raw_lrc TEXT, is_synced INTEGER DEFAULT 0, lang TEXT, updated_at INTEGER NOT NULL, UNIQUE(track_id, source));',
-    'CREATE TABLE IF NOT EXISTS lyrics_translations (id INTEGER PRIMARY KEY AUTOINCREMENT, lyrics_id INTEGER NOT NULL REFERENCES lyrics(id) ON DELETE CASCADE, lang TEXT NOT NULL, translated_lines TEXT NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(lyrics_id, lang));',
-    'CREATE TABLE IF NOT EXISTS radio_stations (id INTEGER PRIMARY KEY AUTOINCREMENT, station_uuid TEXT, name TEXT NOT NULL, stream_url TEXT NOT NULL UNIQUE, homepage_url TEXT, favicon_url TEXT, genre TEXT, country TEXT, bitrate_kbps INTEGER, codec TEXT, is_favorite INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);',
-  ];
-
-  static const List<String> indexes = [
-    'CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path);',
-    'CREATE INDEX IF NOT EXISTS idx_tracks_album_id ON tracks(album_id);',
-    'CREATE INDEX IF NOT EXISTS idx_tracks_title ON tracks(title COLLATE NOCASE);',
-    'CREATE INDEX IF NOT EXISTS idx_albums_name ON albums(name COLLATE NOCASE);',
-    'CREATE INDEX IF NOT EXISTS idx_albums_artist_id ON albums(artist_id);',
-    'CREATE UNIQUE INDEX IF NOT EXISTS idx_albums_name_null_artist ON albums(name COLLATE NOCASE) WHERE artist_id IS NULL;',
-    'CREATE INDEX IF NOT EXISTS idx_artists_name ON artists(name COLLATE NOCASE);',
-    'CREATE INDEX IF NOT EXISTS idx_genres_name ON genres(name COLLATE NOCASE);',
-    'CREATE INDEX IF NOT EXISTS idx_track_genres_genre_id ON track_genres(genre_id);',
-    'CREATE INDEX IF NOT EXISTS idx_track_artists_artist_id ON track_artists(artist_id);',
-    'CREATE INDEX IF NOT EXISTS idx_playlist_entries_playlist_pos ON playlist_entries(playlist_id, position);',
-    'CREATE INDEX IF NOT EXISTS idx_playlist_entries_track_id ON playlist_entries(track_id);',
-    'CREATE INDEX IF NOT EXISTS idx_lyrics_track_source ON lyrics(track_id, source);',
-    'CREATE INDEX IF NOT EXISTS idx_lyrics_translations_lookup ON lyrics_translations(lyrics_id, lang);',
-    'CREATE INDEX IF NOT EXISTS idx_radio_stations_uuid ON radio_stations(station_uuid);',
-    'CREATE INDEX IF NOT EXISTS idx_radio_stations_favorite ON radio_stations(is_favorite);',
-  ];
-}
 
 /// Concise, centralized SQLite persistence service using an asynchronous FIFO
 /// serialization queue compatible with both native FFI and WebAssembly (WasmSqlite3).
 class AppDatabase {
+  /// Reserved playlist ID for the built-in Liked Songs playlist.
   static const int likedSongsPlaylistId = 1;
+
+  /// Reserved playlist ID for the built-in History playlist.
   static const int historyPlaylistId = 2;
 
   String? _dbPath;
@@ -62,8 +35,18 @@ class AppDatabase {
   Database? _persistentDb;
   Future<void>? _queue;
 
+  /// Creates an [AppDatabase] instance optionally targeting [dbPath].
+  ///
+  /// When [dbPath] is omitted or empty on persistent initialization, the
+  /// platform's default application support directory or Web VFS path is used.
   AppDatabase({String? dbPath}) : _dbPath = dbPath;
+
+  /// Creates an in-memory [AppDatabase] instance initialized with the schema.
   factory AppDatabase.inMemory() => AppDatabase.forTesting(openInMemoryDatabase());
+
+  /// Creates an [AppDatabase] wrapping a caller-provided [db] for testing.
+  ///
+  /// Configures SQLite pragmas and executes the schema DDL on [db].
   factory AppDatabase.forTesting(Database db) {
     final appDb = AppDatabase();
     _configurePragmas(db);
@@ -151,6 +134,11 @@ class AppDatabase {
     );
   }
 
+  /// Initializes the persistent database and applies schema DDL and seed rows.
+  ///
+  /// If [dbPathOverride] differs from the current path, any previously opened
+  /// persistent handle is closed before opening the new path. No-op for
+  /// in-memory instances.
   Future<void> init([String? dbPathOverride]) async {
     if (_inMemoryDb != null) return;
     if (dbPathOverride != null && dbPathOverride != _dbPath) {
@@ -161,6 +149,7 @@ class AppDatabase {
     await _runTask(_executeSchema, flush: true);
   }
 
+  /// Closes the underlying database handles after any queued tasks complete.
   Future<void> close() {
     if (_queue == null) {
       _inMemoryDb?.close();
@@ -177,6 +166,9 @@ class AppDatabase {
     });
   }
 
+  /// Loads all library entities and relationships into a [CatalogSnapshot].
+  ///
+  /// Returns an empty [CatalogSnapshot] if the query fails.
   Future<CatalogSnapshot> getCatalogSnapshot() => _runTask(_getCatalogSnapshotSync);
 
   static CatalogSnapshot _getCatalogSnapshotSync(Database db) {
@@ -251,6 +243,9 @@ class AppDatabase {
     }
   }
 
+  /// Inserts or updates [tracks] along with their artists, albums, genres, and embedded lyrics.
+  ///
+  /// Performs all mutations atomically in a single SQLite transaction.
   Future<void> upsertTracks(List<ExtractedTrackData> tracks) =>
       tracks.isEmpty ? Future.value() : _runTask((db) => _upsertTracksSync(db, tracks), flush: true);
 
@@ -403,6 +398,7 @@ class AppDatabase {
     }
   }
 
+  /// Deletes tracks matching [trackIds] and removes orphaned albums, artists, and genres.
   Future<void> deleteTracksAndPurgeOrphans(List<int> trackIds) =>
       _runTask((db) => _deleteTracksAndPurgeOrphansSync(db, trackIds), flush: true);
 
@@ -428,6 +424,9 @@ class AppDatabase {
     }
   }
 
+  /// Deletes all library, lyrics, radio, and user playlist records.
+  ///
+  /// Built-in system playlists (`Liked Songs` and `History`) are preserved.
   Future<void> clearAllData() => _runTask(_clearAllDataSync, flush: true);
 
   static void _clearAllDataSync(Database db) {
@@ -447,6 +446,9 @@ class AppDatabase {
     }
   }
 
+  /// Creates a new user playlist named [name] and returns its row ID.
+  ///
+  /// Returns `-1` if creation fails.
   Future<int> createPlaylist(String name) => _runTask((db) {
         try {
           db.execute(
@@ -460,6 +462,9 @@ class AppDatabase {
         }
       }, flush: true);
 
+  /// Deletes the user playlist with [playlistId].
+  ///
+  /// System playlists cannot be deleted by this method.
   Future<void> deletePlaylist(int playlistId) => _runTask((db) {
         try {
           db.execute('DELETE FROM playlists WHERE id = ? AND type = ?;', [playlistId, PlaylistType.user.value]);
@@ -468,6 +473,7 @@ class AppDatabase {
         }
       }, flush: true);
 
+  /// Updates the name of the playlist with [playlistId] to [name].
   Future<void> renamePlaylist(int playlistId, String name) => _runTask((db) {
         try {
           db.execute('UPDATE playlists SET name = ? WHERE id = ?;', [name.trim(), playlistId]);
@@ -476,6 +482,7 @@ class AppDatabase {
         }
       }, flush: true);
 
+  /// Appends [trackId] to the end of the playlist identified by [playlistId].
   Future<void> addTrackToPlaylist(int playlistId, int trackId) =>
       _runTask((db) => _addTrackToPlaylistSync(db, playlistId, trackId), flush: true);
 
@@ -494,6 +501,7 @@ class AppDatabase {
     }
   }
 
+  /// Appends all [trackIds] in order to the playlist identified by [playlistId].
   Future<void> addTracksToPlaylist(int playlistId, List<int> trackIds) =>
       trackIds.isEmpty ? Future.value() : _runTask((db) => _addTracksToPlaylistSync(db, playlistId, trackIds), flush: true);
 
@@ -514,6 +522,7 @@ class AppDatabase {
     }
   }
 
+  /// Removes [trackId] from [playlistId] and compacts remaining entry positions.
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) =>
       _runTask((db) => _removeTrackFromPlaylistSync(db, playlistId, trackId), flush: true);
 
@@ -541,6 +550,7 @@ class AppDatabase {
     }
   }
 
+  /// Moves a playlist entry from [fromIndex] to [toIndex] within [playlistId].
   Future<void> reorderPlaylistEntries(int playlistId, int fromIndex, int toIndex) =>
       _runTask((db) => _reorderPlaylistEntriesSync(db, playlistId, fromIndex, toIndex), flush: true);
 
@@ -573,6 +583,7 @@ class AppDatabase {
     }
   }
 
+  /// Toggles membership of [trackId] in the Liked Songs playlist.
   Future<void> toggleLikeTrack(int trackId) => _runTask((db) {
         try {
           final rows = db.select('SELECT id FROM playlist_entries WHERE playlist_id = ? AND track_id = ? LIMIT 1;', [likedSongsPlaylistId, trackId]);
@@ -586,6 +597,7 @@ class AppDatabase {
         }
       }, flush: true);
 
+  /// Removes all entries from the History playlist.
   Future<void> clearHistory() => _runTask((db) {
         try {
           db.execute('DELETE FROM playlist_entries WHERE playlist_id = ?;', [historyPlaylistId]);
@@ -594,11 +606,17 @@ class AppDatabase {
         }
       }, flush: true);
 
+  /// Returns all persisted lyrics rows associated with [trackId].
   Future<List<Map<String, dynamic>>> getLyricsForTrack(int trackId) => _runTask((db) {
         final rows = db.select('SELECT id, track_id, source, state, raw_lrc, is_synced, lang, updated_at FROM lyrics WHERE track_id = ?;', [trackId]);
         return rows.map((r) => Map<String, dynamic>.from(r)).toList();
       });
 
+  /// Inserts or updates a lyrics record for [trackId] and [source], returning its row ID.
+  ///
+  /// Persists [state], optional [rawLrc], [isSynced], [lang], and [updatedAt]
+  /// (defaulting to the current timestamp), and invalidates any cached
+  /// translations linked to the resulting lyrics entry.
   Future<int> saveLyricsEntry({
     required int trackId,
     required String source,
@@ -621,11 +639,13 @@ class AppDatabase {
         return lyricsId;
       }, flush: true);
 
+  /// Deletes the lyrics entry matching [lyricsId] from the database.
   Future<void> deleteLyrics(int lyricsId) => _runTask(
         (db) => db.execute('DELETE FROM lyrics WHERE id = ?;', [lyricsId]),
         flush: true,
       );
 
+  /// Returns cached translated lines for [lyricsId] and [lang], or `null` if unavailable.
   Future<List<String>?> getLyricsTranslation({required int lyricsId, required String lang}) => _runTask((db) {
         final rows = db.select('SELECT translated_lines FROM lyrics_translations WHERE lyrics_id = ? AND lang = ? LIMIT 1;', [lyricsId, lang]);
         if (rows.isEmpty) return null;
@@ -636,6 +656,7 @@ class AppDatabase {
         }
       });
 
+  /// Saves or updates [translatedLines] for [lyricsId] and target [lang].
   Future<void> saveLyricsTranslation({
     required int lyricsId,
     required String lang,
@@ -649,6 +670,7 @@ class AppDatabase {
         );
       }, flush: true);
 
+  /// Returns all saved [RadioStation] entries ordered by favorites then name.
   Future<List<RadioStation>> getRadioStations() => _runTask((db) {
         final rows = db.select(
           'SELECT id, station_uuid, name, stream_url, homepage_url, favicon_url, genre, country, bitrate_kbps, codec, is_favorite, created_at '
@@ -670,6 +692,7 @@ class AppDatabase {
         )).toList();
       });
 
+  /// Inserts or updates [station] and returns the persisted [RadioStation].
   Future<RadioStation> saveRadioStation(RadioStation station) => _runTask((db) {
         final ts = station.createdAt.millisecondsSinceEpoch;
         if (station.id != null) {
@@ -718,10 +741,12 @@ class AppDatabase {
         return station.copyWith(id: id);
       }, flush: true);
 
+  /// Deletes the radio station matching [id].
   Future<void> deleteRadioStation(int id) => _runTask((db) {
         db.execute('DELETE FROM radio_stations WHERE id = ?;', [id]);
       }, flush: true);
 
+  /// Sets the favorite flag of the radio station matching [id] to [isFavorite].
   Future<void> setRadioStationFavorite(int id, bool isFavorite) => _runTask((db) {
         db.execute('UPDATE radio_stations SET is_favorite = ? WHERE id = ?;', [isFavorite ? 1 : 0, id]);
       }, flush: true);

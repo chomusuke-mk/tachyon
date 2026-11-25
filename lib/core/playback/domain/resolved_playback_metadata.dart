@@ -10,15 +10,31 @@ import 'package:tachyon/core/store/domain/track.dart';
 /// real-time engine metadata streams (for livestreams/radios and tracks whose
 /// background scan analysis is still in progress).
 class ResolvedPlaybackMetadata {
+  /// Primary display title (song title or station name).
   final String title;
+
+  /// Secondary display line (artist names, station context, or genre).
   final String subtitle;
+
+  /// Album or container title, if available.
   final String? album;
+
+  /// Cached local file path or remote artwork URI, if available.
   final String? artworkUri;
+
+  /// In-memory cover image bytes extracted from live stream or file metadata.
   final Uint8List? artworkBytes;
+
+  /// Formatted badge text describing live stream genre, bitrate, and codec.
   final String? liveStreamBadge;
+
+  /// Resolved library [Artist] objects eligible for navigation.
   final List<Artist> clickableArtists;
+
+  /// Whether any displayed fields were derived from live engine metadata.
   final bool isFromLiveMetadata;
 
+  /// Creates a [ResolvedPlaybackMetadata] payload.
   const ResolvedPlaybackMetadata({
     required this.title,
     required this.subtitle,

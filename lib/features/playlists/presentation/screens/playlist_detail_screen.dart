@@ -1,0 +1,343 @@
+import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/core/playback/playback_controller.dart';
+import 'package:tachyon/core/store/domain/playlist.dart';
+import 'package:tachyon/core/metadata/metadata_utils.dart';
+
+import 'package:tachyon/shared/widgets/album_art_image.dart';
+import 'package:tachyon/shared/widgets/ambient_backdrop.dart';
+import 'package:tachyon/shared/widgets/track_tile.dart';
+import 'package:tachyon/shared/theme/app_theme.dart';
+import 'package:tachyon/shared/utils/duration_formatter.dart';
+import 'package:tachyon/features/playback/presentation/screens/now_playing_screen.dart';
+import 'package:tachyon/features/shell/presentation/widgets/mini_player_bar.dart';
+
+import 'package:tachyon/features/playlists/presentation/controllers/playlists_controller.dart';
+import 'package:tachyon/features/playlists/presentation/widgets/playlist_dialogs.dart';
+
+/// Detail screen showing a [Playlist]'s cover art, tracks, playback actions, and reordering.
+class PlaylistDetailScreen extends StatefulWidget {
+  /// Initial playlist displayed by this screen.
+  final Playlist playlist;
+
+  /// Creates a [PlaylistDetailScreen] for [playlist].
+  const PlaylistDetailScreen({super.key, required this.playlist});
+
+  @override
+  State<PlaylistDetailScreen> createState() => _PlaylistDetailScreenState();
+}
+
+class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<PlaylistsController>().selectPlaylist(widget.playlist);
+    });
+  }
+
+  Widget _buildHeaderCover(
+    BuildContext context,
+    Playlist playlist,
+    String? artworkUri,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final fallbackWidget = Container(
+      width: 140,
+      height: 140,
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(16.0),
+      ),
+      child: Icon(
+        playlist.type == PlaylistType.liked
+            ? Icons.favorite_rounded
+            : (playlist.type == PlaylistType.history
+                  ? Icons.history_rounded
+                  : Icons.playlist_play_rounded),
+        size: 64,
+        color: colorScheme.onPrimaryContainer,
+      ),
+    );
+
+    if (artworkUri == null || artworkUri.isEmpty) {
+      return fallbackWidget;
+    }
+
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16.0),
+          child: SizedBox(
+            width: 140,
+            height: 140,
+            child: AlbumArtImage(
+              artworkUri: artworkUri,
+              quality: ThumbnailQuality.high,
+              fit: BoxFit.cover,
+              fallback: fallbackWidget,
+            ),
+          ),
+        ),
+        if (playlist.type == PlaylistType.liked)
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.favorite_rounded,
+                size: 16,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        if (playlist.type == PlaylistType.history)
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.history_rounded,
+                size: 16,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = context.watch<LocaleController>().localeStrings;
+    final playlists = context.watch<PlaylistsController>();
+    final playback = context.read<PlaybackController>();
+
+    final isSelected = playlists.selectedPlaylist?.id == widget.playlist.id;
+    final currentPlaylist = isSelected
+        ? playlists.selectedPlaylist!
+        : widget.playlist;
+    final tracks = isSelected && playlists.selectedPlaylistTracks.isNotEmpty
+        ? playlists.selectedPlaylistTracks
+        : currentPlaylist.tracks;
+    final isDesktop = TachyonBreakpoints.isDesktop(context);
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: Text(currentPlaylist.name),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        actions: [
+          if (currentPlaylist.type == PlaylistType.user)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (value) {
+                if (value == 'rename') {
+                  PlaylistDialogs.showRename(context, currentPlaylist);
+                } else if (value == 'delete') {
+                  PlaylistDialogs.showDelete(
+                    context,
+                    currentPlaylist,
+                    onDeleted: () => Navigator.of(context).pop(),
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'rename',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit_rounded, size: 20),
+                      const SizedBox(width: 12),
+                      Text(strings.plRename),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.delete_outline_rounded,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        strings.plDelete,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(child: AmbientBackdrop(artworkUri: currentPlaylist.artworkUri)),
+          CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    children: [
+                      _buildHeaderCover(context, currentPlaylist, currentPlaylist.artworkUri),
+                      const SizedBox(height: 16),
+                      Text(
+                        currentPlaylist.name,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${strings.plTracksCountFormatted(tracks.length)} • ${tracks.formattedTotalDuration}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          FilledButton.icon(
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: Text(strings.plPlayAll),
+                            onPressed: tracks.isNotEmpty
+                                ? () => playback.playAll(tracks, startIndex: 0)
+                                : null,
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.shuffle_rounded),
+                            label: Text(strings.plShuffleAll),
+                            onPressed: tracks.isNotEmpty
+                                ? () => playback.playAll(tracks, shuffle: true)
+                                : null,
+                          ),
+                        ],
+                      ),
+                      if (currentPlaylist.type == PlaylistType.user)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            strings.plReorderHint,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                              color: Theme.of(context).colorScheme.outline,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              if (tracks.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      strings.plEmpty,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                )
+              else if (currentPlaylist.type == PlaylistType.user)
+                SliverReorderableList(
+                  itemCount: tracks.length,
+                  onReorderItem: (oldIndex, newIndex) {
+                    if (currentPlaylist.id != null) {
+                      playlists.reorderPlaylistEntries(
+                        currentPlaylist.id!,
+                        oldIndex,
+                        newIndex,
+                      );
+                    }
+                  },
+                  itemBuilder: (context, index) {
+                    final track = tracks[index];
+                    return TrackTile(
+                      key: ValueKey('${track.id ?? track.filePath}_$index'),
+                      track: track,
+                      contextTracks: tracks,
+                      additionalActions: [
+                        if (track.id != null && currentPlaylist.id != null)
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(
+                              Icons.remove_circle_outline_rounded,
+                              size: 20,
+                            ),
+                            tooltip: strings.plRemoveTrack,
+                            onPressed: () {
+                              playlists.removeTrackFromPlaylist(
+                                currentPlaylist.id!,
+                                track.id!,
+                              );
+                            },
+                          ),
+                        ReorderableDragStartListener(
+                          index: index,
+                          child: const Padding(
+                            padding: EdgeInsets.only(left: 4.0),
+                            child: Icon(Icons.drag_handle_rounded),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                )
+              else
+                SliverList.builder(
+                  itemCount: tracks.length,
+                  itemBuilder: (context, index) {
+                    final track = tracks[index];
+                    return TrackTile(
+                      key: ValueKey('${track.id ?? track.filePath}_$index'),
+                      track: track,
+                      contextTracks: tracks,
+                    );
+                  },
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
+          ),
+        ],
+      ),
+      bottomNavigationBar: RepaintBoundary(
+        child: MiniPlayerBar(
+          isDesktop: isDesktop,
+          onTap: () => NowPlayingScreen.open(context),
+        ),
+      ),
+    );
+  }
+}

@@ -2,27 +2,50 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import 'package:tachyon/core/constants/languages.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 
-enum LyricsDialogTab { sources, translation }
+/// Active configuration tab within [LyricsSourcesDialog].
+enum LyricsDialogTab {
+  /// Configuration tab for enabling or disabling lyrics lookup sources.
+  sources,
+
+  /// Configuration tab for selecting lyrics translation languages.
+  translation,
+}
 
 /// Modal dialog for configuring active lyrics sources (Local, lrclib.net, lyrics.ovh)
 /// and lyrics translation (source language, target language).
 class LyricsSourcesDialog extends StatefulWidget {
+  /// Whether local embedded tags and `.lrc` files are initially enabled.
   final bool initialEnableLocal;
+
+  /// Whether `lrclib.net` lookups are initially enabled.
   final bool initialEnableLrclib;
+
+  /// Whether `lyrics.ovh` lookups are initially enabled.
   final bool initialEnableLyricsOvh;
+
+  /// Whether lyrics are currently loaded for the active track.
   final bool hasLyrics;
+
+  /// Whether lyrics translation display mode is currently active.
   final bool isTranslated;
+
+  /// Callback invoked when any lyrics source toggle changes.
   final void Function({bool? local, bool? lrclib, bool? lyricsOvh})?
       onSourcesChanged;
+
+  /// Callback invoked to trigger a fresh lyrics search using the active sources.
   final Future<void> Function()? onForceReSearch;
+
+  /// Callback invoked to retranslate the loaded lyrics for the chosen languages.
   final Future<void> Function({
     String? sourceLanguage,
     required String targetLanguage,
   })? onRetranslate;
 
+  /// Creates a [LyricsSourcesDialog].
   const LyricsSourcesDialog({
     super.key,
     this.initialEnableLocal = true,

@@ -10,16 +10,16 @@ import 'package:tachyon/core/lyrics/lrc_parser.dart';
 import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/shared/utils/cancellation_token.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 import 'package:tachyon/core/store/domain/album.dart';
 import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/lyrics/domain/lyrics_source.dart';
-import 'package:tachyon/features/playback/presentation/lyrics_view.dart';
+import 'package:tachyon/features/playback/presentation/widgets/lyrics_view.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/playback/presentation/widgets/lyrics_sources_dialog.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 
 class _FileSystemLocaleRepository extends LocaleRepository {
   @override

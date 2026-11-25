@@ -8,7 +8,7 @@ import 'package:tachyon/core/store/domain/artist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
-import 'package:tachyon/core/playback/linux_mpris_bridge.dart';
+import 'package:tachyon/core/playback/bridges/linux_mpris_bridge.dart';
 import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';

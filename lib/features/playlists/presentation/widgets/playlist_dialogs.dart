@@ -1,8 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playlists/presentation/playlists_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/features/playlists/presentation/controllers/playlists_controller.dart';
 
 /// Centralized modal dialogs for playlist CRUD operations (create, rename, delete).
 abstract final class PlaylistDialogs {
@@ -66,6 +66,7 @@ abstract final class PlaylistDialogs {
 
 /// Dialog widget for creating a new playlist with lifecycle-managed controller.
 class CreatePlaylistDialog extends StatefulWidget {
+  /// Creates a [CreatePlaylistDialog].
   const CreatePlaylistDialog({super.key});
 
   @override
@@ -122,7 +123,10 @@ class _CreatePlaylistDialogState extends State<CreatePlaylistDialog> {
 
 /// Dialog widget for renaming a playlist with lifecycle-managed controller.
 class RenamePlaylistDialog extends StatefulWidget {
+  /// User playlist to rename.
   final Playlist playlist;
+
+  /// Creates a [RenamePlaylistDialog] for [playlist].
   const RenamePlaylistDialog({super.key, required this.playlist});
 
   @override

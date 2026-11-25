@@ -12,12 +12,22 @@ import 'package:tachyon/shared/utils/cors_image_utils.dart';
 /// Reusable widget that renders a station's remote favicon/logo with animated
 /// playback overlay and graceful fallback to theme-colored vector icons.
 class RadioLogoAvatar extends StatelessWidget {
+  /// Optional URL of the station's favicon or logo image.
   final String? faviconUrl;
+
+  /// Square width and height of the avatar in logical pixels.
   final double size;
+
+  /// Whether this station is the currently selected item.
   final bool isCurrent;
+
+  /// Whether this station is currently playing audio.
   final bool isPlaying;
+
+  /// Optional corner radius overriding the default 8px rounded corners.
   final BorderRadius? borderRadius;
 
+  /// Creates a [RadioLogoAvatar].
   const RadioLogoAvatar({
     super.key,
     required this.faviconUrl,

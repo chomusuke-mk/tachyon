@@ -1,22 +1,31 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/features/library/presentation/library_controller.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
-import 'package:tachyon/shared/utils/permission_utils.dart';
+import 'package:tachyon/features/library/presentation/controllers/library_controller.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
+import 'package:tachyon/core/platform/permission_utils.dart';
 
-/// Shows [child] once every required permission is granted. Until then it
-/// displays a simple screen to request them. When permissions transition from
-/// missing to granted, the default music folder is registered (only if the
-/// folder list was never set) and the library is scanned.
+/// Shows [child] once every required runtime permission is granted.
+///
+/// Until all permissions are granted, displays a prompt screen to request them.
+/// When permissions transition from missing to granted, registers the default
+/// music folder if the folder list has never been set and scans the library.
 class PermissionsGate extends StatefulWidget {
+  /// Widget displayed once all required permissions are granted.
   final Widget child;
+
+  /// Whether required permissions are already granted when the widget mounts.
   final bool initiallyGranted;
 
+  /// Optional callback invoked once all required runtime permissions are granted.
+  final VoidCallback? onGranted;
+
+  /// Creates a [PermissionsGate] wrapping [child].
   const PermissionsGate({
     super.key,
     required this.child,
     this.initiallyGranted = true,
+    this.onGranted,
   });
 
   @override
@@ -68,6 +77,7 @@ class _PermissionsGateState extends State<PermissionsGate>
     final library = context.read<LibraryController>();
     await settings.ensureDefaultMusicDirectory();
     if (!mounted) return;
+    widget.onGranted?.call();
     setState(() => _allGranted = true);
     library.loadLibrary(autoScan: true);
   }

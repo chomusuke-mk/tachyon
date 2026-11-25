@@ -3,8 +3,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
-
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
@@ -34,11 +34,15 @@ export 'package:tachyon/core/playback/domain/crossfade_config.dart';
 export 'package:tachyon/core/playback/domain/loop_mode.dart';
 export 'package:tachyon/core/playback/domain/resolved_playback_metadata.dart';
 
+part 'playback_controller_dsp.dart';
+part 'playback_controller_queue.dart';
+
 class _DomainNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
 }
 
-class PlaybackController extends ChangeNotifier {
+/// Shared backing state and engine bindings for [PlaybackController] mixins.
+abstract class _PlaybackControllerState extends ChangeNotifier {
   final LibraryStore? _store;
   final SettingsRepository _settingsRepository;
   final Stream<List<ma.AudioDevice>>? _injectedDevicesStream;
@@ -56,27 +60,32 @@ class PlaybackController extends ChangeNotifier {
   ma.AudioDevice? _currentDevice;
   List<ma.AudioDevice> _audioDevices = const [];
   bool _isInfiniteMixEnabled = false;
-  bool _isMinimized = false;
+  AppLifecycleMode _lifecycleMode = AppLifecycleMode.active;
   bool _pauseOnDeviceChange = true;
   bool _wasPlayingBeforeStop = false;
   bool _isLibraryScanActive = false;
+  bool _visualizerEnabled = false;
   Track? _lastCanonicalCurrentTrack;
   int _lastPositionEmitTimestamp = 0;
   int _lastEmittedPositionMs = -1;
+  int _lastSystemPositionTimestamp = 0;
+  int _lastSystemPositionMs = -1;
 
-  // Scoped domain listenables (fine-grained UI rebuilds)
   final _DomainNotifier _trackNotifier = _DomainNotifier();
   final _DomainNotifier _transportNotifier = _DomainNotifier();
   final _DomainNotifier _controlsNotifier = _DomainNotifier();
   final _DomainNotifier _tuningNotifier = _DomainNotifier();
   final _DomainNotifier _queueNotifier = _DomainNotifier();
   final _DomainNotifier _devicesNotifier = _DomainNotifier();
+  final Set<_DomainNotifier> _dirtyDomains = <_DomainNotifier>{};
 
   final ValueNotifier<double> _volumeNotifier = ValueNotifier<double>(1.0);
   final ValueNotifier<Duration> _positionNotifier = ValueNotifier<Duration>(
     Duration.zero,
   );
   final ValueNotifier<int> _positionSecondsNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<Duration> _systemPositionNotifier =
+      ValueNotifier<Duration>(Duration.zero);
   final ValueNotifier<ma.Buffer> _bufferNotifier = ValueNotifier<ma.Buffer>(
     const ma.Buffer(),
   );
@@ -91,29 +100,21 @@ class PlaybackController extends ChangeNotifier {
   final StreamController<ma.MiniaudioPlayerException> _errorsController =
       StreamController<ma.MiniaudioPlayerException>.broadcast();
 
-  // Coalesced latest-wins RPC lanes (no timers)
   final Map<String, Future<void>> _rpcInFlight = {};
   final Map<String, Future<void> Function()> _rpcPending = {};
 
-  // Persistence throttling state
   DateTime? _lastPersistenceTime;
   String? _lastPersistedFilePath;
   int? _lastPersistedPositionMs;
   static const Duration _persistenceThrottle = Duration(seconds: 5);
 
-  @visibleForTesting
-  String? get lastPersistedFilePath => _lastPersistedFilePath;
-  @visibleForTesting
-  int? get lastPersistedPositionMs => _lastPersistedPositionMs;
-
-  // History and persistence tracking
   bool _isDisposed = false;
   bool _inScopedNotify = false;
   String? _currentlyLoggedHistoryFilePath;
   bool _historyLoggedForCurrentTrack = false;
   String? _lastActivePlayableKey;
 
-  PlaybackController({
+  _PlaybackControllerState({
     LibraryStore? store,
     required SettingsRepository settingsRepository,
     MetadataService? metadataService,
@@ -134,7 +135,9 @@ class PlaybackController extends ChangeNotifier {
       _scanProgressSubscription = metadataService.progressStream.listen((
         progress,
       ) {
-        setLibraryAnalysisActive(progress.isRunning);
+        (this as PlaybackController).setLibraryAnalysisActive(
+          progress.isRunning,
+        );
       });
     }
 
@@ -155,6 +158,7 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
+  /// Lazily instantiated native audio player engine handle.
   ma.MiniaudioPlayer<AudioPlayable> get player {
     if (_player == null) {
       final eng = ma.MiniaudioPlayer<AudioPlayable>(
@@ -173,10 +177,16 @@ class PlaybackController extends ChangeNotifier {
     return _player!;
   }
 
+  bool get _isUiSuppressed => _lifecycleMode != AppLifecycleMode.active;
+
   void _emitScoped(List<_DomainNotifier> domains) {
     if (_isDisposed) return;
-    for (final d in domains) {
-      d.notify();
+    if (_isUiSuppressed) {
+      _dirtyDomains.addAll(domains);
+    } else {
+      for (final d in domains) {
+        d.notify();
+      }
     }
     _inScopedNotify = true;
     try {
@@ -222,11 +232,14 @@ class PlaybackController extends ChangeNotifier {
 
   void _bindEngine(ma.MiniaudioPlayer<AudioPlayable> player) {
     unawaited(
-      player.action.setVisualizerEnabled(_visualizerEnabled && !_isMinimized),
+      player.action.setVisualizerEnabled(
+        _visualizerEnabled && !_isUiSuppressed,
+      ),
     );
     _syncSnapshotFromEngine(player, notifyAll: true);
     _isInfiniteMixEnabled = player.state.infiniteMixEnabled;
     _setPosition(player.state.position);
+    _setSystemPosition(player.state.position);
     _volumeNotifier.value = player.state.volume;
     _bufferNotifier.value = player.state.buffer;
     _audioInfoNotifier.value = player.state.audioInfo;
@@ -307,7 +320,7 @@ class PlaybackController extends ChangeNotifier {
         final nextDur = dur ?? Duration.zero;
         final durChanged = _state.duration != nextDur;
         _state = _state.copyWith(duration: nextDur);
-        final cur = currentPlayable;
+        final cur = (this as PlaybackController).currentPlayable;
         if (_isLibraryScanActive &&
             dur != null &&
             dur > Duration.zero &&
@@ -369,7 +382,11 @@ class PlaybackController extends ChangeNotifier {
       }),
       player.stream.buffer.listen((buf) {
         if (_isDisposed) return;
-        _bufferNotifier.value = buf;
+        if (!_isUiSuppressed) {
+          _bufferNotifier.value = buf;
+        } else {
+          _dirtyDomains.add(_transportNotifier);
+        }
         if (_state.isBuffering != buf.isBuffering) {
           _state = _state.copyWith(isBuffering: buf.isBuffering);
           _emitScoped([_transportNotifier]);
@@ -377,7 +394,7 @@ class PlaybackController extends ChangeNotifier {
       }),
       player.stream.metadata.listen((meta) {
         if (_isDisposed) return;
-        final playable = currentPlayable;
+        final playable = (this as PlaybackController).currentPlayable;
         if (playable == null) return;
         if (playable.isStream) {
           _liveMetadataNotifier.value = meta;
@@ -404,7 +421,7 @@ class PlaybackController extends ChangeNotifier {
           audioSampleRate: info?.sampleRate,
           audioChannels: info?.channels,
         );
-        final playable = currentPlayable;
+        final playable = (this as PlaybackController).currentPlayable;
         if (playable?.isStream == true) {
           _emitScoped([_trackNotifier]);
         } else if (_isLibraryScanActive &&
@@ -418,7 +435,7 @@ class PlaybackController extends ChangeNotifier {
         }
       }),
       player.stream.silenceSavedDuration.listen((saved) {
-        if (_isDisposed) return;
+        if (_isDisposed || _isUiSuppressed) return;
         _silenceSavedDurationNotifier.value = saved;
       }),
       player.stream.errors.listen((err) {
@@ -459,18 +476,26 @@ class PlaybackController extends ChangeNotifier {
     _positionSubscription = player.stream.position.listen((pos) {
       if (_isDisposed) return;
       final now = DateTime.now().millisecondsSinceEpoch;
-      final deltaMs = now - _lastPositionEmitTimestamp;
-      final minIntervalMs = _isMinimized ? 5000 : 33;
-      final jumpThresholdMs = _isMinimized ? 2000 : 1000;
-      if (deltaMs < minIntervalMs &&
-          (pos.inMilliseconds - _lastEmittedPositionMs).abs() <=
-              jumpThresholdMs) {
-        return;
-      }
-      _lastPositionEmitTimestamp = now;
-      _lastEmittedPositionMs = pos.inMilliseconds;
 
-      _setPosition(pos);
+      // Always keep system notification progress updated (~2s cadence or seek jump).
+      final sysDeltaMs = now - _lastSystemPositionTimestamp;
+      if (sysDeltaMs >= 2000 ||
+          (pos.inMilliseconds - _lastSystemPositionMs).abs() > 2000) {
+        _lastSystemPositionTimestamp = now;
+        _lastSystemPositionMs = pos.inMilliseconds;
+        _setSystemPosition(pos);
+      }
+
+      if (!_isUiSuppressed) {
+        final uiDeltaMs = now - _lastPositionEmitTimestamp;
+        if (uiDeltaMs >= 33 ||
+            (pos.inMilliseconds - _lastEmittedPositionMs).abs() > 1000) {
+          _lastPositionEmitTimestamp = now;
+          _lastEmittedPositionMs = pos.inMilliseconds;
+          _setPosition(pos);
+        }
+      }
+
       if ((pos.inMilliseconds - _state.position.inMilliseconds).abs() >= 1000) {
         final oldState = _state;
         _state = _state.copyWith(position: pos);
@@ -480,7 +505,7 @@ class PlaybackController extends ChangeNotifier {
     });
 
     _visualizerSubscription = player.stream.visualizer.listen((vis) {
-      if (!_visualizerEnabled || _isMinimized || _isDisposed) return;
+      if (!_visualizerEnabled || _isUiSuppressed || _isDisposed) return;
       _visualizerDataNotifier.value = vis;
     });
   }
@@ -495,17 +520,9 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  bool get isLibraryAnalysisActive => _isLibraryScanActive;
-
-  void setLibraryAnalysisActive(bool active) {
-    if (_isLibraryScanActive == active) return;
-    _isLibraryScanActive = active;
-    _syncMetadataEnabled();
-    if (!active &&
-        currentPlayable?.isStream != true &&
-        _liveMetadataNotifier.value != null) {
-      _liveMetadataNotifier.value = null;
-      _emitScoped([_trackNotifier]);
+  void _setSystemPosition(Duration pos) {
+    if (_systemPositionNotifier.value != pos) {
+      _systemPositionNotifier.value = pos;
     }
   }
 
@@ -517,7 +534,9 @@ class PlaybackController extends ChangeNotifier {
   void _syncMetadataEnabled() {
     final p = _player;
     if (p == null || _isDisposed) return;
-    final wantMetadata = _shouldEnableMetadataFor(currentPlayable);
+    final wantMetadata = _shouldEnableMetadataFor(
+      (this as PlaybackController).currentPlayable,
+    );
     if (p.state.metadataEnabled != wantMetadata) {
       unawaited(p.action.setMetadataEnabled(wantMetadata).catchError((_) {}));
     }
@@ -573,8 +592,9 @@ class PlaybackController extends ChangeNotifier {
     if (_isDisposed) return;
     final store = _store;
     if (store == null) return;
+    final ctrl = this as PlaybackController;
 
-    final cur = currentTrack;
+    final cur = ctrl.currentTrack;
     final currentChanged = !identical(cur, _lastCanonicalCurrentTrack);
     if (currentChanged) {
       _lastCanonicalCurrentTrack = cur;
@@ -590,9 +610,9 @@ class PlaybackController extends ChangeNotifier {
       return;
     }
 
-    if (queue.isNotEmpty) {
+    if (ctrl.queue.isNotEmpty) {
       var queueUpgraded = false;
-      for (final item in queue) {
+      for (final item in ctrl.queue) {
         final raw = item.data;
         if (raw is Track && !identical(_canonicalPlayable(raw), raw)) {
           queueUpgraded = true;
@@ -698,638 +718,18 @@ class PlaybackController extends ChangeNotifier {
     return existing ?? playable;
   }
 
-  // ---------------------------------------------------------------------------
-  // Scoped Listenables & Observables
-  // ---------------------------------------------------------------------------
-  Listenable get trackListenable => _trackNotifier;
-  Listenable get transportListenable => _transportNotifier;
-  Listenable get controlsListenable => _controlsNotifier;
-  ValueListenable<double> get volumeListenable => _volumeNotifier;
-  Listenable get tuningListenable => _tuningNotifier;
-  Listenable get queueListenable => _queueNotifier;
-  Listenable get devicesListenable => _devicesNotifier;
-
-  ValueNotifier<Duration> get positionNotifier => _positionNotifier;
-  ValueListenable<Duration> get positionListenable => _positionNotifier;
-  ValueListenable<int> get positionSecondsListenable =>
-      _positionSecondsNotifier;
-  ValueListenable<ma.Buffer> get bufferListenable => _bufferNotifier;
-  ValueListenable<ma.VisualizerData> get visualizerDataListenable =>
-      _visualizerDataNotifier;
-  ValueListenable<ma.AudioMetadata?> get liveMetadataListenable =>
-      _liveMetadataNotifier;
-  ValueListenable<ma.AudioInfo?> get audioInfoListenable => _audioInfoNotifier;
-  ValueListenable<Duration> get silenceSavedDurationListenable =>
-      _silenceSavedDurationNotifier;
-  Stream<ma.MiniaudioPlayerException> get errorsStream =>
-      _errorsController.stream;
-
-  AudioPlayable resolvePlayable(AudioPlayable playable) =>
-      _canonicalPlayable(playable);
-
-  ResolvedPlaybackMetadata? get currentDisplayMetadata {
-    final playable = currentPlayable;
-    if (playable == null) return null;
-    return ResolvedPlaybackMetadata.resolve(
-      playable: playable,
-      liveMetadata: _liveMetadataNotifier.value,
-      liveAudioInfo: _audioInfoNotifier.value,
-    );
-  }
-
-  PlaybackState get state => _state;
-  ma.AudioSource<AudioPlayable>? get currentEntry =>
-      _player != null ? _player!.state.currentItem : _state.currentEntry;
-  AudioPlayable? get currentPlayable {
-    final raw = currentEntry?.data ?? _state.currentPlayable ?? currentTrack;
-    if (raw == null) return null;
-    return _canonicalPlayable(raw);
-  }
-
-  Track? get currentTrack {
-    final raw =
-        currentEntry?.data ?? _state.currentPlayable ?? _state.currentTrack;
-    if (raw is Track) {
-      final canonical = _canonicalPlayable(raw);
-      return canonical is Track ? canonical : raw;
-    }
-    return null;
-  }
-
-  bool isCurrentTrack(Track? track) {
-    final cur = currentTrack;
-    return track != null &&
-        (cur == track ||
-            (cur?.id != null && cur?.id == track.id) ||
-            (cur?.filePath.isNotEmpty == true &&
-                cur?.filePath == track.filePath));
-  }
-
-  bool get isPlaying => _player?.state.isPlaying ?? _state.isPlaying;
-  bool get isBuffering => _player?.state.isBuffering ?? _state.isBuffering;
-  bool get isCompleted => _state.isCompleted;
-  bool get isLiveStream =>
-      currentPlayable?.isStream ??
-      (_player != null &&
-          _player!.state.currentItem != null &&
-          _player!.state.duration == null) ||
-      _state.isLiveStream;
-
-  Duration get position => _positionNotifier.value;
-  ma.Buffer get buffer => _bufferNotifier.value;
-  ma.AudioMetadata? get liveMetadata => _liveMetadataNotifier.value;
-  ma.AudioInfo? get liveAudioInfo => _audioInfoNotifier.value;
-  Duration get silenceSavedDuration => _silenceSavedDurationNotifier.value;
-
-  bool _visualizerEnabled = false;
-
-  void setVisualizerEnabled(bool enabled) {
-    _visualizerEnabled = enabled;
-    if (!enabled) {
-      scheduleMicrotask(() {
-        if (!_visualizerEnabled && !_isDisposed) {
-          _visualizerDataNotifier.value = ma.VisualizerData.empty();
-        }
-      });
-    }
-    if (_player != null) {
-      unawaited(
-        _player!.action
-            .setVisualizerEnabled(enabled && !_isMinimized)
-            .catchError((_) {}),
-      );
-    }
-  }
-
-  void setMinimized(bool minimized) {
-    if (_isMinimized == minimized) return;
-    _isMinimized = minimized;
-    if (_player != null) {
-      if (minimized) {
-        unawaited(_player!.action.setVisualizerEnabled(false).catchError((_) {}));
-      } else {
-        if (_visualizerEnabled) {
-          unawaited(
-            _player!.action.setVisualizerEnabled(true).catchError((_) {}),
-          );
-        }
-        final livePos = _player!.state.position;
-        _lastPositionEmitTimestamp = DateTime.now().millisecondsSinceEpoch;
-        _lastEmittedPositionMs = livePos.inMilliseconds;
-        _setPosition(livePos);
-      }
-    }
-  }
-
-  Duration get duration => _player?.state.duration ?? _state.duration;
-  double get progress => duration.inMilliseconds > 0
-      ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
-      : 0.0;
-  Duration get remaining =>
-      duration > position ? duration - position : Duration.zero;
-
-  double get currentVisualAmplitude {
-    if (!isPlaying) return 0.0;
-    final track = currentTrack;
-    return track?.getPointAtPosition(position, duration) ?? 0.0;
-  }
-
-  double get volume =>
-      _rpcInFlight.containsKey('volume')
-          ? _state.volume
-          : (_player?.state.volume ?? _state.volume);
-  double get rate =>
-      _rpcInFlight.containsKey('rate')
-          ? _state.rate
-          : (_player?.state.rate ?? _state.rate);
-  double get pitch =>
-      _rpcInFlight.containsKey('pitch')
-          ? _state.pitch
-          : (_player?.state.pitch ?? _state.pitch);
-
-  LoopMode get loopMode => _player?.state.loopMode ?? _state.loopMode;
-  bool get isShuffled => _player?.state.isShuffled ?? _state.isShuffled;
-
-  List<ma.AudioSource<AudioPlayable>> get queue =>
-      _player != null ? _player!.state.queue : _state.queue;
-  int get currentIndex => _player?.state.currentIndex ?? _state.currentIndex;
-
-  bool get hasNext => _player?.state.hasNext ?? _state.hasNext;
-  bool get hasPrevious => _player?.state.hasPrevious ?? _state.hasPrevious;
-
-  CrossfadeConfig get crossfadeConfig => _player != null
-      ? CrossfadeConfig(
-          duration: _player!.state.crossfadeConfig.autoDuration,
-          manualDuration: _player!.state.crossfadeConfig.manualDuration,
-          curve: _player!.state.crossfadeConfig.curve,
-        )
-      : _state.crossfadeConfig;
-
-  bool get isCrossfading => _player?.state.isCrossfading ?? false;
-
-  bool get skipSilence => _player?.state.skipSilence ?? _state.skipSilence;
-  ma.SilenceSkipMode get silenceSkipMode =>
-      _player?.state.silenceSkipMode ?? _state.silenceSkipMode;
-  bool get volumeNormalization =>
-      _player?.state.volumeNormalization ?? _state.volumeNormalization;
-  ma.ReplayGainMode get replayGainMode =>
-      _player?.state.replayGainMode ?? _state.replayGainMode;
-  double get preampDb => _player?.state.preamp ?? _state.preampDb;
-  double get balance => _player?.state.balance ?? _state.balance;
-  double get spatializerWidth =>
-      _player?.state.spatializerWidth ?? _state.spatializerWidth;
-  bool get mono => _player?.state.mono ?? _state.mono;
-  ma.Crossfeed get crossfeed => _player?.state.crossfeed ?? _state.crossfeed;
-  bool get limiterEnabled =>
-      _player?.state.limiterEnabled ?? _state.limiterEnabled;
-  ma.Reverb get reverb => _player?.state.reverb ?? ma.Reverb.off;
-
-  // ---------------------------------------------------------------------------
-  // High-Level Track Selection & Queue Actions
-  // ---------------------------------------------------------------------------
-  Future<void> openTracks(
-    List<AudioPlayable> tracks, {
-    int? startIndex,
-    bool play = true,
-    bool shuffle = false,
-  }) async {
-    if (tracks.isEmpty) return;
-    final canonicalTracks = [
-      for (final t in tracks) _canonicalPlayable(t),
-    ];
-    final items = [for (final t in canonicalTracks) t.toAudioSource()];
-    final int targetIdx = (startIndex != null &&
-            startIndex >= 0 &&
-            startIndex < canonicalTracks.length)
-        ? startIndex
-        : 0;
-    await _ensureMetadataEnabledFor(canonicalTracks[targetIdx]);
-    await player.action.setQueue(items);
-    if (play) {
-      await player.action.play(position: startIndex, shuffled: shuffle);
-    } else if (shuffle) {
-      await player.action.setShuffle(true);
-    }
-  }
-
-  Future<void> playTrack(
-    AudioPlayable track, {
-    List<AudioPlayable>? contextTracks,
-  }) async {
-    final trackList = (contextTracks != null && contextTracks.isNotEmpty)
-        ? contextTracks
-        : [track];
-
-    var startIndex = trackList.indexWhere((t) => t.filePath == track.filePath);
-    if (startIndex == -1) startIndex = 0;
-
-    try {
-      await openTracks(
-        trackList,
-        startIndex: startIndex,
-        play: true,
-        shuffle: isShuffled,
-      );
-    } catch (e) {
-      debugPrint('[PlaybackController] Error in playTrack: $e');
-    }
-  }
-
-  Future<void> playAll(
-    List<AudioPlayable> tracks, {
-    bool shuffle = false,
-    int? startIndex,
-  }) async {
-    if (tracks.isEmpty) return;
-    try {
-      await openTracks(
-        tracks,
-        startIndex: startIndex,
-        play: true,
-        shuffle: shuffle,
-      );
-    } catch (e) {
-      debugPrint('[PlaybackController] Error in playAll: $e');
-    }
-  }
-
-  Future<void> playNext(AudioPlayable track) async {
-    try {
-      final item = _canonicalPlayable(track).toAudioSource();
-      await player.action.insertNext(item);
-    } catch (e) {
-      debugPrint('[PlaybackController] Error in playNext: $e');
-    }
-  }
-
-  Future<void> addToQueue(AudioPlayable track) async {
-    await appendTracks([track]);
-  }
-
-  Future<void> appendTracks(List<AudioPlayable> tracks) async {
-    if (tracks.isEmpty) return;
-    try {
-      final items = [
-        for (final t in tracks) _canonicalPlayable(t).toAudioSource(),
-      ];
-      await player.action.append(items);
-    } catch (e) {
-      debugPrint('[PlaybackController] Error in appendTracks: $e');
-    }
-  }
-
-  Future<void> removeFromQueue(int index) async {
-    try {
-      await player.action.removeAt(index);
-    } catch (e) {
-      debugPrint('[PlaybackController] Error in removeFromQueue: $e');
-    }
-  }
-
-  Future<void> reorderQueue(int from, int to) async {
-    try {
-      await player.action.reorder(from, to);
-    } catch (e) {
-      debugPrint('[PlaybackController] Error in reorderQueue: $e');
-    }
-  }
-
-  Future<void> clearQueue() async {
-    try {
-      await player.action.clearQueue();
-    } catch (e) {
-      debugPrint('[PlaybackController] Error in clearQueue: $e');
-    }
-  }
-
-  Future<void> skipToQueueIndex(int index) async {
-    if (index < 0 || index >= queue.length) return;
-    try {
-      await _ensureMetadataEnabledFor(queue[index].data);
-      await player.action.play(position: index);
-    } catch (e) {
-      debugPrint('[PlaybackController] Error in skipToQueueIndex: $e');
-    }
-  }
-
-  ma.Equalizer get equalizer => _equalizer;
-  ma.AudioDevice? get currentDevice => _currentDevice;
-  List<ma.AudioDevice> get audioDevices => _audioDevices;
-  Stream<List<ma.AudioDevice>> get devicesStream =>
-      _injectedDevicesStream ??
-      _player?.stream.globalOutputDevices ??
-      const Stream.empty();
-
   void _applySavedDeviceIfAvailable(List<ma.AudioDevice> devices) {
     final savedId = _settingsRepository.getSettings().audioOutputDeviceId;
     if (savedId != null && savedId.isNotEmpty && _currentDevice == null) {
       final match = devices.where((d) => d.id == savedId).firstOrNull;
       if (match != null) {
-        unawaited(setAudioDevice(match));
+        unawaited((this as PlaybackController).setAudioDevice(match));
       }
     }
   }
 
-  Future<void> setEqualizer(ma.Equalizer equalizer) async {
-    _equalizer = equalizer;
-    await _coalesceRpc(
-      'equalizer',
-      () => player.action.setEqualizer(equalizer),
-    );
-  }
-
-  Future<void> setReverb(ma.Reverb reverb) async {
-    await _coalesceRpc('reverb', () => player.action.setReverb(reverb));
-  }
-
-  Future<List<ma.AudioDevice>> getAudioDevices() async {
-    try {
-      final p = _player;
-      final devices = (p != null && p.state.globalOutputDevices.isNotEmpty)
-          ? p.state.globalOutputDevices
-          : await ma.MiniaudioPlayer.getOutputDevices();
-      if (!_isDisposed && devices.isNotEmpty) {
-        _audioDevices = devices;
-        _applySavedDeviceIfAvailable(devices);
-        _emitScoped([_devicesNotifier]);
-      }
-      return devices;
-    } catch (e) {
-      debugPrint('[PlaybackController] getAudioDevices error: $e');
-      return const [];
-    }
-  }
-
-  Future<bool> setAudioDevice(ma.AudioDevice device) async {
-    _currentDevice = device;
-    _emitScoped([_devicesNotifier]);
-    try {
-      final id = device.isAuto ? 'AUTO' : device.id;
-      await player.action.setOutputs({ma.AudioOutput(deviceId: id)});
-      return true;
-    } catch (e) {
-      debugPrint('[PlaybackController] setAudioDevice error: $e');
-      return false;
-    }
-  }
-
-  bool get pauseOnDeviceChange => _pauseOnDeviceChange;
-
-  Future<void> setPauseOnDeviceChange(bool pause) async {
-    _pauseOnDeviceChange = pause;
-    if (_player != null) {
-      try {
-        await _player!.action.setPauseOnDeviceChange(pause);
-      } catch (e) {
-        debugPrint('[PlaybackController] setPauseOnDeviceChange error: $e');
-      }
-    }
-  }
-
-  bool get isInfiniteMixEnabled => _isInfiniteMixEnabled;
-
-  void setInfiniteMix(bool enabled) {
-    _isInfiniteMixEnabled = enabled;
-    _state = _state.copyWith(isInfiniteMixEnabled: enabled);
-    _emitScoped([_controlsNotifier, _queueNotifier]);
-    try {
-      unawaited(
-        player.action
-            .setInfiniteMix(
-              ma.InfiniteMixConfig(
-                enabled: enabled,
-                remainingTracksThreshold: 3,
-              ),
-            )
-            .catchError((Object e) {
-              debugPrint('[PlaybackController] setInfiniteMix error: $e');
-            }),
-      );
-    } catch (e) {
-      debugPrint('[PlaybackController] setInfiniteMix error: $e');
-    }
-  }
-
-  void toggleInfiniteMix() {
-    setInfiniteMix(!isInfiniteMixEnabled);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Transport Controls
-  // ---------------------------------------------------------------------------
-  Future<void> play() async {
-    try {
-      await player.action.play();
-    } catch (e) {
-      debugPrint('[PlaybackController] play error: $e');
-    }
-  }
-
-  Future<void> pause() async {
-    try {
-      await player.action.pause();
-    } catch (e) {
-      debugPrint('[PlaybackController] pause error: $e');
-    }
-  }
-
-  Future<void> playOrPause() async {
-    if (isPlaying) {
-      await pause();
-    } else {
-      await play();
-    }
-  }
-
-  Future<void> stop() async {
-    try {
-      _wasPlayingBeforeStop = false;
-      await player.action.stop();
-    } catch (e) {
-      debugPrint('[PlaybackController] stop error: $e');
-    }
-  }
-
-  Future<void> next() async {
-    try {
-      await player.action.next();
-    } catch (e) {
-      debugPrint('[PlaybackController] next error: $e');
-    }
-  }
-
-  Future<void> previous() async {
-    try {
-      await player.action.previous();
-    } catch (e) {
-      debugPrint('[PlaybackController] previous error: $e');
-    }
-  }
-
-  Future<void> seek(Duration pos) async {
-    try {
-      _setPosition(pos);
-      await _coalesceRpc('seek', () => player.action.seek(pos));
-    } catch (e) {
-      debugPrint('[PlaybackController] seek error: $e');
-    }
-  }
-
-  Future<void> setVolume(double vol) async {
-    final clamped = vol.clamp(0.0, 2.0);
-    _state = _state.copyWith(volume: clamped);
-    _volumeNotifier.value = clamped;
-    _emitScoped([_tuningNotifier]);
-    await _coalesceRpc('volume', () => player.action.setVolume(clamped));
-  }
-
-  Future<void> setRate(double rate) async {
-    final clamped = rate.clamp(
-      AppDefaults.playbackRateMin,
-      AppDefaults.playbackRateMax,
-    );
-    _state = _state.copyWith(rate: clamped);
-    _emitScoped([_tuningNotifier]);
-    await _coalesceRpc('rate', () => player.action.setRate(clamped));
-  }
-
-  Future<void> setPitch(double pitch) async {
-    final clamped = pitch.clamp(
-      AppDefaults.playbackPitchMin,
-      AppDefaults.playbackPitchMax,
-    );
-    _state = _state.copyWith(pitch: clamped);
-    _emitScoped([_tuningNotifier]);
-    await _coalesceRpc('pitch', () => player.action.setPitch(clamped));
-  }
-
-  Future<void> setShuffle(bool enabled) async {
-    try {
-      await player.action.setShuffle(enabled);
-    } catch (e) {
-      debugPrint('[PlaybackController] setShuffle error: $e');
-    }
-  }
-
-  Future<void> toggleShuffle() => setShuffle(!isShuffled);
-
-  Future<void> setLoopMode(LoopMode loop) async {
-    try {
-      await player.action.setLoopMode(loop);
-    } catch (e) {
-      debugPrint('[PlaybackController] setLoopMode error: $e');
-    }
-  }
-
-  Future<void> toggleLoopMode() async {
-    try {
-      final nextMode = loopMode.next();
-      await setLoopMode(nextMode);
-    } catch (e) {
-      debugPrint('[PlaybackController] toggleLoopMode error: $e');
-    }
-  }
-
-  Future<void> setCrossfadeConfig(CrossfadeConfig config) async {
-    await _coalesceRpc(
-      'crossfade',
-      () => player.action.setCrossfade(
-        ma.CrossfadeConfig(
-          autoDuration: config.duration,
-          manualDuration: config.manualDuration,
-          curve: config.curve,
-        ),
-      ),
-    );
-  }
-
-  Future<void> setSilenceConfig(ma.SilenceSkipConfig config) async {
-    final validated = config.validated();
-    _state = _state.copyWith(
-      skipSilence: validated.enabled,
-      silenceSkipMode: validated.mode,
-    );
-    await _coalesceRpc('silence', () => player.action.setSilenceConfig(validated));
-  }
-
-  Future<void> setSkipSilence(
-    bool enabled, {
-    ma.SilenceSkipMode mode = ma.SilenceSkipMode.all,
-  }) async {
-    final effectiveMode =
-        mode == ma.SilenceSkipMode.disabled ? ma.SilenceSkipMode.all : mode;
-    final config = enabled
-        ? ma.SilenceSkipConfig(enabled: true, mode: effectiveMode)
-        : const ma.SilenceSkipConfig.off();
-    await setSilenceConfig(config);
-  }
-
-  Future<void> setReplayGainMode(ma.ReplayGainMode mode) async {
-    _state = _state.copyWith(
-      volumeNormalization: mode != ma.ReplayGainMode.disabled,
-      replayGainMode: mode,
-    );
-    await _coalesceRpc(
-      'replayGainMode',
-      () => player.action.setReplayGainMode(mode),
-    );
-  }
-
-  Future<void> setVolumeNormalization(bool enabled) async {
-    await setReplayGainMode(
-      enabled ? ma.ReplayGainMode.track : ma.ReplayGainMode.disabled,
-    );
-  }
-
-  Future<void> setPreamp(double preampDb) async {
-    _state = _state.copyWith(preampDb: preampDb);
-    await _coalesceRpc('preamp', () => player.action.setPreamp(preampDb));
-  }
-
-  Future<void> setBalance(double balance) async {
-    _state = _state.copyWith(balance: balance);
-    await _coalesceRpc('balance', () => player.action.setBalance(balance));
-  }
-
-  Future<void> setMono(bool enabled) async {
-    _state = _state.copyWith(mono: enabled);
-    try {
-      await player.action.setMono(enabled);
-    } catch (e) {
-      debugPrint('[PlaybackController] setMono error: $e');
-    }
-  }
-
-  Future<void> setCrossfeed(ma.Crossfeed crossfeed) async {
-    _state = _state.copyWith(crossfeed: crossfeed);
-    await _coalesceRpc(
-      'crossfeed',
-      () => player.action.setCrossfeed(crossfeed),
-    );
-  }
-
-  Future<void> setSpatializer(double width) async {
-    _state = _state.copyWith(spatializerWidth: width);
-    await _coalesceRpc(
-      'spatializer',
-      () => player.action.setSpatializer(enabled: width != 1.0, width: width),
-    );
-  }
-
-  Future<void> setLimiter(bool enabled) async {
-    _state = _state.copyWith(limiterEnabled: enabled);
-    try {
-      await player.action.setLimiter(enabled);
-    } catch (e) {
-      debugPrint('[PlaybackController] setLimiter error: $e');
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // History Logging & State Persistence Helpers
-  // ---------------------------------------------------------------------------
   void _checkHistoryLogging(PlaybackState newState) {
-    final track = currentTrack ?? newState.currentTrack;
+    final track = (this as PlaybackController).currentTrack ?? newState.currentTrack;
     final currentFilePath = track?.filePath;
     if (currentFilePath != _currentlyLoggedHistoryFilePath) {
       _currentlyLoggedHistoryFilePath = currentFilePath;
@@ -1397,16 +797,6 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  Future<void> flushStatePersistence() async {
-    final current = currentTrack;
-    if (current != null) {
-      await _flushStatePersistence(
-        current.filePath,
-        _positionNotifier.value.inMilliseconds,
-      );
-    }
-  }
-
   Future<void> _flushStatePersistence(String filePath, int positionMs) async {
     _lastPersistenceTime = DateTime.now();
     _lastPersistedFilePath = filePath;
@@ -1417,18 +807,305 @@ class PlaybackController extends ChangeNotifier {
       positionMs: positionMs,
     );
   }
+}
+
+/// Coordinates audio playback, queue management, DSP effects, live stream
+/// metadata, scoped UI listenables, and lifecycle-aware UI update throttling.
+class PlaybackController extends _PlaybackControllerState
+    with _PlaybackControllerQueueMixin, _PlaybackControllerDspMixin {
+  /// Creates a [PlaybackController] backed by [settingsRepository] and optional
+  /// [store], [metadataService], [engine], and [devicesStream].
+  PlaybackController({
+    super.store,
+    required super.settingsRepository,
+    super.metadataService,
+    super.engine,
+    super.devicesStream,
+  });
+
+  /// Last file path written by playback position persistence (exposed for tests).
+  @visibleForTesting
+  String? get lastPersistedFilePath => _lastPersistedFilePath;
+
+  /// Last position in milliseconds persisted to settings (exposed for tests).
+  @visibleForTesting
+  int? get lastPersistedPositionMs => _lastPersistedPositionMs;
+
+  /// Scoped listenable triggered when active track metadata changes.
+  Listenable get trackListenable => _trackNotifier;
+
+  /// Scoped listenable triggered when play/pause/buffer/completion state changes.
+  Listenable get transportListenable => _transportNotifier;
+
+  /// Scoped listenable triggered when shuffle, loop, or crossfade flags change.
+  Listenable get controlsListenable => _controlsNotifier;
+
+  /// Reactive volume level listenable (`0.0` to `2.0`).
+  ValueListenable<double> get volumeListenable => _volumeNotifier;
+
+  /// Scoped listenable triggered when DSP tuning parameters change.
+  Listenable get tuningListenable => _tuningNotifier;
+
+  /// Scoped listenable triggered when queue contents or active index change.
+  Listenable get queueListenable => _queueNotifier;
+
+  /// Scoped listenable triggered when available audio output devices change.
+  Listenable get devicesListenable => _devicesNotifier;
+
+  /// Mutable UI position notifier (paused when lifecycle is suspended/background).
+  ValueNotifier<Duration> get positionNotifier => _positionNotifier;
+
+  /// Read-only UI position listenable (paused when lifecycle is suspended/background).
+  ValueListenable<Duration> get positionListenable => _positionNotifier;
+
+  /// Integer second position listenable for minimal digital clock rebuilds.
+  ValueListenable<int> get positionSecondsListenable =>
+      _positionSecondsNotifier;
+
+  /// System media position listenable that keeps updating during suspended and
+  /// background modes for OS media notifications (Android, MPRIS, SMTC).
+  ValueListenable<Duration> get systemPositionListenable =>
+      _systemPositionNotifier;
+
+  /// Stream/file buffer range listenable.
+  ValueListenable<ma.Buffer> get bufferListenable => _bufferNotifier;
+
+  /// Real-time FFT/PCM visualizer sample listenable.
+  ValueListenable<ma.VisualizerData> get visualizerDataListenable =>
+      _visualizerDataNotifier;
+
+  /// Live ICY / stream metadata listenable.
+  ValueListenable<ma.AudioMetadata?> get liveMetadataListenable =>
+      _liveMetadataNotifier;
+
+  /// Live audio stream format info (sample rate, channels, bitrate).
+  ValueListenable<ma.AudioInfo?> get audioInfoListenable => _audioInfoNotifier;
+
+  /// Cumulative silence duration skipped during playback.
+  ValueListenable<Duration> get silenceSavedDurationListenable =>
+      _silenceSavedDurationNotifier;
+
+  /// Broadcast stream of fatal or recoverable engine exceptions.
+  Stream<ma.MiniaudioPlayerException> get errorsStream =>
+      _errorsController.stream;
+
+  /// Whether a background library scan is currently running.
+  bool get isLibraryAnalysisActive => _isLibraryScanActive;
+
+  /// Current [AppLifecycleMode] controlling UI emission throttling.
+  AppLifecycleMode get lifecycleMode => _lifecycleMode;
+
+  /// Updates whether library analysis metadata enrichment is active.
+  void setLibraryAnalysisActive(bool active) {
+    if (_isLibraryScanActive == active) return;
+    _isLibraryScanActive = active;
+    _syncMetadataEnabled();
+    if (!active &&
+        currentPlayable?.isStream != true &&
+        _liveMetadataNotifier.value != null) {
+      _liveMetadataNotifier.value = null;
+      _emitScoped([_trackNotifier]);
+    }
+  }
+
+  /// Resolves [playable] to its canonical in-memory [Track] instance if indexed.
+  AudioPlayable resolvePlayable(AudioPlayable playable) =>
+      _canonicalPlayable(playable);
+
+  /// Resolved display metadata merging persisted tags and live stream updates.
+  ResolvedPlaybackMetadata? get currentDisplayMetadata {
+    final playable = currentPlayable;
+    if (playable == null) return null;
+    return ResolvedPlaybackMetadata.resolve(
+      playable: playable,
+      liveMetadata: _liveMetadataNotifier.value,
+      liveAudioInfo: _audioInfoNotifier.value,
+    );
+  }
+
+  /// Latest combined [PlaybackState] snapshot.
+  PlaybackState get state => _state;
+
+  /// Currently loaded queue entry in the player engine, if any.
+  ma.AudioSource<AudioPlayable>? get currentEntry =>
+      _player != null ? _player!.state.currentItem : _state.currentEntry;
+
+  /// Currently playing or queued [AudioPlayable], resolved canonically.
+  AudioPlayable? get currentPlayable {
+    final raw = currentEntry?.data ?? _state.currentPlayable ?? currentTrack;
+    if (raw == null) return null;
+    return _canonicalPlayable(raw);
+  }
+
+  /// Currently active [Track], or `null` when idle or playing a non-track stream.
+  Track? get currentTrack {
+    final raw =
+        currentEntry?.data ?? _state.currentPlayable ?? _state.currentTrack;
+    if (raw is Track) {
+      final canonical = _canonicalPlayable(raw);
+      return canonical is Track ? canonical : raw;
+    }
+    return null;
+  }
+
+  /// Returns `true` when [track] matches the active track by reference, ID, or path.
+  bool isCurrentTrack(Track? track) {
+    final cur = currentTrack;
+    return track != null &&
+        (cur == track ||
+            (cur?.id != null && cur?.id == track.id) ||
+            (cur?.filePath.isNotEmpty == true &&
+                cur?.filePath == track.filePath));
+  }
+
+  /// Whether audio is currently playing.
+  bool get isPlaying => _player?.state.isPlaying ?? _state.isPlaying;
+
+  /// Whether the player engine is currently buffering stream data.
+  bool get isBuffering => _player?.state.isBuffering ?? _state.isBuffering;
+
+  /// Whether the active queue finished playing naturally.
+  bool get isCompleted => _state.isCompleted;
+
+  /// Whether the current playable is a live audio stream without finite duration.
+  bool get isLiveStream =>
+      currentPlayable?.isStream ??
+      (_player != null &&
+          _player!.state.currentItem != null &&
+          _player!.state.duration == null) ||
+      _state.isLiveStream;
+
+  /// Current playback position exposed to UI listeners.
+  Duration get position => _positionNotifier.value;
+
+  /// Current stream buffer bounds.
+  ma.Buffer get buffer => _bufferNotifier.value;
+
+  /// Latest live ICY/stream metadata frame.
+  ma.AudioMetadata? get liveMetadata => _liveMetadataNotifier.value;
+
+  /// Latest live audio format details.
+  ma.AudioInfo? get liveAudioInfo => _audioInfoNotifier.value;
+
+  /// Total duration skipped by silence removal.
+  Duration get silenceSavedDuration => _silenceSavedDurationNotifier.value;
+
+  /// Total duration of the current track, or [Duration.zero] for live streams.
+  Duration get duration => _player?.state.duration ?? _state.duration;
+
+  /// Normalized playback progress in `[0.0, 1.0]`.
+  double get progress => duration.inMilliseconds > 0
+      ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+      : 0.0;
+
+  /// Remaining duration until end of the current track.
+  Duration get remaining =>
+      duration > position ? duration - position : Duration.zero;
+
+  /// Normalized precomputed waveform amplitude at the current playback position.
+  double get currentVisualAmplitude {
+    if (!isPlaying) return 0.0;
+    final track = currentTrack;
+    return track?.getPointAtPosition(position, duration) ?? 0.0;
+  }
+
+  /// Enables or disables real-time audio visualizer sampling.
+  void setVisualizerEnabled(bool enabled) {
+    _visualizerEnabled = enabled;
+    if (!enabled) {
+      scheduleMicrotask(() {
+        if (!_visualizerEnabled && !_isDisposed) {
+          _visualizerDataNotifier.value = ma.VisualizerData.empty();
+        }
+      });
+    }
+    if (_player != null) {
+      unawaited(
+        _player!.action
+            .setVisualizerEnabled(enabled && !_isUiSuppressed)
+            .catchError((_) {}),
+      );
+    }
+  }
+
+  /// Applies [mode] to suppress UI rebuilds/tickers while keeping OS media
+  /// notifications active, and flushes pending UI state on return to active mode.
+  void setLifecycleMode(AppLifecycleMode mode) {
+    if (_lifecycleMode == mode) return;
+    _lifecycleMode = mode;
+    final suppressed = _isUiSuppressed;
+    if (suppressed) {
+      if (_player != null) {
+        unawaited(
+          _player!.action.setVisualizerEnabled(false).catchError((_) {}),
+        );
+      }
+      _visualizerDataNotifier.value = ma.VisualizerData.empty();
+      return;
+    }
+
+    if (_player != null) {
+      if (_visualizerEnabled) {
+        unawaited(
+          _player!.action.setVisualizerEnabled(true).catchError((_) {}),
+        );
+      }
+      final livePos = _player!.state.position;
+      _lastPositionEmitTimestamp = DateTime.now().millisecondsSinceEpoch;
+      _lastEmittedPositionMs = livePos.inMilliseconds;
+      _setPosition(livePos);
+      _setSystemPosition(livePos);
+      _bufferNotifier.value = _player!.state.buffer;
+      _silenceSavedDurationNotifier.value =
+          _player!.state.silenceSavedDuration;
+    }
+
+    if (_dirtyDomains.isNotEmpty) {
+      final domains = _dirtyDomains.toList(growable: false);
+      _dirtyDomains.clear();
+      _emitScoped(domains);
+    }
+  }
+
+  /// Legacy helper mapping [minimized] to [AppLifecycleMode.suspended] or
+  /// [AppLifecycleMode.active].
+  void setMinimized(bool minimized) {
+    setLifecycleMode(
+      minimized ? AppLifecycleMode.suspended : AppLifecycleMode.active,
+    );
+  }
+
+  /// Immediately persists the active track path and position to settings.
+  Future<void> flushStatePersistence() async {
+    final current = currentTrack;
+    if (current != null) {
+      await _flushStatePersistence(
+        current.filePath,
+        (_player?.state.position ?? _positionNotifier.value).inMilliseconds,
+      );
+    }
+  }
 
   @override
   void notifyListeners() {
     if (_isDisposed) return;
     if (!_inScopedNotify) {
       _volumeNotifier.value = volume;
-      _trackNotifier.notify();
-      _transportNotifier.notify();
-      _controlsNotifier.notify();
-      _tuningNotifier.notify();
-      _queueNotifier.notify();
-      _devicesNotifier.notify();
+      final allDomains = <_DomainNotifier>[
+        _trackNotifier,
+        _transportNotifier,
+        _controlsNotifier,
+        _tuningNotifier,
+        _queueNotifier,
+        _devicesNotifier,
+      ];
+      if (_isUiSuppressed) {
+        _dirtyDomains.addAll(allDomains);
+      } else {
+        for (final d in allDomains) {
+          d.notify();
+        }
+      }
     }
     super.notifyListeners();
   }
@@ -1464,6 +1141,7 @@ class PlaybackController extends ChangeNotifier {
     _volumeNotifier.dispose();
     _positionNotifier.dispose();
     _positionSecondsNotifier.dispose();
+    _systemPositionNotifier.dispose();
     _bufferNotifier.dispose();
     _visualizerDataNotifier.dispose();
     _liveMetadataNotifier.dispose();

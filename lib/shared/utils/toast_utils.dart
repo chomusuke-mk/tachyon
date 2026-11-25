@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'package:material_ui/material_ui.dart';
-import 'package:tachyon/app.dart';
+import 'package:tachyon/app/app.dart';
 
-class ToastUtils {
+/// Global overlay toast helper displaying floating error, success, and dismissible feedback messages.
+abstract final class ToastUtils {
   /// Global navigator key owned by [App].
   static GlobalKey<NavigatorState> get navigatorKey => App.navigatorKey;
 
@@ -11,14 +12,14 @@ class ToastUtils {
   static Timer? _timer;
 
   static void _show(String message, Color bgColor, IconData icon) {
-    // 2. Matamos al instante la notificación anterior si entra una nueva
+    // Immediately replace any currently visible toast when a new message arrives.
     _timer?.cancel();
     _killCurrent();
 
     final overlayState = navigatorKey.currentState?.overlay;
     if (overlayState == null) return;
 
-    // 3. Creamos el nuevo Toast con su animación
+    // Create the new animated overlay toast entry.
     _currentOverlay = OverlayEntry(
       builder: (context) => _ToastWidget(
         message: message,
@@ -29,10 +30,9 @@ class ToastUtils {
       ),
     );
 
-    // 4. Lo inyectamos en la pantalla
     overlayState.insert(_currentOverlay!);
 
-    // 5. Programamos su salida animada después de 3 segundos
+    // Schedule animated dismissal after 3 seconds.
     _timer = Timer(
       const Duration(seconds: 3),
       () => _hideCurrent(animate: true),
@@ -54,39 +54,32 @@ class ToastUtils {
     _timer?.cancel();
 
     if (animate && _currentState != null) {
-      // Esperamos que termine la animación de salida (Bounce/Fade Out)
       await _currentState!.reverse();
     }
 
-    // Si nadie interrumpió y sobrescribió la notificación en este lapso:
+    // Remove only if no newer toast replaced this overlay in the meantime.
     if (_currentOverlay == targetOverlay) {
       _killCurrent();
     }
   }
 
-  // --- MÉTODOS PÚBLICOS ---
-
+  /// Displays an error toast notification with [message].
   static void showError(String message) {
     _show(message, Colors.red.shade700, Icons.error_outline);
   }
 
+  /// Displays a confirmation toast notification with [message].
   static void showSuccess(String message) {
     _show(message, Colors.green.shade700, Icons.check_circle_outline);
   }
 
-  static void showInfo(String message) {
-    _show(message, Colors.blue.shade700, Icons.info_outline);
-  }
-
+  /// Immediately dismisses any visible overlay toast and cancels pending timers.
   static void dismissAll() {
     _timer?.cancel();
     _killCurrent();
   }
 }
 
-// =====================================================================
-// WIDGET INTERNO ANIMADO
-// =====================================================================
 class _ToastWidget extends StatefulWidget {
   final String message;
   final Color bgColor;
@@ -122,7 +115,7 @@ class _ToastWidgetState extends State<_ToastWidget>
       duration: const Duration(milliseconds: 400),
     );
 
-    // Animación de Deslizamiento con rebote sutil (Entra desde abajo)
+    // Slide-in animation from bottom with a subtle spring overshoot.
     _slideAnimation =
         Tween<Offset>(begin: const Offset(0.0, 1.0), end: Offset.zero).animate(
           CurvedAnimation(
@@ -132,7 +125,7 @@ class _ToastWidgetState extends State<_ToastWidget>
           ),
         );
 
-    // Animación de Opacidad (Fade In/Out)
+    // Fade-in / fade-out opacity animation.
     _fadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
@@ -162,8 +155,7 @@ class _ToastWidgetState extends State<_ToastWidget>
           position: _slideAnimation,
           child: FadeTransition(
             opacity: _fadeAnimation,
-            // Material es vital en un Overlay para que los textos hereden el estilo por defecto
-            // y no aparezcan con subrayados amarillos. Se ubica aquí para no bloquear clics.
+            // Material supplies default overlay typography so text inherits theme styles.
             child: Material(
               color: Colors.transparent,
               child: Container(

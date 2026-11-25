@@ -12,12 +12,12 @@ import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
-import 'package:tachyon/features/locales/presentation/locale_controller.dart';
-import 'package:tachyon/features/playback/presentation/now_playing_screen.dart';
-import 'package:tachyon/features/playback/presentation/queue_drawer.dart';
+import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
+import 'package:tachyon/features/playback/presentation/screens/now_playing_screen.dart';
+import 'package:tachyon/features/playback/presentation/widgets/queue_drawer.dart';
 import 'package:tachyon/features/radios/presentation/widgets/radio_logo_avatar.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 
 class _TestLocaleRepo extends LocaleRepository {

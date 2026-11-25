@@ -12,9 +12,11 @@ import 'package:tachyon/core/playback/domain/loop_mode.dart';
 import 'package:tachyon/features/playback/presentation/widgets/visualizers/now_playing_visualizer_mode.dart';
 import 'package:tachyon/features/settings/domain/app_settings.dart';
 
+/// Persistence repository storing and retrieving [AppSettings] via [SharedPreferences].
 class SettingsRepository {
   final SharedPreferences _prefs;
 
+  /// Creates a [SettingsRepository] backed by the given [SharedPreferences] instance.
   SettingsRepository(this._prefs);
 
   static const _keyMusicDirectories = 's_music_directories';
@@ -81,6 +83,9 @@ class SettingsRepository {
     return ThemeMode.values[themeIndex];
   }
 
+  /// Returns the 10-band equalizer gain values in decibels.
+  ///
+  /// Defaults to ten `0.0` dB bands if no gains have been persisted.
   List<double> getEqualizerGains() {
     final gainsStrings = _prefs.getStringList(_keyEqualizerGains);
     if (gainsStrings == null) {
@@ -89,6 +94,10 @@ class SettingsRepository {
     return gainsStrings.map((s) => double.tryParse(s) ?? 0.0).toList();
   }
 
+  /// Loads and assembles the full [AppSettings] snapshot from persisted preferences.
+  ///
+  /// Applies default values and migrates legacy percentage-scaled volume and
+  /// volume boost values when needed.
   AppSettings getSettings() {
     return AppSettings(
       musicDirectories: _prefs.getStringList(_keyMusicDirectories) ?? [],
@@ -165,6 +174,11 @@ class SettingsRepository {
     );
   }
 
+  /// Persists all fields of [settings] to preferences.
+  ///
+  /// Removes optional keys such as [AppSettings.audioOutputDeviceId],
+  /// [AppSettings.customBackgroundPath], and [AppSettings.lastPlayedFilePath]
+  /// when their values on [settings] are `null`.
   Future<void> saveSettings(AppSettings settings) async {
     final futures = <Future<bool>>[
       _prefs.setStringList(_keyMusicDirectories, settings.musicDirectories),
@@ -265,45 +279,58 @@ class SettingsRepository {
     await Future.wait(futures);
   }
 
+  /// Returns the persisted [TrackSortOption] for sorting library tracks.
   TrackSortOption getTrackSortOption() {
     return TrackSortOption.fromString(_prefs.getString(_keyTrackSortBy));
   }
 
+  /// Persists the selected track sort [option].
   Future<void> setTrackSortOption(TrackSortOption option) =>
       _prefs.setString(_keyTrackSortBy, option.name);
 
+  /// Returns whether library tracks are sorted in ascending order.
   bool getTrackSortAscending() =>
       _prefs.getBool(_keyTrackSortAscending) ?? true;
 
+  /// Persists whether library tracks are sorted in [ascending] order.
   Future<void> setTrackSortAscending(bool ascending) =>
       _prefs.setBool(_keyTrackSortAscending, ascending);
 
+  /// Returns the persisted [AlbumSortOption] for sorting library albums.
   AlbumSortOption getAlbumSortOption() {
     return AlbumSortOption.fromString(_prefs.getString(_keyAlbumSortBy));
   }
 
+  /// Persists the selected album sort [option].
   Future<void> setAlbumSortOption(AlbumSortOption option) =>
       _prefs.setString(_keyAlbumSortBy, option.name);
 
+  /// Returns whether library albums are sorted in ascending order.
   bool getAlbumSortAscending() =>
       _prefs.getBool(_keyAlbumSortAscending) ?? true;
 
+  /// Persists whether library albums are sorted in [ascending] order.
   Future<void> setAlbumSortAscending(bool ascending) =>
       _prefs.setBool(_keyAlbumSortAscending, ascending);
 
+  /// Returns the persisted [ArtistSortOption] for sorting library artists.
   ArtistSortOption getArtistSortOption() {
     return ArtistSortOption.fromString(_prefs.getString(_keyArtistSortBy));
   }
 
+  /// Persists the selected artist sort [option].
   Future<void> setArtistSortOption(ArtistSortOption option) =>
       _prefs.setString(_keyArtistSortBy, option.name);
 
+  /// Returns whether library artists are sorted in ascending order.
   bool getArtistSortAscending() =>
       _prefs.getBool(_keyArtistSortAscending) ?? true;
 
+  /// Persists whether library artists are sorted in [ascending] order.
   Future<void> setArtistSortAscending(bool ascending) =>
       _prefs.setBool(_keyArtistSortAscending, ascending);
 
+  /// Returns the persisted [LyricsDisplayMode], defaulting to [LyricsDisplayMode.original].
   LyricsDisplayMode getLyricsDisplayMode() {
     final modeName = _prefs.getString(_keyLyricsDisplayMode);
     return LyricsDisplayMode.values.firstWhere(
@@ -312,40 +339,53 @@ class SettingsRepository {
     );
   }
 
+  /// Persists the selected lyrics display [mode].
   Future<void> setLyricsDisplayMode(LyricsDisplayMode mode) =>
       _prefs.setString(_keyLyricsDisplayMode, mode.name);
 
+  /// Returns whether the lyrics panel is shown on the playback view.
   bool getPlaybackShowLyrics() =>
       _prefs.getBool(_keyPlaybackShowLyrics) ?? false;
 
+  /// Persists whether to [show] the lyrics panel on the playback view.
   Future<void> setPlaybackShowLyrics(bool show) =>
       _prefs.setBool(_keyPlaybackShowLyrics, show);
 
+  /// Returns whether the queue panel is shown on the playback view.
   bool getPlaybackShowQueue() => _prefs.getBool(_keyPlaybackShowQueue) ?? false;
 
+  /// Persists whether to [show] the queue panel on the playback view.
   Future<void> setPlaybackShowQueue(bool show) =>
       _prefs.setBool(_keyPlaybackShowQueue, show);
 
+  /// Returns the target language code for lyrics translation, defaulting to `'defaultOption'`.
   String getLyricsTranslationTargetLang() =>
       _prefs.getString(_keyLyricsTranslationTargetLang) ?? 'defaultOption';
 
+  /// Persists the target language code [lang] for lyrics translation.
   Future<void> setLyricsTranslationTargetLang(String lang) =>
       _prefs.setString(_keyLyricsTranslationTargetLang, lang);
 
+  /// Returns the source language code for lyrics translation, defaulting to `'auto'`.
   String getLyricsTranslationSourceLang() =>
       _prefs.getString(_keyLyricsTranslationSourceLang) ?? 'auto';
 
+  /// Persists the source language code [lang] for lyrics translation.
   Future<void> setLyricsTranslationSourceLang(String lang) =>
       _prefs.setString(_keyLyricsTranslationSourceLang, lang);
 
+  /// Returns the persisted audio output device identifier, or `null` if unset.
   String? getAudioOutputDeviceId() => _prefs.getString(_keyAudioOutputDeviceId);
 
+  /// Returns whether playback pauses when the audio output device changes.
   bool getPauseOnDeviceChange() =>
       _prefs.getBool(_keyPauseOnDeviceChange) ?? true;
 
+  /// Persists whether playback should [pause] when the audio output device changes.
   Future<void> setPauseOnDeviceChange(bool pause) =>
       _prefs.setBool(_keyPauseOnDeviceChange, pause);
 
+  /// Persists the preferred audio output device [id], or clears it when `null`.
   Future<void> setAudioOutputDeviceId(String? id) async {
     if (id == null) {
       await _prefs.remove(_keyAudioOutputDeviceId);
@@ -354,11 +394,14 @@ class SettingsRepository {
     }
   }
 
+  /// Persists the list of library directory paths [dirs].
   Future<void> setMusicDirectories(List<String> dirs) =>
       _prefs.setStringList(_keyMusicDirectories, dirs);
 
+  /// Returns the persisted list of individual music file paths and stream URLs.
   List<String> getMusicFiles() => _prefs.getStringList(_keyMusicFiles) ?? [];
 
+  /// Persists the list of individual music [files] and stream URLs.
   Future<void> setMusicFiles(List<String> files) =>
       _prefs.setStringList(_keyMusicFiles, files);
 
@@ -370,27 +413,35 @@ class SettingsRepository {
   /// Whether the individual music files/links list has ever been persisted.
   bool get hasMusicFilesBeenSet => _prefs.containsKey(_keyMusicFiles);
 
+  /// Persists the automatic crossfade [durationSeconds], clamped to `0`–`30`.
   Future<void> setCrossfadeDuration(int durationSeconds) =>
       _prefs.setInt(_keyCrossfadeDuration, durationSeconds.clamp(0, 30));
 
+  /// Persists the manual crossfade [durationSeconds], clamped to `0`–`5`.
   Future<void> setCrossfadeManualDuration(int durationSeconds) =>
       _prefs.setInt(_keyCrossfadeManualDuration, durationSeconds.clamp(0, 5));
 
+  /// Persists the crossfade interpolation [curve].
   Future<void> setCrossfadeCurve(CrossfadeCurve curve) =>
       _prefs.setString(_keyCrossfadeCurve, curve.jsonValue);
 
+  /// Persists the playback [volume], clamped to `0.0`–`2.0`.
   Future<void> setVolume(double volume) =>
       _prefs.setDouble(_keyVolume, volume.clamp(0.0, 2.0));
 
+  /// Persists the playback speed [rate], clamped to `0.5`–`1.5`.
   Future<void> setPlaybackRate(double rate) =>
       _prefs.setDouble(_keyPlaybackRate, rate.clamp(0.5, 1.5));
 
+  /// Persists the playback [pitch], clamped to `0.5`–`1.5`.
   Future<void> setPlaybackPitch(double pitch) =>
       _prefs.setDouble(_keyPlaybackPitch, pitch.clamp(0.5, 1.5));
 
+  /// Persists the queue repeat [mode].
   Future<void> setLoopMode(LoopMode mode) =>
       _prefs.setString(_keyLoopMode, mode.repr);
 
+  /// Persists whether queue [shuffle] is enabled.
   Future<void> setShuffle(bool shuffle) => _prefs.setBool(_keyShuffle, shuffle);
 
   Crossfeed _getCrossfeed() {
@@ -416,6 +467,9 @@ class SettingsRepository {
     return 3;
   }
 
+  /// Returns the persisted [SilenceSkipMode], defaulting to [SilenceSkipMode.all].
+  ///
+  /// Converts legacy or unset [SilenceSkipMode.disabled] values to [SilenceSkipMode.all].
   SilenceSkipMode getSilenceSkipMode() {
     final val = _prefs.getInt(_keySilenceSkipMode);
     if (val == null || val == SilenceSkipMode.disabled.value) {
@@ -424,6 +478,7 @@ class SettingsRepository {
     return SilenceSkipMode.fromValue(val);
   }
 
+  /// Persists the active silence skip [mode], mapping [SilenceSkipMode.disabled] to [SilenceSkipMode.all].
   Future<void> setSilenceSkipMode(SilenceSkipMode mode) {
     final effective = mode == SilenceSkipMode.disabled
         ? SilenceSkipMode.all
@@ -431,20 +486,26 @@ class SettingsRepository {
     return _prefs.setInt(_keySilenceSkipMode, effective.value);
   }
 
+  /// Persists whether automatic silence skipping ([skip]) is enabled.
   Future<void> setSkipSilence(bool skip) =>
       _prefs.setBool(_keySkipSilence, skip);
 
+  /// Persists whether ReplayGain volume normalization ([normalize]) is enabled.
   Future<void> setVolumeNormalization(bool normalize) =>
       _prefs.setBool(_keyVolumeNormalization, normalize);
 
+  /// Persists the pre-amplifier gain [preampDb] in decibels, clamped to `-12.0`–`12.0`.
   Future<void> setPreamp(double preampDb) =>
       _prefs.setDouble(_keyPreamp, preampDb.clamp(-12.0, 12.0));
 
+  /// Persists the stereo [balance], clamped to `-1.0`–`1.0`.
   Future<void> setBalance(double balance) =>
       _prefs.setDouble(_keyBalance, balance.clamp(-1.0, 1.0));
 
+  /// Persists whether [mono] audio downmixing is enabled.
   Future<void> setMono(bool mono) => _prefs.setBool(_keyMono, mono);
 
+  /// Persists the headphone [crossfeed] preset and custom filter parameters.
   Future<void> setCrossfeed(Crossfeed crossfeed) async {
     await Future.wait([
       _prefs.setInt(_keyCrossfeed, _encodeCrossfeedModeIndex(crossfeed)),
@@ -453,23 +514,30 @@ class SettingsRepository {
     ]);
   }
 
+  /// Persists the spatializer stereo [width], clamped to `0.0`–`2.0`.
   Future<void> setSpatializer(double width) =>
       _prefs.setDouble(_keySpatializer, width.clamp(0.0, 2.0));
 
+  /// Persists whether the output peak [limiter] is enabled.
   Future<void> setLimiter(bool limiter) => _prefs.setBool(_keyLimiter, limiter);
 
+  /// Persists the volume [boost] value, clamped to `100`–`200`.
   Future<void> setVolumeBoost(double boost) =>
       _prefs.setDouble(_keyVolumeBoost, boost.clamp(100, 200));
 
+  /// Persists the application brightness [theme] mode.
   Future<void> setThemeMode(ThemeMode theme) =>
       _prefs.setInt(_keyTheme, theme.index);
 
+  /// Persists the accent seed color ARGB [colorValue].
   Future<void> setAccentColor(int colorValue) =>
       _prefs.setInt(_keyAccentColor, colorValue);
 
+  /// Persists whether pure-black OLED mode ([isOled]) is enabled.
   Future<void> setIsOledMode(bool isOled) =>
       _prefs.setBool(_keyIsOledMode, isOled);
 
+  /// Persists the custom background image [path], or clears it when `null`.
   Future<void> setCustomBackgroundPath(String? path) async {
     if (path == null) {
       await _prefs.remove(_keyCustomBackgroundPath);
@@ -478,15 +546,19 @@ class SettingsRepository {
     }
   }
 
+  /// Persists the custom background Gaussian blur [sigma].
   Future<void> setBackgroundBlurSigma(double sigma) =>
       _prefs.setDouble(_keyBackgroundBlurSigma, sigma);
 
+  /// Persists the custom background dim overlay [opacity].
   Future<void> setBackgroundDimOpacity(double opacity) =>
       _prefs.setDouble(_keyBackgroundDimOpacity, opacity);
 
+  /// Persists the selected application [language] code.
   Future<void> setAppLanguage(String language) =>
       _prefs.setString(_keyLanguage, language);
 
+  /// Persists the [filePath] and playback [positionMs] of the last played track.
   Future<void> setLastPlayed({
     required String filePath,
     required int positionMs,
@@ -496,59 +568,76 @@ class SettingsRepository {
     await _prefs.setInt(_keyLastPlayedPosition, positionMs);
   }
 
+  /// Persists whether the graphic equalizer is [enabled].
   Future<void> setEqualizerEnabled(bool enabled) =>
       _prefs.setBool(_keyEqualizerEnabled, enabled);
 
+  /// Returns the persisted equalizer preset identifier, defaulting to `'flat'`.
   String getEqualizerPreset() =>
       _prefs.getString(_keyEqualizerPreset) ?? 'flat';
 
+  /// Persists the active equalizer [preset] identifier.
   Future<void> setEqualizerPreset(String preset) =>
       _prefs.setString(_keyEqualizerPreset, preset);
 
+  /// Persists the list of equalizer band [gains] in decibels.
   Future<void> setEqualizerGains(List<double> gains) => _prefs.setStringList(
     _keyEqualizerGains,
     gains.map((g) => g.toString()).toList(),
   );
 
+  /// Persists whether the audio reverb effect is [enabled].
   Future<void> setReverbEnabled(bool enabled) =>
       _prefs.setBool(_keyReverbEnabled, enabled);
 
+  /// Returns the persisted reverb preset identifier, defaulting to `'off'`.
   String getReverbPreset() =>
       _prefs.getString(_keyReverbPreset) ?? 'off';
 
+  /// Persists the active reverb [preset] identifier.
   Future<void> setReverbPreset(String preset) =>
       _prefs.setString(_keyReverbPreset, preset);
 
+  /// Persists the reverb room size [val], clamped to `0.0`–`1.0`.
   Future<void> setReverbRoomSize(double val) =>
       _prefs.setDouble(_keyReverbRoomSize, val.clamp(0.0, 1.0));
 
+  /// Persists the reverb damping [val], clamped to `0.0`–`1.0`.
   Future<void> setReverbDamping(double val) =>
       _prefs.setDouble(_keyReverbDamping, val.clamp(0.0, 1.0));
 
+  /// Persists the reverb stereo width [val], clamped to `0.0`–`1.0`.
   Future<void> setReverbWidth(double val) =>
       _prefs.setDouble(_keyReverbWidth, val.clamp(0.0, 1.0));
 
+  /// Persists the reverb wet mix level [val], clamped to `0.0`–`2.0`.
   Future<void> setReverbWet(double val) =>
       _prefs.setDouble(_keyReverbWet, val.clamp(0.0, 2.0));
 
+  /// Persists the reverb dry mix level [val], clamped to `0.0`–`2.0`.
   Future<void> setReverbDry(double val) =>
       _prefs.setDouble(_keyReverbDry, val.clamp(0.0, 2.0));
 
+  /// Returns whether card view layout is enabled for [screenKey], falling back to [defaultValue].
   bool getCardView(String screenKey, {bool defaultValue = true}) {
     return _prefs.getBool('s_view_card_$screenKey') ?? defaultValue;
   }
 
+  /// Persists whether card view layout ([isCardView]) is enabled for [screenKey].
   Future<void> setCardView(String screenKey, bool isCardView) =>
       _prefs.setBool('s_view_card_$screenKey', isCardView);
 
+  /// Returns the persisted [NowPlayingVisualizerMode].
   NowPlayingVisualizerMode getNowPlayingVisualizerMode() {
     final str = _prefs.getString(_keyNowPlayingVisualizerMode);
     return NowPlayingVisualizerMode.fromString(str);
   }
 
+  /// Persists the selected now-playing visualizer [mode].
   Future<void> setNowPlayingVisualizerMode(NowPlayingVisualizerMode mode) =>
       _prefs.setString(_keyNowPlayingVisualizerMode, mode.name);
 
+  /// Removes all persisted Tachyon settings keys (`s_*`) from preferences.
   Future<void> resetToDefaults() async {
     final keys = _prefs.getKeys().where((k) => k.startsWith('s_')).toList();
     for (final k in keys) {

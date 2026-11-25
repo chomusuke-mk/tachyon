@@ -4,16 +4,37 @@ import 'package:material_ui/material_ui.dart';
 
 /// Studio rotary knob / circular interactive dial for continuous DSP parameters.
 class StudioKnob extends StatefulWidget {
+  /// Current numeric parameter value.
   final double value;
+
+  /// Minimum selectable value.
   final double min;
+
+  /// Maximum selectable value.
   final double max;
+
+  /// Short caption displayed beneath the knob.
   final String label;
+
+  /// Optional unit suffix appended to the formatted value readout.
+  ///
+  /// When set to `'%'`, the readout formats the normalized position between
+  /// [min] and [max] as a percentage.
   final String? unit;
+
+  /// Number of decimal places shown when [unit] is not `'%'`.
   final int decimals;
+
+  /// Accent color of the active arc and indicator dot.
   final Color activeColor;
+
+  /// Callback invoked with the clamped value during vertical drag gestures.
   final ValueChanged<double> onChanged;
+
+  /// Diameter of the circular knob in logical pixels.
   final double size;
 
+  /// Creates a [StudioKnob].
   const StudioKnob({
     super.key,
     required this.value,

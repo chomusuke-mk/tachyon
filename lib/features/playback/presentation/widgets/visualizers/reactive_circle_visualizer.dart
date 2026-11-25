@@ -1,420 +1,15 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:tachyon/features/playback/presentation/widgets/visualizers/reactive_circle_painter.dart';
 
-/// Resolves the accent color for the reactive circle visualizer.
-///
-/// Uses [trackColor] if provided, adjusting luminance and saturation to guarantee
-/// a luminous neon appearance.
-/// If [trackColor] is null, falls back to the application's theme emphasis color
-/// ([ColorScheme.primary]), adjusted for high contrast and luminosity against the background.
-Color resolveReactiveCircleColor({
-  Color? trackColor,
-  required ThemeData theme,
-}) {
-  final isDark = theme.brightness == Brightness.dark;
-
-  if (trackColor != null) {
-    final hsl = HSLColor.fromColor(trackColor);
-    if (isDark) {
-      final adjustedLightness = hsl.lightness.clamp(0.48, 0.85);
-      final adjustedSaturation = hsl.saturation.clamp(0.65, 1.0);
-      return hsl
-          .withLightness(adjustedLightness)
-          .withSaturation(adjustedSaturation)
-          .toColor();
-    } else {
-      final adjustedLightness = hsl.lightness.clamp(0.25, 0.52);
-      final adjustedSaturation = hsl.saturation.clamp(0.70, 1.0);
-      return hsl
-          .withLightness(adjustedLightness)
-          .withSaturation(adjustedSaturation)
-          .toColor();
-    }
-  }
-
-  // Fallback to application theme's emphasis color (no hardcoded yellow)
-  return theme.colorScheme.primary;
-}
-
-enum NcsSpectrumStyle {
-  bars,
-  analogWave,
-}
+export 'package:tachyon/features/playback/presentation/widgets/visualizers/reactive_circle_painter.dart';
 
 /// Lightweight notifier triggering only CustomPainter.paint() without Widget.build() rebuilds.
 class _FrameTickNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
-}
-
-/// Shared render state between the physics engine and the custom painter.
-class ReactiveCircleRenderState {
-  double smoothBass = 0.0;
-  double smoothRms = 0.0;
-  double shakeX = 0.0;
-  double shakeY = 0.0;
-}
-
-/// Number of angular rays (spectrum bins) around the circle.
-const int _kRays = 128;
-
-/// Number of dot layers drawn along every ray.
-const int _kDotLayers = 18;
-
-/// Number of dot layers per batched draw call (3 groups: near / mid / far).
-const int _kLayersPerGroup = 6;
-
-/// Production zero-allocation CustomPainter rendering the classic NCS
-/// "neon ring + dotted wave" audio-reactive circle.
-///
-/// Look (modelled after the NCS visualizer):
-/// - A thick glowing neon ring at the outer edge.
-/// - The inner edge of the ring is deformed *inwards* by the spectrum, forming
-///   an organic wavy crescent (the audio never shoots rays outwards).
-/// - Beyond the solid band, a lattice of dots fades towards the centre, dense
-///   near the band and sparse further in, giving the "3D dotted sphere" feel.
-/// - The centre stays transparent.
-///
-/// Efficiency: no `Paint`/`Path`/`List` allocation in [paint], no blur
-/// (`MaskFilter`) passes, a single cached radial-gradient shader for the glow
-/// and only 6 draw calls per frame (glow, band, 3 dot batches, optional contour).
-class ReactiveCirclePainter extends CustomPainter {
-  final ReactiveCircleRenderState renderState;
-  final Float32List bins;
-  final Float32List secondaryBins;
-  final Float32List innerPoints;
-  final Float32List radii;
-  final Float32List dotsNear;
-  final Float32List dotsMid;
-  final Float32List dotsFar;
-  final Float32List cosLUT;
-  final Float32List sinLUT;
-
-  final double baseRadius;
-  final double maxBarHeight;
-  final Color accentColor;
-  final NcsSpectrumStyle style;
-  final String? centerText;
-
-  /// Radial distribution of the dot layers (0..1), dense near the band.
-  static final Float32List _dotProfile = _buildDotProfile();
-
-  static Float32List _buildDotProfile() {
-    final list = Float32List(_kDotLayers);
-    for (int j = 0; j < _kDotLayers; j++) {
-      // u^1.8: practically continuous lines right at the band, opening up to a
-      // sparse dotted pitch towards the tips.
-      final double u = (j + 1) / _kDotLayers;
-      list[j] = math.pow(u, 1.8).toDouble();
-    }
-    return list;
-  }
-
-  /// Ratio between the glow gradient radius and the ring radius.
-  static const double _glowScale = 1.20;
-
-  // Shared (cached) glow shader: built once per accent color, in unit space.
-  static ui.Shader? _glowShader;
-  static Color? _glowShaderColor;
-
-  // Pre-instantiated Paint & Path objects (Zero runtime allocation inside paint)
-  final Paint _glowPaint = Paint()..blendMode = BlendMode.plus;
-  final Paint _bandPaint = Paint()..style = PaintingStyle.fill;
-  final Paint _dotsNearPaint = Paint()..strokeCap = StrokeCap.round;
-  final Paint _dotsMidPaint = Paint()..strokeCap = StrokeCap.round;
-  final Paint _dotsFarPaint = Paint()..strokeCap = StrokeCap.round;
-  final Paint _contourPaint = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeJoin = StrokeJoin.round;
-  final Paint _contourBackPaint = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeJoin = StrokeJoin.round
-    ..blendMode = BlendMode.plus;
-
-  final Path _bandPath = Path()..fillType = PathFillType.evenOdd;
-  final Path _innerPath = Path();
-  final Path _secondaryPath = Path();
-
-  TextPainter? _cachedTextPainter;
-  String? _lastText;
-  Color? _lastAccentColor;
-
-  ReactiveCirclePainter({
-    super.repaint,
-    ReactiveCircleRenderState? renderState,
-    Float32List? bins,
-    Float32List? secondaryBins,
-    Float32List? innerPoints,
-    Float32List? radii,
-    Float32List? dotsNear,
-    Float32List? dotsMid,
-    Float32List? dotsFar,
-    Float32List? cosLUT,
-    Float32List? sinLUT,
-    double? baseRadius,
-    double? maxBarHeight,
-    required this.accentColor,
-    this.style = NcsSpectrumStyle.bars,
-    this.centerText,
-  })  : renderState = renderState ?? ReactiveCircleRenderState(),
-        bins = bins ?? Float32List(_kRays),
-        secondaryBins = secondaryBins ?? Float32List(_kRays),
-        innerPoints = innerPoints ?? Float32List(_kRays * 2),
-        radii = radii ?? Float32List(_kRays),
-        dotsNear = dotsNear ?? Float32List(_kRays * _kLayersPerGroup * 2),
-        dotsMid = dotsMid ?? Float32List(_kRays * _kLayersPerGroup * 2),
-        dotsFar = dotsFar ?? Float32List(_kRays * _kLayersPerGroup * 2),
-        cosLUT = cosLUT ?? Float32List(_kRays),
-        sinLUT = sinLUT ?? Float32List(_kRays),
-        baseRadius = baseRadius ?? 100.0,
-        maxBarHeight = maxBarHeight ?? 80.0 {
-    _updatePaints(accentColor);
-  }
-
-  void _updatePaints(Color color) {
-    if (_glowShader == null || _glowShaderColor != color) {
-      // Unit-space gradient (radius 1.0) scaled on the canvas every frame, so
-      // the same shader serves any ring size / pulse without being rebuilt.
-      const double ring = 1.0 / _glowScale;
-      _glowShader = ui.Gradient.radial(
-        Offset.zero,
-        1.0,
-        [
-          color.withValues(alpha: 0.0),
-          color.withValues(alpha: 0.10),
-          color.withValues(alpha: 0.42),
-          color.withValues(alpha: 0.0),
-        ],
-        const [0.0, ring * 0.80, ring, 1.0],
-      );
-      _glowShaderColor = color;
-    }
-    _glowPaint.shader = _glowShader;
-
-    _bandPaint.color = Color.lerp(color, Colors.white, 0.10)!;
-
-    _dotsNearPaint.color =
-        Color.lerp(color, Colors.white, 0.35)!;
-    _dotsMidPaint.color =
-        Color.lerp(color, Colors.white, 0.20)!.withValues(alpha: 0.75);
-    _dotsFarPaint.color = color.withValues(alpha: 0.55);
-
-    _contourPaint
-      ..color = Color.lerp(color, Colors.white, 0.70)!.withValues(alpha: 0.85)
-      ..strokeWidth = 2.0;
-    _contourBackPaint
-      ..color = color.withValues(alpha: 0.45)
-      ..strokeWidth = 5.0;
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double cx = size.width * 0.5;
-    final double cy = size.height * 0.5;
-
-    final double dynamicScale = 1.0 + (renderState.smoothBass * 0.05);
-    final double ringRadius = baseRadius * dynamicScale;
-    final double ringWidth = math.max(3.0, ringRadius * 0.035);
-
-    // Apply micro-shake directly on the GPU matrix without rebuilding widgets
-    canvas.save();
-    canvas.translate(renderState.shakeX, renderState.shakeY);
-
-    // 1. Soft neon glow around the ring: one cached gradient shader, no blur.
-    canvas.save();
-    canvas.translate(cx, cy);
-    final double glowRadius = ringRadius * _glowScale;
-    canvas.scale(glowRadius, glowRadius);
-    canvas.drawCircle(Offset.zero, 1.0, _glowPaint);
-    canvas.restore();
-
-    // 2. Spectrum -> inner edge of the ring (deformed inwards).
-    final double innerBase = ringRadius - ringWidth;
-    final double dotWidth = math.max(1.1, ringRadius * 0.0085);
-    _dotsNearPaint.strokeWidth = dotWidth;
-    _dotsMidPaint.strokeWidth = dotWidth;
-    _dotsFarPaint.strokeWidth = dotWidth * 1.1;
-
-    if (style == NcsSpectrumStyle.analogWave) {
-      _fillInnerPoints(
-        secondaryBins,
-        cx,
-        cy,
-        innerBase,
-        ringRadius * 0.30,
-        ringRadius,
-      );
-      _buildClosedPath(_secondaryPath);
-    }
-    _fillInnerPoints(bins, cx, cy, innerBase, ringRadius * 0.22, ringRadius);
-    _buildClosedPath(_innerPath);
-
-    // 3. Solid neon band between the outer circle and the wavy inner contour.
-    // NOTE: Path.reset() restores the default fill type, so evenOdd must be
-    // re-applied every frame or the whole disc gets filled instead of a ring.
-    _bandPath
-      ..reset()
-      ..fillType = PathFillType.evenOdd
-      ..addOval(Rect.fromCircle(center: Offset(cx, cy), radius: ringRadius))
-      ..addPath(_innerPath, Offset.zero);
-    canvas.drawPath(_bandPath, _bandPaint);
-
-    // 4. Dotted lattice (bars style) or liquid contour (analog style).
-    if (style == NcsSpectrumStyle.bars) {
-      _paintDotLattice(canvas, cx, cy, ringRadius);
-    } else {
-      canvas.drawPath(_secondaryPath, _contourBackPaint);
-      canvas.drawPath(_innerPath, _contourPaint);
-    }
-
-    // 5. Central text cached in GPU memory
-    if (centerText != null && centerText!.isNotEmpty) {
-      _paintCachedCenterText(canvas, cx, cy, dynamicScale);
-    }
-
-    canvas.restore();
-  }
-
-  /// Computes the inner contour points of the band for [values] into
-  /// [innerPoints] as `[x0, y0, x1, y1, ...]`.
-  void _fillInnerPoints(
-    Float32List values,
-    double cx,
-    double cy,
-    double innerBase,
-    double reach,
-    double ringRadius,
-  ) {
-    final double rMin = ringRadius * 0.5;
-    final double rest = ringRadius * 0.01;
-    for (int i = 0; i < _kRays; i++) {
-      // Squared: quiet bins leave a thin ring, only loud ones bulge inwards.
-      double r = innerBase - rest - values[i] * values[i] * reach;
-      if (r < rMin) r = rMin;
-      radii[i] = r;
-      final int idx = i * 2;
-      innerPoints[idx] = cx + cosLUT[i] * r;
-      innerPoints[idx + 1] = cy + sinLUT[i] * r;
-    }
-  }
-
-  /// Builds a smooth closed curve through [innerPoints] (midpoint quadratic
-  /// Beziers) reusing the given pre-instantiated [path].
-  void _buildClosedPath(Path path) {
-    path.reset();
-    final int last = (_kRays - 1) * 2;
-    double xCurr = innerPoints[0];
-    double yCurr = innerPoints[1];
-    path.moveTo(
-      (innerPoints[last] + xCurr) * 0.5,
-      (innerPoints[last + 1] + yCurr) * 0.5,
-    );
-    for (int i = 0; i < _kRays; i++) {
-      final int next = ((i + 1) & (_kRays - 1)) * 2;
-      final double xNext = innerPoints[next];
-      final double yNext = innerPoints[next + 1];
-      path.quadraticBezierTo(
-        xCurr,
-        yCurr,
-        (xCurr + xNext) * 0.5,
-        (yCurr + yNext) * 0.5,
-      );
-      xCurr = xNext;
-      yCurr = yNext;
-    }
-    path.close();
-  }
-
-  /// Rays of dots shooting *inwards* from the band, like the NCS dotted wave.
-  /// Ray length follows the spectrum (loud areas stream deep into the circle,
-  /// quiet ones leave just a fringe). Dots are continuous next to the band and
-  /// open up to a sparse pitch towards the tips, fading as they go.
-  /// Packed into 3 contiguous buffers => exactly 3 `drawRawPoints` calls.
-  void _paintDotLattice(
-    Canvas canvas,
-    double cx,
-    double cy,
-    double ringRadius,
-  ) {
-    final double rMin = ringRadius * 0.16;
-    final double minLen = ringRadius * 0.10;
-    final double lenGain = ringRadius * 0.85;
-    final Float32List profile = _dotProfile;
-
-    for (int i = 0; i < _kRays; i++) {
-      final double rs = radii[i];
-      final double c = cosLUT[i];
-      final double s = sinLUT[i];
-      final double b = bins[i];
-      double len = minLen + b * lenGain;
-      final double maxLen = rs - rMin;
-      if (len > maxLen) len = maxLen;
-
-      for (int jj = 0; jj < _kLayersPerGroup; jj++) {
-        final int base = (i * _kLayersPerGroup + jj) * 2;
-
-        double r = rs - len * profile[jj];
-        dotsNear[base] = cx + c * r;
-        dotsNear[base + 1] = cy + s * r;
-
-        r = rs - len * profile[jj + _kLayersPerGroup];
-        dotsMid[base] = cx + c * r;
-        dotsMid[base + 1] = cy + s * r;
-
-        r = rs - len * profile[jj + _kLayersPerGroup * 2];
-        dotsFar[base] = cx + c * r;
-        dotsFar[base + 1] = cy + s * r;
-      }
-    }
-
-    canvas.drawRawPoints(ui.PointMode.points, dotsFar, _dotsFarPaint);
-    canvas.drawRawPoints(ui.PointMode.points, dotsMid, _dotsMidPaint);
-    canvas.drawRawPoints(ui.PointMode.points, dotsNear, _dotsNearPaint);
-  }
-
-  void _paintCachedCenterText(
-    Canvas canvas,
-    double cx,
-    double cy,
-    double scale,
-  ) {
-    if (_cachedTextPainter == null ||
-        _lastText != centerText ||
-        _lastAccentColor != accentColor) {
-      _lastText = centerText;
-      _lastAccentColor = accentColor;
-      _cachedTextPainter = TextPainter(
-        text: TextSpan(
-          text: centerText,
-          style: TextStyle(
-            color: Color.lerp(accentColor, Colors.white, 0.85),
-            fontSize: baseRadius * 0.38,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 3.5,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-    }
-
-    canvas.save();
-    canvas.translate(cx, cy);
-    canvas.scale(scale, scale);
-    final tp = _cachedTextPainter!;
-    tp.paint(canvas, Offset(-tp.width * 0.5, -tp.height * 0.5));
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant ReactiveCirclePainter oldDelegate) {
-    return oldDelegate.accentColor != accentColor ||
-        oldDelegate.baseRadius != baseRadius ||
-        oldDelegate.maxBarHeight != maxBarHeight ||
-        oldDelegate.style != style;
-  }
 }
 
 /// Ultra-high performance NCS Circular Audio Visualizer Widget.
@@ -426,27 +21,67 @@ class ReactiveCirclePainter extends CustomPainter {
 /// - Neon ring deformed inwards by the spectrum + dotted lattice, 5 batched draw calls.
 /// - Auto-sleep on silence for 0% CPU/GPU overhead when paused.
 class ReactiveCircleVisualizerWidget extends StatefulWidget {
+  /// Width and height of the square visualizer canvas in logical pixels.
   final double size;
+
+  /// Corner radius value accepted for layout consistency across renderers.
   final double cornerRadius;
+
+  /// Fallback 10-band spectrum magnitudes (`0.0` to `1.0`) when [displayBandsProvider] is `null`.
   final List<double> displayBands;
+
+  /// Fallback smoothed bass energy (`0.0` to `1.0`).
   final double smoothedBass;
+
+  /// Fallback smoothed RMS amplitude (`0.0` to `1.0`) when [smoothedRmsProvider] is `null`.
   final double smoothedRms;
+
+  /// Fallback instantaneous peak amplitude (`0.0` to `1.0`) when [rawPeakProvider] is `null`.
   final double rawPeak;
+
+  /// Fallback left-channel audio level (`0.0` to `1.0`) when [leftChannelProvider] is `null`.
   final double leftChannel;
+
+  /// Fallback right-channel audio level (`0.0` to `1.0`) when [rightChannelProvider] is `null`.
   final double rightChannel;
+
+  /// Primary neon accent color for the ring and spectrum dot lattice.
   final Color accentColor;
+
+  /// Whether audio playback is active when [isPlayingProvider] is `null`.
   final bool isPlaying;
+
+  /// Optional zero-rebuild callback returning live 10-band spectrum magnitudes.
   final List<double> Function()? displayBandsProvider;
+
+  /// Optional zero-rebuild callback returning live smoothed RMS amplitude.
   final double Function()? smoothedRmsProvider;
+
+  /// Optional zero-rebuild callback returning live instantaneous peak amplitude.
   final double Function()? rawPeakProvider;
+
+  /// Optional zero-rebuild callback returning the live left-channel level.
   final double Function()? leftChannelProvider;
+
+  /// Optional zero-rebuild callback returning the live right-channel level.
   final double Function()? rightChannelProvider;
+
+  /// Optional zero-rebuild callback returning whether playback is currently active.
   final bool Function()? isPlayingProvider;
+
+  /// Listenable synchronized with playback activity to wake and sleep the ticker.
   final Listenable? frameListenable;
+
+  /// Contour rendering style applied by [ReactiveCirclePainter].
   final NcsSpectrumStyle style;
+
+  /// Optional widget centered inside the ring with reactive bass pulse and micro-shake.
   final Widget? centerChild;
+
+  /// Optional text painted in the center when [centerChild] is `null`.
   final String? centerText;
 
+  /// Creates a [ReactiveCircleVisualizerWidget].
   const ReactiveCircleVisualizerWidget({
     super.key,
     required this.size,
@@ -483,8 +118,8 @@ class _ReactiveCircleVisualizerWidgetState
   final _FrameTickNotifier _paintNotifier = _FrameTickNotifier();
   Duration _lastElapsed = Duration.zero;
 
-  static const int _halfBins = _kRays ~/ 2;
-  static const int _totalBins = _kRays;
+  static const int _halfBins = kReactiveCircleRays ~/ 2;
+  static const int _totalBins = kReactiveCircleRays;
 
   // Classic NCS rotation offset (-90° - 32°)
   static const double _rotationOffset =
@@ -501,10 +136,15 @@ class _ReactiveCircleVisualizerWidgetState
   // Render buffers shared with the painter (contiguous for batched GPU calls)
   final Float32List _innerPoints = Float32List(_totalBins * 2);
   final Float32List _radii = Float32List(_totalBins);
-  final Float32List _dotsNear =
-      Float32List(_totalBins * _kLayersPerGroup * 2);
-  final Float32List _dotsMid = Float32List(_totalBins * _kLayersPerGroup * 2);
-  final Float32List _dotsFar = Float32List(_totalBins * _kLayersPerGroup * 2);
+  final Float32List _dotsNear = Float32List(
+    _totalBins * kReactiveCircleLayersPerGroup * 2,
+  );
+  final Float32List _dotsMid = Float32List(
+    _totalBins * kReactiveCircleLayersPerGroup * 2,
+  );
+  final Float32List _dotsFar = Float32List(
+    _totalBins * kReactiveCircleLayersPerGroup * 2,
+  );
 
   // Precomputed trigonometric & physics LUTs
   final Float32List _cosLUT = Float32List(_totalBins);

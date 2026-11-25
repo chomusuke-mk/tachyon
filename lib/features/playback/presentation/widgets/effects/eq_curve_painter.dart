@@ -6,13 +6,25 @@ import 'package:miniaudio_player/miniaudio_player.dart';
 /// Draws a smooth biquad interpolation spline curve with soft frequency axis grid lines,
 /// interactive response nodes, and application theme-aware palette with reusable paints/paths.
 class EqCurvePainter extends CustomPainter {
+  /// Equalizer band values rendered as the frequency response curve.
   final Equalizer equalizer;
+
+  /// Primary accent color used for the response curve, fill, and nodes.
   final Color activeColor;
+
+  /// Fill color of the rounded chart background.
   final Color backgroundColor;
+
+  /// Color of the horizontal limit guides and vertical band axis lines.
   final Color? gridLineColor;
+
+  /// Color of the horizontal 0 dB center reference line.
   final Color? zeroLineColor;
+
+  /// Text color of the decibel scale labels (`+12dB`, `0dB`, `-12dB`).
   final Color? labelColor;
 
+  /// Number of frequency bands plotted across the horizontal axis.
   static const int bandCount = 10;
 
   static final List<double> _xCache = List<double>.filled(bandCount, 0.0);
@@ -46,6 +58,7 @@ class EqCurvePainter extends CustomPainter {
   static TextPainter? _tpZero;
   static TextPainter? _tpMinus12;
 
+  /// Creates an [EqCurvePainter].
   const EqCurvePainter({
     required this.equalizer,
     this.activeColor = const Color(0xFF00D1FF),
@@ -55,6 +68,7 @@ class EqCurvePainter extends CustomPainter {
     this.labelColor,
   });
 
+  /// Returns the horizontal canvas coordinate for band [index] within [width].
   static double getXForBand(int index, double width) {
     return (width / (bandCount + 1)) * (index + 1);
   }

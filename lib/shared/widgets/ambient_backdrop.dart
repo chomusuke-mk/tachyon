@@ -3,7 +3,7 @@ import 'dart:ui';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
-import 'package:tachyon/features/settings/presentation/settings_controller.dart';
+import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';
 import 'package:tachyon/shared/widgets/app_background.dart';
 
@@ -20,9 +20,13 @@ import 'package:tachyon/shared/widgets/app_background.dart';
 /// 2. User configured wallpaper image via [SettingsController.customBackgroundPath].
 /// 3. App accent theme radial gradient fallback.
 class AmbientBackdrop extends StatelessWidget {
+  /// Optional local path or remote URL of the artwork image to blur.
   final String? artworkUri;
+
+  /// Optional raw encoded artwork bytes used instead of or alongside [artworkUri].
   final Uint8List? artworkBytes;
 
+  /// Creates an [AmbientBackdrop].
   const AmbientBackdrop({
     super.key,
     this.artworkUri,

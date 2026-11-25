@@ -13,13 +13,19 @@ import 'package:web/web.dart' as web;
 
 /// Virtual directory descriptor on Web (backed by OPFS).
 class StorageDirectory {
+  /// Virtual directory path.
   final String path;
+
+  /// Creates a virtual directory descriptor for [path].
   const StorageDirectory(this.path);
 }
 
 /// Virtual file reference on Web (backed by OPFS).
 class StorageFileRef {
+  /// Virtual file path.
   final String path;
+
+  /// Creates a virtual file reference for [path].
   const StorageFileRef(this.path);
 }
 
@@ -31,7 +37,10 @@ class StorageFileRef {
 /// images are read and decoded asynchronously on demand into Flutter's
 /// `PaintingBinding.instance.imageCache`.
 abstract final class PersistentBinaryStorage {
+  /// Virtual temporary directory descriptor.
   static StorageDirectory? tempDirectory;
+
+  /// Virtual directory descriptor for cached cover art.
   static StorageDirectory? thumbnailsDirectory;
 
   static final Set<String> _knownCoverHashes = <String>{};
@@ -44,6 +53,7 @@ abstract final class PersistentBinaryStorage {
   static web.FileSystemDirectoryHandle? _backgroundsDirHandle;
   static Future<void>? _opfsInitFuture;
 
+  /// Estimated number of logical processor cores reported by the browser.
   static int get processorCount {
     try {
       final hc = web.window.navigator.hardwareConcurrency;
@@ -53,10 +63,19 @@ abstract final class PersistentBinaryStorage {
     }
   }
 
+  /// Whether the current platform is Linux (always `false` on web).
   static bool get isLinux => false;
+
+  /// Whether the current platform is Windows (always `false` on web).
   static bool get isWindows => false;
+
+  /// Whether the current platform is Android (always `false` on web).
   static bool get isAndroid => false;
+
+  /// Whether the current platform is iOS (always `false` on web).
   static bool get isIOS => false;
+
+  /// Whether the current platform is macOS (always `false` on web).
   static bool get isMacOS => false;
 
   static ({String dir, String fileName})? _parseOpfsPath(String pathOrUri) {
@@ -74,12 +93,19 @@ abstract final class PersistentBinaryStorage {
   static bool isManagedWebAudioPath(String pathOrUrl) =>
       _parseOpfsPath(pathOrUrl)?.dir == 'audio';
 
+  /// Sets [thumbnailsDirectory] and [tempDirectory] and triggers [initAsync].
+  ///
+  /// Uses [thumbnailsPath] and [tempPath] as virtual root paths.
   static void init(String thumbnailsPath, String tempPath) {
     tempDirectory = StorageDirectory(tempPath);
     thumbnailsDirectory = StorageDirectory(thumbnailsPath);
     unawaited(initAsync(thumbnailsPath: thumbnailsPath, tempPath: tempPath));
   }
 
+  /// Initializes virtual storage paths and indexes existing OPFS directories.
+  ///
+  /// Optionally overrides [thumbnailsPath] and [tempPath] before opening OPFS
+  /// handles.
   static Future<void> initAsync({
     String? thumbnailsPath,
     String? tempPath,
@@ -250,21 +276,29 @@ abstract final class PersistentBinaryStorage {
     } catch (_) {}
   }
 
+  /// Ensures [tempDirectory] and [thumbnailsDirectory] have default descriptors.
   static void ensureInitialized() {
     tempDirectory ??= const StorageDirectory('/temp');
     thumbnailsDirectory ??= const StorageDirectory('/covers');
   }
 
+  /// Ensures virtual storage descriptors are initialized (no-op on web).
   static Future<void> clearTempDirectory() async {
     ensureInitialized();
   }
 
+  /// Returns whether the cover hash derived from [artworkUri] is indexed in OPFS.
+  ///
+  /// Ignores [resolvedArtworkPath] on web.
   static bool hasCachedArtwork(String artworkUri, String resolvedArtworkPath) {
     ensureInitialized();
     final hash = p.basename(artworkUri);
     return _knownCoverHashes.contains(hash);
   }
 
+  /// Writes cover art [bytes] for [hash] into the OPFS `covers` directory.
+  ///
+  /// Ignores [targetFilePath] on web and skips writing if already cached.
   static Future<void> saveCoverBytes(
     String hash,
     String targetFilePath,
@@ -280,6 +314,7 @@ abstract final class PersistentBinaryStorage {
     _knownCoverHashes.add(cleanHash);
   }
 
+  /// Resolves cached cover bytes for [artworkUri] as an inline `data:` URI.
   static Future<Uri?> resolveCoverDataUriAsync(String artworkUri) async {
     final hash = p.basename(artworkUri.trim());
     if (hash.isEmpty) return null;
@@ -288,6 +323,7 @@ abstract final class PersistentBinaryStorage {
     return Uri.dataFromBytes(bytes, mimeType: 'image/jpeg');
   }
 
+  /// Returns virtual [StorageFileRef] entries for all indexed cached covers.
   static List<StorageFileRef> listCachedCoverFiles() {
     ensureInitialized();
     final base = thumbnailsDirectory!.path;
@@ -297,6 +333,7 @@ abstract final class PersistentBinaryStorage {
     ];
   }
 
+  /// Evicts and deletes OPFS cover entries whose names are not in [validFileNames].
   static Future<void> purgeUnusedCovers(Set<String> validFileNames) async {
     final toRemove = <String>[
       for (final hash in _knownCoverHashes)
@@ -316,6 +353,7 @@ abstract final class PersistentBinaryStorage {
   // Picked Web Audio & Background Files (Direct OPFS)
   // ---------------------------------------------------------------------------
 
+  /// Writes picked audio [bytes] under a sanitized [fileName] into OPFS `audio/`.
   static Future<String?> savePickedAudioFile(
     String fileName,
     Uint8List bytes,
@@ -330,6 +368,7 @@ abstract final class PersistentBinaryStorage {
     return canonicalPath;
   }
 
+  /// Deletes a browser-picked audio file at [uriOrPath] from OPFS `audio/`.
   static Future<void> removeWebAudioFile(String uriOrPath) async {
     final parsed = _parseOpfsPath(uriOrPath);
     if (parsed?.dir == 'audio') {
@@ -339,6 +378,7 @@ abstract final class PersistentBinaryStorage {
     }
   }
 
+  /// Writes custom background [bytes] under a sanitized [fileName] into OPFS `backgrounds/`.
   static Future<String?> saveCustomBackgroundBytes(
     String fileName,
     Uint8List bytes,
@@ -355,6 +395,7 @@ abstract final class PersistentBinaryStorage {
     return canonicalPath;
   }
 
+  /// Returns [sourceImagePath] if it exists in OPFS or is an HTTP(S) URL, or `null`.
   static Future<String?> copyCustomBackgroundFile(
     String sourceImagePath,
   ) async {
@@ -368,9 +409,13 @@ abstract final class PersistentBinaryStorage {
   // Filesystem Inspection & Discovery on Web
   // ---------------------------------------------------------------------------
 
+  /// Always returns `false` because local filesystem directories do not exist at [path] on web.
   static bool directoryExistsSync(String path) => false;
+
+  /// Always returns `false` because local filesystem directories do not exist at [path] on web.
   static Future<bool> directoryExists(String path) async => false;
 
+  /// Synchronously checks whether [path] is an HTTP(S) URL or an indexed OPFS entry.
   static bool fileExistsSync(String path) {
     if (path.isEmpty) return false;
     if (path.startsWith('http://') || path.startsWith('https://')) return true;
@@ -386,6 +431,7 @@ abstract final class PersistentBinaryStorage {
     return _knownCoverHashes.contains(p.basename(path));
   }
 
+  /// Asynchronously checks whether [path] is an HTTP(S) URL or exists in OPFS.
   static Future<bool> fileExists(String path) async {
     if (path.isEmpty) return false;
     if (path.startsWith('http://') || path.startsWith('https://')) return true;
@@ -429,6 +475,7 @@ abstract final class PersistentBinaryStorage {
     return false;
   }
 
+  /// Returns cached or queried byte size and modification timestamp for an OPFS audio [path].
   static Future<({int size, int modifiedAt})?> statFile(String path) async {
     final parsed = _parseOpfsPath(path);
     if (parsed?.dir == 'audio') {
@@ -445,8 +492,12 @@ abstract final class PersistentBinaryStorage {
     return null;
   }
 
+  /// Always returns an empty list because local subdirectories of [dirPath] are unavailable on web.
   static List<String> listSubdirectoriesSync(String dirPath) => const [];
 
+  /// Emits an empty stream because scanning [directories] for [supportedExtensions] is unsupported on web.
+  ///
+  /// Ignores [isCancelled] because no scan is performed.
   static Stream<({String path, int size, int modifiedAt})>
   discoverAudioFilesStream(
     List<String> directories,
@@ -454,6 +505,7 @@ abstract final class PersistentBinaryStorage {
     bool Function()? isCancelled,
   }) async* {}
 
+  /// Always returns `null` because adjacent local files for [audioFilePath] are unavailable on web.
   static Future<String?> readLocalLrcFile(String audioFilePath) async => null;
 
   // ---------------------------------------------------------------------------
@@ -480,6 +532,10 @@ abstract final class PersistentBinaryStorage {
     return _readOpfsFile(handle, fileName);
   }
 
+  /// Resolves an OPFS-backed [ImageProvider] for [pathOrUri].
+  ///
+  /// Optionally resizes the decoded image to [maxWidth] and [maxHeight], or
+  /// returns `null` if the resolved filename is empty.
   static Future<ImageProvider?> resolveLocalOrOpfsImageProvider(
     String pathOrUri, {
     int? maxWidth,
@@ -497,6 +553,10 @@ abstract final class PersistentBinaryStorage {
     );
   }
 
+  /// Builds an OPFS-backed image widget for [pathOrUri], or returns [fallback].
+  ///
+  /// Applies optional layout dimensions ([width], [height]), decode hints
+  /// ([cacheWidth], [cacheHeight]), and box [fit].
   static Widget buildLocalOrOpfsImage(
     String pathOrUri, {
     double? width,
@@ -534,6 +594,7 @@ abstract final class PersistentBinaryStorage {
     );
   }
 
+  /// Parses [value] as an ISO-8601 timestamp, returning `null` if invalid.
   static DateTime? tryParseHttpDate(String value) => DateTime.tryParse(value);
 }
 

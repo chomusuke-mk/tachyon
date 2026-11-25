@@ -6,7 +6,7 @@ import 'package:tachyon/core/database/app_database.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/radios/data/radio_browser_service.dart';
-import 'package:tachyon/features/radios/presentation/radio_controller.dart';
+import 'package:tachyon/features/radios/presentation/controllers/radio_controller.dart';
 
 void main() {
   group('RadioBrowserService Unit Tests', () {

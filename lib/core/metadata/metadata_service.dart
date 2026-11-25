@@ -10,7 +10,7 @@ import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/core/store/library_store.dart';
-import 'package:tachyon/shared/utils/memory_optimizer.dart';
+import 'package:tachyon/core/lifecycle/memory_optimizer.dart';
 
 export 'package:tachyon/core/metadata/domain/discovered_audio_file.dart';
 
@@ -38,34 +38,27 @@ class _QueuedScan {
 /// delegating heavy analysis to `miniaudio_player`'s native Rust worker thread pool
 /// or Web Worker, without spawning Dart Isolates (ensuring 100% Web and Native parity).
 class MetadataService {
+  /// SQLite persistence service for saving and deleting scanned tracks.
   final AppDatabase database;
+
+  /// In-memory library store synchronized after scan mutations.
   final LibraryStore store;
+
+  /// Optional override for the maximum concurrent extraction workers.
   final int? customWorkerCount;
 
+  /// Creates a [MetadataService] backed by [database] and optional [store] and [customWorkerCount].
   MetadataService({
     required this.database,
     LibraryStore? store,
     this.customWorkerCount,
   }) : store = store ?? LibraryStore(database);
 
+  /// Effective number of concurrent extraction workers for library scans.
   int get workerCount =>
       customWorkerCount ?? math.max(1, PersistentBinaryStorage.processorCount);
 
   CancellationToken? _currentScanToken;
-
-  /// Convenience wrapper to discover audio files recursively across [directories]
-  /// and explicit [files] (local paths, OPFS URIs, or HTTP/HTTPS audio URLs).
-  Stream<DiscoveredAudioFile> discoverFiles(
-    List<String> directories, {
-    List<String> files = const [],
-    CancellationToken? cancellationToken,
-  }) {
-    return _discoverSourcesStream(
-      directories,
-      files: files,
-      cancellationToken: cancellationToken,
-    );
-  }
 
   final List<_QueuedScan> _scanQueue = [];
   final StreamController<ScanProgress> _progressController =
@@ -79,7 +72,7 @@ class MetadataService {
       _currentScanToken != null && !_currentScanToken!.isCancelled;
 
   /// Starts the scan pipeline using a bounded async concurrency pool proportional
-  /// to CPU cores and returns a [Stream<ScanProgress>].
+  /// to CPU cores and returns a [Stream]<[ScanProgress]>.
   ///
   /// Both [directories] and individual [files] (local files, OPFS audio files, or
   /// HTTP/HTTPS audio links) are unified into the catalog. An individual file in
