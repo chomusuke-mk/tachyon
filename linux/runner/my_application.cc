@@ -10,6 +10,9 @@
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -153,6 +156,7 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
   FlMethodChannel* window_state_channel;
   GtkWindow* window;
+  FlView* view;
   GtkHeaderBar* header_bar;
   GtkWidget* background_button;
   gboolean use_header_bar;
@@ -232,6 +236,55 @@ static void release_app_hold_if_needed(MyApplication* self) {
     native_log(kNativeLogDebug, "Releasing GApplication hold (app_held -> false)");
     g_application_release(G_APPLICATION(self));
   }
+}
+
+// GTK3's gtk_window_map() maps child widgets before calling gdk_window_show(),
+// so FlViewRendererSubsurface::map() runs while the Wayland wl_surface is
+// still NULL after gtk_widget_hide(). Remapping FlView once the mapped parent
+// window owns a live wl_surface re-attaches the EGL subsurface without needing
+// a manual resize.
+static void refresh_flutter_view_surface(MyApplication* self,
+                                         const char* reason) {
+  if (self->window == nullptr || self->view == nullptr) {
+    return;
+  }
+
+  GtkWidget* view_widget = GTK_WIDGET(self->view);
+  gboolean is_wayland_window = FALSE;
+  const void* wl_surface_ptr = nullptr;
+#ifdef GDK_WINDOWING_WAYLAND
+  GdkWindow* gdk_win = gtk_widget_get_window(GTK_WIDGET(self->window));
+  if (gdk_win != nullptr && GDK_IS_WAYLAND_WINDOW(gdk_win)) {
+    is_wayland_window = TRUE;
+    wl_surface_ptr =
+        static_cast<const void*>(gdk_wayland_window_get_wl_surface(gdk_win));
+  }
+#endif
+
+  const gboolean was_mapped = gtk_widget_get_mapped(view_widget);
+  GtkAllocation alloc{};
+  gtk_widget_get_allocation(view_widget, &alloc);
+
+  const gboolean should_remap =
+      is_wayland_window && wl_surface_ptr != nullptr && was_mapped;
+  if (should_remap) {
+    gtk_widget_unmap(view_widget);
+    gtk_widget_map(view_widget);
+  }
+  gtk_widget_queue_draw(view_widget);
+
+  native_log(kNativeLogDebug,
+             "refresh_flutter_view_surface(%s): wayland=%s wl_surface=%p "
+             "wasMapped=%s alloc=%dx%d remapped=%s",
+             reason != nullptr ? reason : "<unknown>",
+             bool_str(is_wayland_window), wl_surface_ptr, bool_str(was_mapped),
+             alloc.width, alloc.height, bool_str(should_remap));
+}
+
+static void on_window_map_after(GtkWidget* widget, gpointer user_data) {
+  (void)widget;
+  MyApplication* self = MY_APPLICATION(user_data);
+  refresh_flutter_view_surface(self, "window::map-after");
 }
 
 static void on_background_button_clicked(GtkButton* button,
@@ -383,6 +436,15 @@ static gboolean on_window_state_event(GtkWidget* widget,
       bool_str(self->is_maximized), bool_str(self->is_focused),
       bool_str(changed), static_cast<long long>(focus_guard_elapsed_us));
 
+  if (!self->is_hidden_to_tray && self->view != nullptr &&
+      (event->changed_mask & GDK_WINDOW_STATE_WITHDRAWN) != 0 &&
+      (event->new_window_state & GDK_WINDOW_STATE_WITHDRAWN) == 0) {
+    gtk_widget_queue_draw(GTK_WIDGET(self->view));
+    native_log(
+        kNativeLogDebug,
+        "on_window_state_event: WITHDRAWN cleared -> queued FlView redraw");
+  }
+
   if (changed) {
     emit_window_state_changed(self);
   }
@@ -517,7 +579,12 @@ static void window_state_method_call_cb(FlMethodChannel* channel,
       gtk_widget_show(GTK_WIDGET(self->window));
       gtk_window_deiconify(self->window);
       gtk_window_present(self->window);
+      if (self->view != nullptr) {
+        gtk_widget_grab_focus(GTK_WIDGET(self->view));
+      }
       release_app_hold_if_needed(self);
+      native_log(kNativeLogDebug,
+                 "restoreFromBackground: window shown & presented");
       emit_window_state_changed(self);
     }
     fl_method_call_respond_success(method_call, nullptr, nullptr);
@@ -570,6 +637,9 @@ static void my_application_activate(GApplication* application) {
     gtk_widget_show(GTK_WIDGET(self->window));
     gtk_window_deiconify(self->window);
     gtk_window_present(self->window);
+    if (self->view != nullptr) {
+      gtk_widget_grab_focus(GTK_WIDGET(self->view));
+    }
     release_app_hold_if_needed(self);
     emit_window_state_changed(self);
     if (was_hidden_to_tray && self->window_state_channel != nullptr) {
@@ -662,6 +732,8 @@ static void my_application_activate(GApplication* application) {
   g_signal_connect_object(window, "notify::is-active",
                           G_CALLBACK(on_window_is_active_notify), self,
                           static_cast<GConnectFlags>(0));
+  g_signal_connect_object(window, "map", G_CALLBACK(on_window_map_after), self,
+                          G_CONNECT_AFTER);
 
   gtk_window_set_default_size(window, 1280, 720);
 
@@ -670,6 +742,7 @@ static void my_application_activate(GApplication* application) {
                                                 self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
+  self->view = view;
   GdkRGBA background_color;
   gdk_rgba_parse(&background_color, "#000000");
   fl_view_set_background_color(view, &background_color);
@@ -738,6 +811,7 @@ static void my_application_dispose(GObject* object) {
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->window_state_channel);
   self->window = nullptr;
+  self->view = nullptr;
   self->header_bar = nullptr;
   self->background_button = nullptr;
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);

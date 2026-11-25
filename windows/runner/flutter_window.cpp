@@ -183,6 +183,9 @@ void FlutterWindow::SetupWindowStateChannel() {
             ::ShowWindow(hwnd, is_maximized_ ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
             ::SetForegroundWindow(hwnd);
           }
+          if (flutter_controller_) {
+            flutter_controller_->ForceRedraw();
+          }
           EmitWindowStateChanged();
           result->Success();
         } else if (method == "updateTrayState") {

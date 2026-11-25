@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
 import 'package:tachyon/core/lifecycle/app_memory_coordinator.dart';
@@ -330,6 +331,10 @@ class AppLifecycleController extends ChangeNotifier
       startTrimmerInActive: _startTrimmerOnActive,
     );
     notifyListeners();
+    if (prev == AppLifecycleMode.background &&
+        nextMode == AppLifecycleMode.active) {
+      SchedulerBinding.instance.scheduleForcedFrame();
+    }
   }
 
   @override
