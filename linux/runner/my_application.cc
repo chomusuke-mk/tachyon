@@ -1,12 +1,152 @@
 #include "my_application.h"
 
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
 #include <flutter_linux/flutter_linux.h>
 #include <malloc.h>
+#include <sys/time.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+enum NativeLogLevel {
+  kNativeLogVerbose = 0,
+  kNativeLogDebug = 1,
+  kNativeLogInfo = 2,
+  kNativeLogWarn = 3,
+  kNativeLogError = 4,
+  kNativeLogOff = 5,
+};
+
+const char* native_log_level_label(NativeLogLevel level) {
+  switch (level) {
+    case kNativeLogVerbose:
+      return "VERBOSE";
+    case kNativeLogDebug:
+      return "DEBUG";
+    case kNativeLogInfo:
+      return "INFO";
+    case kNativeLogWarn:
+      return "WARN";
+    case kNativeLogError:
+      return "ERROR";
+    case kNativeLogOff:
+      return "OFF";
+  }
+  return "DEBUG";
+}
+
+NativeLogLevel resolve_native_log_level() {
+  static gboolean initialized = FALSE;
+#ifdef NDEBUG
+  static NativeLogLevel cached_level = kNativeLogError;
+#else
+  static NativeLogLevel cached_level = kNativeLogDebug;
+#endif
+  if (!initialized) {
+    initialized = TRUE;
+    const char* env_level = std::getenv("TACHYON_LOG_LEVEL");
+    if (env_level != nullptr && env_level[0] != '\0') {
+      if (g_ascii_strcasecmp(env_level, "verbose") == 0 ||
+          g_ascii_strcasecmp(env_level, "v") == 0) {
+        cached_level = kNativeLogVerbose;
+      } else if (g_ascii_strcasecmp(env_level, "debug") == 0 ||
+                 g_ascii_strcasecmp(env_level, "d") == 0) {
+        cached_level = kNativeLogDebug;
+      } else if (g_ascii_strcasecmp(env_level, "info") == 0 ||
+                 g_ascii_strcasecmp(env_level, "i") == 0) {
+        cached_level = kNativeLogInfo;
+      } else if (g_ascii_strcasecmp(env_level, "warn") == 0 ||
+                 g_ascii_strcasecmp(env_level, "warning") == 0 ||
+                 g_ascii_strcasecmp(env_level, "w") == 0) {
+        cached_level = kNativeLogWarn;
+      } else if (g_ascii_strcasecmp(env_level, "error") == 0 ||
+                 g_ascii_strcasecmp(env_level, "err") == 0 ||
+                 g_ascii_strcasecmp(env_level, "e") == 0) {
+        cached_level = kNativeLogError;
+      } else if (g_ascii_strcasecmp(env_level, "off") == 0 ||
+                 g_ascii_strcasecmp(env_level, "none") == 0) {
+        cached_level = kNativeLogOff;
+      }
+    }
+  }
+  return cached_level;
+}
+
+__attribute__((format(printf, 2, 3))) void native_log(NativeLogLevel level,
+                                                      const char* fmt,
+                                                      ...) {
+  const NativeLogLevel min_level = resolve_native_log_level();
+  if (min_level == kNativeLogOff || level == kNativeLogOff ||
+      level < min_level) {
+    return;
+  }
+
+  struct timeval tv;
+  gettimeofday(&tv, nullptr);
+  struct tm tm_info;
+  localtime_r(&tv.tv_sec, &tm_info);
+
+  std::fprintf(stderr, "[%02d:%02d:%02d.%03d] [%-7s] [LinuxRunner] ",
+               tm_info.tm_hour, tm_info.tm_min, tm_info.tm_sec,
+               static_cast<int>(tv.tv_usec / 1000),
+               native_log_level_label(level));
+  va_list args;
+  va_start(args, fmt);
+  std::vfprintf(stderr, fmt, args);
+  va_end(args);
+  std::fputc('\n', stderr);
+  std::fflush(stderr);
+}
+
+void format_gdk_window_state(GdkWindowState state, char* buf, gsize size) {
+  if (size == 0) return;
+  buf[0] = '\0';
+  if (state == static_cast<GdkWindowState>(0)) {
+    g_strlcpy(buf, "NONE", size);
+    return;
+  }
+
+  struct FlagEntry {
+    GdkWindowState flag;
+    const char* name;
+  };
+  static const FlagEntry kFlags[] = {
+      {GDK_WINDOW_STATE_WITHDRAWN, "WITHDRAWN"},
+      {GDK_WINDOW_STATE_ICONIFIED, "ICONIFIED"},
+      {GDK_WINDOW_STATE_MAXIMIZED, "MAXIMIZED"},
+      {GDK_WINDOW_STATE_STICKY, "STICKY"},
+      {GDK_WINDOW_STATE_FULLSCREEN, "FULLSCREEN"},
+      {GDK_WINDOW_STATE_ABOVE, "ABOVE"},
+      {GDK_WINDOW_STATE_BELOW, "BELOW"},
+      {GDK_WINDOW_STATE_FOCUSED, "FOCUSED"},
+      {GDK_WINDOW_STATE_TILED, "TILED"},
+  };
+
+  gboolean first = TRUE;
+  for (gsize i = 0; i < G_N_ELEMENTS(kFlags); ++i) {
+    if ((state & kFlags[i].flag) != 0) {
+      if (!first) {
+        g_strlcat(buf, "|", size);
+      }
+      g_strlcat(buf, kFlags[i].name, size);
+      first = FALSE;
+    }
+  }
+  if (first) {
+    g_snprintf(buf, size, "OTHER(0x%x)", static_cast<unsigned int>(state));
+  }
+}
+
+const char* bool_str(gboolean value) { return value ? "true" : "false"; }
+
+}  // namespace
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -45,8 +185,17 @@ static FlValue* build_window_state_value(MyApplication* self) {
 
 static void emit_window_state_changed(MyApplication* self) {
   if (self->window_state_channel == nullptr) {
+    native_log(kNativeLogWarn,
+               "emit_window_state_changed skipped: window_state_channel is null");
     return;
   }
+  native_log(
+      kNativeLogDebug,
+      "emit_window_state_changed: hasNativeHeaderBar=%s hasSystemDecorations=true "
+      "isMinimized=%s isFocused=%s isMaximized=%s isHiddenToTray=%s",
+      bool_str(self->use_header_bar), bool_str(self->is_minimized),
+      bool_str(self->is_focused), bool_str(self->is_maximized),
+      bool_str(self->is_hidden_to_tray));
   g_autoptr(FlValue) state_map = build_window_state_value(self);
   fl_method_channel_invoke_method(self->window_state_channel,
                                   "onWindowStateChanged", state_map, nullptr,
@@ -58,12 +207,20 @@ static void set_minimized_state(MyApplication* self, gboolean minimized) {
     self->minimize_timestamp_us = g_get_monotonic_time();
   }
   if (self->is_minimized == minimized) {
+    native_log(kNativeLogVerbose,
+               "set_minimized_state unchanged: isMinimized=%s",
+               bool_str(minimized));
     return;
   }
+  const gboolean prev_minimized = self->is_minimized;
   self->is_minimized = minimized;
+  native_log(kNativeLogDebug, "set_minimized_state: %s -> %s",
+             bool_str(prev_minimized), bool_str(minimized));
 
   if (minimized) {
-    malloc_trim(0);
+    int trim_res = malloc_trim(0);
+    native_log(kNativeLogDebug,
+               "set_minimized_state: malloc_trim(0) returned %d", trim_res);
   }
 
   emit_window_state_changed(self);
@@ -72,6 +229,7 @@ static void set_minimized_state(MyApplication* self, gboolean minimized) {
 static void release_app_hold_if_needed(MyApplication* self) {
   if (self->app_held) {
     self->app_held = FALSE;
+    native_log(kNativeLogDebug, "Releasing GApplication hold (app_held -> false)");
     g_application_release(G_APPLICATION(self));
   }
 }
@@ -80,6 +238,7 @@ static void on_background_button_clicked(GtkButton* button,
                                          gpointer user_data) {
   (void)button;
   MyApplication* self = MY_APPLICATION(user_data);
+  native_log(kNativeLogDebug, "HeaderBar send-to-background button clicked");
   if (self->window_state_channel != nullptr) {
     fl_method_channel_invoke_method(self->window_state_channel,
                                     "onBackgroundRequested", nullptr, nullptr,
@@ -90,6 +249,7 @@ static void on_background_button_clicked(GtkButton* button,
 static void on_minimize_button_clicked(GtkButton* button, gpointer user_data) {
   (void)button;
   MyApplication* self = MY_APPLICATION(user_data);
+  native_log(kNativeLogDebug, "HeaderBar minimize button clicked");
   set_minimized_state(self, TRUE);
 }
 
@@ -158,6 +318,12 @@ static gboolean on_window_state_event(GtkWidget* widget,
   MyApplication* self = MY_APPLICATION(user_data);
   gboolean changed = FALSE;
 
+  char changed_buf[128];
+  char new_buf[128];
+  format_gdk_window_state(event->changed_mask, changed_buf,
+                          sizeof(changed_buf));
+  format_gdk_window_state(event->new_window_state, new_buf, sizeof(new_buf));
+
   const GdkWindowState min_mask = static_cast<GdkWindowState>(
       GDK_WINDOW_STATE_ICONIFIED | GDK_WINDOW_STATE_WITHDRAWN);
   if ((event->changed_mask & min_mask) != 0 && !self->is_hidden_to_tray) {
@@ -169,7 +335,10 @@ static gboolean on_window_state_event(GtkWidget* widget,
       self->is_minimized = minimized;
       changed = TRUE;
       if (minimized) {
-        malloc_trim(0);
+        int trim_res = malloc_trim(0);
+        native_log(kNativeLogDebug,
+                   "on_window_state_event: malloc_trim(0) on minimize -> %d",
+                   trim_res);
       }
     }
   }
@@ -183,12 +352,14 @@ static gboolean on_window_state_event(GtkWidget* widget,
     }
   }
 
+  gint64 focus_guard_elapsed_us = -1;
   if ((event->changed_mask & GDK_WINDOW_STATE_FOCUSED) != 0 &&
       !self->is_hidden_to_tray) {
     gboolean focused =
         (event->new_window_state & GDK_WINDOW_STATE_FOCUSED) != 0;
     if (focused && self->is_minimized) {
       gint64 elapsed_us = g_get_monotonic_time() - self->minimize_timestamp_us;
+      focus_guard_elapsed_us = elapsed_us;
       if (elapsed_us > 250000) {
         self->is_minimized = FALSE;
         changed = TRUE;
@@ -199,6 +370,17 @@ static gboolean on_window_state_event(GtkWidget* widget,
       changed = TRUE;
     }
   }
+
+  native_log(
+      kNativeLogDebug,
+      "on_window_state_event: changed_mask=0x%x(%s) new_state=0x%x(%s) "
+      "hiddenToTray=%s -> minimized=%s maximized=%s focused=%s changed=%s "
+      "guardElapsedUs=%lld",
+      static_cast<unsigned int>(event->changed_mask), changed_buf,
+      static_cast<unsigned int>(event->new_window_state), new_buf,
+      bool_str(self->is_hidden_to_tray), bool_str(self->is_minimized),
+      bool_str(self->is_maximized), bool_str(self->is_focused),
+      bool_str(changed), static_cast<long long>(focus_guard_elapsed_us));
 
   if (changed) {
     emit_window_state_changed(self);
@@ -213,14 +395,22 @@ static void on_window_is_active_notify(GObject* object,
   (void)pspec;
   MyApplication* self = MY_APPLICATION(user_data);
   if (self->window == nullptr || self->is_hidden_to_tray) {
+    native_log(
+        kNativeLogDebug,
+        "on_window_is_active_notify ignored: window=%p hiddenToTray=%s",
+        static_cast<const void*>(self->window),
+        bool_str(self->is_hidden_to_tray));
     return;
   }
 
   gboolean active = gtk_window_is_active(self->window);
+  gboolean prev_focused = self->is_focused;
+  gboolean prev_minimized = self->is_minimized;
+  gint64 elapsed_us = -1;
   gboolean changed = FALSE;
 
   if (active && self->is_minimized) {
-    gint64 elapsed_us = g_get_monotonic_time() - self->minimize_timestamp_us;
+    elapsed_us = g_get_monotonic_time() - self->minimize_timestamp_us;
     if (elapsed_us > 250000) {
       self->is_minimized = FALSE;
       changed = TRUE;
@@ -231,6 +421,15 @@ static void on_window_is_active_notify(GObject* object,
     self->is_focused = active;
     changed = TRUE;
   }
+
+  native_log(
+      kNativeLogDebug,
+      "notify::is-active: gtk_window_is_active=%s hiddenToTray=%s "
+      "focused(%s->%s) minimized(%s->%s) guardElapsedUs=%lld changed=%s",
+      bool_str(active), bool_str(self->is_hidden_to_tray),
+      bool_str(prev_focused), bool_str(self->is_focused),
+      bool_str(prev_minimized), bool_str(self->is_minimized),
+      static_cast<long long>(elapsed_us), bool_str(changed));
 
   if (changed) {
     emit_window_state_changed(self);
@@ -243,6 +442,11 @@ static void window_state_method_call_cb(FlMethodChannel* channel,
   (void)channel;
   MyApplication* self = MY_APPLICATION(user_data);
   const gchar* method = fl_method_call_get_name(method_call);
+
+  native_log(g_strcmp0(method, "updateTrayState") == 0 ? kNativeLogVerbose
+                                                       : kNativeLogDebug,
+             "MethodCall Dart -> LinuxRunner: %s",
+             method != nullptr ? method : "<null>");
 
   if (g_strcmp0(method, "getWindowState") == 0) {
     g_autoptr(FlValue) result = build_window_state_value(self);
@@ -297,7 +501,10 @@ static void window_state_method_call_cb(FlMethodChannel* channel,
       }
       self->is_hidden_to_tray = TRUE;
       gtk_widget_hide(GTK_WIDGET(self->window));
-      malloc_trim(0);
+      int trim_res = malloc_trim(0);
+      native_log(kNativeLogDebug,
+                 "enterBackgroundMode: window hidden, malloc_trim(0)=%d",
+                 trim_res);
       emit_window_state_changed(self);
     }
     fl_method_call_respond_success(method_call, nullptr, nullptr);
@@ -324,17 +531,24 @@ static void window_state_method_call_cb(FlMethodChannel* channel,
   } else if (g_strcmp0(method, "updateTrayState") == 0) {
     fl_method_call_respond_success(method_call, nullptr, nullptr);
   } else {
+    native_log(kNativeLogWarn,
+               "Unimplemented method call on window_state channel: %s",
+               method != nullptr ? method : "<null>");
     fl_method_call_respond_not_implemented(method_call, nullptr);
   }
 }
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
+  int trim_res = 0;
   if (!self->is_hidden_to_tray) {
     gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
   }
   hook_header_bar_minimize_button(self);
-  malloc_trim(0);
+  trim_res = malloc_trim(0);
+  native_log(kNativeLogDebug,
+             "first_frame_cb: is_hidden_to_tray=%s malloc_trim(0)=%d",
+             bool_str(self->is_hidden_to_tray), trim_res);
 }
 
 // Implements GApplication::activate.
@@ -342,8 +556,16 @@ static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   if (self->window != nullptr) {
     gboolean was_hidden_to_tray = self->is_hidden_to_tray;
+    gboolean prev_minimized = self->is_minimized;
+    gboolean prev_focused = self->is_focused;
     self->is_hidden_to_tray = FALSE;
     self->is_minimized = FALSE;
+    native_log(
+        kNativeLogInfo,
+        "my_application_activate (existing window): wasHiddenToTray=%s "
+        "prevMinimized=%s prevFocused=%s",
+        bool_str(was_hidden_to_tray), bool_str(prev_minimized),
+        bool_str(prev_focused));
     gtk_widget_show(GTK_WIDGET(self->window));
     gtk_window_deiconify(self->window);
     gtk_window_present(self->window);
@@ -378,16 +600,27 @@ static void my_application_activate(GApplication* application) {
   // If running on Wayland assume the header bar will work (may need changing
   // if future cases occur).
   gboolean use_header_bar = TRUE;
+  gboolean is_x11 = FALSE;
+  const gchar* wm_name = nullptr;
 #ifdef GDK_WINDOWING_X11
   GdkScreen* screen = gtk_window_get_screen(window);
   if (GDK_IS_X11_SCREEN(screen)) {
-    const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
+    is_x11 = TRUE;
+    wm_name = gdk_x11_screen_get_window_manager_name(screen);
     if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
       use_header_bar = FALSE;
     }
   }
 #endif
   self->use_header_bar = use_header_bar;
+  native_log(
+      kNativeLogInfo,
+      "my_application_activate (initial): backend=%s wm_name=%s "
+      "use_header_bar=%s native_log_level=%s",
+      is_x11 ? "X11" : "Wayland/Non-X11",
+      wm_name != nullptr ? wm_name : "<none>",
+      bool_str(use_header_bar),
+      native_log_level_label(resolve_native_log_level()));
 
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
@@ -470,6 +703,8 @@ static gboolean my_application_local_command_line(GApplication* application,
 
   g_autoptr(GError) error = nullptr;
   if (!g_application_register(application, nullptr, &error)) {
+    native_log(kNativeLogError, "Failed to register GApplication: %s",
+               error != nullptr ? error->message : "<unknown>");
     g_warning("Failed to register: %s", error->message);
     *exit_status = 1;
     return TRUE;
@@ -489,6 +724,7 @@ static void my_application_startup(GApplication* application) {
 // Implements GApplication::shutdown.
 static void my_application_shutdown(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  native_log(kNativeLogDebug, "my_application_shutdown");
   release_app_hold_if_needed(self);
   G_APPLICATION_CLASS(my_application_parent_class)->shutdown(application);
 }
@@ -496,6 +732,7 @@ static void my_application_shutdown(GApplication* application) {
 // Implements GObject::dispose.
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
+  native_log(kNativeLogDebug, "my_application_dispose");
   release_app_hold_if_needed(self);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->window_state_channel);

@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
 
 /// Direct HTTP client service for querying the open-source community
 /// [Radio Browser](https://www.radio-browser.info/) API with automatic mirror failover.
 class RadioBrowserService {
+  static const _log = ScopedLogger('RadioBrowser');
+
   final http.Client _client;
   final List<String> _mirrors;
 
@@ -82,7 +85,7 @@ class RadioBrowserService {
           .where((name) => name.isNotEmpty)
           .toList(growable: false);
     } catch (e) {
-      debugPrint('[RadioBrowserService] getPopularCountries error: $e');
+      _log.e('getPopularCountries error', error: e);
       return const [];
     }
   }
@@ -103,7 +106,7 @@ class RadioBrowserService {
           .where((tag) => tag.isNotEmpty && tag.length > 2)
           .toList(growable: false);
     } catch (e) {
-      debugPrint('[RadioBrowserService] getPopularTags error: $e');
+      _log.e('getPopularTags error', error: e);
       return const [];
     }
   }
@@ -176,7 +179,7 @@ class RadioBrowserService {
             }
           }
         } catch (e) {
-          debugPrint('[RadioBrowserService] validateAndRefresh chunk error: $e');
+          _log.w('validateAndRefresh chunk error: $e');
         }
       }
     }
@@ -203,7 +206,7 @@ class RadioBrowserService {
           }
         }
       } catch (e) {
-        debugPrint('[RadioBrowserService] validateAndRefresh URL error: $e');
+        _log.w('validateAndRefresh URL error: $e');
       }
     }
 
@@ -242,11 +245,11 @@ class RadioBrowserService {
         }
       } catch (e) {
         lastError = e;
-        debugPrint('[RadioBrowserService] Mirror $mirror failed: $e. Trying next mirror...');
+        _log.w('Mirror $mirror failed: $e. Trying next mirror...');
       }
     }
 
-    debugPrint('[RadioBrowserService] All mirrors exhausted. Last error: $lastError');
+    _log.e('All mirrors exhausted', error: lastError);
     return const [];
   }
 

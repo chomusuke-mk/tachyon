@@ -18,6 +18,7 @@ import 'package:tachyon/core/lifecycle/app_memory_coordinator.dart';
 import 'package:tachyon/core/lifecycle/desktop_tray_service.dart';
 import 'package:tachyon/core/lifecycle/memory_optimizer.dart';
 import 'package:tachyon/core/lifecycle/window_control_bridge.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/lyrics/lyrics_manager.dart';
 import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
@@ -38,12 +39,24 @@ import 'package:tachyon/features/settings/presentation/controllers/settings_cont
 /// Bootstraps core services, controllers, native lifecycle/tray bridges,
 /// and mounts the root [App] inside a top-level [MultiProvider].
 abstract final class AppBootstrap {
+  static const _log = ScopedLogger('Bootstrap');
+
   /// Initializes all application dependencies and launches the Flutter UI.
   static Future<void> run() async {
     WidgetsFlutterBinding.ensureInitialized();
+    const buildMode = kReleaseMode
+        ? 'release'
+        : (kProfileMode ? 'profile' : 'debug');
+    _log.i(
+      'Starting Tachyon (buildMode=$buildMode, isWeb=$kIsWeb, '
+      'platform=${defaultTargetPlatform.name}, '
+      'logLevel=${AppLogger.minLevel.label}, '
+      'envTachyonLogLevel="${AppLogger.envLogLevel}")',
+    );
     await MiniaudioPlayer.ensureInitialized(
       rootIsolateToken: kIsWeb ? null : ServicesBinding.rootIsolateToken,
     );
+    _log.d('MiniaudioPlayer engine initialized');
     PaintingBinding.instance.imageCache.maximumSize =
         AppMemoryCoordinator.activeImageCacheMaxSize;
     PaintingBinding.instance.imageCache.maximumSizeBytes =
@@ -58,7 +71,13 @@ abstract final class AppBootstrap {
         'Skia.setResourceCacheMaxBytes',
         AppMemoryCoordinator.activeSkiaCacheMaxBytes,
       );
-    } catch (_) {}
+      _log.d(
+        'Configured Skia cache=${AppMemoryCoordinator.activeSkiaCacheMaxBytes}B '
+        'imageCache=${AppMemoryCoordinator.activeImageCacheMaxSize}/${AppMemoryCoordinator.activeImageCacheMaxBytes}B',
+      );
+    } catch (e) {
+      _log.w('Failed to configure initial Skia cache limit: $e');
+    }
 
     final sharedPreferences = await SharedPreferences.getInstance();
     final String dbPath;
@@ -72,10 +91,8 @@ abstract final class AppBootstrap {
       final appSupportDir = await getApplicationSupportDirectory();
       final cacheDirectory = await getApplicationCacheDirectory();
       dbPath = p.join(appSupportDir.path, 'music.db');
-      if (kDebugMode) {
-        debugPrint('CACHE PATH: ${cacheDirectory.path}');
-        debugPrint('DATA PATH: ${appSupportDir.path}');
-      }
+      _log.d('Cache path: ${cacheDirectory.path}');
+      _log.d('Data path: ${appSupportDir.path}');
       MetadataUtils.init(
         p.join(appSupportDir.path, 'covers'),
         p.join(cacheDirectory.path, 'covers'),
@@ -84,9 +101,15 @@ abstract final class AppBootstrap {
 
     final appDatabase = AppDatabase(dbPath: dbPath);
     await appDatabase.init();
+    _log.d('AppDatabase initialized at $dbPath');
 
     final libraryStore = LibraryStore(appDatabase);
     await libraryStore.reloadFromDatabase();
+    _log.d(
+      'LibraryStore hydrated: tracks=${libraryStore.tracks.length} '
+      'albums=${libraryStore.albums.length} artists=${libraryStore.artists.length} '
+      'playlists=${libraryStore.playlists.length} radios=${libraryStore.radioStations.length}',
+    );
 
     final metadataService = MetadataService(
       database: appDatabase,
@@ -113,6 +136,11 @@ abstract final class AppBootstrap {
       playbackController: playbackController,
     );
     await settingsController.init();
+    _log.d(
+      'Settings initialized: themeMode=${settingsController.themeMode.name} '
+      'oled=${settingsController.isOledMode} '
+      'hasCustomBackground=${settingsController.customBackgroundPath?.isNotEmpty ?? false}',
+    );
 
     String resolveDefaultLanguage() {
       final systemCode = ui.PlatformDispatcher.instance.locale.languageCode
@@ -126,6 +154,7 @@ abstract final class AppBootstrap {
     }
     final localeController = LocaleController(localeRepository, initialLang);
     await localeController.whenReady;
+    _log.d('LocaleController ready: locale=${localeController.currentLocaleCode}');
     settingsController.localeListenable.addListener(() {
       final lang = settingsController.appLanguage;
       final effective = (lang == 'defaultOption')
@@ -137,6 +166,7 @@ abstract final class AppBootstrap {
     });
 
     final permissionsGranted = await PermissionUtils.areAllGranted();
+    _log.d('Runtime permissions granted=$permissionsGranted');
     if (permissionsGranted) {
       await settingsController.ensureDefaultMusicDirectory();
       unawaited(libraryController.scanDirectories());
@@ -147,6 +177,10 @@ abstract final class AppBootstrap {
 
     final windowBridge = WindowControlBridge();
     await windowBridge.initialize();
+    _log.d(
+      'WindowControlBridge ready: hasNativeChannel=${windowBridge.hasNativeChannel} '
+      'usesFlutterTitleBar=${windowBridge.usesFlutterTitleBar}',
+    );
 
     final desktopTrayService = DesktopTrayService(
       playbackController: playbackController,
@@ -165,6 +199,7 @@ abstract final class AppBootstrap {
       playbackController: playbackController,
       lifecycleController: lifecycleController,
     );
+    _log.d('SystemMediaService initialized');
 
     final lyricsManager = LyricsManager(
       database: appDatabase,
@@ -217,7 +252,9 @@ abstract final class AppBootstrap {
       ),
     );
 
+    _log.i('Launching root App widget');
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _log.d('First frame rendered: triggering aggressive post-startup memory trim');
       MemoryOptimizer.trim(level: MemoryTrimLevel.aggressive);
       MemoryOptimizer.startPeriodicTrimmer();
     });

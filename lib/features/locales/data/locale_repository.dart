@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:tachyon/core/logging/app_logger.dart';
 
 /// Repository responsible for loading and parsing JSONC localization files
 /// from the Flutter application bundle assets (compatible with both Native and Web/JS).
@@ -92,7 +92,7 @@ class LocaleRepository {
 
       return stringMap;
     } catch (e) {
-      debugPrint('Error loading localization for "$localeCode": $e');
+      AppLogger.e('LocaleRepository', 'Error loading localization for "$localeCode"', error: e);
       return {};
     }
   }

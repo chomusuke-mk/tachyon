@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:provider/provider.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/library/presentation/screens/artist_detail_screen.dart';
@@ -27,6 +28,8 @@ class MiniPlayerBar extends StatefulWidget {
 }
 
 class _MiniPlayerBarState extends State<MiniPlayerBar> {
+  static const _log = ScopedLogger('MiniPlayerBar');
+
   String? _lastRequestedKey;
   String? _currentArtworkUri;
   Color? _extractedColor;
@@ -166,6 +169,11 @@ class _MiniPlayerBarState extends State<MiniPlayerBar> {
       listenable: playback.trackListenable,
       builder: (context, _) {
         final currentPlayable = playback.currentPlayable;
+        _log.vLazy(
+          () =>
+              'MiniPlayerBar.build isDesktop=${widget.isDesktop} playable=${currentPlayable?.filePath} '
+              'lifecycleMode=${playback.lifecycleMode.name}',
+        );
         if (currentPlayable == null) return const SizedBox.shrink();
 
         final displayMeta = playback.currentDisplayMetadata;

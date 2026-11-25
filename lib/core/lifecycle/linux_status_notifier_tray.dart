@@ -5,6 +5,7 @@ import 'package:dbus/dbus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:tachyon/core/lifecycle/window_control_bridge.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 
 /// Snapshot of localized labels and playback status displayed in the desktop tray.
 @immutable
@@ -128,6 +129,8 @@ class TrayPixmapData {
 /// Works seamlessly across GNOME (AppIndicator), KDE Plasma, XFCE, and Wayland
 /// panels without requiring external `libayatana-appindicator3` native C libraries.
 class LinuxStatusNotifierTray {
+  static const _log = ScopedLogger('LinuxTray');
+
   /// Callback invoked when the user activates the tray icon or picks a menu item.
   final NativeTrayActionCallback onAction;
 
@@ -163,6 +166,7 @@ class LinuxStatusNotifierTray {
   /// Shows or hides the Linux StatusNotifierItem on the session D-Bus.
   Future<void> setVisible(bool visible) async {
     if (_disposed || _visible == visible) return;
+    _log.d('setVisible($visible)');
     _visible = visible;
     if (visible) {
       await _show();
@@ -174,6 +178,11 @@ class LinuxStatusNotifierTray {
   /// Updates the tray tooltip and context menu state.
   Future<void> updateState(TrayPresentationState nextState) async {
     if (_disposed || _state == nextState) return;
+    _log.vLazy(
+      () =>
+          'updateState visible=$_visible title="${nextState.tooltipTitle}" '
+          'playing=${nextState.isPlaying} shuffled=${nextState.isShuffled}',
+    );
     final tooltipChanged =
         _state.tooltipTitle != nextState.tooltipTitle ||
         _state.tooltipSubtitle != nextState.tooltipSubtitle ||
@@ -236,6 +245,7 @@ class LinuxStatusNotifierTray {
       }
 
       await _registerWithWatcher();
+      _log.d('StatusNotifierItem visible on bus=$_busName');
 
       _watcherSub = DBusSignalStream(
         client,
@@ -249,11 +259,12 @@ class LinuxStatusNotifierTray {
         final newOwner = signal.values[2].asString();
         if (ownedName == 'org.kde.StatusNotifierWatcher' &&
             newOwner.isNotEmpty) {
+          _log.d('StatusNotifierWatcher appeared ($newOwner); re-registering');
           unawaited(_registerWithWatcher());
         }
       });
-    } catch (e) {
-      debugPrint('[LinuxStatusNotifierTray] Failed to show tray icon: $e');
+    } catch (e, st) {
+      _log.e('Failed to show tray icon', error: e, stackTrace: st);
     }
   }
 
@@ -273,14 +284,14 @@ class LinuxStatusNotifierTray {
         [DBusString(busName)],
         replySignature: DBusSignature.empty,
       );
+      _log.d('Registered $busName with org.kde.StatusNotifierWatcher');
     } catch (e) {
-      debugPrint(
-        '[LinuxStatusNotifierTray] StatusNotifierWatcher unavailable: $e',
-      );
+      _log.w('StatusNotifierWatcher unavailable: $e');
     }
   }
 
   Future<void> _hide() async {
+    _log.d('Hiding tray icon (bus=$_busName)');
     await _watcherSub?.cancel();
     _watcherSub = null;
 
@@ -570,9 +581,11 @@ class TachyonStatusNotifierObject extends DBusObject {
     }
     switch (methodCall.name) {
       case 'Activate':
+        LinuxStatusNotifierTray._log.d('StatusNotifierItem Activate (left click) -> restore');
         tray.onAction(DesktopTrayAction.restore);
         return DBusMethodSuccessResponse([]);
       case 'SecondaryActivate':
+        LinuxStatusNotifierTray._log.d('StatusNotifierItem SecondaryActivate -> playPause');
         tray.onAction(DesktopTrayAction.playPause);
         return DBusMethodSuccessResponse([]);
       case 'ContextMenu':
@@ -744,6 +757,7 @@ class TachyonDBusMenuObject extends DBusObject {
   }
 
   void _dispatchMenuEvent(int id) {
+    LinuxStatusNotifierTray._log.d('DBusMenu item clicked: id=$id');
     switch (id) {
       case playPauseId:
         tray.onAction(DesktopTrayAction.playPause);

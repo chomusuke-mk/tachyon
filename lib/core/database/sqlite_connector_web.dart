@@ -1,5 +1,7 @@
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:sqlite3/wasm.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
+
+const _log = ScopedLogger('SqliteConnectorWeb');
 
 WasmSqlite3? _wasmSqlite;
 IndexedDbFileSystem? _indexedDbFs;
@@ -14,9 +16,7 @@ Future<WasmSqlite3> _ensureWasmSqlite() async {
       sqlite.registerVirtualFileSystem(fs, makeDefault: true);
       _indexedDbFs = fs;
     } catch (e) {
-      debugPrint(
-        '[SqliteConnectorWeb] IndexedDbFileSystem fallback to InMemoryFileSystem: $e',
-      );
+      _log.w('IndexedDbFileSystem fallback to InMemoryFileSystem: $e');
       sqlite.registerVirtualFileSystem(InMemoryFileSystem(), makeDefault: true);
     }
     _vfsRegistered = true;

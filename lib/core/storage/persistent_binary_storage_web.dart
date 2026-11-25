@@ -5,9 +5,10 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
-    show DiagnosticsProperty, SynchronousFuture, debugPrint;
+    show DiagnosticsProperty, SynchronousFuture;
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
+import 'package:tachyon/core/logging/app_logger.dart';
 // ignore: depend_on_referenced_packages
 import 'package:web/web.dart' as web;
 
@@ -37,6 +38,8 @@ class StorageFileRef {
 /// images are read and decoded asynchronously on demand into Flutter's
 /// `PaintingBinding.instance.imageCache`.
 abstract final class PersistentBinaryStorage {
+  static const _log = ScopedLogger('PersistentBinaryStorage');
+
   /// Virtual temporary directory descriptor.
   static StorageDirectory? tempDirectory;
 
@@ -167,7 +170,7 @@ abstract final class PersistentBinaryStorage {
         },
       );
     } catch (e) {
-      debugPrint('[PersistentBinaryStorage] OPFS init error: $e');
+      _log.e('OPFS init error', error: e);
     }
   }
 
@@ -205,7 +208,7 @@ abstract final class PersistentBinaryStorage {
       await writable.write(bytes.toJS).toDart;
       await writable.close().toDart;
     } catch (e) {
-      debugPrint('[PersistentBinaryStorage] OPFS write error ($fileName): $e');
+      _log.e('OPFS write error ($fileName)', error: e);
     }
   }
 

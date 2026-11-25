@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_ui/material_ui.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
@@ -20,6 +21,8 @@ class _SettingsDomainNotifier extends ChangeNotifier {
 /// Exposes domain-specific [Listenable]s (such as [themeListenable] and
 /// [equalizerListenable]) to minimize unnecessary widget rebuilds.
 class SettingsController extends ChangeNotifier {
+  static const _log = ScopedLogger('Settings');
+
   final SettingsRepository _repository;
   final PlaybackController? _playbackController;
 
@@ -248,7 +251,7 @@ class SettingsController extends ChangeNotifier {
         try {
           await current();
         } catch (e) {
-          debugPrint('[SettingsController] Persist ($key) error: $e');
+          _log.e('Persist ($key) error', error: e);
         }
         final next = _persistPending.remove(key);
         if (next == null || _isDisposed) break;
@@ -278,6 +281,11 @@ class SettingsController extends ChangeNotifier {
   /// notifies all scoped listenables.
   Future<void> init() async {
     _settings = _repository.getSettings();
+    _log.d(
+      'init themeMode=${_settings.themeMode.name} oled=${_settings.isOledMode} '
+      'dirs=${_settings.musicDirectories.length} files=${_settings.musicFiles.length} '
+      'customBg=${_settings.customBackgroundPath?.isNotEmpty ?? false}',
+    );
 
     final pb = _playbackController;
     if (pb != null) {
@@ -907,6 +915,7 @@ class SettingsController extends ChangeNotifier {
 
   /// Updates and persists the application brightness theme [mode].
   Future<void> setThemeMode(ThemeMode mode) async {
+    _log.d('setThemeMode(${mode.name})');
     _settings = _settings.copyWith(themeMode: mode);
     _emitScoped([_themeNotifier]);
     await _repository.setThemeMode(mode);
@@ -921,6 +930,7 @@ class SettingsController extends ChangeNotifier {
 
   /// Updates and persists whether pure-black OLED mode ([isOled]) is enabled.
   Future<void> setIsOledMode(bool isOled) async {
+    _log.d('setIsOledMode($isOled)');
     _settings = _settings.copyWith(isOledMode: isOled);
     _emitScoped([_themeNotifier]);
     await _repository.setIsOledMode(isOled);
@@ -932,6 +942,7 @@ class SettingsController extends ChangeNotifier {
   /// or clears the custom background when `null`. Returns `true` on success.
   Future<bool> setCustomBackground(String? sourceImagePath) async {
     if (sourceImagePath == null) {
+      _log.d('Clearing custom background');
       _settings = _settings.copyWith(clearCustomBackground: true);
       _emitScoped([_themeNotifier]);
       await _repository.setCustomBackgroundPath(null);
@@ -942,13 +953,18 @@ class SettingsController extends ChangeNotifier {
       final targetPath = await PersistentBinaryStorage.copyCustomBackgroundFile(
         sourceImagePath,
       );
-      if (targetPath == null) return false;
+      if (targetPath == null) {
+        _log.w('setCustomBackground failed: copy returned null for $sourceImagePath');
+        return false;
+      }
 
+      _log.d('Custom background updated -> $targetPath');
       _settings = _settings.copyWith(customBackgroundPath: targetPath);
       _emitScoped([_themeNotifier]);
       await _repository.setCustomBackgroundPath(targetPath);
       return true;
-    } catch (_) {
+    } catch (e) {
+      _log.w('setCustomBackground error for $sourceImagePath: $e');
       return false;
     }
   }

@@ -545,11 +545,13 @@ mixin _LibraryStoreMutationsMixin on _LibraryStoreState {
       entries: <PlaylistEntry>[],
     );
     addPlaylist(playlist);
+    _log.d('Created playlist in store: id=$playlistId name="$trimmed"');
     return playlist;
   }
 
   /// Deletes the playlist identified by [playlistId] from RAM and [AppDatabase].
   Future<void> deletePlaylistInStore(int playlistId) async {
+    _log.d('Deleting playlist in store: id=$playlistId');
     removePlaylist(playlistId);
     await _database?.deletePlaylist(playlistId);
   }
@@ -558,6 +560,7 @@ mixin _LibraryStoreMutationsMixin on _LibraryStoreState {
   Future<void> renamePlaylistInStore(int playlistId, String newName) async {
     final trimmed = newName.trim();
     if (trimmed.isEmpty) return;
+    _log.d('Renaming playlist in store: id=$playlistId -> "$trimmed"');
     renamePlaylist(playlistId, trimmed);
     await _database?.renamePlaylist(playlistId, trimmed);
   }
@@ -613,6 +616,7 @@ mixin _LibraryStoreMutationsMixin on _LibraryStoreState {
 
   /// Deletes [trackId] and purges orphaned albums/artists/genres in SQLite, then reloads.
   Future<void> deleteTrackInStore(int trackId) async {
+    _log.d('Deleting track in store: trackId=$trackId');
     removeTrack(trackId);
     await _database?.deleteTracksAndPurgeOrphans([trackId]);
     if (_database != null) {
@@ -622,6 +626,7 @@ mixin _LibraryStoreMutationsMixin on _LibraryStoreState {
 
   /// Clears all catalog tables and rehydrates an empty snapshot.
   Future<void> clearAllDataInStore() async {
+    _log.i('Clearing all catalog data in store and database');
     await _database?.clearAllData();
     if (_database != null) {
       final db = _database;

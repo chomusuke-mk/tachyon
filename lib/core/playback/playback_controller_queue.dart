@@ -19,6 +19,7 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
 
   /// Enables or disables automatic infinite library mix playback.
   void setInfiniteMix(bool enabled) {
+    _log.d('setInfiniteMix($enabled)');
     _isInfiniteMixEnabled = enabled;
     _state = _state.copyWith(isInfiniteMixEnabled: enabled);
     _emitScoped([_controlsNotifier, _queueNotifier]);
@@ -32,11 +33,11 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
               ),
             )
             .catchError((Object e) {
-              debugPrint('[PlaybackController] setInfiniteMix error: $e');
+              _log.e('setInfiniteMix async error', error: e);
             }),
       );
     } catch (e) {
-      debugPrint('[PlaybackController] setInfiniteMix error: $e');
+      _log.e('setInfiniteMix error', error: e);
     }
   }
 
@@ -54,6 +55,9 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
     bool shuffle = false,
   }) async {
     if (tracks.isEmpty) return;
+    _log.d(
+      'openTracks count=${tracks.length} startIndex=$startIndex play=$play shuffle=$shuffle',
+    );
     final canonicalTracks = [
       for (final t in tracks) _canonicalPlayable(t),
     ];
@@ -85,6 +89,9 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
     var startIndex = trackList.indexWhere((t) => t.filePath == track.filePath);
     if (startIndex == -1) startIndex = 0;
 
+    _log.d(
+      'playTrack "${track.title}" queueCount=${trackList.length} startIndex=$startIndex',
+    );
     try {
       await openTracks(
         trackList,
@@ -93,7 +100,7 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
         shuffle: (this as PlaybackController).isShuffled,
       );
     } catch (e) {
-      debugPrint('[PlaybackController] Error in playTrack: $e');
+      _log.e('Error in playTrack', error: e);
     }
   }
 
@@ -104,6 +111,7 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
     int? startIndex,
   }) async {
     if (tracks.isEmpty) return;
+    _log.d('playAll count=${tracks.length} shuffle=$shuffle startIndex=$startIndex');
     try {
       await openTracks(
         tracks,
@@ -112,7 +120,7 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
         shuffle: shuffle,
       );
     } catch (e) {
-      debugPrint('[PlaybackController] Error in playAll: $e');
+      _log.e('Error in playAll', error: e);
     }
   }
 
@@ -122,7 +130,7 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
       final item = _canonicalPlayable(track).toAudioSource();
       await player.action.insertNext(item);
     } catch (e) {
-      debugPrint('[PlaybackController] Error in playNext: $e');
+      _log.e('Error in playNext', error: e);
     }
   }
 
@@ -140,7 +148,7 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
       ];
       await player.action.append(items);
     } catch (e) {
-      debugPrint('[PlaybackController] Error in appendTracks: $e');
+      _log.e('Error in appendTracks', error: e);
     }
   }
 
@@ -149,7 +157,7 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
     try {
       await player.action.removeAt(index);
     } catch (e) {
-      debugPrint('[PlaybackController] Error in removeFromQueue: $e');
+      _log.e('Error in removeFromQueue', error: e);
     }
   }
 
@@ -158,7 +166,7 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
     try {
       await player.action.reorder(from, to);
     } catch (e) {
-      debugPrint('[PlaybackController] Error in reorderQueue: $e');
+      _log.e('Error in reorderQueue', error: e);
     }
   }
 
@@ -167,18 +175,19 @@ mixin _PlaybackControllerQueueMixin on _PlaybackControllerState {
     try {
       await player.action.clearQueue();
     } catch (e) {
-      debugPrint('[PlaybackController] Error in clearQueue: $e');
+      _log.e('Error in clearQueue', error: e);
     }
   }
 
   /// Jumps directly to and plays the queue item at [index].
   Future<void> skipToQueueIndex(int index) async {
     if (index < 0 || index >= queue.length) return;
+    _log.d('skipToQueueIndex($index)');
     try {
       await _ensureMetadataEnabledFor(queue[index].data);
       await player.action.play(position: index);
     } catch (e) {
-      debugPrint('[PlaybackController] Error in skipToQueueIndex: $e');
+      _log.e('Error in skipToQueueIndex', error: e);
     }
   }
 }

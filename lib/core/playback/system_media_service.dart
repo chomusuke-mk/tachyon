@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_controller.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/bridges/linux_mpris_bridge.dart';
 import 'package:tachyon/core/playback/bridges/windows_smtc_bridge.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
@@ -13,6 +14,8 @@ import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 /// playback notification bridges (Android MediaSession, iOS MPNowPlaying,
 /// Linux MPRIS2, and Windows SMTC).
 class SystemMediaService {
+  static const _log = ScopedLogger('SystemMedia');
+
   final TachyonAudioHandler _handler;
   LinuxMprisBridge? _linuxBridge;
   WindowsSmtcBridge? _windowsBridge;
@@ -28,7 +31,7 @@ class SystemMediaService {
     required PlaybackController playbackController,
     AppLifecycleController? lifecycleController,
   }) async {
-    debugPrint('[SystemMediaService] Initializing system media service...');
+    _log.i('Initializing system media service...');
 
     late final TachyonAudioHandler handler;
     await AudioService.init(
@@ -53,9 +56,7 @@ class SystemMediaService {
     final service = SystemMediaService._(handler);
 
     if (!kIsWeb && PersistentBinaryStorage.isLinux) {
-      debugPrint(
-        '[SystemMediaService] Platform is Linux. Starting LinuxMprisBridge...',
-      );
+      _log.d('Platform is Linux. Starting LinuxMprisBridge...');
       final linuxBridge = LinuxMprisBridge(
         handler: handler,
         playbackController: playbackController,
@@ -65,30 +66,22 @@ class SystemMediaService {
       );
       await linuxBridge.initialize();
       service._linuxBridge = linuxBridge;
-      debugPrint(
-        '[SystemMediaService] LinuxMprisBridge initialized successfully.',
-      );
+      _log.d('LinuxMprisBridge initialized successfully.');
     }
 
     if (!kIsWeb && PersistentBinaryStorage.isWindows) {
-      debugPrint(
-        '[SystemMediaService] Platform is Windows. Starting WindowsSmtcBridge...',
-      );
+      _log.d('Platform is Windows. Starting WindowsSmtcBridge...');
       final windowsBridge = WindowsSmtcBridge(handler);
       final ok = await windowsBridge.initialize();
       if (ok) {
         service._windowsBridge = windowsBridge;
-        debugPrint(
-          '[SystemMediaService] WindowsSmtcBridge initialized successfully.',
-        );
+        _log.d('WindowsSmtcBridge initialized successfully.');
       } else {
-        debugPrint(
-          '[SystemMediaService] WindowsSmtcBridge failed to initialize.',
-        );
+        _log.w('WindowsSmtcBridge failed to initialize.');
       }
     }
 
-    debugPrint('[SystemMediaService] Initialization complete.');
+    _log.i('Initialization complete.');
     return service;
   }
 

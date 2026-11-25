@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_controller.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/store/library_store.dart';
@@ -63,6 +64,8 @@ class NowPlayingScreen extends StatefulWidget {
 
 class _NowPlayingScreenState extends State<NowPlayingScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  static const _log = ScopedLogger('NowPlaying');
+
   bool _showLyrics = false;
   bool _showQueue = false;
   bool _isAppActive = true;
@@ -80,6 +83,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   @override
   void initState() {
     super.initState();
+    _log.d('initState');
     WidgetsBinding.instance.addObserver(this);
     _dragResetController = AnimationController(
       vsync: this,
@@ -255,6 +259,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   }
 
   void _onLifecycleModeChanged() {
+    _log.d(
+      'LifecycleMode changed: mode=${_lifecycleController?.mode.name} '
+      'showLyrics=$_showLyrics mounted=$mounted',
+    );
     if (_showLyrics && mounted) {
       setState(() {});
     }
@@ -265,6 +273,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final active = state != AppLifecycleState.hidden &&
         state != AppLifecycleState.paused &&
         state != AppLifecycleState.detached;
+    _log.d(
+      'AppLifecycleState changed: $state (active=$active, prev=$_isAppActive, showLyrics=$_showLyrics)',
+    );
     if (_isAppActive != active) {
       _isAppActive = active;
       if (_showLyrics && mounted) {
@@ -275,6 +286,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
 
   @override
   void dispose() {
+    _log.d('dispose');
     _dragResetController.dispose();
     _screenDragOffset.dispose();
     _lifecycleController?.modeListenable.removeListener(_onLifecycleModeChanged);

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:external_path/external_path.dart';
-import 'package:flutter/foundation.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:win32_registry/win32_registry.dart';
 import 'package:path/path.dart' as p;
 
@@ -12,6 +12,8 @@ typedef _GGetUserSpecialDirDart = Pointer<Utf8> Function(int directory);
 
 /// Utilities for locating platform-specific media folders.
 class FolderUtils {
+  static const _log = ScopedLogger('FolderUtils');
+
   /// Resolves the user's standard music directory on the current platform.
   ///
   /// Returns `null` if the platform is unsupported or the directory cannot be
@@ -24,7 +26,7 @@ class FolderUtils {
         );
         return Directory(path);
       } catch (e) {
-        debugPrint('Error getting music directory: $e');
+        _log.w('Error getting music directory: $e');
       }
       return null;
     }
@@ -37,7 +39,7 @@ class FolderUtils {
         key.close();
         if (path != null && path.isNotEmpty) return Directory(path);
       } catch (e) {
-        debugPrint('Error getting music directory: $e');
+        _log.w('Error getting music directory: $e');
       }
       return null;
     }
@@ -57,7 +59,7 @@ class FolderUtils {
           if (musicDirPath.isNotEmpty) return Directory(musicDirPath);
         }
       } catch (e) {
-        debugPrint('Error getting music directory: $e');
+        _log.w('Error getting music directory: $e');
       }
       return null;
     }

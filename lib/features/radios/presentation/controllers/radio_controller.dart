@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/radios/data/radio_browser_service.dart';
@@ -8,6 +9,8 @@ import 'package:tachyon/features/radios/data/radio_browser_service.dart';
 /// async preloading on app startup, tag/country filtering, and automatic
 /// stream link validation for saved stations.
 class RadioController extends ChangeNotifier {
+  static const _log = ScopedLogger('Radio');
+
   /// Service used to query the Radio Browser API.
   final RadioBrowserService service;
 
@@ -122,7 +125,7 @@ class RadioController extends ChangeNotifier {
       await _validateSavedStations();
     } catch (e) {
       _errorMessage = e.toString();
-      debugPrint('[RadioController] init error: $e');
+      _log.e('init error', error: e);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -146,7 +149,7 @@ class RadioController extends ChangeNotifier {
 
       await _validateSavedStations();
     } catch (e) {
-      debugPrint('[RadioController] refresh error: $e');
+      _log.e('refresh error', error: e);
     } finally {
       _isRefreshing = false;
       notifyListeners();
@@ -238,7 +241,7 @@ class RadioController extends ChangeNotifier {
     } catch (e) {
       if (requestId != _searchRequestId) return;
       _errorMessage = e.toString();
-      debugPrint('[RadioController] _executeSearch error: $e');
+      _log.e('_executeSearch error', error: e);
     } finally {
       if (requestId == _searchRequestId) {
         _isLoading = false;
@@ -255,12 +258,10 @@ class RadioController extends ChangeNotifier {
       final updatedStations = await service.validateAndRefreshStations(saved);
       for (final updated in updatedStations) {
         await store.saveRadioStationInStore(updated);
-        debugPrint(
-          '[RadioController] Updated stream URL/metadata for: ${updated.name}',
-        );
+        _log.d('Updated stream URL/metadata for: ${updated.name}');
       }
     } catch (e) {
-      debugPrint('[RadioController] Error validating saved stations: $e');
+      _log.w('Error validating saved stations: $e');
     }
   }
 }

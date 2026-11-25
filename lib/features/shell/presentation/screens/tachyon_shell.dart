@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:tachyon/core/lifecycle/app_lifecycle_controller.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/shared/theme/app_theme.dart';
 import 'package:tachyon/features/library/presentation/screens/albums_screen.dart';
 import 'package:tachyon/features/library/presentation/screens/artists_screen.dart';
@@ -48,6 +49,8 @@ class TachyonShell extends StatefulWidget {
 }
 
 class _TachyonShellState extends State<TachyonShell> {
+  static const _log = ScopedLogger('TachyonShell');
+
   int _currentIndex = 0;
 
   static const double _minMobileItemWidth = 62.0;
@@ -69,11 +72,13 @@ class _TachyonShellState extends State<TachyonShell> {
 
   void _onDestinationSelected(int index) {
     if (_currentIndex != index) {
+      _log.d('Destination tab changed: $_currentIndex -> $index');
       setState(() => _currentIndex = index);
     }
   }
 
   void _openNowPlaying(BuildContext context) {
+    _log.d('Opening NowPlayingScreen');
     NowPlayingScreen.open(context);
   }
 
@@ -484,6 +489,9 @@ class _TachyonShellState extends State<TachyonShell> {
     final strings = context.watch<LocaleController>().localeStrings;
     final isDesktop = TachyonBreakpoints.isDesktop(context);
     final specs = _getDestinations(strings);
+    _log.vLazy(
+      () => 'TachyonShell.build isDesktop=$isDesktop tabIndex=$_currentIndex',
+    );
 
     // Desktop Layout (>= 720dp)
     if (isDesktop) {

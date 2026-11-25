@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
 import 'package:path/path.dart' as p;
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 import 'package:tachyon/shared/utils/crypto_utils.dart';
 import 'package:tachyon/shared/utils/parse_utils.dart';
@@ -300,7 +301,7 @@ abstract final class MetadataUtils {
           !await PersistentBinaryStorage.fileExists(filePath)) {
         return null;
       }
-      debugPrint('[MetadataService] analyzeAudio error for $filePath: $e');
+      AppLogger.w('MetadataUtils', 'analyzeAudio error for $filePath: $e');
     }
 
     final AudioMetadata? meta = analysis?.metadata;

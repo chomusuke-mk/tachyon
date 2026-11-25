@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:tachyon/core/logging/app_logger.dart';
 
 /// Structured response from the `lyrics.ovh` API.
 @immutable
@@ -91,6 +92,8 @@ class LyricsOvhResponse {
 /// - Handles HTTP 404, 5xx server errors, rate limits, timeouts, and connection drops.
 /// - Normalizes Windows CRLF line endings.
 class LyricsOvhClient {
+  static const _log = ScopedLogger('LyricsOvh');
+
   /// Default `lyrics.ovh` API v1 base URL.
   static const String defaultBaseUrl = 'https://api.lyrics.ovh/v1';
 
@@ -136,9 +139,7 @@ class LyricsOvhClient {
     final uri = Uri.parse(url);
 
     try {
-      debugPrint(
-        'Fetching lyrics from $url at ${DateTime.now().toIso8601String()}',
-      );
+      _log.d('Fetching lyrics from $url');
       final response = await _httpClient
           .get(
             uri,

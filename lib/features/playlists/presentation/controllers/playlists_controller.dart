@@ -1,11 +1,14 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/library_store.dart';
 
 /// State controller managing playlists, liked songs, playback history, and track membership.
 class PlaylistsController extends ChangeNotifier {
+  static const _log = ScopedLogger('Playlists');
+
   /// Underlying [LibraryStore] backing playlist persistence and lookups.
   final LibraryStore store;
   bool _isDisposed = false;
@@ -97,7 +100,7 @@ class PlaylistsController extends ChangeNotifier {
       _syncFromStore();
     } catch (e, st) {
       _errorMessage = 'Failed to load playlists: $e';
-      debugPrint('$_errorMessage\n$st');
+      _log.e(_errorMessage!, error: e, stackTrace: st);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -141,7 +144,7 @@ class PlaylistsController extends ChangeNotifier {
       notifyListeners();
       return playlist?.id ?? -1;
     } catch (e) {
-      debugPrint('[PlaylistsController] createPlaylist error: $e');
+      _log.e('createPlaylist error', error: e);
       return -1;
     }
   }
@@ -162,7 +165,7 @@ class PlaylistsController extends ChangeNotifier {
       _syncFromStore();
       notifyListeners();
     } catch (e) {
-      debugPrint('[PlaylistsController] renamePlaylist error: $e');
+      _log.e('renamePlaylist error', error: e);
     }
   }
 
@@ -185,7 +188,7 @@ class PlaylistsController extends ChangeNotifier {
       _syncFromStore();
       notifyListeners();
     } catch (e) {
-      debugPrint('[PlaylistsController] deletePlaylist error: $e');
+      _log.e('deletePlaylist error', error: e);
     }
   }
 
@@ -196,7 +199,7 @@ class PlaylistsController extends ChangeNotifier {
       _syncFromStore();
       notifyListeners();
     } catch (e) {
-      debugPrint('[PlaylistsController] addTrackToPlaylist error: $e');
+      _log.e('addTrackToPlaylist error', error: e);
     }
   }
 
@@ -208,7 +211,7 @@ class PlaylistsController extends ChangeNotifier {
       _syncFromStore();
       notifyListeners();
     } catch (e) {
-      debugPrint('[PlaylistsController] addTracksToPlaylist error: $e');
+      _log.e('addTracksToPlaylist error', error: e);
     }
   }
 
@@ -219,7 +222,7 @@ class PlaylistsController extends ChangeNotifier {
       _syncFromStore();
       notifyListeners();
     } catch (e) {
-      debugPrint('[PlaylistsController] removeTrackFromPlaylist error: $e');
+      _log.e('removeTrackFromPlaylist error', error: e);
     }
   }
 
@@ -239,7 +242,7 @@ class PlaylistsController extends ChangeNotifier {
       _syncFromStore();
       notifyListeners();
     } catch (e) {
-      debugPrint('[PlaylistsController] reorderPlaylistEntries error: $e');
+      _log.e('reorderPlaylistEntries error', error: e);
       await loadPlaylists();
     }
   }
@@ -252,7 +255,7 @@ class PlaylistsController extends ChangeNotifier {
       notifyListeners();
       return isLiked;
     } catch (e) {
-      debugPrint('[PlaylistsController] toggleLike error: $e');
+      _log.e('toggleLike error', error: e);
       return isTrackLiked(trackId);
     }
   }
@@ -273,7 +276,7 @@ class PlaylistsController extends ChangeNotifier {
       _syncFromStore();
       notifyListeners();
     } catch (e) {
-      debugPrint('[PlaylistsController] clearHistory error: $e');
+      _log.e('clearHistory error', error: e);
     }
   }
 

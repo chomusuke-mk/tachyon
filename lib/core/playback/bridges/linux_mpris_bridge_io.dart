@@ -4,12 +4,15 @@ import 'dart:io';
 import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:dbus/dbus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
 
 /// Clean native MPRIS2 implementation for Linux (GNOME, KDE Plasma, Wayland, playerctl)
 /// without third-party log noise or unimplemented stubs.
 class LinuxMprisBridge {
+  static const _log = ScopedLogger('LinuxMpris');
+
   /// The audio handler controlled and observed by this bridge.
   final TachyonAudioHandler handler;
 
@@ -325,6 +328,7 @@ class LinuxMprisBridge {
     Future<void> run() async {
       if (_isDisposed || _mprisObject == null) return;
       try {
+        _log.vLazy(() => 'Emit PropertiesChanged keys=${changedProperties.keys.toList()}');
         obj.emitPropertiesChanged(
           'org.mpris.MediaPlayer2.Player',
           changedProperties: changedProperties,
@@ -399,17 +403,17 @@ class LinuxMprisBridge {
         _scheduleSync(isMetadataChange: false);
       });
 
-      debugPrint(
-        '[LinuxMprisBridge] Initialization complete. Current status: $playbackStatus, volume: $volume',
+      _log.i(
+        'Initialization complete (bus=$_registeredBusName, status=$playbackStatus, volume=$volume)',
       );
     } catch (e, stack) {
-      debugPrint('[LinuxMprisBridge] Initialization error: $e\n$stack');
+      _log.e('Initialization error', error: e, stackTrace: stack);
     }
   }
 
   /// Cancels subscriptions, unregisters the MPRIS D-Bus object, and closes the bus connection.
   void dispose() {
-    debugPrint('[LinuxMprisBridge] Disposing MPRIS bridge...');
+    _log.d('Disposing MPRIS bridge...');
     _isDisposed = true;
     _syncTimer?.cancel();
     _syncTimer = null;
@@ -616,6 +620,7 @@ class TachyonMprisObject extends DBusObject {
   Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
     if (methodCall.interface == 'org.mpris.MediaPlayer2') {
       if (methodCall.name == 'Raise') {
+        LinuxMprisBridge._log.d('MPRIS Raise requested');
         bridge.onRaiseRequested?.call();
         return DBusMethodSuccessResponse([]);
       }

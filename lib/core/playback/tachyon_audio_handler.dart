@@ -5,6 +5,7 @@ import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/domain/playback_state.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
@@ -14,6 +15,8 @@ import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 /// Linux (MPRIS), and Windows (SMTC).
 class TachyonAudioHandler extends as_lib.BaseAudioHandler
     with as_lib.SeekHandler, as_lib.QueueHandler {
+  static const _log = ScopedLogger('AudioHandler');
+
   /// Controller providing playback state, metadata, and transport actions.
   final PlaybackController playbackController;
 
@@ -66,6 +69,9 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
       _lastEmittedPosition = pos;
       final current = playbackState.value;
       if (current.playing || jumped) {
+        _log.vLazy(
+          () => 'System position update: pos=${pos.inMilliseconds}ms jumped=$jumped',
+        );
         playbackState.add(
           current.copyWith(
             updatePosition: pos,
@@ -134,6 +140,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
           duration: playable.isStream ? null : playable.duration,
           artUri: uri,
         );
+        _log.d('Emitting MediaItem: id=${item.id} title="${item.title}" artist=${item.artist}');
         mediaItem.add(item);
 
         if (kIsWeb && uri == null && artworkUri.isNotEmpty) {
@@ -154,6 +161,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
       }
     } else if (_lastEmittedMediaSignature != null) {
       _lastEmittedMediaSignature = null;
+      _log.d('Clearing MediaItem (null)');
       mediaItem.add(null);
     }
 
@@ -252,6 +260,10 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
       as_lib.MediaAction.setShuffleMode,
     };
 
+    _log.d(
+      'Emitting PlaybackState: playing=$isPlaying proc=${processingState.name} '
+      'pos=${livePosition.inMilliseconds}ms repeat=${asRepeatMode.name} shuffle=${asShuffleMode.name}',
+    );
     playbackState.add(
       as_lib.PlaybackState(
         controls: controls,
@@ -269,13 +281,20 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   }
 
   @override
-  Future<void> play() => playbackController.play();
+  Future<void> play() {
+    _log.d('OS media command: play');
+    return playbackController.play();
+  }
 
   @override
-  Future<void> pause() => playbackController.pause();
+  Future<void> pause() {
+    _log.d('OS media command: pause');
+    return playbackController.pause();
+  }
 
   @override
   Future<void> stop() async {
+    _log.d('OS media command: stop');
     await playbackController.pause();
     playbackState.add(
       playbackState.value.copyWith(
@@ -286,17 +305,28 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
   }
 
   @override
-  Future<void> seek(Duration position) => playbackController.seek(position);
+  Future<void> seek(Duration position) {
+    _log.d('OS media command: seek(${position.inMilliseconds}ms)');
+    return playbackController.seek(position);
+  }
 
   @override
-  Future<void> skipToNext() => playbackController.next();
+  Future<void> skipToNext() {
+    _log.d('OS media command: skipToNext');
+    return playbackController.next();
+  }
 
   @override
-  Future<void> skipToPrevious() => playbackController.previous();
+  Future<void> skipToPrevious() {
+    _log.d('OS media command: skipToPrevious');
+    return playbackController.previous();
+  }
 
   @override
-  Future<void> skipToQueueItem(int index) =>
-      playbackController.skipToQueueIndex(index);
+  Future<void> skipToQueueItem(int index) {
+    _log.d('OS media command: skipToQueueItem($index)');
+    return playbackController.skipToQueueIndex(index);
+  }
 
   @override
   Future<void> setRepeatMode(as_lib.AudioServiceRepeatMode repeatMode) async {
@@ -319,6 +349,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
   @override
   Future<void> onTaskRemoved() async {
+    _log.d('onTaskRemoved (playing=${playbackState.value.playing})');
     if (!playbackState.value.playing) {
       await stop();
     } else if (onTaskRemovedWhilePlaying != null) {
@@ -328,6 +359,7 @@ class TachyonAudioHandler extends as_lib.BaseAudioHandler
 
   @override
   Future<void> onNotificationDeleted() async {
+    _log.d('onNotificationDeleted -> stop');
     await stop();
   }
 

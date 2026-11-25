@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/features/locales/data/locale_repository.dart';
 import 'package:tachyon/features/locales/domain/locale.dart';
 
@@ -66,7 +67,7 @@ class LocaleController extends ChangeNotifier {
     try {
       await _localeStrings.updateFromJson(merged, assertAllKeysPresent: true);
     } on FormatException catch (e) {
-      debugPrint('[LocaleController] Incomplete locale translations: $e');
+      AppLogger.w('LocaleController', 'Incomplete locale translations: $e');
       await _localeStrings.updateFromJson(merged, assertAllKeysPresent: false);
     }
     notifyListeners();
@@ -88,7 +89,12 @@ class LocaleController extends ChangeNotifier {
         await _loadAndMerge(localeCode);
       }
     } catch (e, st) {
-      debugPrint('[LocaleController] Error switching locale to $localeCode: $e\n$st');
+      AppLogger.e(
+        'LocaleController',
+        'Error switching locale to $localeCode',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 }

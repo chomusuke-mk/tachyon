@@ -118,13 +118,14 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
       }
       return devices;
     } catch (e) {
-      debugPrint('[PlaybackController] getAudioDevices error: $e');
+      _log.e('getAudioDevices error', error: e);
       return const [];
     }
   }
 
   /// Routes audio output to [device] and returns whether switching succeeded.
   Future<bool> setAudioDevice(ma.AudioDevice device) async {
+    _log.d('setAudioDevice id=${device.id} name="${device.name}" isAuto=${device.isAuto}');
     _currentDevice = device;
     _emitScoped([_devicesNotifier]);
     try {
@@ -132,7 +133,7 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
       await player.action.setOutputs({ma.AudioOutput(deviceId: id)});
       return true;
     } catch (e) {
-      debugPrint('[PlaybackController] setAudioDevice error: $e');
+      _log.e('setAudioDevice error', error: e);
       return false;
     }
   }
@@ -144,26 +145,28 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
       try {
         await _player!.action.setPauseOnDeviceChange(pause);
       } catch (e) {
-        debugPrint('[PlaybackController] setPauseOnDeviceChange error: $e');
+        _log.e('setPauseOnDeviceChange error', error: e);
       }
     }
   }
 
   /// Resumes or starts playback of the current queue item.
   Future<void> play() async {
+    _log.d('play requested');
     try {
       await player.action.play();
     } catch (e) {
-      debugPrint('[PlaybackController] play error: $e');
+      _log.e('play error', error: e);
     }
   }
 
   /// Pauses playback at the current position.
   Future<void> pause() async {
+    _log.d('pause requested');
     try {
       await player.action.pause();
     } catch (e) {
-      debugPrint('[PlaybackController] pause error: $e');
+      _log.e('pause error', error: e);
     }
   }
 
@@ -178,34 +181,38 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
 
   /// Stops playback and resets completion tracking.
   Future<void> stop() async {
+    _log.d('stop requested');
     try {
       _wasPlayingBeforeStop = false;
       await player.action.stop();
     } catch (e) {
-      debugPrint('[PlaybackController] stop error: $e');
+      _log.e('stop error', error: e);
     }
   }
 
   /// Advances playback to the next queue item.
   Future<void> next() async {
+    _log.d('next requested');
     try {
       await player.action.next();
     } catch (e) {
-      debugPrint('[PlaybackController] next error: $e');
+      _log.e('next error', error: e);
     }
   }
 
   /// Returns playback to the previous queue item.
   Future<void> previous() async {
+    _log.d('previous requested');
     try {
       await player.action.previous();
     } catch (e) {
-      debugPrint('[PlaybackController] previous error: $e');
+      _log.e('previous error', error: e);
     }
   }
 
   /// Seeks the active track to [pos].
   Future<void> seek(Duration pos) async {
+    _log.d('seek(${pos.inMilliseconds}ms, uiSuppressed=$_isUiSuppressed)');
     try {
       if (!_isUiSuppressed) {
         _setPosition(pos);
@@ -213,7 +220,7 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
       _setSystemPosition(pos);
       await _coalesceRpc('seek', () => player.action.seek(pos));
     } catch (e) {
-      debugPrint('[PlaybackController] seek error: $e');
+      _log.e('seek error', error: e);
     }
   }
 
@@ -250,10 +257,11 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
 
   /// Enables or disables queue shuffle mode.
   Future<void> setShuffle(bool enabled) async {
+    _log.d('setShuffle($enabled)');
     try {
       await player.action.setShuffle(enabled);
     } catch (e) {
-      debugPrint('[PlaybackController] setShuffle error: $e');
+      _log.e('setShuffle error', error: e);
     }
   }
 
@@ -262,10 +270,11 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
 
   /// Sets queue repeat mode to [loop].
   Future<void> setLoopMode(LoopMode loop) async {
+    _log.d('setLoopMode(${loop.name})');
     try {
       await player.action.setLoopMode(loop);
     } catch (e) {
-      debugPrint('[PlaybackController] setLoopMode error: $e');
+      _log.e('setLoopMode error', error: e);
     }
   }
 
@@ -275,7 +284,7 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
       final nextMode = loopMode.next();
       await setLoopMode(nextMode);
     } catch (e) {
-      debugPrint('[PlaybackController] toggleLoopMode error: $e');
+      _log.e('toggleLoopMode error', error: e);
     }
   }
 
@@ -353,7 +362,7 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
     try {
       await player.action.setMono(enabled);
     } catch (e) {
-      debugPrint('[PlaybackController] setMono error: $e');
+      _log.e('setMono error', error: e);
     }
   }
 
@@ -381,7 +390,7 @@ mixin _PlaybackControllerDspMixin on _PlaybackControllerState {
     try {
       await player.action.setLimiter(enabled);
     } catch (e) {
-      debugPrint('[PlaybackController] setLimiter error: $e');
+      _log.e('setLimiter error', error: e);
     }
   }
 }

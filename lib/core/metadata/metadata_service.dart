@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/metadata/domain/discovered_audio_file.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
@@ -38,6 +39,8 @@ class _QueuedScan {
 /// delegating heavy analysis to `miniaudio_player`'s native Rust worker thread pool
 /// or Web Worker, without spawning Dart Isolates (ensuring 100% Web and Native parity).
 class MetadataService {
+  static const _log = ScopedLogger('MetadataService');
+
   /// SQLite persistence service for saving and deleting scanned tracks.
   final AppDatabase database;
 
@@ -189,6 +192,9 @@ class MetadataService {
     }
 
     final stopwatch = Stopwatch()..start();
+    _log.i(
+      'Starting scan pipeline: dirs=${directories.length} files=${files.length}',
+    );
     ScanProgress current = const ScanProgress();
     int lastEmitMs = -50;
 
@@ -272,6 +278,10 @@ class MetadataService {
         }
       }
       final toDeleteStored = toDeleteMap.values.toList();
+      _log.d(
+        'Discovery complete: found=${trackDiscover.length} toExtract=${toExtract.length} '
+        'new=${newlyDiscovered.length} toDelete=${toDeleteStored.length}',
+      );
 
       // Publish newly discovered files immediately so the user can browse and
       // start playback while background metadata extraction proceeds.
@@ -311,12 +321,9 @@ class MetadataService {
         int nextIndex = 0;
         final savedCoverHashes = <String>{};
 
-        if (kDebugMode || kIsWeb) {
-          debugPrint(
-            '[MetadataService][PERF] Starting async extraction pool: '
-            'total=$totalExtract, workers=$numWorkers, remote=$hasRemoteSources',
-          );
-        }
+        _log.d(
+          'Starting async extraction pool: total=$totalExtract, workers=$numWorkers, remote=$hasRemoteSources',
+        );
 
         Future<void> runAsyncWorker() async {
           while (!scanToken.isCancelled) {
@@ -332,8 +339,10 @@ class MetadataService {
                 knownSavedHashes: savedCoverHashes,
               );
             } catch (e, st) {
-              debugPrint(
-                '[MetadataService] Async worker failed for ${item.path}: $e\n$st',
+              _log.e(
+                'Async worker failed for ${item.path}',
+                error: e,
+                stackTrace: st,
               );
             }
             itemSw.stop();
@@ -344,13 +353,12 @@ class MetadataService {
             if (track != null) {
               extractedTracks.add(track);
             }
-            if (kDebugMode || kIsWeb) {
-              debugPrint(
-                '[MetadataService][PERF] Extracted ($extractedCount/$totalExtract) '
-                '"${track?.title ?? p.basename(item.path)}" in ${itemSw.elapsedMilliseconds}ms '
-                '(elapsed=${stopwatch.elapsedMilliseconds}ms)',
-              );
-            }
+            _log.vLazy(
+              () =>
+                  'Extracted ($extractedCount/$totalExtract) '
+                  '"${track?.title ?? p.basename(item.path)}" in ${itemSw.elapsedMilliseconds}ms '
+                  '(elapsed=${stopwatch.elapsedMilliseconds}ms)',
+            );
             final progressVal = totalExtract > 0
                 ? extractedCount / totalExtract
                 : 1.0;
@@ -404,7 +412,7 @@ class MetadataService {
           try {
             await database.upsertTracks(extractedTracks);
           } catch (e) {
-            debugPrint('[MetadataService] upsertTracks error: $e');
+            _log.e('upsertTracks error', error: e);
           }
         }
 
@@ -431,7 +439,7 @@ class MetadataService {
             toDeleteStored.map((t) => t.id).toList(),
           );
         } catch (e) {
-          debugPrint('[MetadataService] deleteTracksAndPurgeOrphans error: $e');
+          _log.e('deleteTracksAndPurgeOrphans error', error: e);
         }
 
         await store.reloadFromDatabase();
@@ -461,7 +469,7 @@ class MetadataService {
           }
           await MetadataUtils.purgeUnusedCovers(validHashes);
         } catch (e) {
-          debugPrint('[MetadataService] cleaningThumbnails error: $e');
+          _log.e('cleaningThumbnails error', error: e);
         }
       } else {
         toExtract.clear();
@@ -469,6 +477,10 @@ class MetadataService {
         store.clearPendingDiscoveredTracks();
       }
 
+      _log.i(
+        'Scan pipeline completed in ${stopwatch.elapsedMilliseconds}ms '
+        '(extracted=$extractedCount/$totalExtract, catalogModified=$hasMutations)',
+      );
       sendProgress(
         ScanProgress(
           stage: ScanStage.completed,
@@ -480,7 +492,7 @@ class MetadataService {
       );
       if (!controller.isClosed) controller.close();
     } catch (e, st) {
-      debugPrint('[MetadataService] Pipeline failed: $e\n$st');
+      _log.e('Pipeline failed', error: e, stackTrace: st);
       store.clearPendingDiscoveredTracks();
       sendProgress(
         ScanProgress(stage: ScanStage.failed, errorMessage: e.toString()),

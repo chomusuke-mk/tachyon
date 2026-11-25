@@ -1,9 +1,11 @@
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 /// Web implementation of file and media picking backed by persistent storage.
 abstract final class FilePickerService {
+  static const _log = ScopedLogger('FilePickerWeb');
+
   /// Returns `null` because directory selection is not supported on the web.
   static Future<String?> pickDirectory({
     String? dialogTitle,
@@ -34,7 +36,7 @@ abstract final class FilePickerService {
         bytes,
       );
     } catch (e, stackTrace) {
-      debugPrint('[FilePickerServiceWeb] Error picking image: $e\n$stackTrace');
+      _log.e('Error picking image', error: e, stackTrace: stackTrace);
       return null;
     }
   }
@@ -74,9 +76,7 @@ abstract final class FilePickerService {
       }
       return savedUris;
     } catch (e, stackTrace) {
-      debugPrint(
-        '[FilePickerServiceWeb] Error picking audio files: $e\n$stackTrace',
-      );
+      _log.e('Error picking audio files', error: e, stackTrace: stackTrace);
       return const [];
     }
   }

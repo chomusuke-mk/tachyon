@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_controller.dart';
 import 'package:tachyon/core/lifecycle/linux_status_notifier_tray.dart';
 import 'package:tachyon/core/lifecycle/window_control_bridge.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 
@@ -12,6 +13,8 @@ import 'package:tachyon/features/locales/presentation/controllers/locale_control
 /// context menus across Linux (`StatusNotifierItem`), Windows (`Shell_NotifyIcon`),
 /// and macOS (`NSStatusBar`).
 class DesktopTrayService {
+  static const _log = ScopedLogger('DesktopTray');
+
   final PlaybackController _playbackController;
   final LocaleController _localeController;
   final WindowControlBridge _windowBridge;
@@ -40,6 +43,7 @@ class DesktopTrayService {
   /// Initializes platform tray state and syncs initial localized tooltips.
   Future<void> initialize() async {
     if (_isDisposed || kIsWeb || !_windowBridge.isDesktopPlatform) return;
+    _log.d('Initializing DesktopTrayService (os=${Platform.operatingSystem})');
     if (Platform.isLinux) {
       _linuxTray ??= LinuxStatusNotifierTray(
         onAction: _handleAction,
@@ -52,6 +56,7 @@ class DesktopTrayService {
   /// Shows or hides the system tray icon.
   Future<void> setVisible(bool visible) async {
     if (_isDisposed || kIsWeb || !_windowBridge.isDesktopPlatform) return;
+    _log.d('setVisible($visible) (prev=$_isVisible)');
     _isVisible = visible;
     if (Platform.isLinux) {
       _linuxTray ??= LinuxStatusNotifierTray(
@@ -64,6 +69,7 @@ class DesktopTrayService {
   }
 
   void _handleAction(DesktopTrayAction action) {
+    _log.d('Tray action triggered: $action');
     final lifecycle = _lifecycleController;
     switch (action) {
       case DesktopTrayAction.restore:
@@ -155,6 +161,11 @@ class DesktopTrayService {
   Future<void> _syncTrayPresentationAsync() async {
     if (_isDisposed || kIsWeb || !_windowBridge.isDesktopPlatform) return;
     final state = _buildPresentationState();
+    _log.vLazy(
+      () =>
+          'Syncing tray presentation: visible=$_isVisible tooltip="${state.fullTooltip}" '
+          'playing=${state.isPlaying} shuffled=${state.isShuffled} hasTrack=${state.hasTrack}',
+    );
     if (Platform.isLinux) {
       await _linuxTray?.updateState(state);
     } else if (Platform.isWindows || Platform.isMacOS) {
@@ -177,6 +188,7 @@ class DesktopTrayService {
 
   /// Releases playback/locale listeners and disposes native tray handles.
   Future<void> dispose() async {
+    _log.d('Disposing DesktopTrayService');
     _isDisposed = true;
     _isVisible = false;
     _playbackController.removeListener(_syncTrayPresentation);

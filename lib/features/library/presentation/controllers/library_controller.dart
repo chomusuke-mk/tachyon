@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:tachyon/core/lifecycle/memory_optimizer.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
@@ -15,7 +17,6 @@ import 'package:tachyon/core/store/domain/track.dart';
 import 'package:tachyon/core/store/domain/track_sort_option.dart';
 import 'package:tachyon/core/store/library_store.dart';
 import 'package:tachyon/features/settings/data/settings_repository.dart';
-import 'package:tachyon/core/lifecycle/memory_optimizer.dart';
 
 export 'package:tachyon/core/store/domain/album_sort_option.dart';
 export 'package:tachyon/core/store/domain/artist_sort_option.dart';
@@ -24,6 +25,8 @@ export 'package:tachyon/core/store/domain/track_sort_option.dart';
 /// State controller for the music library, sorting, filters, folder browsing,
 /// and directory scanning.
 class LibraryController extends ChangeNotifier {
+  static const _log = ScopedLogger('Library');
+
   /// Repository for persisting library sorting, folder view, and source settings.
   final SettingsRepository settingsRepository;
 
@@ -267,7 +270,7 @@ class LibraryController extends ChangeNotifier {
       }
     } catch (e, st) {
       _errorMessage = 'Failed to load library: $e';
-      debugPrint('$_errorMessage\n$st');
+      _log.e(_errorMessage!, error: e, stackTrace: st);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -650,10 +653,16 @@ class LibraryController extends ChangeNotifier {
   /// When all sources have been removed, scans with empty lists to purge
   /// removed tracks.
   Future<void> scanDirectories() async {
-    if (isScanning) return;
+    if (isScanning) {
+      _log.d('scanDirectories ignored: scan already in progress');
+      return;
+    }
     final currentSettings = settingsRepository.getSettings();
     final directories = currentSettings.musicDirectories;
     final files = currentSettings.musicFiles;
+    _log.d(
+      'scanDirectories starting (dirs=${directories.length}, files=${files.length})',
+    );
     _scanProgressNotifier.value = const ScanProgress(
       stage: ScanStage.gettingDatabase,
     );

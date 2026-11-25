@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:path/path.dart' as p;
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/metadata/domain/discovered_audio_file.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
@@ -23,6 +24,8 @@ import 'package:tachyon/shared/utils/waveform_codec.dart';
 part 'library_store_hydration.dart';
 part 'library_store_mutations.dart';
 part 'library_store_queries.dart';
+
+const _log = ScopedLogger('LibraryStore');
 
 /// Shared state holder for [LibraryStore] mixins across part files.
 abstract class _LibraryStoreState extends ChangeNotifier {
@@ -128,6 +131,7 @@ class LibraryStore extends _LibraryStoreState
   Future<void> reloadFromDatabase() async {
     final db = _database;
     if (db == null) return;
+    _log.d('Reloading catalog snapshot from AppDatabase');
     final snapshot = await db.getCatalogSnapshot();
     final stations = await db.getRadioStations();
     hydrateFromSnapshot(snapshot, radioStations: stations);

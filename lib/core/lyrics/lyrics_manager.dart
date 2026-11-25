@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:tachyon/core/database/app_database.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/lyrics/clients/lrclib_client.dart';
 import 'package:tachyon/core/lyrics/clients/lyrics_ovh_client.dart';
 import 'package:tachyon/core/lyrics/clients/lyrics_translation_client.dart';
@@ -89,6 +90,8 @@ class _PersistedLyricsRow {
 /// position synchronization. Resolves track metadata in $O(1)$ from
 /// [LibraryStore] and persists/queries cached lyrics in [AppDatabase].
 class LyricsManager {
+  static const _log = ScopedLogger('LyricsManager');
+
   /// SQLite persistence service used to cache lyrics and translations.
   final AppDatabase database;
 
@@ -340,12 +343,20 @@ class LyricsManager {
     bool isCancelled() => cancellationToken?.isCancelled ?? false;
 
     if (isCancelled()) return LyricsResult.cancelled;
+    _log.d(
+      'Resolving lyrics: trackId=$trackId title="$title" artist="$artist" '
+      'local=$enableLocal lrclib=$enableLrclib ovh=$enableLyricsOvh force=$forceRefresh',
+    );
 
     // Fetch all persisted lyrics rows for this track in 1 query.
     final Map<LyricsSource, _PersistedLyricsRow> persistedBySource = {};
     if (trackId != null) {
       final rows = await database.getLyricsForTrack(trackId);
       if (isCancelled()) return LyricsResult.cancelled;
+    _log.d(
+      'Resolving lyrics: trackId=$trackId title="$title" artist="$artist" '
+      'local=$enableLocal lrclib=$enableLrclib ovh=$enableLyricsOvh force=$forceRefresh',
+    );
       for (final r in rows) {
         try {
           final src = LyricsSource.fromDbString(r['source'] as String);
@@ -372,6 +383,7 @@ class LyricsManager {
             embeddedRow.state == LyricsSourceState.found) {
           final parsed = _parseRow(embeddedRow);
           if (parsed.isNotEmpty) {
+            _log.d('Cache hit: embedded lyrics (trackId=$trackId)');
             return LyricsResult(
               lrc: parsed,
               rawLrc: embeddedRow.rawLrc,
@@ -383,11 +395,19 @@ class LyricsManager {
       }
 
       if (isCancelled()) return LyricsResult.cancelled;
+    _log.d(
+      'Resolving lyrics: trackId=$trackId title="$title" artist="$artist" '
+      'local=$enableLocal lrclib=$enableLrclib ovh=$enableLyricsOvh force=$forceRefresh',
+    );
 
       // 2. Contiguous `.lrc` file on disk (always mirrored to SQLite).
       if (filePath.isNotEmpty) {
         final diskLrcRaw = await _readLocalLrcFileRaw(filePath);
         if (isCancelled()) return LyricsResult.cancelled;
+    _log.d(
+      'Resolving lyrics: trackId=$trackId title="$title" artist="$artist" '
+      'local=$enableLocal lrclib=$enableLrclib ovh=$enableLyricsOvh force=$forceRefresh',
+    );
 
         if (diskLrcRaw != null && diskLrcRaw.trim().isNotEmpty) {
           final parsed = LrcParser.parse(diskLrcRaw);
@@ -402,6 +422,7 @@ class LyricsManager {
                 isSynced: parsed.isSynced,
               );
             }
+            _log.d('Cache/disk hit: .lrc file (trackId=$trackId)');
             return LyricsResult(
               lrc: parsed,
               rawLrc: diskLrcRaw,
@@ -420,6 +441,10 @@ class LyricsManager {
     }
 
     if (isCancelled()) return LyricsResult.cancelled;
+    _log.d(
+      'Resolving lyrics: trackId=$trackId title="$title" artist="$artist" '
+      'local=$enableLocal lrclib=$enableLrclib ovh=$enableLyricsOvh force=$forceRefresh',
+    );
 
     // -------------------------------------------------------------------------
     // 3. Primary Remote API: lrclib.net
@@ -433,6 +458,7 @@ class LyricsManager {
         if (hasExistingFound) {
           final parsed = _parseRow(lrclibRow);
           if (parsed.isNotEmpty) {
+            _log.d('DB cache hit: lrclib (trackId=$trackId)');
             return LyricsResult(
               lrc: parsed,
               rawLrc: lrclibRow.rawLrc,
@@ -458,6 +484,10 @@ class LyricsManager {
             existingRawLrc: hasExistingFound ? lrclibRow.rawLrc : null,
           );
           if (isCancelled()) return LyricsResult.cancelled;
+    _log.d(
+      'Resolving lyrics: trackId=$trackId title="$title" artist="$artist" '
+      'local=$enableLocal lrclib=$enableLrclib ovh=$enableLyricsOvh force=$forceRefresh',
+    );
           if (lrclibResult != null) {
             return lrclibResult;
           }
@@ -465,6 +495,7 @@ class LyricsManager {
         if (hasExistingFound) {
           final parsed = _parseRow(lrclibRow);
           if (parsed.isNotEmpty) {
+            _log.d('DB cache hit: lrclib (trackId=$trackId)');
             return LyricsResult(
               lrc: parsed,
               rawLrc: lrclibRow.rawLrc,
@@ -477,6 +508,10 @@ class LyricsManager {
     }
 
     if (isCancelled()) return LyricsResult.cancelled;
+    _log.d(
+      'Resolving lyrics: trackId=$trackId title="$title" artist="$artist" '
+      'local=$enableLocal lrclib=$enableLrclib ovh=$enableLyricsOvh force=$forceRefresh',
+    );
 
     // -------------------------------------------------------------------------
     // 4. Secondary Backup API: lyrics.ovh (plain text)
@@ -511,6 +546,10 @@ class LyricsManager {
           existingRawLrc: hasExistingFound ? ovhRow.rawLrc : null,
         );
         if (isCancelled()) return LyricsResult.cancelled;
+    _log.d(
+      'Resolving lyrics: trackId=$trackId title="$title" artist="$artist" '
+      'local=$enableLocal lrclib=$enableLrclib ovh=$enableLyricsOvh force=$forceRefresh',
+    );
         if (ovhResult != null) {
           return ovhResult;
         }

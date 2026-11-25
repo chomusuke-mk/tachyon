@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 
 /// Platform channel action identifier emitted by native desktop trays.
 enum DesktopTrayAction {
@@ -33,6 +34,8 @@ typedef NativeTrayActionCallback = void Function(DesktopTrayAction action);
 /// Dart lifecycle logic with native desktop runners (Linux GTK, Windows Win32,
 /// macOS AppKit).
 class WindowControlBridge {
+  static const _log = ScopedLogger('WindowBridge');
+
   /// Method channel shared with native desktop platform runners.
   static const MethodChannel channel = MethodChannel(
     'dev.chomusuke.tachyon/window_state',
@@ -113,6 +116,7 @@ class WindowControlBridge {
     }
 
     if (!isDesktopPlatform && _invokeOverride == null) {
+      _log.d('Skipping native window probe (not desktop platform)');
       return;
     }
 
@@ -120,19 +124,32 @@ class WindowControlBridge {
       final raw = await _invoke<Map<Object?, Object?>>('getWindowState');
       if (raw != null && !_isDisposed) {
         _hasNativeChannel = true;
-        _updateWindowState(
-          DesktopWindowState.fromMap(raw, fallback: _windowStateNotifier.value),
+        final next = DesktopWindowState.fromMap(
+          raw,
+          fallback: _windowStateNotifier.value,
         );
+        _updateWindowState(next);
+        _log.d(
+          'Initialized from native getWindowState: hasHeaderBar=${next.hasNativeHeaderBar} '
+          'sysDecor=${next.hasSystemDecorations} minimized=${next.isMinimized} '
+          'focused=${next.isFocused} maximized=${next.isMaximized} hiddenToTray=${next.isHiddenToTray} '
+          'usesFlutterTitleBar=$usesFlutterTitleBar',
+        );
+      } else {
+        _log.d('getWindowState returned null (hasNativeChannel=false)');
       }
-    } on MissingPluginException {
+    } on MissingPluginException catch (e) {
       _hasNativeChannel = false;
-    } catch (_) {
+      _log.d('Native window_state channel unavailable (MissingPluginException): $e');
+    } catch (e, st) {
       _hasNativeChannel = false;
+      _log.w('Failed to initialize WindowControlBridge', error: e, stackTrace: st);
     }
   }
 
   Future<dynamic> _handleIncomingCall(MethodCall call) async {
     if (_isDisposed) return null;
+    _log.d('Native -> Dart: ${call.method} args=${call.arguments}');
     switch (call.method) {
       case 'onWindowStateChanged':
         _hasNativeChannel = true;
@@ -160,6 +177,8 @@ class WindowControlBridge {
         final action = _parseTrayAction(actionName);
         if (action != null) {
           onTrayAction?.call(action);
+        } else {
+          _log.w('Unknown native tray action: $actionName');
         }
         break;
     }
@@ -168,6 +187,15 @@ class WindowControlBridge {
 
   void _updateWindowState(DesktopWindowState next) {
     if (_isDisposed || _windowStateNotifier.value == next) return;
+    final prev = _windowStateNotifier.value;
+    _log.vLazy(
+      () =>
+          'DesktopWindowState updated: '
+          'minimized(${prev.isMinimized}->${next.isMinimized}) '
+          'focused(${prev.isFocused}->${next.isFocused}) '
+          'maximized(${prev.isMaximized}->${next.isMaximized}) '
+          'hiddenToTray(${prev.isHiddenToTray}->${next.isHiddenToTray})',
+    );
     _windowStateNotifier.value = next;
   }
 
@@ -184,15 +212,22 @@ class WindowControlBridge {
   }
 
   Future<T?> _invoke<T>(String method, [Object? arguments]) async {
+    if (method == 'updateTrayState') {
+      _log.vLazy(() => 'Dart -> Native: $method');
+    } else {
+      _log.d('Dart -> Native: $method');
+    }
     if (_invokeOverride != null) {
       return _invokeOverride<T>(method, arguments);
     }
     if (kIsWeb) return null;
     try {
       return await channel.invokeMethod<T>(method, arguments);
-    } on MissingPluginException {
+    } on MissingPluginException catch (e) {
+      _log.vLazy(() => 'MethodChannel $method missing plugin: $e');
       return null;
-    } catch (_) {
+    } catch (e, st) {
+      _log.w('MethodChannel $method failed', error: e, stackTrace: st);
       return null;
     }
   }
@@ -211,12 +246,14 @@ class WindowControlBridge {
 
   /// Hides the desktop window when entering [AppLifecycleMode.background].
   Future<void> enterBackgroundMode() async {
+    _log.d('enterBackgroundMode -> updating isHiddenToTray=true');
     _updateWindowState(_windowStateNotifier.value.copyWith(isHiddenToTray: true));
     await _invoke<void>('enterBackgroundMode');
   }
 
   /// Shows and focuses the desktop window when exiting [AppLifecycleMode.background].
   Future<void> restoreFromBackground() async {
+    _log.d('restoreFromBackground -> updating isHiddenToTray=false, isMinimized=false');
     _updateWindowState(
       _windowStateNotifier.value.copyWith(
         isHiddenToTray: false,
@@ -278,6 +315,7 @@ class WindowControlBridge {
 
   /// Releases platform channel callbacks and internal notifiers.
   void dispose() {
+    _log.d('Disposed');
     _isDisposed = true;
     if (_attachChannelHandler && _invokeOverride == null) {
       channel.setMethodCallHandler(null);

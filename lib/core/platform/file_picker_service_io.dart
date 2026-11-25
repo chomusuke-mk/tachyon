@@ -4,10 +4,13 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:win32/win32.dart';
 
 /// Service for opening native file and directory picker dialogs.
 abstract final class FilePickerService {
+  static const _log = ScopedLogger('FilePicker');
+
   /// Opens the native system folder picker to select a directory.
   /// Returns the absolute path string, or null if cancelled or error.
   static Future<String?> pickDirectory({
@@ -28,7 +31,7 @@ abstract final class FilePickerService {
       );
       return uri?.path;
     } catch (e, stackTrace) {
-      debugPrint('[FilePickerService] Error picking directory: $e\n$stackTrace');
+      _log.e('Error picking directory', error: e, stackTrace: stackTrace);
       return null;
     }
   }
@@ -54,7 +57,7 @@ abstract final class FilePickerService {
       );
       return file?.path;
     } catch (e, stackTrace) {
-      debugPrint('[FilePickerService] Error picking image: $e\n$stackTrace');
+      _log.e('Error picking image', error: e, stackTrace: stackTrace);
       return null;
     }
   }
@@ -80,9 +83,7 @@ abstract final class FilePickerService {
       );
       return files.map((f) => f.path).whereType<String>().toList();
     } catch (e, stackTrace) {
-      debugPrint(
-        '[FilePickerService] Error picking audio files: $e\n$stackTrace',
-      );
+      _log.e('Error picking audio files', error: e, stackTrace: stackTrace);
       return const [];
     }
   }
@@ -94,7 +95,7 @@ abstract final class FilePickerService {
     String? dialogTitle,
     String? initialDirectory,
   }) {
-    debugPrint('[FilePickerService] Launching Win32 IFileOpenDialog for directory on main UI thread...');
+    _log.d('Launching Win32 IFileOpenDialog for directory on main UI thread...');
     return using((arena) {
       final fileDialog = arena.com<IFileOpenDialog>(FileOpenDialog);
 
@@ -118,26 +119,29 @@ abstract final class FilePickerService {
           );
           fileDialog.setFolder(item);
         } catch (e) {
-          debugPrint('[FilePickerService] Note: Failed to set initial directory "$initialDirectory": $e');
+          _log.w('Failed to set initial directory "$initialDirectory": $e');
         }
       }
 
       try {
         final parentHwnd = GetForegroundWindow();
-        debugPrint('[FilePickerService] Showing folder dialog with parent HWND: $parentHwnd');
+        _log.d('Showing folder dialog with parent HWND: $parentHwnd');
         fileDialog.show(parentHwnd);
       } on WindowsException catch (e) {
         if (e.hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
-          debugPrint('[FilePickerService] User cancelled folder picker dialog.');
+          _log.d('User cancelled folder picker dialog.');
           return null;
         }
-        debugPrint('[FilePickerService] WindowsException while showing dialog: $e (HRESULT: 0x${e.hr.toRadixString(16)})');
+        _log.e(
+          'WindowsException while showing dialog (HRESULT: 0x${e.hr.toRadixString(16)})',
+          error: e,
+        );
         rethrow;
       }
 
       final selectedItem = fileDialog.getResult();
       if (selectedItem == null) {
-        debugPrint('[FilePickerService] No item was returned from fileDialog.getResult()');
+        _log.d('No item was returned from fileDialog.getResult()');
         return null;
       }
 
@@ -145,7 +149,7 @@ abstract final class FilePickerService {
       final pathPtr = item.getDisplayName(SIGDN_FILESYSPATH);
       try {
         final selectedPath = pathPtr.toDartString();
-        debugPrint('[FilePickerService] Selected directory path: $selectedPath');
+        _log.d('Selected directory path: $selectedPath');
         return selectedPath;
       } finally {
         CoTaskMemFree(pathPtr);
@@ -158,7 +162,7 @@ abstract final class FilePickerService {
     String? dialogTitle,
     String? initialDirectory,
   }) {
-    debugPrint('[FilePickerService] Launching Win32 IFileOpenDialog for image on main UI thread...');
+    _log.d('Launching Win32 IFileOpenDialog for image on main UI thread...');
     return using((arena) {
       final fileDialog = arena.com<IFileOpenDialog>(FileOpenDialog);
 
@@ -192,26 +196,29 @@ abstract final class FilePickerService {
           );
           fileDialog.setFolder(item);
         } catch (e) {
-          debugPrint('[FilePickerService] Note: Failed to set initial image directory "$initialDirectory": $e');
+          _log.w('Failed to set initial image directory "$initialDirectory": $e');
         }
       }
 
       try {
         final parentHwnd = GetForegroundWindow();
-        debugPrint('[FilePickerService] Showing image dialog with parent HWND: $parentHwnd');
+        _log.d('Showing image dialog with parent HWND: $parentHwnd');
         fileDialog.show(parentHwnd);
       } on WindowsException catch (e) {
         if (e.hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
-          debugPrint('[FilePickerService] User cancelled image picker dialog.');
+          _log.d('User cancelled image picker dialog.');
           return null;
         }
-        debugPrint('[FilePickerService] WindowsException while showing image dialog: $e (HRESULT: 0x${e.hr.toRadixString(16)})');
+        _log.e(
+          'WindowsException while showing image dialog (HRESULT: 0x${e.hr.toRadixString(16)})',
+          error: e,
+        );
         rethrow;
       }
 
       final selectedItem = fileDialog.getResult();
       if (selectedItem == null) {
-        debugPrint('[FilePickerService] No item was returned from fileDialog.getResult()');
+        _log.d('No item was returned from fileDialog.getResult()');
         return null;
       }
 
@@ -219,7 +226,7 @@ abstract final class FilePickerService {
       final pathPtr = item.getDisplayName(SIGDN_FILESYSPATH);
       try {
         final selectedPath = pathPtr.toDartString();
-        debugPrint('[FilePickerService] Selected image path: $selectedPath');
+        _log.d('Selected image path: $selectedPath');
         return selectedPath;
       } finally {
         CoTaskMemFree(pathPtr);

@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_controller.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/features/locales/presentation/controllers/locale_controller.dart';
 
 /// Custom desktop window title bar rendered when the native platform runner
@@ -11,6 +12,8 @@ import 'package:tachyon/features/locales/presentation/controllers/locale_control
 /// Displays the application title, drag/double-click-maximize surface, and
 /// window controls: Send to background, Minimize, Maximize / Restore, and Close.
 class DesktopWindowBar extends StatelessWidget {
+  static const _log = ScopedLogger('WindowBar');
+
   /// Standard height of the desktop window control strip.
   static const double barHeight = 36.0;
 
@@ -42,15 +45,24 @@ class DesktopWindowBar extends StatelessWidget {
           valueListenable: lifecycle.windowBridge.windowStateListenable,
           builder: (context, windowState, _) {
             final isMaximized = windowState.isMaximized;
+            _log.vLazy(
+              () =>
+                  'DesktopWindowBar.build maximized=$isMaximized minimized=${windowState.isMinimized} focused=${windowState.isFocused}',
+            );
             return Row(
               children: [
                 if (isMacOS) const SizedBox(width: 74),
                 Expanded(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onPanStart: (_) =>
-                        lifecycle.windowBridge.startWindowDrag(),
-                    onDoubleTap: lifecycle.toggleMaximizeWindow,
+                    onPanStart: (_) {
+                      _log.d('Drag initiated on title bar');
+                      lifecycle.windowBridge.startWindowDrag();
+                    },
+                    onDoubleTap: () {
+                      _log.d('Title bar double-tapped -> toggleMaximize');
+                      lifecycle.toggleMaximizeWindow();
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Row(
@@ -96,7 +108,10 @@ class DesktopWindowBar extends StatelessWidget {
                   ),
                   iconColor: colorScheme.onSurfaceVariant,
                   hoverColor: colorScheme.primary.withValues(alpha: 0.14),
-                  onPressed: lifecycle.enterBackground,
+                  onPressed: () {
+                    _log.d('Caption button pressed: sendToBackground');
+                    lifecycle.enterBackground();
+                  },
                 ),
                 if (!isMacOS) ...[
                   _WindowCaptionButton(
@@ -105,7 +120,10 @@ class DesktopWindowBar extends StatelessWidget {
                     tooltip: labelOrFallback(strings.winMinimize, 'Minimize'),
                     iconColor: colorScheme.onSurfaceVariant,
                     hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
-                    onPressed: lifecycle.minimizeWindow,
+                    onPressed: () {
+                      _log.d('Caption button pressed: minimize');
+                      lifecycle.minimizeWindow();
+                    },
                   ),
                   _WindowCaptionButton(
                     key: const Key('win_btn_maximize'),
@@ -118,7 +136,10 @@ class DesktopWindowBar extends StatelessWidget {
                         : labelOrFallback(strings.winMaximize, 'Maximize'),
                     iconColor: colorScheme.onSurfaceVariant,
                     hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
-                    onPressed: lifecycle.toggleMaximizeWindow,
+                    onPressed: () {
+                      _log.d('Caption button pressed: toggleMaximize');
+                      lifecycle.toggleMaximizeWindow();
+                    },
                   ),
                   _WindowCaptionButton(
                     key: const Key('win_btn_close'),
@@ -127,7 +148,10 @@ class DesktopWindowBar extends StatelessWidget {
                     iconColor: colorScheme.onSurfaceVariant,
                     hoverColor: colorScheme.error.withValues(alpha: 0.85),
                     hoverIconColor: colorScheme.onError,
-                    onPressed: lifecycle.closeApplication,
+                    onPressed: () {
+                      _log.d('Caption button pressed: close');
+                      lifecycle.closeApplication();
+                    },
                   ),
                 ],
               ],

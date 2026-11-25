@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 import 'package:tachyon/shared/utils/cancellation_token.dart';
@@ -349,8 +349,9 @@ class LrclibClient {
 
     final headers = {'User-Agent': _userAgent, 'Accept': 'application/json'};
 
-    debugPrint(
-      'Dispatching request to $requestUri at ${now.toIso8601String()}',
+    AppLogger.d(
+      'LrclibClient',
+      'Dispatching request to $requestUri',
     );
     // 6. Execute HTTP request
     try {

@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 /// Renders a persistent background wallpaper image with Gaussian blur
@@ -34,12 +35,18 @@ class AppBackground extends StatefulWidget {
 }
 
 class _AppBackgroundState extends State<AppBackground> {
+  static const _log = ScopedLogger('AppBackground');
+
   bool _exists = false;
 
   @override
   void initState() {
     super.initState();
     _checkExists();
+    _log.d(
+      'Mounted imagePath=${widget.imagePath} exists=$_exists '
+      'blurSigma=${widget.blurSigma} dimOpacity=${widget.dimOpacity}',
+    );
   }
 
   @override
@@ -47,6 +54,14 @@ class _AppBackgroundState extends State<AppBackground> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imagePath != widget.imagePath) {
       _checkExists();
+      _log.d(
+        'Updated imagePath: ${oldWidget.imagePath} -> ${widget.imagePath} (exists=$_exists)',
+      );
+    } else if (oldWidget.blurSigma != widget.blurSigma ||
+        oldWidget.dimOpacity != widget.dimOpacity) {
+      _log.d(
+        'Updated style: blurSigma=${widget.blurSigma} dimOpacity=${widget.dimOpacity}',
+      );
     }
   }
 
@@ -56,11 +71,25 @@ class _AppBackgroundState extends State<AppBackground> {
       _exists = false;
     } else {
       _exists = PersistentBinaryStorage.fileExistsSync(path);
+      if (!_exists) {
+        _log.w('Background file does not exist on disk/OPFS: $path');
+      }
     }
   }
 
   @override
+  void dispose() {
+    _log.d('Disposed (unmounted) imagePath=${widget.imagePath}');
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    _log.vLazy(
+      () =>
+          'AppBackground.build exists=$_exists imagePath=${widget.imagePath} '
+          'blurSigma=${widget.blurSigma} dimOpacity=${widget.dimOpacity}',
+    );
     if (!_exists || widget.imagePath == null) {
       return const SizedBox.shrink();
     }

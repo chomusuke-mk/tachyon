@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 
 /// Central domain class managing localized string lookups for Tachyon.
 ///
@@ -1506,7 +1506,7 @@ class AppStringKey {
       final missingKeys = _allAppStrings
           .where((key) => !jsonData.containsKey(key))
           .toList();
-      debugPrint('Missing localization keys: ${missingKeys.join(', ')}');
+      AppLogger.w('Locale', 'Missing localization keys: ${missingKeys.join(', ')}');
       if (assertAllKeysPresent) {
         throw FormatException(
           'Missing localization keys: ${missingKeys.join(', ')}',

@@ -7,6 +7,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:smtc_windows/smtc_windows.dart';
 // ignore: implementation_imports
 import 'package:smtc_windows/src/rust/frb_generated.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
 
 /// Bridges [TachyonAudioHandler] to Windows System Media Transport Controls (SMTC)
@@ -19,6 +20,8 @@ import 'package:tachyon/core/playback/tachyon_audio_handler.dart';
 /// - Sequential execution lane to prevent concurrent WinRT COM apartment contention.
 /// - Change deduplication to eliminate redundant WinRT updates during rapid skips or pauses.
 class WindowsSmtcBridge {
+  static const _log = ScopedLogger('WindowsSmtc');
+
   final TachyonAudioHandler _handler;
   SMTCWindows? _smtc;
   HttpServer? _coverServer;
@@ -56,7 +59,7 @@ class WindowsSmtcBridge {
       try {
         await action();
       } catch (e) {
-        debugPrint('[WindowsSmtcBridge] Action failed: $e');
+        _log.e('Action failed', error: e);
       }
     }
 
@@ -80,13 +83,13 @@ class WindowsSmtcBridge {
       try {
         _coverServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         _coverServer!.listen(_handleCoverRequest, onError: (e) {
-          debugPrint('[WindowsSmtcBridge] Cover server error: $e');
+          _log.w('Cover server error: $e');
         });
-        debugPrint(
-          '[WindowsSmtcBridge] Loopback cover server started on port ${_coverServer!.port}',
+        _log.d(
+          'Loopback cover server started on port ${_coverServer!.port}',
         );
       } catch (e) {
-        debugPrint('[WindowsSmtcBridge] Failed to start loopback server: $e');
+        _log.w('Failed to start loopback server: $e');
       }
 
       // ignore: invalid_use_of_internal_member
@@ -259,7 +262,7 @@ class WindowsSmtcBridge {
 
       return true;
     } catch (e) {
-      debugPrint('[WindowsSmtcBridge] Initialization failed: $e');
+      _log.e('Initialization failed', error: e);
       return false;
     }
   }

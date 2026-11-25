@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:miniaudio_player/miniaudio_player.dart' as ma;
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/metadata/domain/scan_progress.dart';
 import 'package:tachyon/core/metadata/metadata_service.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
@@ -36,6 +37,8 @@ export 'package:tachyon/core/playback/domain/resolved_playback_metadata.dart';
 
 part 'playback_controller_dsp.dart';
 part 'playback_controller_queue.dart';
+
+const _log = ScopedLogger('Playback');
 
 class _DomainNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
@@ -110,6 +113,7 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
 
   bool _isDisposed = false;
   bool _inScopedNotify = false;
+  bool _loggedUiPositionSuppressed = false;
   String? _currentlyLoggedHistoryFilePath;
   bool _historyLoggedForCurrentTrack = false;
   String? _lastActivePlayableKey;
@@ -161,6 +165,7 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
   /// Lazily instantiated native audio player engine handle.
   ma.MiniaudioPlayer<AudioPlayable> get player {
     if (_player == null) {
+      _log.i('Lazily instantiating MiniaudioPlayer engine');
       final eng = ma.MiniaudioPlayer<AudioPlayable>(
         config: ma.PlayerConfig(
           pauseOnDeviceChange: _pauseOnDeviceChange,
@@ -183,6 +188,10 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
     if (_isDisposed) return;
     if (_isUiSuppressed) {
       _dirtyDomains.addAll(domains);
+      _log.vLazy(
+        () =>
+            'Queued ${domains.length} dirty domain(s) while uiSuppressed=true (totalDirty=${_dirtyDomains.length})',
+      );
     } else {
       for (final d in domains) {
         d.notify();
@@ -207,8 +216,8 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
       while (true) {
         try {
           await current();
-        } catch (e) {
-          debugPrint('[PlaybackController] RPC ($key) error: $e');
+        } catch (e, st) {
+          _log.e('RPC ($key) error', error: e, stackTrace: st);
         }
         final next = _rpcPending.remove(key);
         if (next == null || _isDisposed) break;
@@ -270,6 +279,10 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
           isBuffering: engState.isBuffering,
           isCompleted: isCompleted,
         );
+        _log.d(
+          'Engine playbackState changed: playing=${engState.isPlaying} '
+          'buffering=${engState.isBuffering} completed=$isCompleted',
+        );
         _checkStatePersistence(oldState, _state);
         _emitScoped([_transportNotifier]);
       }),
@@ -292,11 +305,13 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
           isPlaying: playing,
           isCompleted: nextCompleted,
         );
+        _log.d('Engine isPlaying changed: playing=$playing completed=$nextCompleted');
         _checkStatePersistence(oldState, _state);
         _emitScoped([_transportNotifier]);
       }),
       player.stream.isBuffering.listen((buffering) {
         if (_isDisposed || _state.isBuffering == buffering) return;
+        _log.d('Engine isBuffering changed: $buffering');
         _state = _state.copyWith(isBuffering: buffering);
         _emitScoped([_transportNotifier]);
       }),
@@ -440,7 +455,7 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
       }),
       player.stream.errors.listen((err) {
         if (!_isDisposed && !_errorsController.isClosed) {
-          debugPrint('[PlaybackController] Native player error: $err');
+          _log.e('Native player error', error: err);
           _errorsController.add(err);
         }
       }),
@@ -493,7 +508,21 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
           _lastPositionEmitTimestamp = now;
           _lastEmittedPositionMs = pos.inMilliseconds;
           _setPosition(pos);
+          _log.vLazy(() => 'UI position tick: ${pos.inMilliseconds}ms');
         }
+      } else {
+        if (!_loggedUiPositionSuppressed) {
+          _loggedUiPositionSuppressed = true;
+          _log.d(
+            'UI position updates paused while lifecycleMode=${_lifecycleMode.name} '
+            '(engine pos=${pos.inMilliseconds}ms, system notification still active)',
+          );
+        }
+        _log.vLazy(
+          () =>
+              'Suppressed UI position tick at ${pos.inMilliseconds}ms '
+              '(lifecycleMode=${_lifecycleMode.name})',
+        );
       }
 
       if ((pos.inMilliseconds - _state.position.inMilliseconds).abs() >= 1000) {
@@ -644,6 +673,11 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
       _liveMetadataNotifier.value = null;
       _audioInfoNotifier.value = null;
       _syncMetadataEnabled();
+      _log.d(
+        'Active track changed: idx=${engState.currentIndex ?? 0} '
+        'title="${resolved?.title}" path=$playableKey '
+        'durationMs=${engState.duration?.inMilliseconds ?? 0}',
+      );
     }
 
     _state = _state.copyWith(
@@ -750,9 +784,7 @@ abstract class _PlaybackControllerState extends ChangeNotifier {
                 trackId,
               ])
               .catchError((e) {
-                debugPrint(
-                  '[PlaybackController] Failed to add track $trackId to history: $e',
-                );
+                _log.e('Failed to add track $trackId to history', error: e);
               });
         }
       }
@@ -1032,8 +1064,15 @@ class PlaybackController extends _PlaybackControllerState
   /// notifications active, and flushes pending UI state on return to active mode.
   void setLifecycleMode(AppLifecycleMode mode) {
     if (_lifecycleMode == mode) return;
+    final prev = _lifecycleMode;
     _lifecycleMode = mode;
+    _loggedUiPositionSuppressed = false;
     final suppressed = _isUiSuppressed;
+    _log.d(
+      'setLifecycleMode: ${prev.name} -> ${mode.name} '
+      '(uiSuppressed=$suppressed, visualizerEnabled=$_visualizerEnabled, '
+      'dirtyDomains=${_dirtyDomains.length})',
+    );
     if (suppressed) {
       if (_player != null) {
         unawaited(
@@ -1058,11 +1097,13 @@ class PlaybackController extends _PlaybackControllerState
       _bufferNotifier.value = _player!.state.buffer;
       _silenceSavedDurationNotifier.value =
           _player!.state.silenceSavedDuration;
+      _log.d('Resumed active mode: synced livePos=${livePos.inMilliseconds}ms');
     }
 
     if (_dirtyDomains.isNotEmpty) {
       final domains = _dirtyDomains.toList(growable: false);
       _dirtyDomains.clear();
+      _log.d('Flushing ${domains.length} dirty UI domain(s)');
       _emitScoped(domains);
     }
   }
@@ -1112,6 +1153,7 @@ class PlaybackController extends _PlaybackControllerState
 
   @override
   void dispose() {
+    _log.d('Disposing PlaybackController');
     _isDisposed = true;
     _store?.removeListener(_onLibraryStoreUpdated);
     _scanProgressSubscription?.cancel();

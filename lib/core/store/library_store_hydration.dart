@@ -318,6 +318,11 @@ mixin _LibraryStoreHydrationMixin on _LibraryStoreState {
     }
 
     _isHydrated = true;
+    _log.d(
+      'Hydrated catalog: tracks=${_allTracks.length} albums=${_allAlbums.length} '
+      'artists=${_allArtists.length} genres=${_allGenres.length} '
+      'playlists=${_allPlaylists.length} radios=${_radioStations.length}',
+    );
     notifyListeners();
   }
 }

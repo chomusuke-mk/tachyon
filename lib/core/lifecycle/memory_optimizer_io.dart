@@ -2,14 +2,16 @@ import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/lifecycle/app_lifecycle_mode.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 
 /// Cross-platform low-level native memory optimizer.
 ///
 /// Dispatches OS kernel and libc/CRT commands to flush unreferenced heap
 /// arenas and working-set pages back to the operating system.
 class MemoryOptimizer {
+  static const _log = ScopedLogger('MemoryOptimizer');
+
   static bool _initialized = false;
   static void Function(MemoryTrimLevel level)? _platformTrimmer;
   static Timer? _periodicTimer;
@@ -71,10 +73,9 @@ class MemoryOptimizer {
             emptyWorkingSet(hProcess);
           }
         };
+        _log.d('Bound Windows memory trimming APIs (emptyWorkingSet=${emptyWorkingSet != null})');
       } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[MemoryOptimizer] Failed to bind Windows APIs: $e');
-        }
+        _log.w('Failed to bind Windows APIs: $e');
       }
     } else if (Platform.isAndroid) {
       try {
@@ -112,10 +113,11 @@ class MemoryOptimizer {
             }
           }
         };
+        _log.d(
+          'Bound Android memory trimming APIs (mallopt=${mallopt != null}, madvise=${madvise != null})',
+        );
       } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[MemoryOptimizer] Failed to bind Android APIs: $e');
-        }
+        _log.w('Failed to bind Android APIs: $e');
       }
     } else if (Platform.isLinux) {
       try {
@@ -139,10 +141,9 @@ class MemoryOptimizer {
             _reclaimPosixMapsPages(madvise, aggressive: true);
           }
         };
+        _log.d('Bound Linux memory trimming APIs (malloc_trim, madvise=${madvise != null})');
       } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[MemoryOptimizer] Failed to bind Linux APIs: $e');
-        }
+        _log.w('Failed to bind Linux APIs: $e');
       }
     } else if (Platform.isMacOS) {
       try {
@@ -156,10 +157,9 @@ class MemoryOptimizer {
         _platformTrimmer = (MemoryTrimLevel level) {
           pressureRelief(nullptr, 0);
         };
+        _log.d('Bound macOS memory trimming APIs (malloc_zone_pressure_relief)');
       } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[MemoryOptimizer] Failed to bind macOS APIs: $e');
-        }
+        _log.w('Failed to bind macOS APIs: $e');
       }
     }
   }
@@ -263,11 +263,14 @@ class MemoryOptimizer {
   static void trim({MemoryTrimLevel level = MemoryTrimLevel.moderate}) {
     try {
       _ensureInitialized();
+      if (level == MemoryTrimLevel.light) {
+        _log.vLazy(() => 'trim(level=${level.name})');
+      } else {
+        _log.d('trim(level=${level.name})');
+      }
       _platformTrimmer?.call(level);
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[MemoryOptimizer] Trim warning: $e');
-      }
+      _log.w('Trim warning: $e');
     }
   }
 
@@ -279,6 +282,7 @@ class MemoryOptimizer {
     void Function()? onTrim,
   }) {
     _periodicTimer?.cancel();
+    _log.d('Starting periodic trimmer (interval=${interval.inSeconds}s)');
     _periodicTimer = Timer.periodic(interval, (_) {
       onTrim?.call();
       trim(level: MemoryTrimLevel.light);
@@ -287,6 +291,9 @@ class MemoryOptimizer {
 
   /// Stops the periodic background trimmer if currently active.
   static void stopPeriodicTrimmer() {
+    if (_periodicTimer != null) {
+      _log.d('Stopping periodic trimmer');
+    }
     _periodicTimer?.cancel();
     _periodicTimer = null;
   }

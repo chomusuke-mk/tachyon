@@ -2,10 +2,11 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sqlite3/common.dart';
 import 'package:tachyon/core/database/app_database_schema.dart';
 import 'package:tachyon/core/database/sqlite_connector.dart';
+import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart' show ExtractedTrackData;
 import 'package:tachyon/core/playback/domain/radio_station.dart';
 import 'package:tachyon/core/store/domain/catalog_snapshot.dart';
@@ -24,6 +25,8 @@ typedef PreparedStatement = CommonPreparedStatement;
 /// Concise, centralized SQLite persistence service using an asynchronous FIFO
 /// serialization queue compatible with both native FFI and WebAssembly (WasmSqlite3).
 class AppDatabase {
+  static const _log = ScopedLogger('AppDatabase');
+
   /// Reserved playlist ID for the built-in Liked Songs playlist.
   static const int likedSongsPlaylistId = 1;
 
@@ -146,11 +149,14 @@ class AppDatabase {
       _persistentDb = null;
       _dbPath = dbPathOverride;
     }
+    _log.i('Initializing persistent database (path=$_dbPath)');
     await _runTask(_executeSchema, flush: true);
+    _log.d('Database schema ready');
   }
 
   /// Closes the underlying database handles after any queued tasks complete.
   Future<void> close() {
+    _log.i('Closing database handles');
     if (_queue == null) {
       _inMemoryDb?.close();
       _inMemoryDb = null;
@@ -238,7 +244,7 @@ class AppDatabase {
       );
     } catch (e) {
       try { db.execute('ROLLBACK;'); } catch (_) {}
-      debugPrint('[AppDatabase] Error in getCatalogSnapshot: $e');
+      _log.e('Error in getCatalogSnapshot', error: e);
       return const CatalogSnapshot.empty();
     }
   }
@@ -457,7 +463,7 @@ class AppDatabase {
           );
           return db.lastInsertRowId;
         } catch (e) {
-          debugPrint('[AppDatabase] Ignored error in createPlaylist: $e');
+          _log.w('Ignored error in createPlaylist: $e');
           return -1;
         }
       }, flush: true);
@@ -469,7 +475,7 @@ class AppDatabase {
         try {
           db.execute('DELETE FROM playlists WHERE id = ? AND type = ?;', [playlistId, PlaylistType.user.value]);
         } catch (e) {
-          debugPrint('[AppDatabase] Ignored error in deletePlaylist: $e');
+          _log.w('Ignored error in deletePlaylist: $e');
         }
       }, flush: true);
 
@@ -478,7 +484,7 @@ class AppDatabase {
         try {
           db.execute('UPDATE playlists SET name = ? WHERE id = ?;', [name.trim(), playlistId]);
         } catch (e) {
-          debugPrint('[AppDatabase] Ignored error in renamePlaylist: $e');
+          _log.w('Ignored error in renamePlaylist: $e');
         }
       }, flush: true);
 
@@ -497,7 +503,7 @@ class AppDatabase {
         [playlistId, trackId, nextPos, DateTime.now().millisecondsSinceEpoch],
       );
     } catch (e) {
-      debugPrint('[AppDatabase] Ignored error in addTrackToPlaylist: $e');
+      _log.w('Ignored error in addTrackToPlaylist: $e');
     }
   }
 
@@ -515,10 +521,10 @@ class AppDatabase {
         db.execute('COMMIT;');
       } catch (e) {
         try { db.execute('ROLLBACK;'); } catch (_) {}
-        debugPrint('[AppDatabase] Ignored error in addTracksToPlaylist: $e');
+        _log.w('Ignored error in addTracksToPlaylist: $e');
       }
     } catch (e) {
-      debugPrint('[AppDatabase] Failed transaction in addTracksToPlaylist: $e');
+      _log.e('Failed transaction in addTracksToPlaylist', error: e);
     }
   }
 
@@ -543,10 +549,10 @@ class AppDatabase {
         db.execute('COMMIT;');
       } catch (e) {
         try { db.execute('ROLLBACK;'); } catch (_) {}
-        debugPrint('[AppDatabase] Ignored error in removeTrackFromPlaylist: $e');
+        _log.w('Ignored error in removeTrackFromPlaylist: $e');
       }
     } catch (e) {
-      debugPrint('[AppDatabase] Failed transaction in removeTrackFromPlaylist: $e');
+      _log.e('Failed transaction in removeTrackFromPlaylist', error: e);
     }
   }
 
@@ -576,10 +582,10 @@ class AppDatabase {
         db.execute('COMMIT;');
       } catch (e) {
         try { db.execute('ROLLBACK;'); } catch (_) {}
-        debugPrint('[AppDatabase] Ignored error in reorderPlaylistEntries: $e');
+        _log.w('Ignored error in reorderPlaylistEntries: $e');
       }
     } catch (e) {
-      debugPrint('[AppDatabase] Failed transaction in reorderPlaylistEntries: $e');
+      _log.e('Failed transaction in reorderPlaylistEntries', error: e);
     }
   }
 
@@ -593,7 +599,7 @@ class AppDatabase {
             _addTrackToPlaylistSync(db, likedSongsPlaylistId, trackId);
           }
         } catch (e) {
-          debugPrint('[AppDatabase] Ignored error in toggleLikeTrack: $e');
+          _log.w('Ignored error in toggleLikeTrack: $e');
         }
       }, flush: true);
 
@@ -602,7 +608,7 @@ class AppDatabase {
         try {
           db.execute('DELETE FROM playlist_entries WHERE playlist_id = ?;', [historyPlaylistId]);
         } catch (e) {
-          debugPrint('[AppDatabase] Ignored error in clearHistory: $e');
+          _log.w('Ignored error in clearHistory: $e');
         }
       }, flush: true);
 
