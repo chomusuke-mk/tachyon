@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:miniaudio_player/miniaudio_player.dart';
 
 /// Custom painter visualizing the 10-band ISO 266 parametric equalizer frequency response.

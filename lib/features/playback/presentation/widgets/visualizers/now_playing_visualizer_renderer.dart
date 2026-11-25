@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tachyon/features/playback/presentation/widgets/visualizers/now_playing_visualizer_mode.dart';
 import 'package:tachyon/features/playback/presentation/widgets/visualizers/reactive_circle_visualizer.dart';
 import 'package:tachyon/features/playback/presentation/widgets/visualizers/spectrum_bars_visualizer.dart';

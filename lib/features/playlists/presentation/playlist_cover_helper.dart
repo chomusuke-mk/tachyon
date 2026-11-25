@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tachyon/core/metadata/metadata_utils.dart';
 import 'package:tachyon/core/store/domain/playlist.dart';
 import 'package:tachyon/shared/widgets/album_art_image.dart';

@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Studio spectrum analyzer painter rendering clean, fluid, audio-reactive
 /// vertical gradient bars across the full width of the artwork, floating

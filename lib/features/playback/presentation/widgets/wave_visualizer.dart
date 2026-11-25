@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Custom painter that renders a continuous, steep audio spectrum wave with
 /// smoothly rounded crest summits (no sharp triangle spikes) directly beneath

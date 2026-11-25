@@ -2,7 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tachyon/core/constants/app_defaults.dart';
 import 'package:tachyon/core/playback/playback_controller.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';

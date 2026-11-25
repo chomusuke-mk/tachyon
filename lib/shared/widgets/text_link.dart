@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A generic text link widget that handles hover states, cursor, optional underline,
 /// and properly manages hover cleanup across asynchronous callbacks (e.g., navigation).

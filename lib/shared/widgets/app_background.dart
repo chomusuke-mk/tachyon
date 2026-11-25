@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tachyon/core/storage/persistent_binary_storage.dart';
 
 /// Renders a persistent background wallpaper image with Gaussian blur

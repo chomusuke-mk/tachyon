@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Studio rotary knob / circular interactive dial for continuous DSP parameters.
 class StudioKnob extends StatefulWidget {

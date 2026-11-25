@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Searchable modal dialog for picking a radio genre/tag or country filter
 /// without causing UI lag across large collections of items.

@@ -21,11 +21,11 @@ abstract final class FilePickerService {
         );
       }
 
-      final path = await FilePicker.getDirectoryPath(
+      final uri = await FilePicker.pickDirectory(
         dialogTitle: dialogTitle,
         initialDirectory: initialDirectory,
       );
-      return path;
+      return uri?.path;
     } catch (e, stackTrace) {
       debugPrint('[FilePickerService] Error picking directory: $e\n$stackTrace');
       return null;
