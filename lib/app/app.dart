@@ -161,24 +161,26 @@ class _AppState extends State<App> {
           builder: (context, child) {
             final appContent = DesktopShortcutsHandler(
               navigatorKey: App.navigatorKey,
-              child: Column(
-                children: [
-                  if (showDesktopBar) const DesktopWindowBar(),
-                  Expanded(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (hasCustomBg)
-                          AppBackground(
-                            imagePath: settings.customBackgroundPath,
-                            blurSigma: settings.backgroundBlurSigma,
-                            dimOpacity: settings.backgroundDimOpacity,
-                          ),
-                        child ?? const SizedBox.shrink(),
-                      ],
+              child: Overlay.wrap(
+                child: Column(
+                  children: [
+                    if (showDesktopBar) const DesktopWindowBar(),
+                    Expanded(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (hasCustomBg)
+                            AppBackground(
+                              imagePath: settings.customBackgroundPath,
+                              blurSigma: settings.backgroundBlurSigma,
+                              dimOpacity: settings.backgroundDimOpacity,
+                            ),
+                          child ?? const SizedBox.shrink(),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
 

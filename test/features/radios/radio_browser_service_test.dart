@@ -34,7 +34,10 @@ void main() {
         });
       });
 
-      final service = RadioBrowserService(client: mockClient);
+      final service = RadioBrowserService(
+        client: mockClient,
+        enableDynamicDiscovery: false,
+      );
       final stations = await service.getTopStations();
 
       expect(stations.length, 1);
@@ -70,7 +73,10 @@ void main() {
         return http.Response(jsonEncode(responseData), 200);
       });
 
-      final service = RadioBrowserService(client: mockClient);
+      final service = RadioBrowserService(
+        client: mockClient,
+        enableDynamicDiscovery: false,
+      );
       final stations = await service.searchStations(
         name: 'Jazz',
         country: 'France',
@@ -107,6 +113,7 @@ void main() {
       final service = RadioBrowserService(
         client: mockClient,
         mirrors: ['https://mirror1.test', 'https://mirror2.test'],
+        enableDynamicDiscovery: false,
       );
 
       final stations = await service.getTopStations();
@@ -151,7 +158,10 @@ void main() {
         return http.Response('Not Found', 404);
       });
 
-      final service = RadioBrowserService(client: mockClient);
+      final service = RadioBrowserService(
+        client: mockClient,
+        enableDynamicDiscovery: false,
+      );
       final stations = await service.getStationsByUuids(['uuid-a', 'uuid-b']);
       expect(stations.length, 2);
 
@@ -194,7 +204,10 @@ void main() {
         );
       });
 
-      final service = RadioBrowserService(client: mockClient);
+      final service = RadioBrowserService(
+        client: mockClient,
+        enableDynamicDiscovery: false,
+      );
       final updatedList = await service.validateAndRefreshStations([localStation]);
 
       expect(updatedList.length, 1);
@@ -206,6 +219,174 @@ void main() {
       expect(updated.faviconUrl, 'https://new.fav/hd_logo.png'); // Favicon updated!
       expect(updated.codec, 'AAC');
       expect(updated.bitrateKbps, 320);
+    });
+
+    test('defaultMirrors contains verified live hosts and excludes dead hosts', () {
+      expect(
+        RadioBrowserService.defaultMirrors,
+        equals(const [
+          'https://all.api.radio-browser.info',
+          'https://de1.api.radio-browser.info',
+          'https://de2.api.radio-browser.info',
+        ]),
+      );
+      expect(
+        RadioBrowserService.defaultMirrors,
+        isNot(contains('https://nl1.api.radio-browser.info')),
+      );
+      expect(
+        RadioBrowserService.defaultMirrors,
+        isNot(contains('https://at1.api.radio-browser.info')),
+      );
+    });
+
+    test('dynamic discovery places discovered mirrors first without duplicates', () async {
+      final requestedHosts = <String>[];
+      final mockClient = MockClient((request) async {
+        requestedHosts.add(request.url.host);
+        return http.Response('[]', 200);
+      });
+
+      final service = RadioBrowserService(
+        client: mockClient,
+        mirrors: const [
+          'https://fallback1.test/',
+          'https://discovered1.test',
+        ],
+        discoverServers: () async => const [
+          'https://discovered1.test/',
+          'https://discovered2.test',
+          'https://discovered1.test',
+        ],
+      );
+
+      final resolved = await service.resolveMirrors();
+      expect(
+        resolved,
+        equals(const [
+          'https://discovered1.test',
+          'https://discovered2.test',
+          'https://fallback1.test',
+        ]),
+      );
+
+      await service.getTopStations();
+      expect(requestedHosts, equals(['discovered1.test']));
+    });
+
+    test('concurrent requests coalesce into a single discovery call', () async {
+      int discoveryCalls = 0;
+      final mockClient = MockClient((request) async => http.Response('[]', 200));
+
+      final service = RadioBrowserService(
+        client: mockClient,
+        mirrors: const ['https://fallback.test'],
+        discoverServers: () async {
+          discoveryCalls++;
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          return const ['https://discovered.test'];
+        },
+      );
+
+      await Future.wait([
+        service.getTopStations(),
+        service.getPopularTags(),
+        service.getPopularCountries(),
+      ]);
+
+      expect(discoveryCalls, equals(1));
+    });
+
+    test('falls back gracefully to fallback mirrors when discovery throws or returns empty', () async {
+      final requestedHosts = <String>[];
+      final mockClient = MockClient((request) async {
+        requestedHosts.add(request.url.host);
+        return http.Response('[]', 200);
+      });
+
+      final throwingService = RadioBrowserService(
+        client: mockClient,
+        mirrors: const ['https://fallback.test'],
+        discoverServers: () async => throw Exception('DNS unavailable'),
+      );
+      await throwingService.getTopStations();
+      expect(requestedHosts, equals(['fallback.test']));
+
+      requestedHosts.clear();
+      final emptyService = RadioBrowserService(
+        client: mockClient,
+        discoverServers: () async => const [],
+      );
+      final mirrors = await emptyService.resolveMirrors();
+      expect(mirrors, equals(RadioBrowserService.defaultMirrors));
+    });
+
+    test('promotes working secondary mirror to primary on failover', () async {
+      final requestedHosts = <String>[];
+      final mockClient = MockClient((request) async {
+        requestedHosts.add(request.url.host);
+        if (request.url.host == 'primary.test') {
+          return http.Response('Service Unavailable', 503);
+        }
+        return http.Response('[]', 200);
+      });
+
+      final service = RadioBrowserService(
+        client: mockClient,
+        mirrors: const ['https://secondary.test'],
+        discoverServers: () async => const ['https://primary.test'],
+      );
+
+      await service.getTopStations();
+      expect(requestedHosts, equals(['primary.test', 'secondary.test']));
+
+      requestedHosts.clear();
+      await service.getTopStations();
+      expect(requestedHosts, equals(['secondary.test']));
+    });
+
+    test('invalidates mirror cache when all mirrors fail and re-discovers next call', () async {
+      int discoveryCalls = 0;
+      bool allowSecondPass = false;
+      final mockClient = MockClient((request) async {
+        if (!allowSecondPass) {
+          return http.Response('Bad Gateway', 502);
+        }
+        if (request.url.host == 'fresh.test') {
+          return http.Response(
+            jsonEncode([
+              {
+                'stationuuid': 'fresh-uuid',
+                'name': 'Fresh Radio',
+                'url_resolved': 'https://fresh.test/stream',
+              },
+            ]),
+            200,
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final service = RadioBrowserService(
+        client: mockClient,
+        mirrors: const ['https://fallback.test'],
+        discoverServers: () async {
+          discoveryCalls++;
+          return discoveryCalls == 1
+              ? const ['https://stale.test']
+              : const ['https://fresh.test'];
+        },
+      );
+
+      final first = await service.getTopStations();
+      expect(first, isEmpty);
+      expect(discoveryCalls, equals(1));
+
+      allowSecondPass = true;
+      final second = await service.getTopStations();
+      expect(discoveryCalls, equals(2));
+      expect(second.length, equals(1));
+      expect(second.first.name, equals('Fresh Radio'));
     });
   });
 
@@ -223,7 +404,7 @@ void main() {
     });
 
     test('currentTabIndex persists and updates correctly', () {
-      final service = RadioBrowserService();
+      final service = RadioBrowserService(enableDynamicDiscovery: false);
       final controller = RadioController(service: service, store: store);
 
       expect(controller.currentTabIndex, 0);
@@ -239,7 +420,10 @@ void main() {
         return http.Response('[]', 200);
       });
 
-      final service = RadioBrowserService(client: mockClient);
+      final service = RadioBrowserService(
+        client: mockClient,
+        enableDynamicDiscovery: false,
+      );
       final controller = RadioController(service: service, store: store);
 
       // Rapidly type letters 'r', 'ro', 'roc', 'rock'

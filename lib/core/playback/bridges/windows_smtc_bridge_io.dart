@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:audio_service/audio_service.dart' as as_lib;
 import 'package:flutter/foundation.dart';
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:smtc_windows/smtc_windows.dart';
 // ignore: implementation_imports
 import 'package:smtc_windows/src/rust/frb_generated.dart';
@@ -63,7 +62,9 @@ class WindowsSmtcBridge {
       }
     }
 
-    final next = prev == null ? Future<void>.sync(run) : prev.then((_) => run());
+    final next = prev == null
+        ? Future<void>.sync(run)
+        : prev.then((_) => run());
     late final Future<void> tail;
     tail = next.whenComplete(() {
       if (identical(_commandLane, tail)) _commandLane = null;
@@ -75,42 +76,27 @@ class WindowsSmtcBridge {
   ///
   /// Optionally loads the native Rust library from [externalLibrary] and
   /// returns whether initialization succeeded.
-  Future<bool> initialize({ExternalLibrary? externalLibrary}) async {
+  Future<bool> initialize() async {
     if (kIsWeb || !Platform.isWindows) return false;
 
     try {
       // 1. Initialize local loopback HTTP server to serve artwork to WinRT SMTC
       try {
         _coverServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-        _coverServer!.listen(_handleCoverRequest, onError: (e) {
-          _log.w('Cover server error: $e');
-        });
-        _log.d(
-          'Loopback cover server started on port ${_coverServer!.port}',
+        _coverServer!.listen(
+          _handleCoverRequest,
+          onError: (e) {
+            _log.w('Cover server error: $e');
+          },
         );
+        _log.d('Loopback cover server started on port ${_coverServer!.port}');
       } catch (e) {
         _log.w('Failed to start loopback server: $e');
       }
 
       // ignore: invalid_use_of_internal_member
       if (!RustLib.instance.initialized) {
-        try {
-          await RustLib.init(
-            forceSameCodegenVersion: false,
-            externalLibrary: externalLibrary,
-          );
-        } catch (_) {
-          final testDll =
-              File(r'build\windows\x64\runner\Debug\smtc_windows.dll');
-          if (testDll.existsSync()) {
-            await RustLib.init(
-              forceSameCodegenVersion: false,
-              externalLibrary: ExternalLibrary.open(testDll.path),
-            );
-          } else {
-            rethrow;
-          }
-        }
+        await RustLib.init(forceSameCodegenVersion: false);
       }
 
       _smtc = SMTCWindows(
@@ -233,8 +219,8 @@ class WindowsSmtcBridge {
         final durationMs =
             _handler.mediaItem.value?.duration?.inMilliseconds ?? 0;
         final posMs = state.updatePosition.inMilliseconds;
-        final seekOccurred = _lastPositionMs == null ||
-            (posMs - _lastPositionMs!).abs() > 2000;
+        final seekOccurred =
+            _lastPositionMs == null || (posMs - _lastPositionMs!).abs() > 2000;
         final durationChanged = durationMs != _lastDurationMs;
         _lastPositionMs = posMs;
         _lastDurationMs = durationMs;

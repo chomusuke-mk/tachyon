@@ -4,20 +4,39 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:tachyon/core/logging/app_logger.dart';
 import 'package:tachyon/core/playback/domain/radio_station.dart';
+import 'package:tachyon/features/radios/data/radio_browser_discovery.dart';
+
+/// Callback that dynamically discovers candidate Radio Browser base URLs.
+typedef RadioBrowserServerDiscoverer = Future<List<String>> Function();
 
 /// Direct HTTP client service for querying the open-source community
-/// [Radio Browser](https://www.radio-browser.info/) API with automatic mirror failover.
+/// [Radio Browser](https://www.radio-browser.info/) API with official DNS
+/// server discovery and automatic mirror failover.
 class RadioBrowserService {
   static const _log = ScopedLogger('RadioBrowser');
 
-  final http.Client _client;
-  final List<String> _mirrors;
+  /// Official round-robin DNS hostname used to discover active Radio Browser servers.
+  static const String discoveryHost = 'all.api.radio-browser.info';
 
-  /// Default Radio Browser API mirror base URLs tried sequentially on failure.
+  final http.Client _client;
+  final List<String> _fallbackMirrors;
+  final RadioBrowserServerDiscoverer _discoverServers;
+  final bool _usingDefaultDiscoverer;
+  final bool _enableDynamicDiscovery;
+
+  /// Duration for which dynamically discovered mirror lists are cached.
+  final Duration discoveryCacheTtl;
+
+  List<String>? _resolvedMirrors;
+  DateTime? _lastDiscoveryAt;
+  Future<List<String>>? _inFlightDiscovery;
+
+  /// Fallback Radio Browser API mirror base URLs used if dynamic DNS discovery
+  /// fails or returns no results.
   static const List<String> defaultMirrors = [
+    'https://all.api.radio-browser.info',
     'https://de1.api.radio-browser.info',
-    'https://nl1.api.radio-browser.info',
-    'https://at1.api.radio-browser.info',
+    'https://de2.api.radio-browser.info',
   ];
 
   static const Map<String, String> _headers = {
@@ -25,12 +44,125 @@ class RadioBrowserService {
     'Accept': 'application/json',
   };
 
-  /// Creates a [RadioBrowserService] using optional [client] and [mirrors].
+  /// Creates a [RadioBrowserService] using optional [client], fallback [mirrors],
+  /// dynamic [discoverServers] callback, [enableDynamicDiscovery] toggle, and
+  /// [discoveryCacheTtl].
   RadioBrowserService({
     http.Client? client,
     List<String>? mirrors,
+    RadioBrowserServerDiscoverer? discoverServers,
+    bool? enableDynamicDiscovery,
+    this.discoveryCacheTtl = const Duration(minutes: 30),
   })  : _client = client ?? http.Client(),
-        _mirrors = mirrors ?? defaultMirrors;
+        _fallbackMirrors = List<String>.unmodifiable(
+          (mirrors ?? defaultMirrors)
+              .map(_normalizeBaseUrl)
+              .where((m) => m.isNotEmpty),
+        ),
+        _usingDefaultDiscoverer = discoverServers == null,
+        _discoverServers = discoverServers ?? discoverRadioBrowserServers,
+        _enableDynamicDiscovery =
+            enableDynamicDiscovery ?? (discoverServers != null || mirrors == null);
+
+  static String _normalizeBaseUrl(String raw) =>
+      raw.trim().replaceAll(RegExp(r'/+$'), '');
+
+  /// Resolves the ordered list of Radio Browser mirror URLs to query.
+  ///
+  /// When dynamic discovery is enabled, discovers active servers via DNS
+  /// (`all.api.radio-browser.info`), caches results for [discoveryCacheTtl],
+  /// coalesces concurrent lookups, and appends deduplicated fallback mirrors.
+  Future<List<String>> resolveMirrors({bool forceRefresh = false}) async {
+    if (!_enableDynamicDiscovery) {
+      return List<String>.unmodifiable(_resolvedMirrors ?? _fallbackMirrors);
+    }
+
+    if (!forceRefresh &&
+        _resolvedMirrors != null &&
+        _lastDiscoveryAt != null &&
+        DateTime.now().difference(_lastDiscoveryAt!) < discoveryCacheTtl) {
+      return List<String>.unmodifiable(_resolvedMirrors!);
+    }
+
+    if (!forceRefresh && _inFlightDiscovery != null) {
+      return _inFlightDiscovery!;
+    }
+
+    final future = _performDiscovery();
+    _inFlightDiscovery = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_inFlightDiscovery, future)) {
+        _inFlightDiscovery = null;
+      }
+    }
+  }
+
+  Future<List<String>> _performDiscovery() async {
+    List<String> discovered = const [];
+    try {
+      discovered = await _discoverServers();
+    } catch (e) {
+      _log.w('Dynamic server discovery failed: $e');
+    }
+
+    if (kIsWeb && discovered.isEmpty && _usingDefaultDiscoverer) {
+      discovered = await _discoverViaServersEndpoint();
+    }
+
+    final merged = <String>{};
+    for (final raw in discovered) {
+      final normalized = _normalizeBaseUrl(raw);
+      if (normalized.isNotEmpty) {
+        merged.add(normalized);
+      }
+    }
+    for (final fallback in _fallbackMirrors) {
+      if (fallback.isNotEmpty) {
+        merged.add(fallback);
+      }
+    }
+
+    final result = merged.toList();
+    _resolvedMirrors = result;
+    _lastDiscoveryAt = DateTime.now();
+    return List<String>.unmodifiable(result);
+  }
+
+  Future<List<String>> _discoverViaServersEndpoint() async {
+    try {
+      final uri = Uri.parse('https://$discoveryHost/json/servers');
+      final response = await _client
+          .get(uri, headers: kIsWeb ? null : _headers)
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return const [];
+      }
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is! List) return const [];
+      final servers = <String>{};
+      for (final item in decoded) {
+        if (item is! Map<String, dynamic>) continue;
+        final name = (item['name'] as String?)
+            ?.trim()
+            .toLowerCase()
+            .replaceAll(RegExp(r'\.+$'), '');
+        if (name == null || name.isEmpty || !name.contains('.')) continue;
+        servers.add(
+          name.startsWith('http://') || name.startsWith('https://')
+              ? _normalizeBaseUrl(name)
+              : 'https://$name',
+        );
+      }
+      final list = servers.toList();
+      list.shuffle(math.Random());
+      return list;
+    } catch (e) {
+      _log.w('Web /json/servers discovery failed: $e');
+      return const [];
+    }
+  }
 
   /// Fetches top voted / top clicked radio stations globally.
   Future<List<RadioStation>> getTopStations({int limit = 40}) async {
@@ -225,8 +357,10 @@ class RadioBrowserService {
     Map<String, String>? queryParams,
   }) async {
     Object? lastError;
+    final mirrors = await resolveMirrors();
 
-    for (final mirror in _mirrors) {
+    for (var i = 0; i < mirrors.length; i++) {
+      final mirror = mirrors[i];
       try {
         final uri = Uri.parse('$mirror$path').replace(
           queryParameters: queryParams?.isNotEmpty == true ? queryParams : null,
@@ -237,18 +371,31 @@ class RadioBrowserService {
             .timeout(const Duration(seconds: 8));
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
+          if (i > 0) {
+            final updated = List<String>.of(_resolvedMirrors ?? mirrors);
+            if (updated.remove(mirror)) {
+              updated.insert(0, mirror);
+              _resolvedMirrors = updated;
+            }
+          }
           final decoded = jsonDecode(utf8.decode(response.bodyBytes));
           if (decoded is List) {
             return decoded;
           }
           return const [];
         }
+        lastError = 'HTTP ${response.statusCode}';
+        _log.w(
+          'Mirror $mirror returned HTTP ${response.statusCode}. Trying next mirror...',
+        );
       } catch (e) {
         lastError = e;
         _log.w('Mirror $mirror failed: $e. Trying next mirror...');
       }
     }
 
+    _resolvedMirrors = null;
+    _lastDiscoveryAt = null;
     _log.e('All mirrors exhausted', error: lastError);
     return const [];
   }

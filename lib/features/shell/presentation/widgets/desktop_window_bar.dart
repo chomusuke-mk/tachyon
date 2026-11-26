@@ -63,10 +63,14 @@ class DesktopWindowBar extends StatelessWidget {
                       _log.d('Title bar double-tapped -> toggleMaximize');
                       lifecycle.toggleMaximizeWindow();
                     },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Row(
-                        children: [
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      //padding: const EdgeInsets.symmetric(horizontal: 12),
+                      children: [
+                        Row(
+                          children: [
+                            const SizedBox(width: 12),
                           if (!isMacOS) ...[
                             ClipRRect(
                               borderRadius: BorderRadius.circular(4),
@@ -96,18 +100,20 @@ class DesktopWindowBar extends StatelessWidget {
                           ),
                         ],
                       ),
+                      ]
                     ),
                   ),
                 ),
                 _WindowCaptionButton(
                   key: const Key('win_btn_background'),
-                  icon: Icons.vertical_align_bottom_rounded,
+                  icon: Icons.keyboard_arrow_down_rounded,
                   tooltip: labelOrFallback(
                     strings.winSendToBackground,
                     'Send to background',
                   ),
                   iconColor: colorScheme.onSurfaceVariant,
                   hoverColor: colorScheme.primary.withValues(alpha: 0.14),
+                  iconSize: 20,
                   onPressed: () {
                     _log.d('Caption button pressed: sendToBackground');
                     lifecycle.enterBackground();
@@ -116,7 +122,7 @@ class DesktopWindowBar extends StatelessWidget {
                 if (!isMacOS) ...[
                   _WindowCaptionButton(
                     key: const Key('win_btn_minimize'),
-                    icon: Icons.minimize_rounded,
+                    icon: Icons.remove_rounded,
                     tooltip: labelOrFallback(strings.winMinimize, 'Minimize'),
                     iconColor: colorScheme.onSurfaceVariant,
                     hoverColor: colorScheme.onSurface.withValues(alpha: 0.08),
@@ -130,7 +136,7 @@ class DesktopWindowBar extends StatelessWidget {
                     icon: isMaximized
                         ? Icons.filter_none_rounded
                         : Icons.crop_square_rounded,
-                    iconSize: isMaximized ? 15 : 16,
+                    iconSize: isMaximized ? 13 : 16,
                     tooltip: isMaximized
                         ? labelOrFallback(strings.winRestore, 'Restore')
                         : labelOrFallback(strings.winMaximize, 'Maximize'),

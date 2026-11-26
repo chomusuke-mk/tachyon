@@ -28,9 +28,7 @@ dependencies:
   smtc_windows: ^1.1.0
   dbus: ^0.8.1
   win32_registry: ^3.0.3
-  win32: ^6.4.0
   ffi: ^2.2.0
-  flutter_rust_bridge: ^2.13.0
   cached_network_image: ^4.0.7
   material_ui: 1.11.1
 

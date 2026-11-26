@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart' as as_lib;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jsonc/jsonc.dart';
 import 'package:material_ui/material_ui.dart';
@@ -27,6 +28,7 @@ import 'package:tachyon/features/search/presentation/controllers/tachyon_search_
 import 'package:tachyon/features/settings/data/settings_repository.dart';
 import 'package:tachyon/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:tachyon/features/shell/presentation/screens/tachyon_shell.dart';
+import 'package:tachyon/features/shell/presentation/widgets/desktop_window_bar.dart';
 import 'package:tachyon/shared/widgets/app_background.dart';
 
 class _TestLocaleRepo extends LocaleRepository {
@@ -692,6 +694,101 @@ void main() {
         expect(find.byType(MaterialApp), findsOneWidget);
         expect(find.byType(TachyonShell), findsOneWidget);
         expect(find.byType(AppBackground), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'App mounts DesktopWindowBar on Windows custom chrome mode without Overlay or RenderFlex exceptions',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        final winBridge = WindowControlBridge(
+          attachChannelHandler: false,
+          isDesktopOverride: true,
+          usesFlutterTitleBarOverride: true,
+        );
+        final winLifecycle = AppLifecycleController(
+          windowBridge: winBridge,
+          playbackController: playback,
+          startTrimmerOnActive: false,
+          observeFlutterLifecycle: false,
+        );
+        addTearDown(() {
+          winLifecycle.dispose();
+          winBridge.dispose();
+        });
+
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        try {
+          await tester.pumpWidget(
+            MultiProvider(
+              providers: [
+                ChangeNotifierProvider<LibraryStore>.value(value: store),
+                Provider<MetadataService>.value(value: metadataService),
+                Provider<SettingsRepository>.value(value: settingsRepo),
+                Provider<LocaleRepository>.value(value: localeRepo),
+                Provider<WindowControlBridge>.value(value: winBridge),
+                ChangeNotifierProvider<AppLifecycleController>.value(
+                  value: winLifecycle,
+                ),
+                ChangeNotifierProvider<SettingsController>.value(
+                  value: settings,
+                ),
+                ChangeNotifierProvider<LocaleController>.value(value: locale),
+                ChangeNotifierProvider<LibraryController>.value(value: library),
+                ChangeNotifierProvider<PlaylistsController>.value(
+                  value: playlists,
+                ),
+                ChangeNotifierProvider<TachyonSearchController>.value(
+                  value: search,
+                ),
+                ChangeNotifierProvider<PlaybackController>.value(
+                  value: playback,
+                ),
+              ],
+              child: const App(permissionsGranted: true),
+            ),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 200));
+          expect(tester.takeException(), isNull);
+
+          expect(find.byType(DesktopWindowBar), findsOneWidget);
+          expect(find.byType(TachyonShell), findsOneWidget);
+          expect(find.byKey(const Key('win_btn_background')), findsOneWidget);
+          expect(find.byKey(const Key('win_btn_minimize')), findsOneWidget);
+          expect(find.byKey(const Key('win_btn_maximize')), findsOneWidget);
+          expect(find.byKey(const Key('win_btn_close')), findsOneWidget);
+
+          winBridge.simulateWindowStateForTest(
+            const DesktopWindowState(
+              hasNativeHeaderBar: false,
+              hasSystemDecorations: false,
+              isFocused: false,
+              isMinimized: false,
+              isMaximized: false,
+            ),
+          );
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+
+          winBridge.simulateWindowStateForTest(
+            const DesktopWindowState(
+              hasNativeHeaderBar: false,
+              hasSystemDecorations: false,
+              isFocused: true,
+              isMinimized: false,
+              isMaximized: true,
+            ),
+          );
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+          expect(find.byTooltip('Restore'), findsOneWidget);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
       },
     );
   });

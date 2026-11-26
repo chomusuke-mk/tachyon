@@ -63,7 +63,7 @@ abstract final class AppBootstrap {
         AppMemoryCoordinator.activeImageCacheMaxBytes;
     MiniaudioPlayer.config(
       logLevel: (kDebugMode || kIsWeb)
-          ? MiniaudioLogLevel.debug
+          ? MiniaudioLogLevel.info
           : MiniaudioLogLevel.error,
     );
     try {

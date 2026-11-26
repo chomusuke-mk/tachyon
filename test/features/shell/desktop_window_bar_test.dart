@@ -137,5 +137,94 @@ void main() {
         }
       },
     );
+
+    testWidgets(
+      'mounts inside MaterialApp.builder wrapped in Overlay.wrap without Overlay or RenderFlex exceptions',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        final bridge = WindowControlBridge(
+          attachChannelHandler: false,
+          isDesktopOverride: true,
+          usesFlutterTitleBarOverride: true,
+          invokeOverride: <T>(String method, [Object? args]) async {
+            invokedMethods.add(method);
+            return null;
+          },
+        );
+        final lifecycle = AppLifecycleController(
+          windowBridge: bridge,
+          startTrimmerOnActive: false,
+          observeFlutterLifecycle: false,
+        );
+        addTearDown(() {
+          lifecycle.dispose();
+          bridge.dispose();
+        });
+
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        try {
+          await tester.pumpWidget(
+            MultiProvider(
+              providers: [
+                ChangeNotifierProvider<LocaleController>.value(
+                  value: localeController,
+                ),
+                ChangeNotifierProvider<AppLifecycleController>.value(
+                  value: lifecycle,
+                ),
+              ],
+              child: MaterialApp(
+                builder: (context, child) {
+                  return Overlay.wrap(
+                    child: Column(
+                      children: [
+                        const DesktopWindowBar(),
+                        Expanded(child: child ?? const SizedBox.shrink()),
+                      ],
+                    ),
+                  );
+                },
+                home: const Scaffold(body: SizedBox.expand()),
+              ),
+            ),
+          );
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+
+          expect(find.byKey(const Key('win_btn_background')), findsOneWidget);
+          expect(find.byKey(const Key('win_btn_minimize')), findsOneWidget);
+          expect(find.byKey(const Key('win_btn_maximize')), findsOneWidget);
+          expect(find.byKey(const Key('win_btn_close')), findsOneWidget);
+          expect(find.byTooltip('Send to background'), findsOneWidget);
+          expect(find.byTooltip('Minimize'), findsOneWidget);
+          expect(find.byTooltip('Maximize'), findsOneWidget);
+          expect(find.byTooltip('Close'), findsOneWidget);
+
+          bridge.simulateWindowStateForTest(
+            const DesktopWindowState(
+              isMaximized: false,
+              isFocused: false,
+            ),
+          );
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+
+          bridge.simulateWindowStateForTest(
+            const DesktopWindowState(
+              isMaximized: true,
+              isFocused: true,
+            ),
+          );
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+          expect(find.byTooltip('Restore'), findsOneWidget);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
   });
 }

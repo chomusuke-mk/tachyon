@@ -1,11 +1,5 @@
-import 'dart:ffi';
-import 'dart:io';
-
-import 'package:ffi/ffi.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:tachyon/core/logging/app_logger.dart';
-import 'package:win32/win32.dart';
 
 /// Service for opening native file and directory picker dialogs.
 abstract final class FilePickerService {
@@ -18,18 +12,11 @@ abstract final class FilePickerService {
     String? initialDirectory,
   }) async {
     try {
-      if (!kIsWeb && Platform.isWindows) {
-        return _pickDirectoryWindows(
-          dialogTitle: dialogTitle,
-          initialDirectory: initialDirectory,
-        );
-      }
-
       final uri = await FilePicker.pickDirectory(
         dialogTitle: dialogTitle,
         initialDirectory: initialDirectory,
       );
-      return uri?.path;
+      return uri?.toFilePath();
     } catch (e, stackTrace) {
       _log.e('Error picking directory', error: e, stackTrace: stackTrace);
       return null;
@@ -43,13 +30,6 @@ abstract final class FilePickerService {
     String? initialDirectory,
   }) async {
     try {
-      if (!kIsWeb && Platform.isWindows) {
-        return _pickImageWindows(
-          dialogTitle: dialogTitle,
-          initialDirectory: initialDirectory,
-        );
-      }
-
       final file = await FilePicker.pickFile(
         type: FileType.image,
         dialogTitle: dialogTitle,
@@ -86,151 +66,5 @@ abstract final class FilePickerService {
       _log.e('Error picking audio files', error: e, stackTrace: stackTrace);
       return const [];
     }
-  }
-
-  /// Uses Win32 IFileOpenDialog on the UI thread to pick a folder on Windows,
-  /// avoiding COM threading apartment conflicts (RPC_E_CHANGED_MODE) caused
-  /// by worker isolates.
-  static String? _pickDirectoryWindows({
-    String? dialogTitle,
-    String? initialDirectory,
-  }) {
-    _log.d('Launching Win32 IFileOpenDialog for directory on main UI thread...');
-    return using((arena) {
-      final fileDialog = arena.com<IFileOpenDialog>(FileOpenDialog);
-
-      final options = fileDialog.getOptions() |
-          FOS_PICKFOLDERS |
-          FOS_FORCEFILESYSTEM |
-          FOS_NOCHANGEDIR;
-      fileDialog.setOptions(options);
-
-      if (dialogTitle != null && dialogTitle.isNotEmpty) {
-        fileDialog.setTitle(arena.pcwstr(dialogTitle));
-      }
-
-      if (initialDirectory != null && initialDirectory.isNotEmpty) {
-        try {
-          final item = arena.adopt(
-            SHCreateItemFromParsingName<IShellItem>(
-              arena.pcwstr(initialDirectory),
-              null,
-            ),
-          );
-          fileDialog.setFolder(item);
-        } catch (e) {
-          _log.w('Failed to set initial directory "$initialDirectory": $e');
-        }
-      }
-
-      try {
-        final parentHwnd = GetForegroundWindow();
-        _log.d('Showing folder dialog with parent HWND: $parentHwnd');
-        fileDialog.show(parentHwnd);
-      } on WindowsException catch (e) {
-        if (e.hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
-          _log.d('User cancelled folder picker dialog.');
-          return null;
-        }
-        _log.e(
-          'WindowsException while showing dialog (HRESULT: 0x${e.hr.toRadixString(16)})',
-          error: e,
-        );
-        rethrow;
-      }
-
-      final selectedItem = fileDialog.getResult();
-      if (selectedItem == null) {
-        _log.d('No item was returned from fileDialog.getResult()');
-        return null;
-      }
-
-      final item = arena.adopt(selectedItem);
-      final pathPtr = item.getDisplayName(SIGDN_FILESYSPATH);
-      try {
-        final selectedPath = pathPtr.toDartString();
-        _log.d('Selected directory path: $selectedPath');
-        return selectedPath;
-      } finally {
-        CoTaskMemFree(pathPtr);
-      }
-    });
-  }
-
-  /// Uses Win32 IFileOpenDialog on the UI thread to pick an image file on Windows.
-  static String? _pickImageWindows({
-    String? dialogTitle,
-    String? initialDirectory,
-  }) {
-    _log.d('Launching Win32 IFileOpenDialog for image on main UI thread...');
-    return using((arena) {
-      final fileDialog = arena.com<IFileOpenDialog>(FileOpenDialog);
-
-      final options = fileDialog.getOptions() |
-          FOS_FORCEFILESYSTEM |
-          FOS_FILEMUSTEXIST |
-          FOS_NOCHANGEDIR;
-      fileDialog.setOptions(options);
-
-      if (dialogTitle != null && dialogTitle.isNotEmpty) {
-        fileDialog.setTitle(arena.pcwstr(dialogTitle));
-      }
-
-      // Filter images
-      final specs = arena<COMDLG_FILTERSPEC>(2);
-      specs[0]
-        ..pszName = arena.pwstr('Image Files (*.jpg; *.jpeg; *.png; *.webp; *.bmp)')
-        ..pszSpec = arena.pwstr('*.jpg;*.jpeg;*.png;*.webp;*.bmp');
-      specs[1]
-        ..pszName = arena.pwstr('All Files (*.*)')
-        ..pszSpec = arena.pwstr('*.*');
-      fileDialog.setFileTypes(2, specs);
-
-      if (initialDirectory != null && initialDirectory.isNotEmpty) {
-        try {
-          final item = arena.adopt(
-            SHCreateItemFromParsingName<IShellItem>(
-              arena.pcwstr(initialDirectory),
-              null,
-            ),
-          );
-          fileDialog.setFolder(item);
-        } catch (e) {
-          _log.w('Failed to set initial image directory "$initialDirectory": $e');
-        }
-      }
-
-      try {
-        final parentHwnd = GetForegroundWindow();
-        _log.d('Showing image dialog with parent HWND: $parentHwnd');
-        fileDialog.show(parentHwnd);
-      } on WindowsException catch (e) {
-        if (e.hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
-          _log.d('User cancelled image picker dialog.');
-          return null;
-        }
-        _log.e(
-          'WindowsException while showing image dialog (HRESULT: 0x${e.hr.toRadixString(16)})',
-          error: e,
-        );
-        rethrow;
-      }
-
-      final selectedItem = fileDialog.getResult();
-      if (selectedItem == null) {
-        _log.d('No item was returned from fileDialog.getResult()');
-        return null;
-      }
-
-      final item = arena.adopt(selectedItem);
-      final pathPtr = item.getDisplayName(SIGDN_FILESYSPATH);
-      try {
-        final selectedPath = pathPtr.toDartString();
-        _log.d('Selected image path: $selectedPath');
-        return selectedPath;
-      } finally {
-        CoTaskMemFree(pathPtr);
-      }
-    });
   }
 }
