@@ -54,7 +54,7 @@ abstract final class AppBootstrap {
       'envTachyonLogLevel="${AppLogger.envLogLevel}")',
     );
     await MiniaudioPlayer.ensureInitialized(
-      rootIsolateToken: kIsWeb ? null : ServicesBinding.rootIsolateToken,
+      rootIsolateToken: kIsWeb ? null : ServicesBinding.rootIsolateToken as RootIsolateToken?,
     );
     _log.d('MiniaudioPlayer engine initialized');
     PaintingBinding.instance.imageCache.maximumSize =

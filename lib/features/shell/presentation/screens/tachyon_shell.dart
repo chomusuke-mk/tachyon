@@ -515,7 +515,7 @@ class _TachyonShellState extends State<TachyonShell> {
                       children: [
                         RepaintBoundary(child: _screens[_currentIndex]),
                         const Positioned(
-                          right: 16,
+                          left: 16,
                           bottom: 16,
                           child: RepaintBoundary(child: ScanProgressOverlay()),
                         ),
@@ -546,7 +546,7 @@ class _TachyonShellState extends State<TachyonShell> {
               children: [
                 RepaintBoundary(child: _screens[_currentIndex]),
                 const Positioned(
-                  right: 16,
+                  left: 16,
                   bottom: 16,
                   child: RepaintBoundary(child: ScanProgressOverlay()),
                 ),
